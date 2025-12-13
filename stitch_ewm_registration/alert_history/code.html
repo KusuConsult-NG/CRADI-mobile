@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Alert History - Climate Early Warning</title>
+<!-- Fonts -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Lexend:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Theme Configuration -->
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#13ec5b",
+                        "background-light": "#f6f8f6",
+                        "background-dark": "#102216",
+                        "surface-dark": "#1A2C22",
+                    },
+                    fontFamily: {
+                        "display": ["Lexend", "sans-serif"]
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark font-display text-slate-900 dark:text-white antialiased selection:bg-primary selection:text-black">
+<div class="relative flex min-h-screen w-full flex-col overflow-x-hidden pb-20">
+<!-- Sticky Header -->
+<header class="sticky top-0 z-50 flex items-center justify-between bg-background-light/95 dark:bg-background-dark/95 backdrop-blur-md p-4 pb-2 border-b border-gray-200 dark:border-white/5">
+<div class="flex size-10 shrink-0 items-center justify-center rounded-full active:bg-gray-200 dark:active:bg-white/10 cursor-pointer transition-colors">
+<span class="material-symbols-outlined text-slate-900 dark:text-white">arrow_back_ios_new</span>
+</div>
+<h2 class="text-lg font-bold leading-tight tracking-[-0.015em] flex-1 text-center pr-2">Alert History</h2>
+<div class="flex items-center justify-end">
+<button class="flex size-10 items-center justify-center rounded-full bg-transparent hover:bg-gray-200 dark:hover:bg-white/10 transition-colors">
+<span class="material-symbols-outlined text-slate-900 dark:text-white">filter_list</span>
+</button>
+</div>
+</header>
+<!-- Search Bar -->
+<div class="px-4 py-3 sticky top-[65px] z-40 bg-background-light dark:bg-background-dark">
+<div class="flex w-full items-center rounded-xl bg-white dark:bg-[#1E3A29] shadow-sm ring-1 ring-gray-200 dark:ring-white/5">
+<div class="flex items-center justify-center pl-4 text-gray-500 dark:text-[#92c9a4]">
+<span class="material-symbols-outlined">search</span>
+</div>
+<input class="w-full flex-1 border-none bg-transparent py-3 pl-3 pr-4 text-base text-slate-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-[#92c9a4]/70 focus:ring-0" placeholder="Search location, hazard, or ID..."/>
+</div>
+</div>
+<!-- Meta Text -->
+<div class="flex items-center justify-between px-5 pb-2">
+<p class="text-xs font-medium text-gray-500 dark:text-[#92c9a4] uppercase tracking-wider">Sync Status</p>
+<div class="flex items-center gap-1.5">
+<span class="relative flex h-2.5 w-2.5">
+<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+<span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-primary"></span>
+</span>
+<p class="text-xs font-medium text-primary">Online • Just now</p>
+</div>
+</div>
+<!-- Filter Chips -->
+<div class="flex gap-3 px-4 pb-4 overflow-x-auto no-scrollbar mask-gradient-right">
+<!-- Active Chip -->
+<button class="flex h-9 shrink-0 items-center justify-center gap-x-2 rounded-full bg-primary px-5 transition-transform active:scale-95">
+<span class="text-black text-sm font-semibold">All Alerts</span>
+</button>
+<!-- Inactive Chips -->
+<button class="flex h-9 shrink-0 items-center justify-center gap-x-2 rounded-full bg-white dark:bg-[#23482f] ring-1 ring-gray-200 dark:ring-0 px-5 transition-transform active:scale-95">
+<span class="text-slate-700 dark:text-white text-sm font-medium">Floods</span>
+</button>
+<button class="flex h-9 shrink-0 items-center justify-center gap-x-2 rounded-full bg-white dark:bg-[#23482f] ring-1 ring-gray-200 dark:ring-0 px-5 transition-transform active:scale-95">
+<span class="text-slate-700 dark:text-white text-sm font-medium">Conflict</span>
+</button>
+<button class="flex h-9 shrink-0 items-center justify-center gap-x-2 rounded-full bg-white dark:bg-[#23482f] ring-1 ring-gray-200 dark:ring-0 px-5 transition-transform active:scale-95">
+<span class="text-slate-700 dark:text-white text-sm font-medium">Drought</span>
+</button>
+<button class="flex h-9 shrink-0 items-center justify-center gap-x-2 rounded-full bg-white dark:bg-[#23482f] ring-1 ring-gray-200 dark:ring-0 px-5 transition-transform active:scale-95">
+<span class="text-slate-700 dark:text-white text-sm font-medium">Fire</span>
+</button>
+</div>
+<!-- Alert Feed -->
+<div class="flex flex-col gap-3 px-4">
+<!-- High Severity Alert -->
+<div class="group relative flex w-full flex-col overflow-hidden rounded-xl bg-white dark:bg-[#1A2C22] shadow-sm transition-all active:scale-[0.99]">
+<div class="absolute left-0 top-0 bottom-0 w-1.5 bg-red-500"></div>
+<div class="flex items-start gap-4 p-4 pl-5">
+<div class="flex size-12 shrink-0 items-center justify-center rounded-full bg-red-500/10 text-red-500">
+<span class="material-symbols-outlined filled">flood</span>
+</div>
+<div class="flex flex-1 flex-col justify-center gap-1">
+<div class="flex items-start justify-between gap-2">
+<p class="text-slate-900 dark:text-white text-base font-bold leading-none">Flash Flood Warning</p>
+<span class="text-xs font-medium text-gray-500 dark:text-gray-400 whitespace-nowrap">2h ago</span>
+</div>
+<p class="text-gray-600 dark:text-[#92c9a4] text-sm leading-normal">Makurdi LGA, Benue State</p>
+<div class="mt-1 flex items-center gap-2">
+<span class="inline-flex items-center rounded-md bg-red-500/10 px-2 py-0.5 text-xs font-medium text-red-500 ring-1 ring-inset ring-red-500/20">High Severity</span>
+<span class="inline-flex items-center rounded-md bg-yellow-500/10 px-2 py-0.5 text-xs font-medium text-yellow-500 ring-1 ring-inset ring-yellow-500/20">Pending</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Moderate Severity Alert -->
+<div class="group relative flex w-full flex-col overflow-hidden rounded-xl bg-white dark:bg-[#1A2C22] shadow-sm transition-all active:scale-[0.99]">
+<div class="absolute left-0 top-0 bottom-0 w-1.5 bg-orange-500"></div>
+<div class="flex items-start gap-4 p-4 pl-5">
+<div class="flex size-12 shrink-0 items-center justify-center rounded-full bg-orange-500/10 text-orange-500">
+<span class="material-symbols-outlined">shield</span>
+</div>
+<div class="flex flex-1 flex-col justify-center gap-1">
+<div class="flex items-start justify-between gap-2">
+<p class="text-slate-900 dark:text-white text-base font-bold leading-none">Community Unrest</p>
+<span class="text-xs font-medium text-gray-500 dark:text-gray-400 whitespace-nowrap">5h ago</span>
+</div>
+<p class="text-gray-600 dark:text-[#92c9a4] text-sm leading-normal">Jos North, Plateau State</p>
+<div class="mt-1 flex items-center gap-2">
+<span class="inline-flex items-center rounded-md bg-orange-500/10 px-2 py-0.5 text-xs font-medium text-orange-500 ring-1 ring-inset ring-orange-500/20">Moderate</span>
+<span class="inline-flex items-center rounded-md bg-blue-500/10 px-2 py-0.5 text-xs font-medium text-blue-400 ring-1 ring-inset ring-blue-500/20">Acknowledged</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Resolved Alert (Primary Theme Color) -->
+<div class="group relative flex w-full flex-col overflow-hidden rounded-xl bg-white dark:bg-[#1A2C22] shadow-sm transition-all active:scale-[0.99] opacity-80">
+<div class="absolute left-0 top-0 bottom-0 w-1.5 bg-primary"></div>
+<div class="flex items-start gap-4 p-4 pl-5">
+<div class="flex size-12 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+<span class="material-symbols-outlined">wb_sunny</span>
+</div>
+<div class="flex flex-1 flex-col justify-center gap-1">
+<div class="flex items-start justify-between gap-2">
+<p class="text-slate-900 dark:text-white text-base font-bold leading-none">Heatwave Advisory</p>
+<span class="text-xs font-medium text-gray-500 dark:text-gray-400 whitespace-nowrap">Yesterday</span>
+</div>
+<p class="text-gray-600 dark:text-[#92c9a4] text-sm leading-normal">Lafia, Nasarawa State</p>
+<div class="mt-1 flex items-center gap-2">
+<span class="inline-flex items-center rounded-md bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary ring-1 ring-inset ring-primary/20">Resolved</span>
+</div>
+</div>
+</div>
+</div>
+<!-- High Severity Alert (Fire) -->
+<div class="group relative flex w-full flex-col overflow-hidden rounded-xl bg-white dark:bg-[#1A2C22] shadow-sm transition-all active:scale-[0.99]">
+<div class="absolute left-0 top-0 bottom-0 w-1.5 bg-red-500"></div>
+<div class="flex items-start gap-4 p-4 pl-5">
+<div class="flex size-12 shrink-0 items-center justify-center rounded-full bg-red-500/10 text-red-500">
+<span class="material-symbols-outlined">local_fire_department</span>
+</div>
+<div class="flex flex-1 flex-col justify-center gap-1">
+<div class="flex items-start justify-between gap-2">
+<p class="text-slate-900 dark:text-white text-base font-bold leading-none">Bush Fire Alert</p>
+<span class="text-xs font-medium text-gray-500 dark:text-gray-400 whitespace-nowrap">Oct 22</span>
+</div>
+<p class="text-gray-600 dark:text-[#92c9a4] text-sm leading-normal">Otukpo, Benue State</p>
+<div class="mt-1 flex items-center gap-2">
+<span class="inline-flex items-center rounded-md bg-red-500/10 px-2 py-0.5 text-xs font-medium text-red-500 ring-1 ring-inset ring-red-500/20">High Severity</span>
+<span class="inline-flex items-center rounded-md bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary ring-1 ring-inset ring-primary/20">Resolved</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Moderate Severity Alert -->
+<div class="group relative flex w-full flex-col overflow-hidden rounded-xl bg-white dark:bg-[#1A2C22] shadow-sm transition-all active:scale-[0.99]">
+<div class="absolute left-0 top-0 bottom-0 w-1.5 bg-orange-500"></div>
+<div class="flex items-start gap-4 p-4 pl-5">
+<div class="flex size-12 shrink-0 items-center justify-center rounded-full bg-orange-500/10 text-orange-500">
+<span class="material-symbols-outlined">water_drop</span>
+</div>
+<div class="flex flex-1 flex-col justify-center gap-1">
+<div class="flex items-start justify-between gap-2">
+<p class="text-slate-900 dark:text-white text-base font-bold leading-none">Rising Water Levels</p>
+<span class="text-xs font-medium text-gray-500 dark:text-gray-400 whitespace-nowrap">Oct 20</span>
+</div>
+<p class="text-gray-600 dark:text-[#92c9a4] text-sm leading-normal">Lokoja, Kogi State</p>
+<div class="mt-1 flex items-center gap-2">
+<span class="inline-flex items-center rounded-md bg-orange-500/10 px-2 py-0.5 text-xs font-medium text-orange-500 ring-1 ring-inset ring-orange-500/20">Moderate</span>
+<span class="inline-flex items-center rounded-md bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary ring-1 ring-inset ring-primary/20">Resolved</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Load More -->
+<div class="py-4 flex justify-center">
+<button class="text-[#92c9a4] text-sm font-medium hover:text-white transition-colors">Load older alerts</button>
+</div>
+</div>
+<!-- Floating Action Button -->
+<div class="fixed bottom-6 right-6 z-50">
+<button class="flex h-14 w-14 items-center justify-center rounded-full bg-primary shadow-lg shadow-primary/25 transition-transform hover:scale-105 active:scale-95">
+<span class="material-symbols-outlined text-black" style="font-size: 28px;">add_alert</span>
+</button>
+</div>
+</div>
+</body></html>

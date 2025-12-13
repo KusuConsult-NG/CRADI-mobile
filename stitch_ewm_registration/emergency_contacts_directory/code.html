@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Emergency Contacts Directory</title>
+<!-- Fonts -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Lexend:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Theme Configuration -->
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#13ec5b",
+                        "primary-dark": "#0eb846",
+                        "background-light": "#f6f8f6",
+                        "background-dark": "#102216",
+                        "surface-light": "#ffffff",
+                        "surface-dark": "#1c2e24",
+                    },
+                    fontFamily: {
+                        "display": ["Lexend", "sans-serif"]
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                },
+            },
+        }
+    </script>
+<style>
+        /* Custom scrollbar hiding for chips */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+        
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .material-symbols-outlined.filled {
+            font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-gray-100 dark:bg-gray-900 font-display antialiased">
+<!-- Mobile Container Wrapper -->
+<div class="relative flex flex-col min-h-screen w-full max-w-md mx-auto bg-background-light dark:bg-background-dark shadow-2xl overflow-hidden">
+<!-- Sticky Header Group -->
+<div class="sticky top-0 z-30 bg-background-light/95 dark:bg-background-dark/95 backdrop-blur-md border-b border-gray-200 dark:border-gray-800 transition-colors duration-300">
+<!-- Top App Bar -->
+<div class="flex items-center p-4 pb-2 justify-between">
+<button class="text-gray-900 dark:text-white flex size-12 shrink-0 items-center justify-center rounded-full hover:bg-gray-200 dark:hover:bg-gray-800 transition-colors">
+<span class="material-symbols-outlined">arrow_back</span>
+</button>
+<h2 class="text-gray-900 dark:text-white text-lg font-bold leading-tight tracking-[-0.015em] flex-1 text-center">Emergency Contacts</h2>
+<div class="flex w-12 items-center justify-end">
+<button class="flex items-center justify-center rounded-lg size-10 text-gray-900 dark:text-white hover:bg-gray-200 dark:hover:bg-gray-800 transition-colors">
+<span class="material-symbols-outlined" title="Synced">cloud_done</span>
+</button>
+</div>
+</div>
+<!-- Search Bar -->
+<div class="px-4 py-2">
+<label class="flex flex-col w-full">
+<div class="flex w-full items-center rounded-xl bg-white dark:bg-surface-dark border border-gray-200 dark:border-gray-700 h-12 shadow-sm transition-colors focus-within:border-primary focus-within:ring-1 focus-within:ring-primary">
+<div class="text-gray-400 dark:text-gray-500 flex items-center justify-center pl-4">
+<span class="material-symbols-outlined">search</span>
+</div>
+<input class="flex w-full flex-1 bg-transparent border-none text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:ring-0 px-3 text-base font-normal leading-normal" placeholder="Search name, LGA, or role" value=""/>
+</div>
+</label>
+</div>
+<!-- Chips -->
+<div class="flex gap-3 px-4 py-3 overflow-x-auto no-scrollbar">
+<!-- Active Chip -->
+<button class="flex h-9 shrink-0 items-center justify-center gap-x-2 rounded-full bg-primary pl-3 pr-4 shadow-sm shadow-primary/30 transition-transform active:scale-95">
+<span class="material-symbols-outlined text-black text-[20px]">view_list</span>
+<p class="text-black text-sm font-semibold">All</p>
+</button>
+<!-- Inactive Chips -->
+<button class="flex h-9 shrink-0 items-center justify-center gap-x-2 rounded-full bg-white dark:bg-surface-dark border border-gray-200 dark:border-gray-700 pl-3 pr-4 transition-transform active:scale-95">
+<span class="material-symbols-outlined text-gray-600 dark:text-gray-300 text-[20px]">person</span>
+<p class="text-gray-700 dark:text-gray-200 text-sm font-medium">Coordinators</p>
+</button>
+<button class="flex h-9 shrink-0 items-center justify-center gap-x-2 rounded-full bg-white dark:bg-surface-dark border border-gray-200 dark:border-gray-700 pl-3 pr-4 transition-transform active:scale-95">
+<span class="material-symbols-outlined text-gray-600 dark:text-gray-300 text-[20px]">local_police</span>
+<p class="text-gray-700 dark:text-gray-200 text-sm font-medium">Emergency</p>
+</button>
+<button class="flex h-9 shrink-0 items-center justify-center gap-x-2 rounded-full bg-white dark:bg-surface-dark border border-gray-200 dark:border-gray-700 pl-3 pr-4 transition-transform active:scale-95">
+<span class="material-symbols-outlined text-gray-600 dark:text-gray-300 text-[20px]">agriculture</span>
+<p class="text-gray-700 dark:text-gray-200 text-sm font-medium">Agri-Extension</p>
+</button>
+</div>
+</div>
+<!-- Main Content Area -->
+<div class="flex-1 overflow-y-auto pb-28 pt-2">
+<!-- Meta Info -->
+<div class="px-4 py-2 flex items-center gap-2">
+<div class="size-2 rounded-full bg-green-500 animate-pulse"></div>
+<p class="text-gray-500 dark:text-gray-400 text-xs font-medium uppercase tracking-wide">Available offline • Updated Today 08:30 AM</p>
+</div>
+<!-- SECTION: LDP Coordinators -->
+<div class="mb-6">
+<h3 class="text-gray-900 dark:text-white text-lg font-bold leading-tight px-4 pb-3 pt-2">LDP Coordinators</h3>
+<div class="px-4 space-y-3">
+<!-- Contact Card 1 -->
+<div class="bg-white dark:bg-surface-dark rounded-xl p-4 shadow-sm border border-gray-100 dark:border-gray-800 flex items-center justify-between gap-3">
+<div class="flex items-center gap-3 flex-1 min-w-0">
+<div class="size-12 rounded-full bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center shrink-0 text-blue-600 dark:text-blue-400">
+<span class="material-symbols-outlined filled">person</span>
+</div>
+<div class="flex flex-col min-w-0">
+<p class="text-gray-900 dark:text-white font-bold truncate text-base">Musa Ibrahim</p>
+<p class="text-gray-500 dark:text-gray-400 text-xs truncate">Coordinator • <span class="font-medium text-gray-700 dark:text-gray-300">Makurdi LGA</span></p>
+</div>
+</div>
+<div class="flex gap-2 shrink-0">
+<button aria-label="Message" class="size-10 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors">
+<span class="material-symbols-outlined text-[20px]">sms</span>
+</button>
+<button aria-label="Call" class="size-10 rounded-full bg-primary flex items-center justify-center text-black shadow-lg shadow-primary/20 hover:bg-primary-dark transition-colors active:scale-95">
+<span class="material-symbols-outlined filled text-[20px]">call</span>
+</button>
+</div>
+</div>
+<!-- Contact Card 2 -->
+<div class="bg-white dark:bg-surface-dark rounded-xl p-4 shadow-sm border border-gray-100 dark:border-gray-800 flex items-center justify-between gap-3">
+<div class="flex items-center gap-3 flex-1 min-w-0">
+<div class="size-12 rounded-full bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center shrink-0 text-blue-600 dark:text-blue-400">
+<span class="material-symbols-outlined filled">person</span>
+</div>
+<div class="flex flex-col min-w-0">
+<p class="text-gray-900 dark:text-white font-bold truncate text-base">Sarah Okafor</p>
+<p class="text-gray-500 dark:text-gray-400 text-xs truncate">Coordinator • <span class="font-medium text-gray-700 dark:text-gray-300">Guma LGA</span></p>
+</div>
+</div>
+<div class="flex gap-2 shrink-0">
+<button class="size-10 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors">
+<span class="material-symbols-outlined text-[20px]">sms</span>
+</button>
+<button class="size-10 rounded-full bg-primary flex items-center justify-center text-black shadow-lg shadow-primary/20 hover:bg-primary-dark transition-colors active:scale-95">
+<span class="material-symbols-outlined filled text-[20px]">call</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+<!-- SECTION: Emergency Services -->
+<div class="mb-6">
+<h3 class="text-gray-900 dark:text-white text-lg font-bold leading-tight px-4 pb-3 pt-2">Emergency Services</h3>
+<div class="px-4 space-y-3">
+<!-- Contact Card 3 -->
+<div class="bg-white dark:bg-surface-dark rounded-xl p-4 shadow-sm border border-gray-100 dark:border-gray-800 flex items-center justify-between gap-3">
+<div class="flex items-center gap-3 flex-1 min-w-0">
+<div class="size-12 rounded-full bg-red-50 dark:bg-red-900/30 flex items-center justify-center shrink-0 text-red-600 dark:text-red-400">
+<span class="material-symbols-outlined filled">local_police</span>
+</div>
+<div class="flex flex-col min-w-0">
+<p class="text-gray-900 dark:text-white font-bold truncate text-base">State Police Command</p>
+<p class="text-gray-500 dark:text-gray-400 text-xs truncate">Hotline • <span class="font-medium text-gray-700 dark:text-gray-300">All LGAs</span></p>
+</div>
+</div>
+<div class="flex gap-2 shrink-0">
+<button class="size-10 rounded-full bg-primary flex items-center justify-center text-black shadow-lg shadow-primary/20 hover:bg-primary-dark transition-colors active:scale-95">
+<span class="material-symbols-outlined filled text-[20px]">call</span>
+</button>
+</div>
+</div>
+<!-- Contact Card 4 -->
+<div class="bg-white dark:bg-surface-dark rounded-xl p-4 shadow-sm border border-gray-100 dark:border-gray-800 flex items-center justify-between gap-3">
+<div class="flex items-center gap-3 flex-1 min-w-0">
+<div class="size-12 rounded-full bg-orange-50 dark:bg-orange-900/30 flex items-center justify-center shrink-0 text-orange-600 dark:text-orange-400">
+<span class="material-symbols-outlined filled">medical_services</span>
+</div>
+<div class="flex flex-col min-w-0">
+<p class="text-gray-900 dark:text-white font-bold truncate text-base">SEMA Rapid Response</p>
+<p class="text-gray-500 dark:text-gray-400 text-xs truncate">Disaster Relief • <span class="font-medium text-gray-700 dark:text-gray-300">Makurdi HQ</span></p>
+</div>
+</div>
+<div class="flex gap-2 shrink-0">
+<button class="size-10 rounded-full bg-primary flex items-center justify-center text-black shadow-lg shadow-primary/20 hover:bg-primary-dark transition-colors active:scale-95">
+<span class="material-symbols-outlined filled text-[20px]">call</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+<!-- SECTION: Agri-Extension -->
+<div class="mb-4">
+<h3 class="text-gray-900 dark:text-white text-lg font-bold leading-tight px-4 pb-3 pt-2">Agri-Extension Officers</h3>
+<div class="px-4 space-y-3">
+<!-- Contact Card 5 -->
+<div class="bg-white dark:bg-surface-dark rounded-xl p-4 shadow-sm border border-gray-100 dark:border-gray-800 flex items-center justify-between gap-3">
+<div class="flex items-center gap-3 flex-1 min-w-0">
+<div class="size-12 rounded-full bg-green-50 dark:bg-green-900/30 flex items-center justify-center shrink-0 text-green-700 dark:text-green-400">
+<span class="material-symbols-outlined filled">agriculture</span>
+</div>
+<div class="flex flex-col min-w-0">
+<p class="text-gray-900 dark:text-white font-bold truncate text-base">Emmanuel Dauda</p>
+<p class="text-gray-500 dark:text-gray-400 text-xs truncate">Livestock Specialist • <span class="font-medium text-gray-700 dark:text-gray-300">Gwer West</span></p>
+</div>
+</div>
+<div class="flex gap-2 shrink-0">
+<button class="size-10 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors">
+<span class="material-symbols-outlined text-[20px]">sms</span>
+</button>
+<button class="size-10 rounded-full bg-primary flex items-center justify-center text-black shadow-lg shadow-primary/20 hover:bg-primary-dark transition-colors active:scale-95">
+<span class="material-symbols-outlined filled text-[20px]">call</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+<!-- Bottom Spacer for Fixed Button -->
+<div class="h-8"></div>
+</div>
+<!-- Sticky Bottom Action (Critical Escalation) -->
+<div class="absolute bottom-6 left-4 right-4 z-40">
+<button class="w-full flex items-center justify-center gap-3 bg-red-600 hover:bg-red-700 text-white font-bold text-lg h-14 rounded-xl shadow-xl shadow-red-600/30 transition-all active:scale-[0.98]">
+<span class="material-symbols-outlined filled animate-pulse">sos</span>
+                Call National Emergency (112)
+            </button>
+</div>
+</div>
+</body></html>

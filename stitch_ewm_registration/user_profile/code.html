@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>User Profile - Climate Early Warning</title>
+<link href="https://fonts.googleapis.com/css2?family=Lexend:wght@300;400;500;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              colors: {
+                "primary": "#13ec5b",
+                "background-light": "#f6f8f6",
+                "background-dark": "#102216",
+                "surface-dark": "#1a3322", // A slightly lighter green/black for cards
+                "text-secondary": "#92c9a4",
+              },
+              fontFamily: {
+                "display": ["Lexend", "sans-serif"]
+              },
+              borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "2xl": "1rem", "full": "9999px"},
+            },
+          },
+        }
+    </script>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark font-display text-slate-900 dark:text-white antialiased min-h-screen flex flex-col">
+<!-- Top App Bar -->
+<div class="sticky top-0 z-10 flex items-center bg-background-light dark:bg-background-dark p-4 pb-2 justify-between border-b dark:border-white/5 border-black/5">
+<button class="text-slate-900 dark:text-white flex size-12 shrink-0 items-center justify-center hover:bg-black/5 dark:hover:bg-white/5 rounded-full transition-colors">
+<span class="material-symbols-outlined text-2xl">arrow_back</span>
+</button>
+<h2 class="text-slate-900 dark:text-white text-lg font-bold leading-tight tracking-[-0.015em] flex-1 text-center pr-12">My Profile</h2>
+</div>
+<div class="flex-1 overflow-y-auto pb-8">
+<!-- Profile Header -->
+<div class="flex p-4 pt-6 @container">
+<div class="flex w-full flex-col gap-4 items-center">
+<div class="flex gap-4 flex-col items-center relative">
+<!-- Avatar with Verification Badge -->
+<div class="relative">
+<div class="bg-center bg-no-repeat aspect-square bg-cover rounded-full h-32 w-32 ring-4 ring-background-light dark:ring-surface-dark shadow-xl" data-alt="Portrait of a smiling Nigerian man in field gear" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuAKOslY66Vx7V0PKuqXmNQV--yPFmuLaNrTLZMTu5IXx2k0-BRtz6bL1ZVv2LpV9Ql0bWfyccTfRc8HlCgv9bu7Yz0tlP974WblLlZ5LQ-a49OlVrPKclfoEgwTXsmMpxbNIrhywiUf-HFp6P_hvAPMvGeXpwseJ-0TqbmgRVdDzrQQpS3taiMw-VP_8wI_DtIffhQcEJxii86T7MTEkgSGmjzKBtdJT4QHWu38cxPB8GBTNsq-hKjBkt6-tCJ4Z8-_DqizvGj0AdF5");'>
+</div>
+<div class="absolute bottom-1 right-1 bg-background-light dark:bg-background-dark rounded-full p-1 shadow-sm">
+<span class="material-symbols-outlined text-primary text-2xl filled" style="font-variation-settings: 'FILL' 1;">verified</span>
+</div>
+</div>
+<div class="flex flex-col items-center justify-center">
+<h1 class="text-slate-900 dark:text-white text-[24px] font-bold leading-tight tracking-tight text-center">Musa Ibrahim</h1>
+<p class="text-slate-500 dark:text-text-secondary text-base font-normal mt-1 text-center">Early Warning Monitor</p>
+<!-- Digital ID Badge Style -->
+<div class="mt-3 px-3 py-1 bg-surface-dark/10 dark:bg-primary/10 border border-primary/20 rounded-full flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-sm">badge</span>
+<span class="text-slate-700 dark:text-primary text-sm font-medium tracking-wide">ID: EWM-2023-452</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Activity Stats Summary -->
+<div class="px-4 py-2">
+<div class="grid grid-cols-3 gap-3">
+<div class="flex flex-col items-center justify-center p-3 rounded-xl bg-white dark:bg-surface-dark shadow-sm border border-black/5 dark:border-white/5">
+<span class="text-2xl font-bold text-primary">42</span>
+<span class="text-xs text-slate-500 dark:text-text-secondary mt-1 text-center">Reports</span>
+</div>
+<div class="flex flex-col items-center justify-center p-3 rounded-xl bg-white dark:bg-surface-dark shadow-sm border border-black/5 dark:border-white/5">
+<span class="text-2xl font-bold text-primary">18</span>
+<span class="text-xs text-slate-500 dark:text-text-secondary mt-1 text-center">Verified</span>
+</div>
+<div class="flex flex-col items-center justify-center p-3 rounded-xl bg-white dark:bg-surface-dark shadow-sm border border-black/5 dark:border-white/5">
+<span class="text-2xl font-bold text-primary">124</span>
+<span class="text-xs text-slate-500 dark:text-text-secondary mt-1 text-center">Days Active</span>
+</div>
+</div>
+</div>
+<!-- Section: Assigned Jurisdiction -->
+<div class="mt-4">
+<h3 class="text-slate-900 dark:text-white text-lg font-bold leading-tight tracking-[-0.015em] px-4 pb-3 pt-2 flex items-center gap-2">
+<span class="material-symbols-outlined text-primary">location_on</span>
+                Assigned Jurisdiction
+            </h3>
+<div class="mx-4 rounded-xl bg-white dark:bg-surface-dark shadow-sm border border-black/5 dark:border-white/5 overflow-hidden">
+<!-- Map Header Image -->
+<div class="h-24 w-full bg-cover bg-center relative" data-alt="Abstract map view of Benue State showing river layout" data-location="Benue State" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuCR-Wuci6hIXSiX4Q7zixGXNUt68tnPdDadn49vLEYoDsILq8zeEBJFHDW6a6zuZVrNTddY7Waw5Rdz4e60-9mI0jAs9eD78cmuAY6ESItyZm0yg9457JB5Ty5SfUvdgv8LOoq4uOXkF_QleWi9c3I7MdKc10HUfdilA0aupTK1T2ySOK861mECX4aYGZykruKP_FzpMcpyVpYMJ4LPUK4Ym5dwPltAi2u2dOIR7jsgEZ7UkEV5Qulhbfe_eQ7OTGbV8OEuj5t-ajIP");'>
+<div class="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent"></div>
+<div class="absolute bottom-2 left-4 text-white text-xs font-medium uppercase tracking-wider">Benue State Zone B</div>
+</div>
+<div class="p-4 space-y-4">
+<div class="flex justify-between items-center border-b border-black/5 dark:border-white/5 pb-3">
+<div class="flex items-center gap-3">
+<div class="bg-background-light dark:bg-background-dark p-2 rounded-lg text-primary">
+<span class="material-symbols-outlined text-xl">map</span>
+</div>
+<div class="flex flex-col">
+<p class="text-slate-400 dark:text-text-secondary text-xs uppercase font-medium">State</p>
+<p class="text-slate-900 dark:text-white text-sm font-semibold">Benue State</p>
+</div>
+</div>
+</div>
+<div class="flex justify-between items-center border-b border-black/5 dark:border-white/5 pb-3">
+<div class="flex items-center gap-3">
+<div class="bg-background-light dark:bg-background-dark p-2 rounded-lg text-primary">
+<span class="material-symbols-outlined text-xl">domain</span>
+</div>
+<div class="flex flex-col">
+<p class="text-slate-400 dark:text-text-secondary text-xs uppercase font-medium">LGA</p>
+<p class="text-slate-900 dark:text-white text-sm font-semibold">Makurdi</p>
+</div>
+</div>
+</div>
+<div class="flex justify-between items-center">
+<div class="flex items-center gap-3">
+<div class="bg-background-light dark:bg-background-dark p-2 rounded-lg text-primary">
+<span class="material-symbols-outlined text-xl">home_work</span>
+</div>
+<div class="flex flex-col">
+<p class="text-slate-400 dark:text-text-secondary text-xs uppercase font-medium">Ward</p>
+<p class="text-slate-900 dark:text-white text-sm font-semibold">Wailomayo</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Section: Account & Settings -->
+<div class="mt-6">
+<h3 class="text-slate-900 dark:text-white text-lg font-bold leading-tight tracking-[-0.015em] px-4 pb-3">Account Settings</h3>
+<div class="mx-4 flex flex-col gap-2">
+<!-- List Item -->
+<button class="flex items-center justify-between w-full p-4 rounded-xl bg-white dark:bg-surface-dark active:scale-[0.98] transition-transform border border-black/5 dark:border-white/5 shadow-sm group">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-slate-500 dark:text-text-secondary group-hover:text-primary transition-colors">person</span>
+<span class="text-slate-900 dark:text-white font-medium">Edit Profile Details</span>
+</div>
+<span class="material-symbols-outlined text-slate-400">chevron_right</span>
+</button>
+<!-- List Item -->
+<button class="flex items-center justify-between w-full p-4 rounded-xl bg-white dark:bg-surface-dark active:scale-[0.98] transition-transform border border-black/5 dark:border-white/5 shadow-sm group">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-slate-500 dark:text-text-secondary group-hover:text-primary transition-colors">language</span>
+<div class="flex flex-col items-start">
+<span class="text-slate-900 dark:text-white font-medium">Language Preference</span>
+<span class="text-xs text-slate-400 dark:text-text-secondary">English (Default)</span>
+</div>
+</div>
+<span class="material-symbols-outlined text-slate-400">chevron_right</span>
+</button>
+<!-- List Item -->
+<button class="flex items-center justify-between w-full p-4 rounded-xl bg-white dark:bg-surface-dark active:scale-[0.98] transition-transform border border-black/5 dark:border-white/5 shadow-sm group">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-slate-500 dark:text-text-secondary group-hover:text-primary transition-colors">sync</span>
+<div class="flex flex-col items-start">
+<span class="text-slate-900 dark:text-white font-medium">Offline Data Sync</span>
+<span class="text-xs text-primary">Up to date</span>
+</div>
+</div>
+<span class="material-symbols-outlined text-slate-400">chevron_right</span>
+</button>
+<!-- List Item -->
+<button class="flex items-center justify-between w-full p-4 rounded-xl bg-white dark:bg-surface-dark active:scale-[0.98] transition-transform border border-black/5 dark:border-white/5 shadow-sm group">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-slate-500 dark:text-text-secondary group-hover:text-primary transition-colors">help</span>
+<span class="text-slate-900 dark:text-white font-medium">Help &amp; Support</span>
+</div>
+<span class="material-symbols-outlined text-slate-400">chevron_right</span>
+</button>
+</div>
+</div>
+<!-- Emergency Contact -->
+<div class="mt-8 px-4 mb-8">
+<button class="w-full py-4 rounded-xl border border-red-500/30 bg-red-500/10 text-red-500 dark:text-red-400 font-bold flex items-center justify-center gap-2 active:bg-red-500/20 transition-colors">
+<span class="material-symbols-outlined">sos</span>
+                Contact Supervisor / SOS
+            </button>
+<div class="mt-4 flex justify-center">
+<button class="text-slate-400 dark:text-white/40 text-sm font-medium px-4 py-2 hover:text-slate-600 dark:hover:text-white transition-colors">
+                    Log Out
+                </button>
+</div>
+</div>
+</div>
+</body></html>
