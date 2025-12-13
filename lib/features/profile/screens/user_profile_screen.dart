@@ -433,7 +433,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                           color: Colors.grey.shade400,
                         ),
                       ),
-                      activeColor: AppColors.primaryRed,
+                      activeThumbColor: AppColors.primaryRed,
                       value: profile.biometricsEnabled,
                       onChanged: (value) async {
                         if (value) {
