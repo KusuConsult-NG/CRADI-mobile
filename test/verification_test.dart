@@ -7,6 +7,8 @@ import 'package:climate_app/features/dashboard/screens/home_screen.dart';
 import 'package:climate_app/features/knowledge_base/screens/hazard_guides_screen.dart';
 import 'package:climate_app/features/knowledge_base/screens/knowledge_base_screen.dart';
 import 'package:climate_app/features/profile/screens/user_profile_screen.dart';
+import 'package:climate_app/features/profile/providers/profile_provider.dart';
+import 'package:climate_app/core/providers/connectivity_provider.dart';
 import 'package:climate_app/features/reporting/providers/reporting_provider.dart';
 import 'package:climate_app/features/reporting/screens/hazard_selection_screen.dart';
 import 'package:climate_app/features/reporting/screens/location_picker_screen.dart';
@@ -15,6 +17,7 @@ import 'package:climate_app/features/reporting/screens/report_review_screen.dart
 import 'package:climate_app/features/settings/screens/settings_screen.dart';
 import 'package:climate_app/features/verification/screens/verification_request_screen.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'dart:io';
 import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
@@ -55,24 +58,35 @@ class _MockHttpClientRequest implements HttpClientRequest {
   }
 
   @override
-  dynamic noSuchMethod(Invocation invocation) {} 
+  dynamic noSuchMethod(Invocation invocation) {}
 }
 
 class _MockHttpClientResponse implements HttpClientResponse {
   @override
   int get statusCode => 200;
-  
-  @override
-  int get contentLength => kTransparentImage.length;
-  
-  @override
-  HttpClientResponseCompressionState get compressionState => HttpClientResponseCompressionState.notCompressed;
 
   @override
-  StreamSubscription<List<int>> listen(void Function(List<int> event)? onData, {Function? onError, void Function()? onDone, bool? cancelOnError}) {
-    return Stream.value(kTransparentImage).listen(onData, onError: onError, onDone: onDone, cancelOnError: cancelOnError);
+  int get contentLength => kTransparentImage.length;
+
+  @override
+  HttpClientResponseCompressionState get compressionState =>
+      HttpClientResponseCompressionState.notCompressed;
+
+  @override
+  StreamSubscription<List<int>> listen(
+    void Function(List<int> event)? onData, {
+    Function? onError,
+    void Function()? onDone,
+    bool? cancelOnError,
+  }) {
+    return Stream.value(kTransparentImage).listen(
+      onData,
+      onError: onError,
+      onDone: onDone,
+      cancelOnError: cancelOnError,
+    );
   }
-  
+
   @override
   dynamic noSuchMethod(Invocation invocation) {}
 }
@@ -86,36 +100,140 @@ class _MockHttpHeaders implements HttpHeaders {
 }
 
 final List<int> kTransparentImage = [
-  0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49,
-  0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06,
-  0x00, 0x00, 0x00, 0x1F, 0x15, 0xC4, 0x89, 0x00, 0x00, 0x00, 0x0A, 0x49, 0x44,
-  0x41, 0x54, 0x78, 0x9C, 0x63, 0x00, 0x01, 0x00, 0x00, 0x05, 0x00, 0x01, 0x0D,
-  0x0A, 0x2D, 0xB4, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE, 0x42,
-  0x60, 0x82,
+  0x89,
+  0x50,
+  0x4E,
+  0x47,
+  0x0D,
+  0x0A,
+  0x1A,
+  0x0A,
+  0x00,
+  0x00,
+  0x00,
+  0x0D,
+  0x49,
+  0x48,
+  0x44,
+  0x52,
+  0x00,
+  0x00,
+  0x00,
+  0x01,
+  0x00,
+  0x00,
+  0x00,
+  0x01,
+  0x08,
+  0x06,
+  0x00,
+  0x00,
+  0x00,
+  0x1F,
+  0x15,
+  0xC4,
+  0x89,
+  0x00,
+  0x00,
+  0x00,
+  0x0A,
+  0x49,
+  0x44,
+  0x41,
+  0x54,
+  0x78,
+  0x9C,
+  0x63,
+  0x00,
+  0x01,
+  0x00,
+  0x00,
+  0x05,
+  0x00,
+  0x01,
+  0x0D,
+  0x0A,
+  0x2D,
+  0xB4,
+  0x00,
+  0x00,
+  0x00,
+  0x00,
+  0x49,
+  0x45,
+  0x4E,
+  0x44,
+  0xAE,
+  0x42,
+  0x60,
+  0x82,
 ];
-
 
 Widget makeTestableWidget({required Widget child}) {
   return MultiProvider(
     providers: [
       ChangeNotifierProvider(create: (_) => AuthProvider()),
       ChangeNotifierProvider(create: (_) => ReportingProvider()),
+      ChangeNotifierProvider(create: (_) => ConnectivityProvider()),
+      ChangeNotifierProvider(create: (_) => ProfileProvider()),
     ],
-    child: MaterialApp(
-      theme: AppTheme.lightTheme,
-      home: child,
-    ),
+    child: MaterialApp(theme: AppTheme.lightTheme, home: child),
   );
 }
 
 void main() {
-  setUpAll(() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  setUpAll(() async {
+    // Mock Firebase
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(
+          const MethodChannel('plugins.flutter.io/firebase_core'),
+          (MethodCall methodCall) async {
+            if (methodCall.method == 'Firebase#initializeCore') {
+              return [
+                {
+                  'name': '[DEFAULT]',
+                  'options': {
+                    'apiKey': 'test',
+                    'appId': 'test',
+                    'messagingSenderId': 'test',
+                    'projectId': 'test',
+                  },
+                  'pluginConstants': {},
+                },
+              ];
+            }
+            return null;
+          },
+        );
+
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(
+          const MethodChannel('plugins.flutter.io/firebase_auth'),
+          (MethodCall methodCall) async => null,
+        );
+
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(
+          const MethodChannel('plugins.flutter.io/cloud_firestore'),
+          (MethodCall methodCall) async => null,
+        );
+
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(
+          const MethodChannel('plugins.flutter.io/firebase_storage'),
+          (MethodCall methodCall) async => null,
+        );
+
     HttpOverrides.global = TestHttpOverrides();
     GoogleFonts.config.allowRuntimeFetching = false;
   });
 
   testWidgets('Render RegistrationScreen', (WidgetTester tester) async {
-    await tester.pumpWidget(makeTestableWidget(child: const RegistrationScreen()));
+    await tester.pumpWidget(
+      makeTestableWidget(child: const RegistrationScreen()),
+    );
     expect(find.byType(RegistrationScreen), findsOneWidget);
   });
 
@@ -130,27 +248,37 @@ void main() {
   });
 
   testWidgets('Render HazardSelectionScreen', (WidgetTester tester) async {
-    await tester.pumpWidget(makeTestableWidget(child: const HazardSelectionScreen()));
+    await tester.pumpWidget(
+      makeTestableWidget(child: const HazardSelectionScreen()),
+    );
     expect(find.byType(HazardSelectionScreen), findsOneWidget);
   });
 
   testWidgets('Render LocationPickerScreen', (WidgetTester tester) async {
-    await tester.pumpWidget(makeTestableWidget(child: const LocationPickerScreen()));
+    await tester.pumpWidget(
+      makeTestableWidget(child: const LocationPickerScreen()),
+    );
     expect(find.byType(LocationPickerScreen), findsOneWidget);
   });
 
   testWidgets('Render ReportDetailsScreen', (WidgetTester tester) async {
-    await tester.pumpWidget(makeTestableWidget(child: const ReportDetailsScreen()));
+    await tester.pumpWidget(
+      makeTestableWidget(child: const ReportDetailsScreen()),
+    );
     expect(find.byType(ReportDetailsScreen), findsOneWidget);
   });
 
   testWidgets('Render ReportReviewScreen', (WidgetTester tester) async {
-    await tester.pumpWidget(makeTestableWidget(child: const ReportReviewScreen()));
+    await tester.pumpWidget(
+      makeTestableWidget(child: const ReportReviewScreen()),
+    );
     expect(find.byType(ReportReviewScreen), findsOneWidget);
   });
 
   testWidgets('Render UserProfileScreen', (WidgetTester tester) async {
-    await tester.pumpWidget(makeTestableWidget(child: const UserProfileScreen()));
+    await tester.pumpWidget(
+      makeTestableWidget(child: const UserProfileScreen()),
+    );
     expect(find.byType(UserProfileScreen), findsOneWidget);
   });
 
@@ -160,27 +288,37 @@ void main() {
   });
 
   testWidgets('Render EmergencyContactsScreen', (WidgetTester tester) async {
-    await tester.pumpWidget(makeTestableWidget(child: const EmergencyContactsScreen()));
+    await tester.pumpWidget(
+      makeTestableWidget(child: const EmergencyContactsScreen()),
+    );
     expect(find.byType(EmergencyContactsScreen), findsOneWidget);
   });
 
   testWidgets('Render KnowledgeBaseScreen', (WidgetTester tester) async {
-    await tester.pumpWidget(makeTestableWidget(child: const KnowledgeBaseScreen()));
+    await tester.pumpWidget(
+      makeTestableWidget(child: const KnowledgeBaseScreen()),
+    );
     expect(find.byType(KnowledgeBaseScreen), findsOneWidget);
   });
 
   testWidgets('Render HazardGuidesScreen', (WidgetTester tester) async {
-    await tester.pumpWidget(makeTestableWidget(child: const HazardGuidesScreen()));
+    await tester.pumpWidget(
+      makeTestableWidget(child: const HazardGuidesScreen()),
+    );
     expect(find.byType(HazardGuidesScreen), findsOneWidget);
   });
 
   testWidgets('Render AlertsListScreen', (WidgetTester tester) async {
-    await tester.pumpWidget(makeTestableWidget(child: const AlertsListScreen()));
+    await tester.pumpWidget(
+      makeTestableWidget(child: const AlertsListScreen()),
+    );
     expect(find.byType(AlertsListScreen), findsOneWidget);
   });
 
   testWidgets('Render VerificationRequestScreen', (WidgetTester tester) async {
-    await tester.pumpWidget(makeTestableWidget(child: const VerificationRequestScreen()));
+    await tester.pumpWidget(
+      makeTestableWidget(child: const VerificationRequestScreen()),
+    );
     expect(find.byType(VerificationRequestScreen), findsOneWidget);
   });
 }

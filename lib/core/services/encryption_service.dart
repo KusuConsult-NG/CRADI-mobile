@@ -48,7 +48,7 @@ class EncryptionService {
       final encrypter = Encrypter(AES(key, mode: AESMode.cbc));
       
       return encrypter.decrypt(encrypted, iv: iv);
-    } catch (e) {
+    } on Exception catch (e) {
       throw Exception('Decryption failed: ${e.toString()}');
     }
   }
@@ -110,7 +110,7 @@ class EncryptionService {
       final encrypter = Encrypter(AES(key, mode: AESMode.cbc));
       
       return Uint8List.fromList(encrypter.decryptBytes(encrypted, iv: iv));
-    } catch (e) {
+    } on Exception catch (e) {
       throw Exception('Decryption failed: ${e.toString()}');
     }
   }

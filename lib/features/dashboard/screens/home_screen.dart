@@ -1,13 +1,13 @@
 import 'package:climate_app/core/theme/app_colors.dart';
 import 'package:climate_app/core/providers/language_provider.dart';
-import 'package:climate_app/features/verification/providers/reports_status_provider.dart';
-import 'package:climate_app/features/verification/models/verification_report_model.dart';
 import 'package:flutter/material.dart';
 import 'dart:io';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:climate_app/features/profile/providers/profile_provider.dart';
 import 'package:provider/provider.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -139,6 +139,43 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                       const SizedBox(height: 24),
 
+                      // Browse Categories
+                      _buildSectionHeader('Browse Categories', () {}),
+                      const SizedBox(height: 12),
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: [
+                            _buildCategoryCard(
+                              'Floods',
+                              Icons.flood,
+                              Colors.blue,
+                            ),
+                            _buildCategoryCard(
+                              'Droughts',
+                              Icons.wb_sunny,
+                              Colors.orange,
+                            ),
+                            _buildCategoryCard(
+                              'Pests',
+                              Icons.pest_control,
+                              Colors.green,
+                            ),
+                            _buildCategoryCard(
+                              'Conflicts',
+                              Icons.shield,
+                              Colors.red,
+                            ),
+                            _buildCategoryCard(
+                              'Erosion',
+                              Icons.landscape,
+                              Colors.brown,
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+
                       // Biometrics Card Removed
 
                       // Filter Tabs (Sticky-ish behavior handled by placement here)
@@ -255,18 +292,14 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ],
           ),
-          GestureDetector(
-            onTap: () {
-              // Notification action
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('No new notifications')),
-              );
-            },
-            child: Stack(
-              children: [
-                Container(
+          Row(
+            children: [
+              GestureDetector(
+                onTap: () => context.push('/chat'),
+                child: Container(
                   width: 40,
                   height: 40,
+                  margin: const EdgeInsets.only(right: 12),
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     color: Colors.white,
@@ -280,25 +313,58 @@ class _HomeScreenState extends State<HomeScreen> {
                     ],
                   ),
                   child: const Icon(
-                    Icons.notifications_outlined,
+                    Icons.chat_bubble_outline,
                     color: AppColors.textPrimary,
-                    size: 22,
+                    size: 20,
                   ),
                 ),
-                Positioned(
-                  top: 10,
-                  right: 12,
-                  child: Container(
-                    width: 8,
-                    height: 8,
-                    decoration: const BoxDecoration(
-                      color: AppColors.errorRed,
-                      shape: BoxShape.circle,
+              ),
+              GestureDetector(
+                onTap: () {
+                  // Notification action
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('No new notifications')),
+                  );
+                },
+                child: Stack(
+                  children: [
+                    Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: Colors.white,
+                        border: Border.all(color: Colors.grey.shade200),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.05),
+                            blurRadius: 4,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: const Icon(
+                        Icons.notifications_outlined,
+                        color: AppColors.textPrimary,
+                        size: 22,
+                      ),
                     ),
-                  ),
+                    Positioned(
+                      top: 10,
+                      right: 12,
+                      child: Container(
+                        width: 8,
+                        height: 8,
+                        decoration: const BoxDecoration(
+                          color: AppColors.errorRed,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ],
       ),
@@ -415,41 +481,57 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildFeedContent() {
-    // Determine content based on tab
-    return Column(
-      children: [
-        if (_selectedFilterIndex == 1 || _selectedFilterIndex == 0) ...[
-          // Alert Card (High Priority)
-          _buildAlertCard(),
-          const SizedBox(height: 16),
-        ],
+    final currentUser = FirebaseAuth.instance.currentUser;
+    if (currentUser == null) {
+      return const Center(child: Text('Please log in to view reports'));
+    }
 
-        if (_selectedFilterIndex == 0) ...[
-          // Verification Requests
-          _buildVerificationCard(
-            title: 'Crop Pest Infestation',
-            reporter: 'Peer Yusuf',
-            location: 'Makurdi North',
-            time: '30m ago',
-            icon: Icons.pest_control,
-            iconColor: Colors.orange,
-            bgIconColor: Colors.orange.shade50,
-          ),
-          const SizedBox(height: 16),
-          _buildVerificationCard(
-            title: 'Drought Signs',
-            reporter: 'Peer Amara',
-            location: 'Otukpo East',
-            time: '2h ago',
-            icon: Icons.water_drop,
-            iconColor: Colors.blue,
-            bgIconColor: Colors.blue.shade50,
-          ),
-        ],
+    // Build query based on selected tab
+    Query<Map<String, dynamic>> query;
 
-        if (_selectedFilterIndex == 2) ...[
-          // My Reports - Empty State
-          Center(
+    if (_selectedFilterIndex == 0) {
+      // To Verify - pending reports
+      query = FirebaseFirestore.instance
+          .collection('reports')
+          .where('status', isEqualTo: 'pending')
+          .orderBy('submittedAt', descending: true)
+          .limit(10);
+    } else if (_selectedFilterIndex == 1) {
+      // Alerts - high/critical severity or alerts
+      query = FirebaseFirestore.instance
+          .collection('reports')
+          .where('isAlert', isEqualTo: true)
+          .orderBy('submittedAt', descending: true)
+          .limit(10);
+    } else {
+      // My Reports - user's own reports
+      query = FirebaseFirestore.instance
+          .collection('reports')
+          .where('userId', isEqualTo: currentUser.uid)
+          .orderBy('submittedAt', descending: true)
+          .limit(10);
+    }
+
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: query.snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return Center(child: Text('Error: ${snapshot.error}'));
+        }
+
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(
+            child: Padding(
+              padding: EdgeInsets.all(40),
+              child: CircularProgressIndicator(),
+            ),
+          );
+        }
+
+        final reports = snapshot.data?.docs ?? [];
+
+        if (reports.isEmpty) {
+          return Center(
             child: Padding(
               padding: const EdgeInsets.all(40),
               child: Column(
@@ -461,7 +543,11 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   const SizedBox(height: 16),
                   Text(
-                    'No reports yet',
+                    _selectedFilterIndex == 0
+                        ? 'No reports to verify'
+                        : _selectedFilterIndex == 1
+                        ? 'No active alerts'
+                        : 'No reports yet',
                     style: GoogleFonts.lexend(
                       fontSize: 16,
                       fontWeight: FontWeight.w600,
@@ -470,7 +556,9 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Reports you submit will appear here',
+                    _selectedFilterIndex == 2
+                        ? 'Reports you submit will appear here'
+                        : 'New items will appear here',
                     style: GoogleFonts.lexend(
                       fontSize: 13,
                       color: Colors.grey.shade500,
@@ -480,13 +568,211 @@ class _HomeScreenState extends State<HomeScreen> {
                 ],
               ),
             ),
+          );
+        }
+
+        return Column(
+          children: [
+            if (_selectedFilterIndex == 1 && reports.isNotEmpty) ...[
+              // Show first alert as featured
+              _buildAlertCardFromData(reports.first.data()),
+              const SizedBox(height: 16),
+            ],
+            ...reports.map((doc) {
+              final data = doc.data();
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 16),
+                child: _buildReportCard(data, doc.id),
+              );
+            }),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildSectionHeader(String title, VoidCallback onViewAll) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          title,
+          style: GoogleFonts.lexend(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            color: AppColors.textPrimary,
           ),
-        ],
+        ),
+        GestureDetector(
+          onTap: onViewAll,
+          child: Text(
+            'See All',
+            style: GoogleFonts.lexend(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: AppColors.primaryRed,
+            ),
+          ),
+        ),
       ],
     );
   }
 
-  Widget _buildAlertCard() {
+  Widget _buildCategoryCard(String label, IconData icon, Color color) {
+    return Container(
+      margin: const EdgeInsets.only(right: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withValues(alpha: 0.2)),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, size: 20, color: color),
+          const SizedBox(width: 8),
+          Text(
+            label,
+            style: GoogleFonts.lexend(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: AppColors.textPrimary,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildReportCard(Map<String, dynamic> data, String docId) {
+    final hazardType = data['hazardType'] ?? 'Unknown';
+    final severity = data['severity'] ?? 'Unknown';
+    final location = data['locationDetails'] ?? 'Unknown location';
+    final timestamp = data['submittedAt'] as Timestamp?;
+    final timeAgo = timestamp != null
+        ? _formatTimeAgo(timestamp.toDate())
+        : 'Unknown time';
+
+    // Map hazard  types to icons
+    IconData icon;
+    Color iconColor;
+    switch (hazardType.toLowerCase()) {
+      case 'flood':
+        icon = Icons.flood;
+        iconColor = Colors.blue;
+        break;
+      case 'drought':
+        icon = Icons.wb_sunny;
+        iconColor = Colors.orange;
+        break;
+      case 'pest':
+        icon = Icons.pest_control;
+        iconColor = Colors.green;
+        break;
+      case 'fire':
+        icon = Icons.local_fire_department;
+        iconColor = Colors.red;
+        break;
+      default:
+        icon = Icons.warning;
+        iconColor = Colors.grey;
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: iconColor.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: iconColor.withValues(alpha: 0.2)),
+            ),
+            child: Icon(icon, color: iconColor),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        '$hazardType - $severity',
+                        style: GoogleFonts.lexend(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                    ),
+                    Icon(Icons.chevron_right, color: Colors.grey.shade400),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    const Icon(
+                      Icons.location_on,
+                      size: 14,
+                      color: AppColors.textSecondary,
+                    ),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text(
+                        location,
+                        style: GoogleFonts.lexend(
+                          fontSize: 12,
+                          color: AppColors.textSecondary,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    const Icon(
+                      Icons.schedule,
+                      size: 14,
+                      color: AppColors.textSecondary,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      timeAgo,
+                      style: GoogleFonts.lexend(
+                        fontSize: 12,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAlertCardFromData(Map<String, dynamic> data) {
+    final hazardType = data['hazardType'] ?? 'Alert';
+    final severity = data['severity'] ?? 'High';
+    final description = data['description'] ?? 'No description available';
+    final location = data['locationDetails'] ?? 'Unknown location';
+    final timestamp = data['submittedAt'] as Timestamp?;
+    final timeAgo = timestamp != null
+        ? _formatTimeAgo(timestamp.toDate())
+        : 'Unknown time';
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
@@ -510,14 +796,14 @@ class _HomeScreenState extends State<HomeScreen> {
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: const Icon(
-                      Icons.flood,
+                      Icons.warning,
                       color: Colors.white,
                       size: 16,
                     ),
                   ),
                   const SizedBox(width: 8),
                   Text(
-                    'WARNING',
+                    'ALERT',
                     style: GoogleFonts.lexend(
                       fontSize: 12,
                       fontWeight: FontWeight.bold,
@@ -538,7 +824,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     const Icon(Icons.timer, size: 14, color: Color(0xFFA50E0E)),
                     const SizedBox(width: 4),
                     Text(
-                      '10m ago',
+                      timeAgo,
                       style: GoogleFonts.lexend(
                         fontSize: 10,
                         fontWeight: FontWeight.bold,
@@ -552,7 +838,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           const SizedBox(height: 12),
           Text(
-            'Flash Flood Warning',
+            '$hazardType - $severity Severity',
             style: GoogleFonts.lexend(
               fontSize: 18,
               fontWeight: FontWeight.bold,
@@ -561,402 +847,34 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           const SizedBox(height: 8),
           Text(
-            'Benue River Bank - Water levels rising rapidly. Immediate evacuation advised for Zone B residents.',
+            '$location - $description',
             style: GoogleFonts.lexend(
               fontSize: 14,
               color: AppColors.textPrimary.withValues(alpha: 0.8),
               height: 1.5,
             ),
-          ),
-          const SizedBox(height: 20),
-          ElevatedButton.icon(
-            onPressed: () {
-              showDialog(
-                context: context,
-                builder: (c) => AlertDialog(
-                  title: Row(
-                    children: [
-                      const Icon(Icons.campaign, color: AppColors.errorRed),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Padding(
-                          padding: const EdgeInsets.only(
-                            left: 12,
-                            top: 8,
-                            bottom: 6,
-                          ), // Reduced from 8 to 6
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Flash Flood Warning',
-                                style: GoogleFonts.lexend(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                'Benue River Bank - Water levels rising rapidly. Immediate evacuation advised for Zone B residents.',
-                                style: GoogleFonts.lexend(fontSize: 14),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  content: SingleChildScrollView(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const SizedBox(height: 16),
-                        Text(
-                          'Broadcast Details:',
-                          style: GoogleFonts.lexend(
-                            fontSize: 14,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        _buildDetailRow('Time:', '10m ago'),
-                        _buildDetailRow(
-                          'Location:',
-                          'Benue River Bank, Zone B',
-                        ),
-                        _buildDetailRow('Severity:', 'High'),
-                        _buildDetailRow('Alert Type:', 'Flash Flood'),
-                        _buildDetailRow('Affected Areas:', 'Makurdi LGA'),
-                        const SizedBox(height: 16),
-                        Text(
-                          'Recommended Actions:',
-                          style: GoogleFonts.lexend(
-                            fontSize: 14,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          '• Evacuate to higher ground immediately\n• Avoid crossing flooded areas\n• Stay tuned for updates\n• Contact emergency services if needed',
-                          style: GoogleFonts.lexend(fontSize: 13),
-                        ),
-                      ],
-                    ),
-                  ),
-                  actions: [
-                    TextButton(
-                      onPressed: () => Navigator.pop(c),
-                      child: const Text('Close'),
-                    ),
-                    ElevatedButton(
-                      onPressed: () {
-                        Navigator.pop(c);
-                        // In a real app, this would send the broadcast
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(
-                              'Broadcast sent to all Zone B residents',
-                              style: GoogleFonts.lexend(),
-                            ),
-                            backgroundColor: AppColors.successGreen,
-                          ),
-                        );
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.errorRed,
-                      ),
-                      child: const Text(
-                        'Send Broadcast',
-                        style: TextStyle(color: Colors.white),
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.errorRed,
-              foregroundColor: Colors.white,
-              minimumSize: const Size(double.infinity, 48),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-            icon: const Icon(Icons.campaign),
-            label: const Text('Broadcast Warning'),
+            maxLines: 3,
+            overflow: TextOverflow.ellipsis,
           ),
         ],
       ),
     );
   }
 
-  Widget _buildVerificationCard({
-    required String title,
-    required String reporter,
-    required String location,
-    required String time,
-    required IconData icon,
-    required Color iconColor,
-    required Color bgIconColor,
-  }) {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.grey.shade200),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              color: bgIconColor,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: iconColor.withValues(alpha: 0.1)),
-            ),
-            child: Icon(icon, color: iconColor),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      title,
-                      style: GoogleFonts.lexend(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.textPrimary,
-                      ),
-                    ),
-                    const Icon(Icons.more_horiz, color: Colors.grey),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                RichText(
-                  text: TextSpan(
-                    style: GoogleFonts.lexend(
-                      fontSize: 12,
-                      color: AppColors.textSecondary,
-                    ),
-                    children: [
-                      const TextSpan(text: 'Reported by '),
-                      TextSpan(
-                        text: reporter,
-                        style: GoogleFonts.lexend(
-                          fontWeight: FontWeight.w500,
-                          color: AppColors.textSecondary,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Icon(
-                      Icons.location_on,
-                      size: 14,
-                      color: AppColors.textSecondary,
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      location,
-                      style: GoogleFonts.lexend(
-                        fontSize: 12,
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Container(
-                      width: 4,
-                      height: 4,
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade300,
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Icon(
-                      Icons.schedule,
-                      size: 14,
-                      color: AppColors.textSecondary,
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      time,
-                      style: GoogleFonts.lexend(
-                        fontSize: 12,
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(
-                      flex: 1,
-                      child: ElevatedButton(
-                        onPressed: () {
-                          final provider = Provider.of<ReportsStatusProvider>(
-                            context,
-                            listen: false,
-                          );
-                          // Verify the first pending report (demo - in production would pass specific ID)
-                          final pendingReports = provider.getReportsByStatus(
-                            ReportStatus.pending,
-                          );
-                          if (pendingReports.isNotEmpty) {
-                            provider.verifyReport(pendingReports.first.id);
-                          }
+  String _formatTimeAgo(DateTime dateTime) {
+    final now = DateTime.now();
+    final difference = now.difference(dateTime);
 
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                'Verified! View in Reports Status',
-                                style: GoogleFonts.lexend(),
-                              ),
-                              backgroundColor: AppColors.successGreen,
-                              action: SnackBarAction(
-                                label: 'View',
-                                textColor: Colors.white,
-                                onPressed: () =>
-                                    context.push('/reports-status'),
-                              ),
-                            ),
-                          );
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.primaryRed,
-                          foregroundColor: Colors.white,
-                          elevation: 0,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                        ),
-                        child: const Text('Verify'),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      flex: 1,
-                      child: OutlinedButton(
-                        onPressed: () {
-                          showDialog(
-                            context: context,
-                            builder: (c) => AlertDialog(
-                              title: Text(
-                                'Verification Details',
-                                style: GoogleFonts.lexend(
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              content: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'Report: $title',
-                                    style: GoogleFonts.lexend(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    'Reporter: $reporter',
-                                    style: GoogleFonts.lexend(fontSize: 13),
-                                  ),
-                                  Text(
-                                    'Location: $location',
-                                    style: GoogleFonts.lexend(fontSize: 13),
-                                  ),
-                                  Text(
-                                    'Time: $time',
-                                    style: GoogleFonts.lexend(fontSize: 13),
-                                  ),
-                                  const SizedBox(height: 12),
-                                  Text(
-                                    'Status: Pending Verification',
-                                    style: GoogleFonts.lexend(
-                                      fontSize: 13,
-                                      color: Colors.orange,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              actions: [
-                                TextButton(
-                                  onPressed: () => Navigator.pop(c),
-                                  child: const Text('Close'),
-                                ),
-                              ],
-                            ),
-                          );
-                        },
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: AppColors.textSecondary,
-                          side: BorderSide(color: Colors.grey.shade200),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          backgroundColor: Colors.grey.shade50,
-                        ),
-                        child: const Text('Details'),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
+    if (difference.inMinutes < 1) {
+      return 'Just now';
+    } else if (difference.inMinutes < 60) {
+      return '${difference.inMinutes}m ago';
+    } else if (difference.inHours < 24) {
+      return '${difference.inHours}h ago';
+    } else if (difference.inDays < 7) {
+      return '${difference.inDays}d ago';
+    } else {
+      return '${(difference.inDays / 7).floor()}w ago';
+    }
   }
-
-  Widget _buildDetailRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 4),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 120,
-            child: Text(
-              label,
-              style: GoogleFonts.lexend(
-                fontSize: 13,
-                fontWeight: FontWeight.w500,
-                color: AppColors.textSecondary,
-              ),
-            ),
-          ),
-          Expanded(
-            child: Text(
-              value,
-              style: GoogleFonts.lexend(
-                fontSize: 13,
-                color: AppColors.textPrimary,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // Biometric Card Removed
 }

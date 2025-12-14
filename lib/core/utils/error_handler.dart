@@ -1,3 +1,4 @@
+import 'dart:developer' as developer;
 import 'package:flutter/foundation.dart';
 
 /// Secure error handler that prevents sensitive data leakage
@@ -74,14 +75,26 @@ class ErrorHandler {
     String? context,
   }) {
     if (kDebugMode) {
-      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      print('🔴 ERROR${context != null ? ' in $context' : ''}');
-      print('Error: ${_sanitizeForLog(error.toString())}');
+      developer.log(
+        '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+        name: 'ErrorHandler',
+      );
+      developer.log(
+        '🔴 ERROR${context != null ? ' in $context' : ''}',
+        name: 'ErrorHandler',
+      );
+      developer.log(
+        'Error: ${_sanitizeForLog(error.toString())}',
+        name: 'ErrorHandler',
+      );
       if (stackTrace != null) {
-        print('Stack trace:');
-        print(_sanitizeStackTrace(stackTrace));
+        developer.log('Stack trace:', name: 'ErrorHandler');
+        developer.log(_sanitizeStackTrace(stackTrace), name: 'ErrorHandler');
       }
-      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      developer.log(
+        '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+        name: 'ErrorHandler',
+      );
     }
 
     // In production, send to analytics/crash reporting (sanitized)

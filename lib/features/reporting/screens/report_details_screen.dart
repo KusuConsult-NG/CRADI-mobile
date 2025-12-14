@@ -64,7 +64,7 @@ class _ReportDetailsScreenState extends State<ReportDetailsScreen> {
         );
         setState(() => _currentLocale = enLocale.localeId);
       }
-    } catch (e) {
+    } on Exception {
       setState(() => _speechAvailable = false);
     }
   }
@@ -142,7 +142,7 @@ class _ReportDetailsScreenState extends State<ReportDetailsScreen> {
           _selectedImages.add(photo);
         });
       }
-    } catch (e) {
+    } on Exception catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Camera error: ${e.toString()}')),
@@ -175,7 +175,7 @@ class _ReportDetailsScreenState extends State<ReportDetailsScreen> {
           _selectedImages.add(photo);
         });
       }
-    } catch (e) {
+    } on Exception catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Gallery error: ${e.toString()}')),
@@ -503,7 +503,7 @@ class _ReportDetailsScreenState extends State<ReportDetailsScreen> {
                                   ],
                                 ),
                               ),
-                              Icon(
+                              const Icon(
                                 Icons.edit_calendar,
                                 color: AppColors.primaryRed,
                               ),

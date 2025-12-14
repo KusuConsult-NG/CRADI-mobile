@@ -320,9 +320,9 @@ class _ReportReviewScreenState extends State<ReportReviewScreen> {
                             ),
                             borderRadius: BorderRadius.circular(8),
                           ),
-                          child: Column(
+                          child: const Column(
                             mainAxisAlignment: MainAxisAlignment.center,
-                            children: const [
+                            children: [
                               Icon(
                                 Icons.add_a_photo,
                                 size: 20,

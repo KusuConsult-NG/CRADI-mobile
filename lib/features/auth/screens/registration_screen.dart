@@ -83,7 +83,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                     child: Container(
                       width: 40,
                       height: 40,
-                      decoration: BoxDecoration(
+                      decoration: const BoxDecoration(
                         shape: BoxShape.circle,
                         color: Colors.transparent,
                         // hover effect simulated

@@ -97,7 +97,7 @@ class BiometricService {
   Future<void> stopAuthentication() async {
     try {
       await _localAuth.stopAuthentication();
-    } catch (e) {
+    } on Exception catch (e) {
       developer.log(
         'Error stopping authentication: $e',
         name: 'BiometricService',

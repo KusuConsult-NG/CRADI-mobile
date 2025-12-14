@@ -43,7 +43,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           _checkingBiometric = false;
         });
       }
-    } catch (e) {
+    } on Exception {
       if (mounted) {
         setState(() {
           _checkingBiometric = false;
@@ -72,10 +72,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
     } on AuthException catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.userMessage), backgroundColor: Colors.red),
+          SnackBar(content: Text(e.toString()), backgroundColor: Colors.red),
         );
       }
-    } catch (e) {
+    } on Exception catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -201,7 +201,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                       Container(
                         padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
+                        decoration: const BoxDecoration(
                           color: AppColors.background,
                           shape: BoxShape.circle,
                         ),

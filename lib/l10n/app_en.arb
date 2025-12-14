@@ -1,0 +1,202 @@
+{
+  "@@locale": "en",
+  
+  "appTitle": "CRADI Early Warning",
+  "@appTitle": {
+    "description": "The application title"
+  },
+
+  "monitoringZone": "MONITORING ZONE",
+  "@monitoringZone": {
+    "description": "Label for monitoring zone header"
+  },
+
+  "toVerify": "To Verify",
+  "@toVerify": {
+    "description": "Tab label for reports pending verification"
+  },
+
+  "alerts": "Alerts",
+  "@alerts": {
+    "description": "Tab label for alerts"
+  },
+
+  "myReports": "My Reports",
+  "@myReports": {
+    "description": "Tab label for user's own reports"
+  },
+
+  "browseCategories": "Browse Categories",
+  "@browseCategories": {
+    "description": "Section header for hazard categories"
+  },
+
+  "recentlyUpdated": "Recently Updated",
+  "@recentlyUpdated": {
+    "description": "Section header for recent updates"
+  },
+
+  "noReportsYet": "No reports yet",
+  "@noReportsYet": {
+    "description": "Empty state message when no reports exist"
+  },
+
+  "noReportsToVerify": "No reports to verify",
+  "@noReportsToVerify": {
+    "description": "Empty state for verification tab"
+  },
+
+  "noActiveAlerts": "No active alerts",
+  "@noActiveAlerts": {
+    "description": "Empty state for alerts tab"
+  },
+
+  "reportHazard": "REPORT HAZARD",
+  "@reportHazard": {
+    "description": "Button label for reporting a hazard"
+  },
+
+  "seeAll": "See All",
+  "@seeAll": {
+    "description": "Link to view all items in a section"
+  },
+
+  "pleaseLoginToViewReports": "Please log in to view reports",
+  "@pleaseLoginToViewReports": {
+    "description": "Message shown when user is not logged in"
+  },
+
+  "settings": "Settings",
+  "notifications": "NOTIFICATIONS",
+  "pushNotifications": "Push Notifications",
+  "criticalAlerts": "Critical Alerts",
+  "dnd": "Do Not Disturb",
+  "dataStorage": "DATA & STORAGE",
+  "wifiOnly": "WiFi Only Sync",
+  "lowData": "Low Data Mode",
+  "general": "GENERAL",
+  "language": "Language",
+  "helpFaq": "Help & FAQ",
+  "aboutApp": "About App",
+  "logout": "Log Out",
+  "back": "Back",
+  "ok": "OK",
+  "cancel": "Cancel",
+  "save": "Save",
+  "delete": "Delete",
+  "edit": "Edit",
+  "continueButton": "Continue",
+  "submit": "Submit",
+  "retry": "Retry",
+  "close": "Close",
+
+  "selectedLanguage": "English",
+  "@selectedLanguage": {
+    "description": "Currently selected language name"
+  },
+
+  "settingsTitle": "Settings",
+  "@settingsTitle": {
+    "description": "Settings screen title"
+  },
+
+  "verifyPhoneNumber": "Verify Phone Number",
+  "enterOtpCode": "Enter the 4-digit code sent to your phone",
+  "resendCode": "Resend Code",
+  "verify": "Verify",
+  "codeExpiresIn": "Code expires in",
+  "neverShareCode": "Never share your verification code with anyone",
+  
+  "selectHazard": "Select Hazard",
+  "whatIncident": "What type of incident are you reporting?",
+  "flooding": "Flooding",
+  "extremeHeat": "Extreme Heat",
+  "drought": "Drought",
+  "windstorms": "Windstorms",
+  "wildfires": "Wildfires",
+  "erosion": "Erosion",
+  "pestOutbreak": "Pest Outbreak",
+  "cropDisease": "Crop Disease",
+
+  "selectSeverity": "Select Severity",
+  "howSevere": "How severe is the hazard?",
+  "low": "Low",
+  "moderate": "Moderate",
+  "high": "High",
+  "critical": "Critical",
+
+  "reportDetails": "Report Details",
+  "description": "Description",
+  "describeHazard": "Describe the hazard here (e.g. flood levels rising, bridge collapsed)...",
+  "whenDidOccur": "When Did This Occur?",
+  "optional": "Optional",
+  "today": "Today",
+  "evidence": "Evidence",
+  "maxPhotos": "Max 3 photos",
+  "camera": "Camera",
+  "gallery": "Gallery",
+  "reviewReport": "Review Report",
+  "listening": "Listening... Speak now",
+  "beSpecific": "Be specific about location and severity.",
+
+  "locationPicker": "Location Picker",
+  "selectLocation": "Select your current location or search for a place",
+  "useCurrentLocation": "Use Current Location",
+  "searchPlaces": "Search for places...",
+  "confirmLocation": "Confirm Location",
+
+  "myProfile": "My Profile",
+  "editProfileDetails": "Edit Profile Details",
+  "fullName": "Full Name",
+  "emailAddress": "Email Address",
+  "biometricLogin": "Biometric Login",
+  "enabled": "Enabled",
+  "disabled": "Disabled",
+  "languagePreference": "Language Preference",
+  "offlineDataSync": "Offline Data Sync",
+  "upToDate": "Up to date",
+  "helpSupport": "Help & Support",
+  "contactSupervisor": "Contact Supervisor / SOS",
+  
+  "errorOccurred": "An error occurred",
+  "tryAgain": "Please try again",
+  "networkError": "Network error. Please check your connection",
+  "invalidOtp": "Invalid OTP code. Please try again.",
+  "otpExpired": "OTP has expired. Please request a new code.",
+  "biometricsNotAvailable": "Biometrics not available on this device",
+  "biometricsEnabled": "Biometric login enabled",
+  "biometricsDisabled": "Biometric login disabled",
+  "profileUpdated": "Profile updated successfully!",
+  "reportSubmitted": "Report submitted successfully!",
+  "reportQueued": "Report queued for submission when online",
+  "syncing": "Syncing...",
+  "syncComplete": "Sync complete",
+  "offline": "Offline",
+  "online": "Online",
+  
+  "offlineModeReady": "Offline Mode Ready:",
+  "offlineModeDescription": "Your photos will be compressed automatically. Reports are saved locally until you have internet.",
+  
+  "validation_required": "This field is required",
+  "validation_invalidEmail": "Please enter a valid email address",
+  "validation_invalidPhone": "Please enter a valid phone number",
+  "validation_minLength": "Must be at least {length} characters",
+  "@validation_minLength": {
+    "description": "Validation message for minimum length",
+    "placeholders": {
+      "length": {
+        "type": "int"
+      }
+    }
+  },
+
+  "validation_maxLength": "Must be at most {length} characters",
+  "@validation_maxLength": {
+    "description": "Validation message for maximum length",
+    "placeholders": {
+      "length": {
+        "type": "int"
+      }
+    }
+  }
+}

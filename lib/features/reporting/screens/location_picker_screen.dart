@@ -2,6 +2,8 @@ import 'package:climate_app/core/theme/app_colors.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';
+import 'package:climate_app/features/reporting/providers/reporting_provider.dart';
 
 class LocationPickerScreen extends StatefulWidget {
   const LocationPickerScreen({super.key});
@@ -17,22 +19,22 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
   final Map<int, Map<String, dynamic>> _severityLevels = {
     1: {
       'label': 'Low Severity',
-      'color': Color(0xFF13ec5b),
+      'color': const Color(0xFF13ec5b),
       'desc': 'Minor issue. No immediate threat.',
     },
     2: {
       'label': 'Medium Severity',
-      'color': Color(0xFFfacc15),
+      'color': const Color(0xFFfacc15),
       'desc': 'Moderate issue. Monitor situation.',
     },
     3: {
       'label': 'High Severity',
-      'color': Color(0xFFf97316),
+      'color': const Color(0xFFf97316),
       'desc': 'Significant threat to property or health. Response required.',
     },
     4: {
       'label': 'Critical Severity',
-      'color': Color(0xFFef4444),
+      'color': const Color(0xFFef4444),
       'desc': 'Life-threatening situation. Immediate action required.',
     },
   };
@@ -177,15 +179,23 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                             min: 1,
                             max: 4,
                             divisions: 3,
-                            onChanged: (value) =>
-                                setState(() => _severityValue = value),
+                            onChanged: (value) {
+                              setState(() => _severityValue = value);
+                              // Update Provider
+                              final severityLabel =
+                                  _severityLevels[value.toInt()]!['label']
+                                      as String;
+                              context.read<ReportingProvider>().setSeverity(
+                                severityLabel,
+                              );
+                            },
                           ),
                         ),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 10),
+                        const Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 10),
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: const [
+                            children: [
                               Text(
                                 'Low',
                                 style: TextStyle(

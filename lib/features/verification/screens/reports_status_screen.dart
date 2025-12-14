@@ -197,7 +197,7 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
           const SizedBox(height: 12),
           Row(
             children: [
-              Icon(Icons.location_on, size: 14, color: AppColors.textSecondary),
+              const Icon(Icons.location_on, size: 14, color: AppColors.textSecondary),
               const SizedBox(width: 4),
               Text(
                 report.location,
@@ -207,7 +207,7 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
                 ),
               ),
               const SizedBox(width: 12),
-              Icon(Icons.schedule, size: 14, color: AppColors.textSecondary),
+              const Icon(Icons.schedule, size: 14, color: AppColors.textSecondary),
               const SizedBox(width: 4),
               Text(
                 report.time,
@@ -222,7 +222,7 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
             const SizedBox(height: 8),
             Row(
               children: [
-                Icon(
+                const Icon(
                   Icons.check_circle,
                   size: 14,
                   color: AppColors.successGreen,
@@ -242,7 +242,7 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
             const SizedBox(height: 4),
             Row(
               children: [
-                Icon(Icons.done_all, size: 14, color: Colors.blue),
+                const Icon(Icons.done_all, size: 14, color: Colors.blue),
                 const SizedBox(width: 4),
                 Text(
                   'Resolved: ${_formatDateTime(report.resolvedAt!)}',

@@ -16,7 +16,10 @@ class OtpScreen extends StatefulWidget {
 }
 
 class _OtpScreenState extends State<OtpScreen> {
-  final List<TextEditingController> _controllers = List.generate(4, (_) => TextEditingController());
+  final List<TextEditingController> _controllers = List.generate(
+    4,
+    (_) => TextEditingController(),
+  );
   final List<FocusNode> _focusNodes = List.generate(4, (_) => FocusNode());
   bool _isLoading = false;
   bool _canResend = true;
@@ -50,12 +53,12 @@ class _OtpScreenState extends State<OtpScreen> {
     _expiryTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       final authProvider = context.read<AuthProvider>();
       final remaining = authProvider.getOtpExpiryRemaining();
-      
+
       if (mounted) {
         setState(() {
           _otpExpiry = remaining;
         });
-        
+
         if (remaining == null || remaining.inSeconds <= 0) {
           _expiryTimer?.cancel();
         }
@@ -66,7 +69,7 @@ class _OtpScreenState extends State<OtpScreen> {
   void _onChanged(String value, int index) {
     if (value.isNotEmpty && index < 3) {
       _focusNodes[index + 1].requestFocus();
-    } 
+    }
     if (value.isEmpty && index > 0) {
       _focusNodes[index - 1].requestFocus();
     }
@@ -78,7 +81,7 @@ class _OtpScreenState extends State<OtpScreen> {
 
   Future<void> _verifyOtp() async {
     final otp = _controllers.map((c) => c.text).join();
-    
+
     // Validate OTP
     final validationError = Validators.validateOTP(otp);
     if (validationError != null) {
@@ -90,7 +93,7 @@ class _OtpScreenState extends State<OtpScreen> {
       _isLoading = true;
       _errorMessage = null;
     });
-    
+
     try {
       final success = await context.read<AuthProvider>().verifyOTP(otp);
 
@@ -105,10 +108,10 @@ class _OtpScreenState extends State<OtpScreen> {
     } on AuthException catch (e) {
       setState(() {
         _isLoading = false;
-        _errorMessage = e.userMessage;
+        _errorMessage = e.toString();
       });
       _clearFields();
-    } catch (e) {
+    } on Exception catch (e) {
       setState(() {
         _isLoading = false;
         _errorMessage = ErrorHandler.getUserMessage(e);
@@ -137,7 +140,7 @@ class _OtpScreenState extends State<OtpScreen> {
     try {
       final authProvider = context.read<AuthProvider>();
       final phoneNumber = authProvider.phoneNumber ?? '';
-      
+
       await authProvider.resendOTP(phoneNumber);
 
       if (mounted) {
@@ -160,9 +163,9 @@ class _OtpScreenState extends State<OtpScreen> {
     } on AuthException catch (e) {
       setState(() {
         _isLoading = false;
-        _errorMessage = e.userMessage;
+        _errorMessage = e.toString();
       });
-    } catch (e) {
+    } on Exception catch (e) {
       setState(() {
         _isLoading = false;
         _errorMessage = ErrorHandler.getUserMessage(e);
@@ -259,12 +262,19 @@ class _OtpScreenState extends State<OtpScreen> {
                   ),
                   child: Row(
                     children: [
-                      Icon(Icons.error_outline, color: Colors.red.shade700, size: 20),
+                      Icon(
+                        Icons.error_outline,
+                        color: Colors.red.shade700,
+                        size: 20,
+                      ),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
                           _errorMessage!,
-                          style: TextStyle(color: Colors.red.shade700, fontSize: 14),
+                          style: TextStyle(
+                            color: Colors.red.shade700,
+                            fontSize: 14,
+                          ),
                         ),
                       ),
                     ],
@@ -287,9 +297,7 @@ class _OtpScreenState extends State<OtpScreen> {
                       style: Theme.of(context).textTheme.headlineMedium,
                       autofocus: index == 0,
                       enabled: !_isLoading,
-                      inputFormatters: [
-                        FilteringTextInputFormatter.digitsOnly,
-                      ],
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                       decoration: InputDecoration(
                         counterText: "",
                         border: OutlineInputBorder(
@@ -297,13 +305,18 @@ class _OtpScreenState extends State<OtpScreen> {
                         ),
                         contentPadding: EdgeInsets.zero,
                         enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide:
-                                BorderSide(color: AppColors.primaryGrey)),
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: const BorderSide(
+                            color: AppColors.primaryGrey,
+                          ),
+                        ),
                         focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide:
-                                BorderSide(color: AppColors.primaryRed, width: 2)),
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: const BorderSide(
+                            color: AppColors.primaryRed,
+                            width: 2,
+                          ),
+                        ),
                       ),
                       onChanged: (value) => _onChanged(value, index),
                     ),
@@ -323,15 +336,17 @@ class _OtpScreenState extends State<OtpScreen> {
                     color: _canResend ? AppColors.primaryRed : Colors.grey,
                   ),
                   label: Text(
-                    _canResend 
+                    _canResend
                         ? 'Resend Code'
                         : 'Resend in ${_resendCooldown}s',
                   ),
                   style: TextButton.styleFrom(
-                    foregroundColor: _canResend ? AppColors.primaryRed : Colors.grey,
+                    foregroundColor: _canResend
+                        ? AppColors.primaryRed
+                        : Colors.grey,
                   ),
                 ),
-                
+
               const Spacer(),
 
               // Security info
@@ -343,7 +358,11 @@ class _OtpScreenState extends State<OtpScreen> {
                 ),
                 child: Row(
                   children: [
-                    Icon(Icons.info_outline, color: Colors.grey.shade700, size: 16),
+                    Icon(
+                      Icons.info_outline,
+                      color: Colors.grey.shade700,
+                      size: 16,
+                    ),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(

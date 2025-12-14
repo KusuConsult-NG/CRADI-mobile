@@ -1,9 +1,9 @@
 import 'package:climate_app/core/theme/app_colors.dart';
+import 'package:climate_app/core/widgets/connectivity_banner.dart';
 import 'package:flutter/material.dart';
 import 'package:climate_app/core/providers/language_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
-
 
 class MainShellScreen extends StatefulWidget {
   final Widget child;
@@ -20,7 +20,7 @@ class _MainShellScreenState extends State<MainShellScreen> {
     setState(() {
       _selectedIndex = index;
     });
-    
+
     switch (index) {
       case 0:
         context.go('/dashboard');
@@ -43,10 +43,7 @@ class _MainShellScreenState extends State<MainShellScreen> {
       appBar: AppBar(
         title: const Text('CRADI Early Warning'),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.notifications),
-            onPressed: () {},
-          ),
+          IconButton(icon: const Icon(Icons.notifications), onPressed: () {}),
         ],
       ),
       drawer: Drawer(
@@ -59,7 +56,10 @@ class _MainShellScreenState extends State<MainShellScreen> {
               accountEmail: Text("ewm@cradi.org"),
               currentAccountPicture: CircleAvatar(
                 backgroundColor: Colors.white,
-                child: Text("EW", style: TextStyle(color: AppColors.primaryRed)),
+                child: Text(
+                  "EW",
+                  style: TextStyle(color: AppColors.primaryRed),
+                ),
               ),
             ),
             ListTile(
@@ -87,7 +87,7 @@ class _MainShellScreenState extends State<MainShellScreen> {
           ],
         ),
       ),
-      body: widget.child,
+      body: ConnectivityBanner(child: widget.child),
       bottomNavigationBar: Consumer<LanguageProvider>(
         builder: (context, provider, _) => NavigationBar(
           selectedIndex: _selectedIndex,
@@ -120,7 +120,10 @@ class _MainShellScreenState extends State<MainShellScreen> {
         onPressed: () => context.push('/report'),
         backgroundColor: AppColors.primaryRed,
         icon: const Icon(Icons.add_alert, color: Colors.white),
-        label: const Text('REPORT HAZARD', style: TextStyle(color: Colors.white)),
+        label: const Text(
+          'REPORT HAZARD',
+          style: TextStyle(color: Colors.white),
+        ),
       ),
     );
   }

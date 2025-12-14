@@ -975,7 +975,7 @@ class NigeriaLocationsData {
   static List<String> getLGAsForState(String state) {
     try {
       return locations.firstWhere((loc) => loc.state == state).lgas;
-    } catch (e) {
+    } on Exception catch (_) {
       return [];
     }
   }
@@ -990,7 +990,7 @@ class NigeriaLocationsData {
     try {
       final location = locations.firstWhere((loc) => loc.state == state);
       return location.lgas.contains(lga);
-    } catch (e) {
+    } on Exception catch (_) {
       return false;
     }
   }

@@ -53,7 +53,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
           }
         }
       }
-    } catch (e) {
+    } on Exception catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -102,10 +102,10 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                   },
                 ),
                 const Divider(),
-                ListTile(
-                  leading: const Icon(Icons.info_outline, color: Colors.grey),
-                  title: const Text('Camera not available on web'),
-                  subtitle: const Text('Please use the gallery option'),
+                const ListTile(
+                  leading: Icon(Icons.info_outline, color: Colors.grey),
+                  title: Text('Camera not available on web'),
+                  subtitle: Text('Please use the gallery option'),
                   enabled: false,
                 ),
               ],
