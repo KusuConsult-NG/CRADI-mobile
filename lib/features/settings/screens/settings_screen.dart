@@ -1,10 +1,14 @@
 import 'package:climate_app/core/theme/app_colors.dart';
 import 'package:climate_app/core/providers/language_provider.dart';
 import 'package:climate_app/features/auth/providers/auth_provider.dart';
+import 'package:climate_app/core/providers/connectivity_provider.dart';
+import 'package:climate_app/features/profile/providers/profile_provider.dart';
+import 'package:climate_app/core/providers/settings_provider.dart';
 import 'package:climate_app/core/utils/error_handler.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'dart:io';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -18,8 +22,6 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   bool _pushNotifications = true;
   bool _criticalAlerts = true;
-  bool _wifiOnly = false;
-  bool _lowData = true;
   bool _biometricAvailable = false;
   bool _biometricEnabled = false;
   bool _checkingBiometric = true;
@@ -145,73 +147,93 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 child: Container(
                   padding: const EdgeInsets.all(16),
                   decoration: _cardDecoration(),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 60,
-                        height: 60,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: AppColors.primaryRed,
-                            width: 2,
-                          ),
-                          image: const DecorationImage(
-                            image: NetworkImage(
-                              'https://lh3.googleusercontent.com/aida-public/AB6AXuDkA8AXpKVbW9BEnyk3I9QQfHdhypgQE68vieinzag6qUtPQpo89IDPiii6tnzPFFg-Gf6kNNa0Ehe0tsRK5tZoLJ4iCUuXrMQGX7OjNqUQgvye0QKoiuHizwc29po-caMEXR1f9iNuuDUhmwsIinlCCyz-X6reJR4tin17NEEDWZ2k8fgMZ7CcW3LZ8apor13vRADOr40PNXmCuKFDW93hEPJdXQRlskD9CXMzcBBbpm2ccB3rpvtl-IWHRhhSIoFJSHiUdE3uTECt',
-                            ),
-                            fit: BoxFit.cover,
-                          ),
-                        ),
-                        child: Align(
-                          alignment: Alignment.bottomRight,
-                          child: Container(
-                            width: 16,
-                            height: 16,
-                            decoration: BoxDecoration(
+                  child: Consumer<ProfileProvider>(
+                    builder: (context, profile, _) => Row(
+                      children: [
+                        Container(
+                          width: 60,
+                          height: 60,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(
                               color: AppColors.primaryRed,
-                              shape: BoxShape.circle,
-                              border: Border.all(color: Colors.white, width: 2),
+                              width: 2,
                             ),
+                            image: profile.profileImagePath != null
+                                ? DecorationImage(
+                                    image:
+                                        profile.profileImagePath!.startsWith(
+                                          'http',
+                                        )
+                                        ? NetworkImage(
+                                                profile.profileImagePath!,
+                                              )
+                                              as ImageProvider
+                                        : FileImage(
+                                            File(profile.profileImagePath!),
+                                          ),
+                                    fit: BoxFit.cover,
+                                  )
+                                : null,
+                            color: profile.profileImagePath == null
+                                ? Colors.grey.shade300
+                                : null,
+                          ),
+                          child: profile.profileImagePath == null
+                              ? const Icon(Icons.person, color: Colors.grey)
+                              : Align(
+                                  alignment: Alignment.bottomRight,
+                                  child: Container(
+                                    width: 16,
+                                    height: 16,
+                                    decoration: BoxDecoration(
+                                      color: AppColors.primaryRed,
+                                      shape: BoxShape.circle,
+                                      border: Border.all(
+                                        color: Colors.white,
+                                        width: 2,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                profile.name,
+                                style: GoogleFonts.lexend(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppColors.textPrimary,
+                                ),
+                              ),
+                              Text(
+                                '${profile.monitoringZone ?? "Benue State"} • Active',
+                                style: GoogleFonts.lexend(
+                                  fontSize: 14,
+                                  color: AppColors.primaryRed,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Monitor Emmanuel',
-                              style: GoogleFonts.lexend(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                                color: AppColors.textPrimary,
-                              ),
-                            ),
-                            Text(
-                              'Benue Zone A • Active',
-                              style: GoogleFonts.lexend(
-                                fontSize: 14,
-                                color: AppColors.primaryRed,
-                              ),
-                            ),
-                          ],
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: const BoxDecoration(
+                            color: AppColors.background,
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.edit,
+                            size: 20,
+                            color: AppColors.primaryRed,
+                          ),
                         ),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: const BoxDecoration(
-                          color: AppColors.background,
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          Icons.edit,
-                          size: 20,
-                          color: AppColors.primaryRed,
-                        ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -254,27 +276,47 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
               const SizedBox(height: 24),
 
-              // Data & Storage
               _buildSectionHeader(provider.dataStorage),
               Container(
                 decoration: _cardDecoration(),
                 child: Column(
                   children: [
-                    _buildSwitchTile(
-                      icon: Icons.wifi,
-                      color: Colors.blue,
-                      title: provider.wifiOnly,
-                      value: _wifiOnly,
-                      onChanged: (v) => setState(() => _wifiOnly = v),
+                    Consumer<ConnectivityProvider>(
+                      builder: (context, connectivity, _) => _buildSwitchTile(
+                        icon: Icons.offline_bolt,
+                        color: Colors.orange,
+                        title: 'Offline Mode',
+                        subtitle: 'Use app without internet connection',
+                        value: connectivity.manualOffline,
+                        onChanged: (v) => connectivity.setManualOffline(v),
+                      ),
                     ),
                     Divider(height: 1, color: Colors.grey.shade100, indent: 60),
-                    _buildSwitchTile(
-                      icon: Icons.data_saver_on,
-                      color: Colors.green,
-                      title: provider.lowData,
-                      subtitle: 'Reduce data usage for maps',
-                      value: _lowData,
-                      onChanged: (v) => setState(() => _lowData = v),
+                    Consumer<SettingsProvider>(
+                      builder: (context, settings, _) => Column(
+                        children: [
+                          _buildSwitchTile(
+                            icon: Icons.wifi,
+                            color: Colors.blue,
+                            title: provider.wifiOnly,
+                            value: settings.wifiOnly,
+                            onChanged: (v) => settings.setWifiOnly(v),
+                          ),
+                          Divider(
+                            height: 1,
+                            color: Colors.grey.shade100,
+                            indent: 60,
+                          ),
+                          _buildSwitchTile(
+                            icon: Icons.data_saver_on,
+                            color: Colors.green,
+                            title: provider.lowData,
+                            subtitle: 'Reduce data usage for maps',
+                            value: settings.lowData,
+                            onChanged: (v) => settings.setLowData(v),
+                          ),
+                        ],
+                      ),
                     ),
                   ],
                 ),
@@ -419,7 +461,50 @@ class _SettingsScreenState extends State<SettingsScreen> {
               SizedBox(
                 width: double.infinity,
                 child: TextButton(
-                  onPressed: () => context.go('/login'),
+                  onPressed: () async {
+                    final confirm = await showDialog<bool>(
+                      context: context,
+                      builder: (context) => AlertDialog(
+                        title: Text(provider.logout),
+                        content: const Text(
+                          'Are you sure you want to sign out?',
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(context, false),
+                            child: Text(provider.cancel),
+                          ),
+                          TextButton(
+                            onPressed: () => Navigator.pop(context, true),
+                            child: Text(
+                              provider.logout,
+                              style: const TextStyle(color: Colors.red),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+
+                    if (confirm == true && context.mounted) {
+                      try {
+                        // Perform logout logic
+                        await context.read<AuthProvider>().logout();
+                        if (context.mounted) {
+                          context.read<ProfileProvider>().clearProfile();
+                          context.go('/login');
+                        }
+                      } on Exception catch (e) {
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('Logout failed: $e'),
+                              backgroundColor: Colors.red,
+                            ),
+                          );
+                        }
+                      }
+                    }
+                  },
                   style: TextButton.styleFrom(
                     backgroundColor: AppColors.background,
                     padding: const EdgeInsets.symmetric(vertical: 16),

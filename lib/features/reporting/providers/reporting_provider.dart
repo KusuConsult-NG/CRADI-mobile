@@ -1,27 +1,21 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:climate_app/core/services/offline_queue_service.dart';
-import 'package:climate_app/core/providers/connectivity_provider.dart';
+import 'package:climate_app/core/services/appwrite_service.dart';
 import 'package:uuid/uuid.dart';
 import 'dart:developer' as developer;
+import 'package:appwrite/appwrite.dart';
 
 enum HazardType { flood, drought, temp, wind, erosion, fire, pest }
 
 enum SeverityLevel { low, medium, high, critical }
 
 class ReportingProvider extends ChangeNotifier {
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  final FirebaseAuth _auth = FirebaseAuth.instance;
-  final FirebaseStorage _storage = FirebaseStorage.instance;
-  final ImagePicker _picker = ImagePicker();
-  final OfflineQueueService _offlineQueue = OfflineQueueService();
-  final Uuid _uuid = const Uuid();
+  ReportingProvider();
 
-  ConnectivityProvider? _connectivityProvider;
+  final AppwriteService _appwrite = AppwriteService();
+  final ImagePicker _picker = ImagePicker();
+  final Uuid _uuid = const Uuid();
 
   String? _hazardType;
   String? _severity;
@@ -29,6 +23,8 @@ class ReportingProvider extends ChangeNotifier {
   String? _description;
   DateTime _reportDateTime = DateTime.now();
   List<XFile> _photos = [];
+  double? _latitude;
+  double? _longitude;
 
   bool _isLoading = false;
 
@@ -39,11 +35,6 @@ class ReportingProvider extends ChangeNotifier {
   DateTime get reportDateTime => _reportDateTime;
   List<XFile> get photos => _photos;
   bool get isLoading => _isLoading;
-
-  /// Set connectivity provider reference (call from widget tree)
-  void setConnectivityProvider(ConnectivityProvider provider) {
-    _connectivityProvider = provider;
-  }
 
   void setHazardType(String type) {
     _hazardType = type;
@@ -57,6 +48,12 @@ class ReportingProvider extends ChangeNotifier {
 
   void setLocationDetails(String details) {
     _locationDetails = details;
+    notifyListeners();
+  }
+
+  void setLocation(double lat, double lng) {
+    _latitude = lat;
+    _longitude = lng;
     notifyListeners();
   }
 
@@ -75,7 +72,7 @@ class ReportingProvider extends ChangeNotifier {
     try {
       final XFile? image = await _picker.pickImage(
         source: source,
-        imageQuality: 70, // Resize/compress
+        imageQuality: 70,
         maxWidth: 1024,
       );
 
@@ -107,100 +104,75 @@ class ReportingProvider extends ChangeNotifier {
     _description = null;
     _reportDateTime = DateTime.now();
     _photos = [];
+    _latitude = null;
+    _longitude = null;
     notifyListeners();
   }
 
-  /// Submit report - automatically queues if offline, uploads if online
+  /// Submit report using Appwrite
   Future<Map<String, dynamic>> submitReport() async {
     try {
       _isLoading = true;
       notifyListeners();
 
-      final user = _auth.currentUser;
+      final user = await _appwrite.getCurrentUser();
       if (user == null) {
         throw Exception('User must be logged in to submit a report');
       }
 
-      if (_hazardType == null ||
-          _severity == null ||
-          _locationDetails == null) {
-        throw Exception('Please fill all required fields');
+      if (_hazardType == null) {
+        throw Exception('Hazard Type is missing');
+      }
+      if (_severity == null || _severity == 'Unknown') {
+        throw Exception('Severity Level is missing');
+      }
+      if (_locationDetails == null) {
+        throw Exception('Location Details are missing');
       }
 
       // Generate unique ID for this report
       final reportId = _uuid.v4();
 
-      // Prepare report data
-      final reportData = {
-        'id': reportId,
-        'userId': user.uid,
-        'hazardType': _hazardType,
-        'severity': _severity,
-        'locationDetails': _locationDetails,
-        'description': _description ?? '',
-        'reportDate': _reportDateTime.toIso8601String(),
-        'submittedAt': DateTime.now().toIso8601String(),
-        'photos': _photos.map((p) => p.path).toList(),
-        'status': 'pending',
-        'verificationCount': 0,
-      };
-
-      // Check connectivity
-      final isOnline = _connectivityProvider?.isOnline ?? true;
-
-      if (!isOnline) {
-        // Queue for later sync
-        await _offlineQueue.queueReport(reportData);
-
-        developer.log('Report queued offline: $reportId');
-
-        reset();
-        _isLoading = false;
-        notifyListeners();
-
-        return {
-          'success': true,
-          'queued': true,
-          'message': 'Report queued for sync when online',
-        };
-      }
-
-      // Online: Upload immediately
-      List<String> imageUrls = [];
+      // Upload images to Appwrite Storage
+      List<String> imageIds = [];
       if (_photos.isNotEmpty) {
         for (int i = 0; i < _photos.length; i++) {
           final photo = _photos[i];
-          final timestamp = DateTime.now().millisecondsSinceEpoch;
-          final ext = photo.path.split('.').last;
-          final path = 'report_images/${user.uid}/${timestamp}_$i.$ext';
+          final fileBytes = await File(photo.path).readAsBytes();
 
-          final ref = _storage.ref().child(path);
-          final uploadTask = await ref.putFile(File(photo.path));
+          final uploadedFile = await _appwrite.uploadFile(
+            bucketId: AppwriteService.reportImagesBucketId,
+            filePath: photo.path,
+            fileBytes: fileBytes,
+          );
 
-          if (uploadTask.state == TaskState.success) {
-            final url = await ref.getDownloadURL();
-            imageUrls.add(url);
-          }
+          imageIds.add(uploadedFile.$id);
         }
       }
 
-      // Create Firestore document
-      final firestoreData = {
-        'userId': user.uid,
+      // Create report document in Appwrite Database
+      final reportData = {
+        'userId': user.$id,
         'hazardType': _hazardType,
         'severity': _severity,
+        'latitude': _latitude ?? 0.0,
+        'longitude': _longitude ?? 0.0,
         'locationDetails': _locationDetails,
         'description': _description ?? '',
-        'reportDate': Timestamp.fromDate(_reportDateTime),
-        'submittedAt': FieldValue.serverTimestamp(),
-        'imageUrls': imageUrls,
+        'submittedAt': DateTime.now().toIso8601String(),
+        'imageIds': imageIds,
         'status': 'pending',
+        'isAlert': _severity == 'critical' || _severity == 'high',
         'verificationCount': 0,
       };
 
-      await _firestore.collection('reports').doc(reportId).set(firestoreData);
+      await _appwrite.createDocument(
+        collectionId: AppwriteService.reportsCollectionId,
+        documentId: reportId,
+        data: reportData,
+      );
 
-      developer.log('Report submitted online: $reportId');
+      developer.log('Report submitted: $reportId');
 
       reset();
       _isLoading = false;
@@ -208,9 +180,14 @@ class ReportingProvider extends ChangeNotifier {
 
       return {
         'success': true,
-        'queued': false,
         'message': 'Report submitted successfully',
+        'reportId': reportId,
       };
+    } on AppwriteException catch (e) {
+      _isLoading = false;
+      notifyListeners();
+      developer.log('Error submitting report: ${e.message}');
+      rethrow;
     } on Exception catch (e) {
       _isLoading = false;
       notifyListeners();

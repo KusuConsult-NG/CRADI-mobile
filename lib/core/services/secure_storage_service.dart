@@ -24,6 +24,7 @@ class SecureStorageService {
   static const String _keyLastLoginAttempt = 'last_login_attempt';
   static const String _keyAccountLockedUntil = 'account_locked_until';
   static const String _keyBiometricEnabled = 'biometric_enabled';
+  static const String _keyVerificationEmail = 'verification_email';
 
   // Authentication token management
   Future<void> saveAuthToken(String token) async {
@@ -140,6 +141,22 @@ class SecureStorageService {
     return enabledStr == 'true';
   }
 
+  // Email verification storage (for email link auth)
+  static Future<void> saveVerificationEmail(String email) async {
+    final instance = SecureStorageService();
+    await instance.write(_keyVerificationEmail, email);
+  }
+
+  static Future<String?> getVerificationEmail() async {
+    final instance = SecureStorageService();
+    return await instance.read(_keyVerificationEmail);
+  }
+
+  static Future<void> deleteVerificationEmail() async {
+    final instance = SecureStorageService();
+    await instance.delete(_keyVerificationEmail);
+  }
+
   // Generic secure storage
   Future<void> write(String key, String value) async {
     await _storage.write(key: key, value: value);
@@ -172,7 +189,7 @@ class SecureStorageService {
     bool keepPreferences = false,
   }) async {
     if (keepAuth && keepPreferences) {
-      // Only clear session data
+      // Only clear temporary session data
       await _storage.delete(key: _keySessionExpiry);
       await _storage.delete(key: _keyLoginAttempts);
       await _storage.delete(key: _keyLastLoginAttempt);
@@ -181,17 +198,23 @@ class SecureStorageService {
     }
 
     if (keepPreferences) {
-      // Keep preferences like biometric enabled, but clear auth
+      // Keep preferences like biometric enabled, but clear auth and user data
       final biometricEnabled = await isBiometricEnabled();
+      final phoneNumber = await getPhoneNumber();
+
       await _storage.deleteAll();
-      // Restore preferences
+
+      // Restore selected preferences
       if (biometricEnabled) {
         await setBiometricEnabled(true);
+        if (phoneNumber != null) {
+          await savePhoneNumber(phoneNumber);
+        }
       }
       return;
     }
 
-    // Default: Clear everything
+    // Default: Clear absolutely everything
     await _storage.deleteAll();
   }
 

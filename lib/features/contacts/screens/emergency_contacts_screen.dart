@@ -1,19 +1,29 @@
 import 'package:climate_app/core/theme/app_colors.dart';
+import 'package:climate_app/features/contacts/models/emergency_contact_model.dart';
+import 'package:climate_app/features/contacts/providers/emergency_contacts_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class EmergencyContactsScreen extends StatefulWidget {
   const EmergencyContactsScreen({super.key});
 
   @override
-  State<EmergencyContactsScreen> createState() => _EmergencyContactsScreenState();
+  State<EmergencyContactsScreen> createState() =>
+      _EmergencyContactsScreenState();
 }
 
 class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
   final TextEditingController _searchController = TextEditingController();
-  int _selectedFilterIndex = 0;
-  final List<String> _filters = ['All', 'Coordinators', 'Emergency', 'Agri-Extension'];
+  final Map<String, String> _categoryMap = {
+    'All': 'all',
+    'Coordinators': 'coordinator',
+    'Emergency': 'emergency',
+    'Agri-Extension': 'agri-extension',
+  };
+  String _selectedCategory = 'all';
 
   @override
   void dispose() {
@@ -21,13 +31,157 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
     super.dispose();
   }
 
+  Future<void> _makePhoneCall(String phone) async {
+    final Uri launchUri = Uri(scheme: 'tel', path: phone);
+    if (await canLaunchUrl(launchUri)) {
+      await launchUrl(launchUri);
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not launch phone app')),
+        );
+      }
+    }
+  }
+
+  Future<void> _sendSMS(String phone) async {
+    final Uri launchUri = Uri(scheme: 'sms', path: phone);
+    if (await canLaunchUrl(launchUri)) {
+      await launchUrl(launchUri);
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not launch SMS app')),
+        );
+      }
+    }
+  }
+
+  void _showAddContactDialog() {
+    final nameController = TextEditingController();
+    final roleController = TextEditingController();
+    final phoneController = TextEditingController();
+    final orgController = TextEditingController();
+    final lgaController = TextEditingController();
+    String selectedCategory = 'coordinator';
+
+    showDialog(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: Text(
+          'Add Emergency Contact',
+          style: GoogleFonts.lexend(fontWeight: FontWeight.bold),
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: nameController,
+                decoration: const InputDecoration(labelText: 'Name'),
+              ),
+              TextField(
+                controller: roleController,
+                decoration: const InputDecoration(labelText: 'Role'),
+              ),
+              TextField(
+                controller: phoneController,
+                keyboardType: TextInputType.phone,
+                decoration: const InputDecoration(labelText: 'Phone'),
+              ),
+              TextField(
+                controller: orgController,
+                decoration: const InputDecoration(
+                  labelText: 'Organization (Optional)',
+                ),
+              ),
+              TextField(
+                controller: lgaController,
+                decoration: const InputDecoration(labelText: 'LGA (Optional)'),
+              ),
+              const SizedBox(height: 16),
+              DropdownButtonFormField<String>(
+                initialValue: selectedCategory,
+                decoration: const InputDecoration(labelText: 'Category'),
+                items: const [
+                  DropdownMenuItem(
+                    value: 'coordinator',
+                    child: Text('Coordinator'),
+                  ),
+                  DropdownMenuItem(
+                    value: 'emergency',
+                    child: Text('Emergency'),
+                  ),
+                  DropdownMenuItem(
+                    value: 'agri-extension',
+                    child: Text('Agri-Extension'),
+                  ),
+                  DropdownMenuItem(value: 'other', child: Text('Other')),
+                ],
+                onChanged: (v) => selectedCategory = v ?? 'coordinator',
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(c),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final provider = context.read<EmergencyContactsProvider>();
+              final contact = EmergencyContact(
+                id: '',
+                name: nameController.text,
+                role: roleController.text,
+                phone: phoneController.text,
+                organization: orgController.text.isEmpty
+                    ? null
+                    : orgController.text,
+                lga: lgaController.text.isEmpty ? null : lgaController.text,
+                category: selectedCategory,
+              );
+
+              try {
+                await provider.addContact(contact);
+                if (c.mounted) Navigator.pop(c);
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Contact added successfully')),
+                  );
+                }
+              } on Exception catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(
+                    context,
+                  ).showSnackBar(SnackBar(content: Text('Error: $e')));
+                }
+              }
+            },
+            child: const Text('Add'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final provider = Provider.of<EmergencyContactsProvider>(
+      context,
+      listen: false,
+    );
+
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new, size: 20, color: AppColors.textPrimary),
+          icon: const Icon(
+            Icons.arrow_back_ios_new,
+            size: 20,
+            color: AppColors.textPrimary,
+          ),
           onPressed: () => context.pop(),
         ),
         title: Text(
@@ -40,8 +194,8 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
         centerTitle: true,
         actions: [
           IconButton(
-            icon: const Icon(Icons.cloud_done, color: AppColors.textPrimary),
-            onPressed: () {},
+            icon: const Icon(Icons.add, color: AppColors.primaryRed),
+            onPressed: _showAddContactDialog,
           ),
         ],
         backgroundColor: AppColors.background.withValues(alpha: 0.95),
@@ -51,209 +205,152 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
           child: Container(color: Colors.grey.shade200, height: 1.0),
         ),
       ),
-      body: Stack(
+      body: Column(
         children: [
-          SingleChildScrollView(
-            padding: const EdgeInsets.only(bottom: 100), // Space for FAB
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Search Bar
-                Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: TextField(
-                    controller: _searchController,
-                    decoration: InputDecoration(
-                      hintText: 'Search name, LGA, or role',
-                      hintStyle: GoogleFonts.lexend(color: Colors.grey.shade400),
-                      prefixIcon: Icon(Icons.search, color: Colors.grey.shade400),
-                      filled: true,
-                      fillColor: Colors.white,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide(color: Colors.grey.shade200),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide(color: Colors.grey.shade200),
-                      ),
-                      contentPadding: const EdgeInsets.symmetric(vertical: 0),
-                    ),
-                  ),
+          // Search Bar
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: TextField(
+              controller: _searchController,
+              decoration: InputDecoration(
+                hintText: 'Search name, LGA, or role',
+                hintStyle: GoogleFonts.lexend(color: Colors.grey.shade400),
+                prefixIcon: Icon(Icons.search, color: Colors.grey.shade400),
+                filled: true,
+                fillColor: Colors.white,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: Colors.grey.shade200),
                 ),
-
-                // Filters
-                SizedBox(
-                  height: 40,
-                  child: ListView.separated(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    scrollDirection: Axis.horizontal,
-                    itemCount: _filters.length,
-                    separatorBuilder: (c, i) => const SizedBox(width: 8),
-                    itemBuilder: (context, index) {
-                      final isSelected = _selectedFilterIndex == index;
-                      return ChoiceChip(
-                        label: Text(_filters[index]),
-                        selected: isSelected,
-                        onSelected: (v) => setState(() => _selectedFilterIndex = index),
-                        labelStyle: GoogleFonts.lexend(
-                          fontWeight: FontWeight.w600,
-                          color: isSelected ? Colors.white : AppColors.textPrimary,
-                        ),
-                        selectedColor: AppColors.primaryRed,
-                        backgroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(20),
-                          side: BorderSide(color: isSelected ? Colors.transparent : Colors.grey.shade200),
-                        ),
-                        showCheckmark: false,
-                        avatar: isSelected ? const Icon(Icons.check, size: 16, color: Colors.white) : null,
-                      );
-                    },
-                  ),
-                ),
-
-                const SizedBox(height: 16),
-                
-                // Meta Info
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Row(
-                    children: [
-                      Container(width: 8, height: 8, decoration: const BoxDecoration(color: AppColors.successGreen, shape: BoxShape.circle)),
-                      const SizedBox(width: 8),
-                      Text(
-                        'Available offline • Updated Today 08:30 AM',
-                        style: GoogleFonts.lexend(fontSize: 12, color: Colors.grey.shade500, fontWeight: FontWeight.w500),
-                      ),
-                    ],
-                  ),
-                ),
-
-                const SizedBox(height: 24),
-
-                // LDP Coordinators
-                _buildSectionHeader('LDP Coordinators'),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Column(
-                    children: [
-                      _buildContactChange(
-                        name: 'Musa Ibrahim',
-                        detail: 'Coordinator • Makurdi LGA',
-                        icon: Icons.person,
-                        iconColor: Colors.blue,
-                        iconBg: Colors.blue.shade50,
-                      ),
-                      const SizedBox(height: 12),
-                      _buildContactChange(
-                        name: 'Sarah Okafor',
-                        detail: 'Coordinator • Guma LGA',
-                        icon: Icons.person,
-                        iconColor: Colors.blue,
-                        iconBg: Colors.blue.shade50,
-                      ),
-                    ],
-                  ),
-                ),
-
-                const SizedBox(height: 24),
-
-                // Emergency Services
-                _buildSectionHeader('Emergency Services'),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Column(
-                    children: [
-                      _buildContactChange(
-                        name: 'State Police Command',
-                        detail: 'Hotline • All LGAs',
-                        icon: Icons.local_police,
-                        iconColor: AppColors.errorRed,
-                        iconBg: AppColors.errorRed.withValues(alpha: 0.1),
-                      ),
-                      const SizedBox(height: 12),
-                      _buildContactChange(
-                        name: 'SEMA Rapid Response',
-                        detail: 'Disaster Relief • Makurdi HQ',
-                        icon: Icons.medical_services,
-                        iconColor: Colors.orange,
-                        iconBg: Colors.orange.shade50,
-                        showSms: false,
-                      ),
-                    ],
-                  ),
-                ),
-
-                const SizedBox(height: 24),
-
-                // Agri-Extension
-                _buildSectionHeader('Agri-Extension Officers'),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: _buildContactChange(
-                    name: 'Emmanuel Dauda',
-                    detail: 'Livestock Specialist • Gwer West',
-                    icon: Icons.agriculture,
-                    iconColor: AppColors.successGreen,
-                    iconBg: AppColors.successGreen.withValues(alpha: 0.1),
-                  ),
-                ),
-              ],
+                contentPadding: const EdgeInsets.symmetric(vertical: 0),
+              ),
+              onChanged: (v) => setState(() {}),
             ),
           ),
 
-          // Sticky Bottom Action
-          Positioned(
-            bottom: 24,
-            left: 16,
-            right: 16,
-            child: ElevatedButton(
-              onPressed: () {},
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.errorRed,
-                foregroundColor: Colors.white,
-                minimumSize: const Size(double.infinity, 56),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                elevation: 8,
-                shadowColor: AppColors.errorRed.withValues(alpha: 0.4),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(Icons.sos),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Call National Emergency (112)',
-                    style: GoogleFonts.lexend(fontSize: 16, fontWeight: FontWeight.bold),
+          // Category Filters
+          SizedBox(
+            height: 40,
+            child: ListView.separated(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              scrollDirection: Axis.horizontal,
+              itemCount: _categoryMap.length,
+              separatorBuilder: (c, i) => const SizedBox(width: 8),
+              itemBuilder: (context, index) {
+                final entry = _categoryMap.entries.elementAt(index);
+                final isSelected = _selectedCategory == entry.value;
+                return ChoiceChip(
+                  label: Text(entry.key),
+                  selected: isSelected,
+                  onSelected: (v) =>
+                      setState(() => _selectedCategory = entry.value),
+                  labelStyle: GoogleFonts.lexend(
+                    fontWeight: FontWeight.w600,
+                    color: isSelected ? Colors.white : AppColors.textPrimary,
                   ),
-                ],
-              ),
+                  selectedColor: AppColors.primaryRed,
+                  backgroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20),
+                    side: BorderSide(
+                      color: isSelected
+                          ? Colors.transparent
+                          : Colors.grey.shade200,
+                    ),
+                  ),
+                  showCheckmark: false,
+                );
+              },
+            ),
+          ),
+
+          const SizedBox(height: 16),
+
+          // Contacts List
+          Expanded(
+            child: StreamBuilder<List<EmergencyContact>>(
+              stream: _selectedCategory == 'all'
+                  ? provider.getContactsStream()
+                  : provider.getContactsByCategory(_selectedCategory),
+              builder: (context, snapshot) {
+                if (snapshot.hasError) {
+                  return Center(child: Text('Error: ${snapshot.error}'));
+                }
+
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+
+                var contacts = snapshot.data ?? [];
+
+                // Apply search filter
+                if (_searchController.text.isNotEmpty) {
+                  final query = _searchController.text.toLowerCase();
+                  contacts = contacts
+                      .where(
+                        (c) =>
+                            c.name.toLowerCase().contains(query) ||
+                            c.role.toLowerCase().contains(query) ||
+                            (c.lga?.toLowerCase().contains(query) ?? false),
+                      )
+                      .toList();
+                }
+
+                if (contacts.isEmpty) {
+                  return Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.contacts_outlined,
+                          size: 64,
+                          color: Colors.grey.shade300,
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          'No contacts found',
+                          style: GoogleFonts.lexend(
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+
+                return ListView.separated(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 100),
+                  itemCount: contacts.length,
+                  separatorBuilder: (c, i) => const SizedBox(height: 12),
+                  itemBuilder: (context, index) {
+                    final contact = contacts[index];
+                    return _buildContactCard(contact, provider);
+                  },
+                );
+              },
             ),
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildSectionHeader(String title) {
-    return Padding(
-      padding: const EdgeInsets.only(left: 16, bottom: 12),
-      child: Text(
-        title,
-        style: GoogleFonts.lexend(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => _makePhoneCall('112'),
+        backgroundColor: AppColors.errorRed,
+        icon: const Icon(Icons.sos, color: Colors.white),
+        label: Text(
+          'Emergency 112',
+          style: GoogleFonts.lexend(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
       ),
     );
   }
 
-  Widget _buildContactChange({
-    required String name,
-    required String detail,
-    required IconData icon,
-    required Color iconColor,
-    required Color iconBg,
-    bool showSms = true,
-  }) {
+  Widget _buildContactCard(
+    EmergencyContact contact,
+    EmergencyContactsProvider provider,
+  ) {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -261,7 +358,11 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: Colors.grey.shade100),
         boxShadow: [
-          BoxShadow(color: Colors.black.withValues(alpha: 0.02), blurRadius: 4, offset: const Offset(0, 2)),
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.02),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
         ],
       ),
       child: Row(
@@ -269,8 +370,14 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
           Container(
             width: 48,
             height: 48,
-            decoration: BoxDecoration(color: iconBg, shape: BoxShape.circle),
-            child: Icon(icon, color: iconColor),
+            decoration: BoxDecoration(
+              color: _getCategoryColor(contact.category).withValues(alpha: 0.1),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              _getCategoryIcon(contact.category),
+              color: _getCategoryColor(contact.category),
+            ),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -278,40 +385,84 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  name,
-                  style: GoogleFonts.lexend(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+                  contact.name,
+                  style: GoogleFonts.lexend(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.textPrimary,
+                  ),
                 ),
                 Text(
-                  detail,
-                  style: GoogleFonts.lexend(fontSize: 12, color: Colors.grey.shade500),
+                  '${contact.role}${contact.lga != null ? ' • ${contact.lga}' : ''}',
+                  style: GoogleFonts.lexend(
+                    fontSize: 12,
+                    color: Colors.grey.shade500,
+                  ),
                 ),
               ],
             ),
           ),
-          if (showSms)
-            Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: _buildActionButton(Icons.sms, Colors.grey.shade100, Colors.grey.shade600, () {}),
+          Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: _buildActionButton(
+              Icons.sms,
+              Colors.grey.shade100,
+              Colors.grey.shade600,
+              () => _sendSMS(contact.phone),
             ),
-          _buildActionButton(Icons.call, AppColors.successGreen, Colors.white, () {}),
+          ),
+          _buildActionButton(
+            Icons.call,
+            AppColors.successGreen,
+            Colors.white,
+            () => _makePhoneCall(contact.phone),
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildActionButton(IconData icon, Color bg, Color fg, VoidCallback onTap) {
+  Widget _buildActionButton(
+    IconData icon,
+    Color bg,
+    Color fg,
+    VoidCallback onTap,
+  ) {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(20),
       child: Container(
         width: 40,
         height: 40,
-        decoration: BoxDecoration(
-          color: bg,
-          shape: BoxShape.circle,
-        ),
+        decoration: BoxDecoration(color: bg, shape: BoxShape.circle),
         child: Icon(icon, color: fg, size: 20),
       ),
     );
+  }
+
+  Color _getCategoryColor(String category) {
+    switch (category) {
+      case 'coordinator':
+        return Colors.blue;
+      case 'emergency':
+        return AppColors.errorRed;
+      case 'agri-extension':
+        return AppColors.successGreen;
+      default:
+        return Colors.grey;
+    }
+  }
+
+  IconData _getCategoryIcon(String category) {
+    switch (category) {
+      case 'coordinator':
+        return Icons.person;
+      case 'emergency':
+        return Icons.local_police;
+      case 'agri-extension':
+        return Icons.agriculture;
+      default:
+        return Icons.contact_mail;
+    }
   }
 }

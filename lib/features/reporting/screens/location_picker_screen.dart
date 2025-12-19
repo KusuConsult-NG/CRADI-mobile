@@ -1,9 +1,13 @@
 import 'package:climate_app/core/theme/app_colors.dart';
+import 'package:climate_app/features/reporting/widgets/osm_location_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 import 'package:climate_app/features/reporting/providers/reporting_provider.dart';
+import 'package:climate_app/core/services/geolocation_service.dart';
+import 'package:geolocator/geolocator.dart';
 
 class LocationPickerScreen extends StatefulWidget {
   const LocationPickerScreen({super.key});
@@ -14,6 +18,12 @@ class LocationPickerScreen extends StatefulWidget {
 
 class _LocationPickerScreenState extends State<LocationPickerScreen> {
   double _severityValue = 3.0; // Default High
+  final GeolocationService _geoService = GeolocationService();
+  Position? _currentPosition;
+  bool _isLoadingLocation = true;
+  String _locationError = '';
+  String _lga = 'Loading...';
+  String _ward = 'Loading...';
 
   // Severity Configuration
   final Map<int, Map<String, dynamic>> _severityLevels = {
@@ -38,6 +48,79 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
       'desc': 'Life-threatening situation. Immediate action required.',
     },
   };
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchCurrentLocation();
+  }
+
+  Future<void> _fetchCurrentLocation() async {
+    setState(() {
+      _isLoadingLocation = true;
+      _locationError = '';
+    });
+
+    try {
+      final position = await _geoService.getCurrentPosition();
+
+      if (position != null) {
+        setState(() {
+          _currentPosition = position;
+          _isLoadingLocation = false;
+        });
+
+        // Get location details
+        final details = await _geoService.getLocationDetails(
+          position.latitude,
+          position.longitude,
+        );
+
+        setState(() {
+          _lga = details['lga'] ?? 'Unknown LGA';
+          _ward = details['ward'] ?? 'Unknown Ward';
+        });
+
+        // Update reporting provider with coordinates
+        if (mounted) {
+          context.read<ReportingProvider>().setLocationDetails(
+            '${position.latitude},${position.longitude}',
+          );
+        }
+      } else {
+        setState(() {
+          _isLoadingLocation = false;
+          _locationError = 'Unable to get location. Please enable GPS.';
+        });
+      }
+    } on Exception catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoadingLocation = false;
+          _locationError = 'Location error: ${e.toString()}';
+        });
+      }
+    }
+  }
+
+  String _getGpsStatus() {
+    if (_isLoadingLocation) return 'ACQUIRING...';
+    if (_locationError.isNotEmpty) return 'NO SIGNAL';
+    if (_currentPosition == null) return 'NO SIGNAL';
+
+    final accuracy = _currentPosition!.accuracy;
+    if (accuracy <= 20) return 'GPS STRONG';
+    if (accuracy <= 50) return 'GPS GOOD';
+    return 'GPS WEAK';
+  }
+
+  Color _getGpsStatusColor() {
+    final status = _getGpsStatus();
+    if (status == 'GPS STRONG') return Colors.green.shade700;
+    if (status == 'GPS GOOD') return Colors.orange.shade700;
+    if (status == 'ACQUIRING...') return Colors.blue.shade700;
+    return Colors.red.shade700;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -244,23 +327,25 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                           vertical: 4,
                         ),
                         decoration: BoxDecoration(
-                          color: Colors.green.shade50,
+                          color: _getGpsStatusColor().withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(20),
                         ),
                         child: Row(
                           children: [
                             Icon(
-                              Icons.gps_fixed,
+                              _isLoadingLocation
+                                  ? Icons.gps_not_fixed
+                                  : Icons.gps_fixed,
                               size: 14,
-                              color: Colors.green.shade700,
+                              color: _getGpsStatusColor(),
                             ),
                             const SizedBox(width: 4),
                             Text(
-                              'GPS STRONG',
+                              _getGpsStatus(),
                               style: GoogleFonts.lexend(
                                 fontSize: 10,
                                 fontWeight: FontWeight.bold,
-                                color: Colors.green.shade700,
+                                color: _getGpsStatusColor(),
                               ),
                             ),
                           ],
@@ -287,70 +372,91 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                       children: [
                         // Map Preview
                         SizedBox(
-                          height: 160,
-                          child: Stack(
-                            fit: StackFit.expand,
-                            children: [
-                              Container(
-                                color: Colors.grey.shade200,
-                              ), // Placeholder for map
-                              Center(
-                                child: Icon(
-                                  Icons.location_on,
-                                  size: 48,
-                                  color: severityColor,
-                                ),
-                              ),
-                              Positioned(
-                                bottom: 12,
-                                right: 12,
-                                child: GestureDetector(
-                                  onTap: () {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(
-                                        content: Text(
-                                          'Adjust location map feature',
-                                        ),
-                                      ),
-                                    );
-                                  },
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 12,
-                                      vertical: 6,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: Colors.white,
-                                      borderRadius: BorderRadius.circular(8),
-                                      boxShadow: const [
-                                        BoxShadow(
-                                          color: Colors.black12,
-                                          blurRadius: 4,
-                                        ),
-                                      ],
-                                    ),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        const Icon(
-                                          Icons.edit_location,
-                                          size: 14,
-                                        ),
-                                        const SizedBox(width: 4),
-                                        Text(
-                                          'Adjust',
-                                          style: GoogleFonts.lexend(
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.w600,
+                          height: 200,
+                          child: _currentPosition == null
+                              ? Container(
+                                  color: Colors.grey.shade200,
+                                  child: _isLoadingLocation
+                                      ? const Center(
+                                          child: CircularProgressIndicator(),
+                                        )
+                                      : Center(
+                                          child: Column(
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.center,
+                                            children: [
+                                              Icon(
+                                                Icons.location_off,
+                                                size: 48,
+                                                color: Colors.grey.shade400,
+                                              ),
+                                              const SizedBox(height: 8),
+                                              Text(
+                                                'Location unavailable',
+                                                style: TextStyle(
+                                                  color: Colors.grey.shade600,
+                                                ),
+                                              ),
+                                            ],
                                           ),
                                         ),
-                                      ],
+                                )
+                              : Stack(
+                                  children: [
+                                    OSMLocationPicker(
+                                      initialPosition: LatLng(
+                                        _currentPosition!.latitude,
+                                        _currentPosition!.longitude,
+                                      ),
+                                      isInteractive: false,
+                                      onPositionChanged: (point) {
+                                        // Optional: Handle map taps if needed in future
+                                      },
                                     ),
-                                  ),
+                                    Positioned(
+                                      bottom: 12,
+                                      right: 12,
+                                      child: GestureDetector(
+                                        onTap: _fetchCurrentLocation,
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 12,
+                                            vertical: 6,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: Colors.white,
+                                            borderRadius: BorderRadius.circular(
+                                              8,
+                                            ),
+                                            boxShadow: const [
+                                              BoxShadow(
+                                                color: Colors.black12,
+                                                blurRadius: 4,
+                                              ),
+                                            ],
+                                          ),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              const Icon(
+                                                Icons.my_location,
+                                                size: 14,
+                                              ),
+                                              const SizedBox(width: 4),
+                                              Text(
+                                                'Refresh',
+                                                style: GoogleFonts.lexend(
+                                                  fontSize: 12,
+                                                  fontWeight: FontWeight.w600,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                 ),
-                              ),
-                            ],
-                          ),
                         ),
                         // Details
                         Padding(
@@ -360,11 +466,11 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                               Row(
                                 children: [
                                   Expanded(
-                                    child: _buildLocationInfo('LGA', 'Makurdi'),
+                                    child: _buildLocationInfo('LGA', _lga),
                                   ),
                                   const SizedBox(width: 16),
                                   Expanded(
-                                    child: _buildLocationInfo('WARD', 'Wadata'),
+                                    child: _buildLocationInfo('WARD', _ward),
                                   ),
                                 ],
                               ),
@@ -389,7 +495,14 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                                       ),
                                       const SizedBox(height: 2),
                                       Text(
-                                        '7.7322° N | 8.5218° E',
+                                        _currentPosition != null
+                                            ? _geoService.formatCoordinates(
+                                                _currentPosition!.latitude,
+                                                _currentPosition!.longitude,
+                                              )
+                                            : (_isLoadingLocation
+                                                  ? 'Getting location...'
+                                                  : 'No GPS data'),
                                         style: GoogleFonts.robotoMono(
                                           fontSize: 12,
                                           color: AppColors.textPrimary,
@@ -399,15 +512,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                                   ),
                                   GestureDetector(
                                     onTap: () {
-                                      ScaffoldMessenger.of(
-                                        context,
-                                      ).showSnackBar(
-                                        const SnackBar(
-                                          content: Text(
-                                            'View full details map feature',
-                                          ),
-                                        ),
-                                      );
+                                      _showLocationDetailsDialog(context);
                                     },
                                     child: Text(
                                       'View Details',
@@ -432,24 +537,43 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                       onTap: () {
                         showDialog(
                           context: context,
-                          builder: (context) => AlertDialog(
-                            title: const Text('Enter Location Manually'),
-                            content: const TextField(
-                              decoration: InputDecoration(
-                                hintText: 'Address or Coordinates',
+                          builder: (context) {
+                            final controller = TextEditingController();
+                            return AlertDialog(
+                              title: const Text('Enter Location Manually'),
+                              content: TextField(
+                                controller: controller,
+                                decoration: const InputDecoration(
+                                  hintText: 'Address or Coordinates',
+                                ),
                               ),
-                            ),
-                            actions: [
-                              TextButton(
-                                onPressed: () => Navigator.pop(context),
-                                child: const Text('Cancel'),
-                              ),
-                              TextButton(
-                                onPressed: () => Navigator.pop(context),
-                                child: const Text('Set'),
-                              ),
-                            ],
-                          ),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.pop(context),
+                                  child: const Text('Cancel'),
+                                ),
+                                TextButton(
+                                  onPressed: () {
+                                    if (controller.text.isNotEmpty) {
+                                      context
+                                          .read<ReportingProvider>()
+                                          .setLocationDetails(controller.text);
+                                      // Also verify severity if not set
+                                      final severityLabel =
+                                          _severityLevels[_severityValue
+                                                  .toInt()]!['label']
+                                              as String;
+                                      context
+                                          .read<ReportingProvider>()
+                                          .setSeverity(severityLabel);
+                                    }
+                                    Navigator.pop(context);
+                                  },
+                                  child: const Text('Set'),
+                                ),
+                              ],
+                            );
+                          },
                         );
                       },
                       child: Text(
@@ -477,7 +601,20 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
             ),
             child: SafeArea(
               child: ElevatedButton(
-                onPressed: () => context.push('/report/details'),
+                onPressed: () {
+                  // Sync Severity
+                  final severityLabel =
+                      _severityLevels[_severityValue.toInt()]!['label']
+                          as String;
+                  context.read<ReportingProvider>().setSeverity(severityLabel);
+
+                  // Sync Location if not null (it might have been set by GPS or Manual)
+                  // If location provider is null, we should block or warn?
+                  // For now, assume flow continues, provider check at end will catch it.
+                  // But setting it here ensures "default" value is captured.
+
+                  context.push('/report/details');
+                },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.primaryRed,
                   foregroundColor: Colors.white,
@@ -553,6 +690,122 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
             fontWeight: FontWeight.bold,
             color: AppColors.textPrimary,
           ),
+        ),
+      ],
+    );
+  }
+
+  void _showLocationDetailsDialog(BuildContext context) {
+    if (_currentPosition == null) return;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(24),
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Location Details',
+                  style: GoogleFonts.lexend(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                IconButton(
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(Icons.close),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            _buildDetailRow(
+              Icons.my_location,
+              'Latitude',
+              _currentPosition!.latitude.toStringAsFixed(6),
+            ),
+            const SizedBox(height: 12),
+            _buildDetailRow(
+              Icons.my_location,
+              'Longitude',
+              _currentPosition!.longitude.toStringAsFixed(6),
+            ),
+            const SizedBox(height: 12),
+            _buildDetailRow(
+              Icons.gps_fixed,
+              'Accuracy',
+              '${_currentPosition!.accuracy.toStringAsFixed(1)} meters',
+            ),
+            const SizedBox(height: 12),
+            _buildDetailRow(
+              Icons.height,
+              'Altitude',
+              '${_currentPosition!.altitude.toStringAsFixed(1)} m',
+            ),
+            const SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () => Navigator.pop(context),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primaryRed,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                child: Text(
+                  'Close',
+                  style: GoogleFonts.lexend(fontWeight: FontWeight.bold),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDetailRow(IconData icon, String label, String value) {
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: Colors.grey.shade100,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Icon(icon, size: 18, color: AppColors.primaryRed),
+        ),
+        const SizedBox(width: 16),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              label,
+              style: GoogleFonts.lexend(
+                fontSize: 12,
+                color: Colors.grey.shade500,
+              ),
+            ),
+            Text(
+              value,
+              style: GoogleFonts.lexend(
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
         ),
       ],
     );

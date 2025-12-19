@@ -6,8 +6,10 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:climate_app/features/profile/providers/profile_provider.dart';
 import 'package:provider/provider.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+
+import 'package:climate_app/features/knowledge_base/providers/news_provider.dart';
+import 'package:climate_app/features/verification/models/verification_report_model.dart';
+import 'package:climate_app/features/verification/providers/reports_status_provider.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -20,16 +22,25 @@ class _HomeScreenState extends State<HomeScreen> {
   int _selectedFilterIndex = 0;
 
   @override
+  void initState() {
+    super.initState();
+    // Initial fetch if needed, though StreamBuilder handles it
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
         child: RefreshIndicator(
           onRefresh: () async {
-            // Simulate refresh or reload data
-            await Future.delayed(const Duration(seconds: 1));
+            // Reload user profile data and stats
             if (context.mounted) {
-              // Reload profile or reports if needed
+              await Future.wait([
+                context.read<ProfileProvider>().loadProfile(),
+                context.read<ReportsStatusProvider>().refreshReports(),
+                context.read<NewsProvider>().fetchNews(),
+              ]);
             }
           },
           child: SingleChildScrollView(
@@ -49,12 +60,15 @@ class _HomeScreenState extends State<HomeScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       // Greeting
-                      Consumer<LanguageProvider>(
-                        builder: (context, language, child) => Column(
+                      Consumer2<LanguageProvider, ProfileProvider>(
+                        builder: (context, language, profile, child) => Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              language.greeting,
+                              language.greeting.replaceAll(
+                                '{name}',
+                                profile.name,
+                              ),
                               style: GoogleFonts.lexend(
                                 fontSize: 28,
                                 fontWeight: FontWeight.bold,
@@ -72,8 +86,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                 children: [
                                   const TextSpan(text: 'You have '),
                                   TextSpan(
-                                    text: language
-                                        .attentionText, // Simplified for demo
+                                    text: language.attentionText,
                                     style: GoogleFonts.lexend(
                                       fontWeight: FontWeight.bold,
                                       color: AppColors.textPrimary,
@@ -85,57 +98,131 @@ class _HomeScreenState extends State<HomeScreen> {
                           ],
                         ),
                       ),
-                      const SizedBox(height: 24),
-
-                      // Quick Stats
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: Row(
+                      // Sync Status
+                      Consumer<ReportsStatusProvider>(
+                        builder: (context, provider, _) => Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Expanded(
-                              child: GestureDetector(
-                                onTap: () => context.push('/reports-status'),
-                                child: _buildStatCard(
-                                  count: '12',
-                                  label: 'Active',
-                                  icon: Icons.warning_amber,
-                                  color: AppColors.warningYellow,
-                                  bgColor: AppColors.warningYellow.withValues(
-                                    alpha: 0.1,
-                                  ),
-                                ),
+                            Text(
+                              'SYNC STATUS',
+                              style: GoogleFonts.lexend(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.grey.shade500,
+                                letterSpacing: 1.0,
                               ),
                             ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: GestureDetector(
-                                onTap: () => context.push('/reports-status'),
-                                child: _buildStatCard(
-                                  count: '4',
-                                  label: 'Pending',
-                                  icon: Icons.schedule,
-                                  color: Colors.orange,
-                                  bgColor: Colors.orange.withValues(alpha: 0.1),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: GestureDetector(
-                                onTap: () => context.push('/reports-status'),
-                                child: _buildStatCard(
-                                  count: '28',
-                                  label: 'Resolved',
-                                  icon: Icons.check_circle,
-                                  color: AppColors.successGreen,
-                                  bgColor: AppColors.successGreen.withValues(
-                                    alpha: 0.1,
+                            GestureDetector(
+                              onTap: () => provider.refreshReports(),
+                              child: Row(
+                                children: [
+                                  Container(
+                                    width: 8,
+                                    height: 8,
+                                    decoration: BoxDecoration(
+                                      color: provider.isLoading
+                                          ? Colors.orange
+                                          : AppColors.successGreen,
+                                      shape: BoxShape.circle,
+                                    ),
                                   ),
-                                ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    provider.isLoading
+                                        ? 'Synchronizing...'
+                                        : 'Online • Just now',
+                                    style: GoogleFonts.lexend(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                      color: provider.isLoading
+                                          ? Colors.orange
+                                          : AppColors.successGreen,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Icon(
+                                    Icons.refresh,
+                                    size: 12,
+                                    color: provider.isLoading
+                                        ? Colors.orange
+                                        : AppColors.successGreen,
+                                  ),
+                                ],
                               ),
                             ),
                           ],
                         ),
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Quick Stats
+                      StreamBuilder<List<VerificationReport>>(
+                        stream: context
+                            .read<ReportsStatusProvider>()
+                            .reportsStatusStream,
+                        builder: (context, snapshot) {
+                          final reports = snapshot.data ?? [];
+                          final activeCount = reports
+                              .where(
+                                (r) => r.status == ReportStatus.acknowledged,
+                              )
+                              .length;
+                          final pendingCount = reports
+                              .where((r) => r.status == ReportStatus.pending)
+                              .length;
+                          final resolvedCount = reports
+                              .where((r) => r.status == ReportStatus.resolved)
+                              .length;
+
+                          return Row(
+                            children: [
+                              Expanded(
+                                child: GestureDetector(
+                                  onTap: () => context.push('/reports-status'),
+                                  child: _buildStatCard(
+                                    count: '$activeCount',
+                                    label: 'Active',
+                                    icon: Icons.warning_amber,
+                                    color: AppColors.warningYellow,
+                                    bgColor: AppColors.warningYellow.withValues(
+                                      alpha: 0.1,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: GestureDetector(
+                                  onTap: () => context.push('/reports-status'),
+                                  child: _buildStatCard(
+                                    count: '$pendingCount',
+                                    label: 'Pending',
+                                    icon: Icons.schedule,
+                                    color: Colors.orange,
+                                    bgColor: Colors.orange.withValues(
+                                      alpha: 0.1,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: GestureDetector(
+                                  onTap: () => context.push('/reports-status'),
+                                  child: _buildStatCard(
+                                    count: '$resolvedCount',
+                                    label: 'Resolved',
+                                    icon: Icons.check_circle,
+                                    color: AppColors.successGreen,
+                                    bgColor: AppColors.successGreen.withValues(
+                                      alpha: 0.1,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          );
+                        },
                       ),
                       const SizedBox(height: 24),
 
@@ -150,26 +237,31 @@ class _HomeScreenState extends State<HomeScreen> {
                               'Floods',
                               Icons.flood,
                               Colors.blue,
+                              () => _onCategoryTap('Flooding'),
                             ),
                             _buildCategoryCard(
                               'Droughts',
                               Icons.wb_sunny,
                               Colors.orange,
+                              () => _onCategoryTap('Drought'),
                             ),
                             _buildCategoryCard(
                               'Pests',
                               Icons.pest_control,
                               Colors.green,
+                              () => _onCategoryTap('Pest/Disease'),
                             ),
                             _buildCategoryCard(
                               'Conflicts',
                               Icons.shield,
                               Colors.red,
+                              () => _onCategoryTap('Conflict'),
                             ),
                             _buildCategoryCard(
                               'Erosion',
                               Icons.landscape,
                               Colors.brown,
+                              () => _onCategoryTap('Erosion'),
                             ),
                           ],
                         ),
@@ -212,7 +304,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildHeader() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 10, 20, 10),
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
@@ -223,6 +315,9 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: Consumer<ProfileProvider>(
                   builder: (context, profile, _) {
                     if (profile.profileImagePath != null) {
+                      final imagePath = profile.profileImagePath!;
+                      final isNetworkImage = imagePath.startsWith('http');
+
                       return Container(
                         width: 40,
                         height: 40,
@@ -233,7 +328,9 @@ class _HomeScreenState extends State<HomeScreen> {
                             width: 2,
                           ),
                           image: DecorationImage(
-                            image: FileImage(File(profile.profileImagePath!)),
+                            image: isNetworkImage
+                                ? NetworkImage(imagePath)
+                                : FileImage(File(imagePath)) as ImageProvider,
                             fit: BoxFit.cover,
                           ),
                         ),
@@ -256,39 +353,42 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
               const SizedBox(width: 12),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'MONITORING ZONE',
-                    style: GoogleFonts.lexend(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.textSecondary,
-                      letterSpacing: 0.5,
+              GestureDetector(
+                onTap: () => _showZoneSelector(context),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'MONITORING ZONE',
+                      style: GoogleFonts.lexend(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textSecondary,
+                        letterSpacing: 0.5,
+                      ),
                     ),
-                  ),
-                  Consumer<ProfileProvider>(
-                    builder: (context, profile, _) => Row(
-                      children: [
-                        Text(
-                          profile.monitoringZone ?? 'Benue State',
-                          style: GoogleFonts.lexend(
-                            fontSize: 14,
-                            fontWeight: FontWeight.bold,
+                    Consumer<ProfileProvider>(
+                      builder: (context, profile, _) => Row(
+                        children: [
+                          Text(
+                            profile.monitoringZone ?? 'Benue State',
+                            style: GoogleFonts.lexend(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.textPrimary,
+                            ),
+                          ),
+                          const SizedBox(width: 2),
+                          const Icon(
+                            Icons.expand_more,
+                            size: 18,
                             color: AppColors.textPrimary,
                           ),
-                        ),
-                        const SizedBox(width: 2),
-                        const Icon(
-                          Icons.expand_more,
-                          size: 18,
-                          color: AppColors.textPrimary,
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ],
           ),
@@ -379,7 +479,7 @@ class _HomeScreenState extends State<HomeScreen> {
     required Color bgColor,
   }) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
@@ -481,44 +581,40 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildFeedContent() {
-    final currentUser = FirebaseAuth.instance.currentUser;
-    if (currentUser == null) {
-      return const Center(child: Text('Please log in to view reports'));
-    }
+    final statusProvider = context.watch<ReportsStatusProvider>();
 
-    // Build query based on selected tab
-    Query<Map<String, dynamic>> query;
-
-    if (_selectedFilterIndex == 0) {
-      // To Verify - pending reports
-      query = FirebaseFirestore.instance
-          .collection('reports')
-          .where('status', isEqualTo: 'pending')
-          .orderBy('submittedAt', descending: true)
-          .limit(10);
+    if (_selectedFilterIndex == 2) {
+      // To Verify
+      return _buildStreamFeed(
+        statusProvider.getReportsStreamByStatus(ReportStatus.pending),
+        'No reports to verify',
+      );
     } else if (_selectedFilterIndex == 1) {
-      // Alerts - high/critical severity or alerts
-      query = FirebaseFirestore.instance
-          .collection('reports')
-          .where('isAlert', isEqualTo: true)
-          .orderBy('submittedAt', descending: true)
-          .limit(10);
+      // My Reports
+      return _buildStreamFeed(
+        statusProvider.getReportsStreamByStatus(
+          ReportStatus.pending,
+        ), // Fallback or implement My Reports stream
+        'You haven\'t submitted any reports yet',
+      );
     } else {
-      // My Reports - user's own reports
-      query = FirebaseFirestore.instance
-          .collection('reports')
-          .where('userId', isEqualTo: currentUser.uid)
-          .orderBy('submittedAt', descending: true)
-          .limit(10);
+      // Recent (All)
+      return _buildStreamFeed(
+        statusProvider.getReportsStreamByStatus(
+          ReportStatus.pending,
+        ), // Temporary, should show all
+        'No recent reports',
+      );
     }
+  }
 
-    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream: query.snapshots(),
+  Widget _buildStreamFeed(
+    Stream<List<VerificationReport>> stream,
+    String emptyMessage,
+  ) {
+    return StreamBuilder<List<VerificationReport>>(
+      stream: stream,
       builder: (context, snapshot) {
-        if (snapshot.hasError) {
-          return Center(child: Text('Error: ${snapshot.error}'));
-        }
-
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(
             child: Padding(
@@ -528,40 +624,25 @@ class _HomeScreenState extends State<HomeScreen> {
           );
         }
 
-        final reports = snapshot.data?.docs ?? [];
-
+        final reports = snapshot.data ?? [];
         if (reports.isEmpty) {
           return Center(
             child: Padding(
               padding: const EdgeInsets.all(40),
               child: Column(
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(
-                    Icons.assignment_outlined,
-                    size: 64,
-                    color: Colors.grey.shade300,
+                    Icons.inventory_2_outlined,
+                    size: 48,
+                    color: Colors.grey.shade400,
                   ),
                   const SizedBox(height: 16),
                   Text(
-                    _selectedFilterIndex == 0
-                        ? 'No reports to verify'
-                        : _selectedFilterIndex == 1
-                        ? 'No active alerts'
-                        : 'No reports yet',
+                    emptyMessage,
                     style: GoogleFonts.lexend(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
+                      fontSize: 14,
                       color: AppColors.textSecondary,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    _selectedFilterIndex == 2
-                        ? 'Reports you submit will appear here'
-                        : 'New items will appear here',
-                    style: GoogleFonts.lexend(
-                      fontSize: 13,
-                      color: Colors.grey.shade500,
                     ),
                     textAlign: TextAlign.center,
                   ),
@@ -571,36 +652,140 @@ class _HomeScreenState extends State<HomeScreen> {
           );
         }
 
-        return Column(
-          children: [
-            if (_selectedFilterIndex == 1 && reports.isNotEmpty) ...[
-              // Show first alert as featured
-              _buildAlertCardFromData(reports.first.data()),
-              const SizedBox(height: 16),
-            ],
-            ...reports.map((doc) {
-              final data = doc.data();
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 16),
-                child: _buildReportCard(data, doc.id),
-              );
-            }),
-          ],
+        return ListView.separated(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          itemCount: reports.length > 5
+              ? 5
+              : reports.length, // Show only top 5 on home
+          separatorBuilder: (_, _) => const SizedBox(height: 12),
+          itemBuilder: (context, index) {
+            final report = reports[index];
+            return _buildReportItem(report);
+          },
         );
       },
     );
+  }
+
+  Widget _buildReportItem(VerificationReport report) {
+    return GestureDetector(
+      onTap: () {
+        final alertData = {
+          'title': report.title,
+          'time': report.time,
+          'location': report.location,
+          'icon': _getIconData(report.type),
+          'color': _getIconColor(report.type),
+          'severity': 'Normal', // Default if not in model
+          'status': report.status.displayName,
+          'description': 'Report by ${report.reporter} at ${report.location}',
+        };
+        context.push('/alerts/detail', extra: alertData);
+      },
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.grey.shade200),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: _getIconBgColor(report.iconColor),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(
+                _getIconData(report.iconName),
+                color: _getIconColor(report.iconColor),
+                size: 20,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    report.title,
+                    style: GoogleFonts.lexend(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                  Text(
+                    '${report.location} • ${report.time}',
+                    style: GoogleFonts.lexend(
+                      fontSize: 12,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(
+              Icons.chevron_right,
+              size: 20,
+              color: AppColors.textSecondary,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Color _getIconColor(String colorName) {
+    switch (colorName) {
+      case 'orange':
+        return Colors.orange;
+      case 'blue':
+        return Colors.blue;
+      case 'red':
+        return AppColors.errorRed;
+      case 'green':
+        return AppColors.successGreen;
+      default:
+        return Colors.grey;
+    }
+  }
+
+  Color _getIconBgColor(String colorName) {
+    return _getIconColor(colorName).withValues(alpha: 0.1);
+  }
+
+  IconData _getIconData(String iconName) {
+    switch (iconName) {
+      case 'pest_control':
+        return Icons.pest_control;
+      case 'water_drop':
+        return Icons.water_drop;
+      case 'water':
+        return Icons.water;
+      case 'local_fire_department':
+        return Icons.local_fire_department;
+      default:
+        return Icons.warning;
+    }
   }
 
   Widget _buildSectionHeader(String title, VoidCallback onViewAll) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(
-          title,
-          style: GoogleFonts.lexend(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-            color: AppColors.textPrimary,
+        Expanded(
+          child: Text(
+            title,
+            style: GoogleFonts.lexend(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: AppColors.textPrimary,
+            ),
+            overflow: TextOverflow.ellipsis,
           ),
         ),
         GestureDetector(
@@ -618,263 +803,103 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildCategoryCard(String label, IconData icon, Color color) {
-    return Container(
-      margin: const EdgeInsets.only(right: 12),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withValues(alpha: 0.2)),
-      ),
-      child: Row(
-        children: [
-          Icon(icon, size: 20, color: color),
-          const SizedBox(width: 8),
-          Text(
-            label,
-            style: GoogleFonts.lexend(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-              color: AppColors.textPrimary,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildReportCard(Map<String, dynamic> data, String docId) {
-    final hazardType = data['hazardType'] ?? 'Unknown';
-    final severity = data['severity'] ?? 'Unknown';
-    final location = data['locationDetails'] ?? 'Unknown location';
-    final timestamp = data['submittedAt'] as Timestamp?;
-    final timeAgo = timestamp != null
-        ? _formatTimeAgo(timestamp.toDate())
-        : 'Unknown time';
-
-    // Map hazard  types to icons
-    IconData icon;
-    Color iconColor;
-    switch (hazardType.toLowerCase()) {
-      case 'flood':
-        icon = Icons.flood;
-        iconColor = Colors.blue;
-        break;
-      case 'drought':
-        icon = Icons.wb_sunny;
-        iconColor = Colors.orange;
-        break;
-      case 'pest':
-        icon = Icons.pest_control;
-        iconColor = Colors.green;
-        break;
-      case 'fire':
-        icon = Icons.local_fire_department;
-        iconColor = Colors.red;
-        break;
-      default:
-        icon = Icons.warning;
-        iconColor = Colors.grey;
-    }
-
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.grey.shade200),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              color: iconColor.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: iconColor.withValues(alpha: 0.2)),
-            ),
-            child: Icon(icon, color: iconColor),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: Text(
-                        '$hazardType - $severity',
-                        style: GoogleFonts.lexend(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.textPrimary,
-                        ),
-                      ),
-                    ),
-                    Icon(Icons.chevron_right, color: Colors.grey.shade400),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    const Icon(
-                      Icons.location_on,
-                      size: 14,
-                      color: AppColors.textSecondary,
-                    ),
-                    const SizedBox(width: 4),
-                    Expanded(
-                      child: Text(
-                        location,
-                        style: GoogleFonts.lexend(
-                          fontSize: 12,
-                          color: AppColors.textSecondary,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    const Icon(
-                      Icons.schedule,
-                      size: 14,
-                      color: AppColors.textSecondary,
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      timeAgo,
-                      style: GoogleFonts.lexend(
-                        fontSize: 12,
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildAlertCardFromData(Map<String, dynamic> data) {
-    final hazardType = data['hazardType'] ?? 'Alert';
-    final severity = data['severity'] ?? 'High';
-    final description = data['description'] ?? 'No description available';
-    final location = data['locationDetails'] ?? 'Unknown location';
-    final timestamp = data['submittedAt'] as Timestamp?;
-    final timeAgo = timestamp != null
-        ? _formatTimeAgo(timestamp.toDate())
-        : 'Unknown time';
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.red.shade50,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.red.shade100),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(4),
-                    decoration: BoxDecoration(
-                      color: AppColors.errorRed,
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: const Icon(
-                      Icons.warning,
-                      color: Colors.white,
-                      size: 16,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    'ALERT',
-                    style: GoogleFonts.lexend(
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.red.shade800,
-                      letterSpacing: 0.5,
-                    ),
-                  ),
-                ],
+  Widget _buildCategoryCard(
+    String label,
+    IconData icon,
+    Color color,
+    VoidCallback onTap,
+  ) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        margin: const EdgeInsets.only(right: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: color.withValues(alpha: 0.2)),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, size: 20, color: color),
+            const SizedBox(width: 8),
+            Text(
+              label,
+              style: GoogleFonts.lexend(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: AppColors.textPrimary,
               ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.red.shade100,
-                  borderRadius: BorderRadius.circular(12),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _onCategoryTap(String category) {
+    // Navigate to Alert History (filtered by category)
+    context.push('/alerts', extra: category);
+  }
+
+  void _showZoneSelector(BuildContext context) {
+    final zones = [
+      'Benue State',
+      'Benue Zone A',
+      'Benue Zone B',
+      'Benue Zone C',
+      'Nasarawa State',
+      'Kogi State',
+      'Plateau State',
+    ];
+
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return Container(
+          padding: const EdgeInsets.symmetric(vertical: 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Select Monitoring Zone',
+                style: GoogleFonts.lexend(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
                 ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.timer, size: 14, color: Color(0xFFA50E0E)),
-                    const SizedBox(width: 4),
-                    Text(
-                      timeAgo,
-                      style: GoogleFonts.lexend(
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                        color: const Color(0xFFA50E0E),
-                      ),
-                    ),
-                  ],
+              ),
+              const SizedBox(height: 16),
+              ...zones.map(
+                (zone) => ListTile(
+                  title: Text(zone, style: GoogleFonts.lexend(fontSize: 16)),
+                  trailing: Consumer<ProfileProvider>(
+                    builder: (context, profile, _) =>
+                        profile.monitoringZone == zone
+                        ? const Icon(Icons.check, color: AppColors.primaryRed)
+                        : const SizedBox(),
+                  ),
+                  onTap: () async {
+                    final provider = context.read<ProfileProvider>();
+                    await provider.updateMonitoringZone(zone);
+                    if (context.mounted) {
+                      Navigator.pop(context);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Monitoring zone changed to $zone'),
+                          backgroundColor: AppColors.successGreen,
+                        ),
+                      );
+                    }
+                  },
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          Text(
-            '$hazardType - $severity Severity',
-            style: GoogleFonts.lexend(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: AppColors.textPrimary,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            '$location - $description',
-            style: GoogleFonts.lexend(
-              fontSize: 14,
-              color: AppColors.textPrimary.withValues(alpha: 0.8),
-              height: 1.5,
-            ),
-            maxLines: 3,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ],
-      ),
+        );
+      },
     );
-  }
-
-  String _formatTimeAgo(DateTime dateTime) {
-    final now = DateTime.now();
-    final difference = now.difference(dateTime);
-
-    if (difference.inMinutes < 1) {
-      return 'Just now';
-    } else if (difference.inMinutes < 60) {
-      return '${difference.inMinutes}m ago';
-    } else if (difference.inHours < 24) {
-      return '${difference.inHours}h ago';
-    } else if (difference.inDays < 7) {
-      return '${difference.inDays}d ago';
-    } else {
-      return '${(difference.inDays / 7).floor()}w ago';
-    }
   }
 }

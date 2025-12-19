@@ -55,23 +55,38 @@ dependencies:
   encrypt: ^5.0.3
   http: ^1.2.2
   pointycastle: ^3.9.1
+  # Device fingerprinting and security (compatible with Appwrite)
+  device_info_plus: ^12.0.0
+  # 2FA/TOTP
+  otp: ^3.1.4
+  qr_flutter: ^4.1.0
+  # Network info for security
+  network_info_plus: ^6.0.2
   
-  # Speech recognition
+  # Speech recognition - Used for voice input in reports
   speech_to_text: ^7.0.0
-  firebase_core: ^4.2.1
-  firebase_auth: ^6.1.2
-  cloud_firestore: ^6.1.0
-  firebase_storage: ^13.0.4
-  firebase_messaging: ^16.0.4
-  firebase_crashlytics: ^5.0.5
-  firebase_analytics: ^12.0.4
+  flutter_local_notifications: ^18.0.0
+  # Maps removed - using flutter_map instead (lighter weight)
   
   # Image handling
   cached_network_image: ^3.4.1
+  url_launcher: ^6.3.1
+  geocoding: ^3.0.0
   
   # Localization
   flutter_localizations:
     sdk: flutter
+  # Map library - Using Flutter Map (lighter than Google Maps)
+  flutter_map: ^8.2.2
+  latlong2: ^0.9.1
+  # Chat
+  flutter_chat_ui: ^1.6.14
+  flutter_chat_types: ^3.6.2
+  # Backend
+  appwrite: 20.3.2
+  # Firebase Cloud Messaging for push notifications
+  firebase_messaging: ^15.1.5
+  firebase_core: ^3.8.1
 
 dev_dependencies:
   flutter_test:

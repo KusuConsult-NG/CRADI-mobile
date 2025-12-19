@@ -3,6 +3,7 @@ import 'package:climate_app/core/widgets/connectivity_banner.dart';
 import 'package:flutter/material.dart';
 import 'package:climate_app/core/providers/language_provider.dart';
 import 'package:provider/provider.dart';
+import 'package:climate_app/features/profile/providers/profile_provider.dart';
 import 'package:go_router/go_router.dart';
 
 class MainShellScreen extends StatefulWidget {
@@ -50,17 +51,37 @@ class _MainShellScreenState extends State<MainShellScreen> {
         child: ListView(
           padding: EdgeInsets.zero,
           children: [
-            const UserAccountsDrawerHeader(
-              decoration: BoxDecoration(color: AppColors.primaryRed),
-              accountName: Text("Early Warning Monitor"),
-              accountEmail: Text("ewm@cradi.org"),
-              currentAccountPicture: CircleAvatar(
-                backgroundColor: Colors.white,
-                child: Text(
-                  "EW",
-                  style: TextStyle(color: AppColors.primaryRed),
-                ),
-              ),
+            Consumer<ProfileProvider>(
+              builder: (context, profileProvider, _) {
+                final initials = profileProvider.name.isNotEmpty
+                    ? profileProvider.name
+                          .split(' ')
+                          .take(2)
+                          .map((e) => e.isNotEmpty ? e[0] : '')
+                          .join()
+                    : 'U';
+
+                return UserAccountsDrawerHeader(
+                  decoration: const BoxDecoration(color: AppColors.primaryRed),
+                  accountName: Text(
+                    profileProvider.name.isNotEmpty
+                        ? profileProvider.name
+                        : "Early Warning Monitor",
+                  ),
+                  accountEmail: Text(
+                    profileProvider.email.isNotEmpty
+                        ? profileProvider.email
+                        : "user@cradi.org",
+                  ),
+                  currentAccountPicture: CircleAvatar(
+                    backgroundColor: Colors.white,
+                    child: Text(
+                      initials.toUpperCase(),
+                      style: const TextStyle(color: AppColors.primaryRed),
+                    ),
+                  ),
+                );
+              },
             ),
             ListTile(
               leading: const Icon(Icons.person),

@@ -1,4 +1,5 @@
 import 'package:climate_app/features/alerts/screens/alerts_list_screen.dart';
+import 'package:climate_app/features/alerts/screens/alert_detail_screen.dart';
 import 'package:climate_app/features/auth/screens/login_screen.dart';
 import 'package:climate_app/features/chat/screens/chat_screen.dart';
 import 'package:climate_app/features/auth/screens/otp_screen.dart';
@@ -33,7 +34,7 @@ class SplashScreen extends StatelessWidget {
 }
 
 final GoRouter appRouter = GoRouter(
-  initialLocation: '/register', // Set to register for UI verification
+  initialLocation: '/login', // Set to login as default entry
   routes: [
     GoRoute(path: '/', builder: (context, state) => const SplashScreen()),
     GoRoute(
@@ -41,7 +42,13 @@ final GoRouter appRouter = GoRouter(
       builder: (context, state) => const RegistrationScreen(),
     ),
     GoRoute(path: '/login', builder: (context, state) => const LoginScreen()),
-    GoRoute(path: '/otp', builder: (context, state) => const OtpScreen()),
+    GoRoute(
+      path: '/otp',
+      builder: (context, state) {
+        final email = state.extra as String?;
+        return OtpScreen(email: email);
+      },
+    ),
     ShellRoute(
       builder: (context, state, child) => MainShellScreen(child: child),
       routes: [
@@ -55,7 +62,19 @@ final GoRouter appRouter = GoRouter(
         ),
         GoRoute(
           path: '/alerts',
-          builder: (context, state) => const AlertsListScreen(),
+          builder: (context, state) {
+            final category = state.extra as String?;
+            return AlertsListScreen(initialCategory: category);
+          },
+          routes: [
+            GoRoute(
+              path: 'detail',
+              builder: (context, state) {
+                final alert = state.extra as Map<String, dynamic>;
+                return AlertDetailScreen(alert: alert);
+              },
+            ),
+          ],
         ),
         GoRoute(
           path: '/knowledge-base',

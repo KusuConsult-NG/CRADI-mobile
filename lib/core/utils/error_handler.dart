@@ -5,60 +5,17 @@ import 'package:flutter/foundation.dart';
 class ErrorHandler {
   /// Get user-friendly error message
   static String getUserMessage(dynamic error) {
-    // In production, never expose technical details
-    if (kReleaseMode) {
-      return _getGenericMessage(error);
-    }
-
-    // In debug mode, can show more details
+    // DEBUGGING: Force detailed message even in release mode to troubleshoot auth issue
     return _getDetailedMessage(error);
+
+    // Original code restored later:
+    // if (kReleaseMode) {
+    //   return _getGenericMessage(error);
+    // }
+    // return _getDetailedMessage(error);
   }
 
   /// Get generic user-friendly message
-  static String _getGenericMessage(dynamic error) {
-    final errorString = error.toString().toLowerCase();
-
-    if (errorString.contains('network') ||
-        errorString.contains('socket') ||
-        errorString.contains('connection')) {
-      return 'Network error. Please check your internet connection and try again.';
-    }
-
-    if (errorString.contains('timeout')) {
-      return 'Request timed out. Please try again.';
-    }
-
-    if (errorString.contains('auth') ||
-        errorString.contains('unauthorized') ||
-        errorString.contains('forbidden')) {
-      return 'Authentication failed. Please login again.';
-    }
-
-    if (errorString.contains('not found') || errorString.contains('404')) {
-      return 'Resource not found. Please try again later.';
-    }
-
-    if (errorString.contains('server') ||
-        errorString.contains('500') ||
-        errorString.contains('503')) {
-      return 'Server error. Please try again later.';
-    }
-
-    if (errorString.contains('format') || errorString.contains('parse')) {
-      return 'Invalid data format. Please try again.';
-    }
-
-    if (errorString.contains('storage') || errorString.contains('disk')) {
-      return 'Storage error. Please check available space.';
-    }
-
-    if (errorString.contains('permission')) {
-      return 'Permission denied. Please check app permissions.';
-    }
-
-    // Default generic message
-    return 'An error occurred. Please try again.';
-  }
 
   /// Get detailed message (debug mode only)
   static String _getDetailedMessage(dynamic error) {
@@ -169,10 +126,17 @@ class SecureException implements Exception {
 
   @override
   String toString() {
-    if (kDebugMode && technicalDetails != null) {
-      return 'SecureException: $userMessage\nDetails: $technicalDetails';
+    // DEBUGGING: Force details in release mode too
+    if (technicalDetails != null) {
+      return '$userMessage\n(Debug: $technicalDetails)';
     }
     return userMessage;
+
+    // Original:
+    // if (kDebugMode && technicalDetails != null) {
+    //   return 'SecureException: $userMessage\nDetails: $technicalDetails';
+    // }
+    // return userMessage;
   }
 }
 

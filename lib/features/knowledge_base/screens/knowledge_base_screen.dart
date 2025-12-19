@@ -1,10 +1,50 @@
+import 'dart:developer' as developer;
+import 'package:climate_app/core/providers/connectivity_provider.dart';
+import 'package:climate_app/features/knowledge_base/providers/news_provider.dart';
 import 'package:climate_app/core/theme/app_colors.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';
 
-class KnowledgeBaseScreen extends StatelessWidget {
+class KnowledgeBaseScreen extends StatefulWidget {
   const KnowledgeBaseScreen({super.key});
+
+  @override
+  State<KnowledgeBaseScreen> createState() => _KnowledgeBaseScreenState();
+}
+
+class _KnowledgeBaseScreenState extends State<KnowledgeBaseScreen> {
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
+
+  @override
+  void initState() {
+    super.initState();
+    Future.microtask(() {
+      if (mounted) {
+        context.read<NewsProvider>().fetchNews();
+      }
+    });
+  }
+
+  List<Map<String, dynamic>> _getFilteredNews(
+    List<Map<String, dynamic>> newsItems,
+  ) {
+    if (_searchQuery.isEmpty) return newsItems;
+    return newsItems
+        .where(
+          (item) =>
+              item['title'].toLowerCase().contains(_searchQuery.toLowerCase()),
+        )
+        .toList();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -58,6 +98,12 @@ class KnowledgeBaseScreen extends StatelessWidget {
                 ],
               ),
               child: TextField(
+                controller: _searchController,
+                onChanged: (value) {
+                  setState(() {
+                    _searchQuery = value;
+                  });
+                },
                 decoration: InputDecoration(
                   hintText: 'Search guides, hazards, or contacts...',
                   hintStyle: GoogleFonts.lexend(
@@ -65,6 +111,17 @@ class KnowledgeBaseScreen extends StatelessWidget {
                     fontSize: 14,
                   ),
                   prefixIcon: Icon(Icons.search, color: Colors.grey.shade400),
+                  suffixIcon: _searchQuery.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(Icons.clear),
+                          onPressed: () {
+                            _searchController.clear();
+                            setState(() {
+                              _searchQuery = '';
+                            });
+                          },
+                        )
+                      : null,
                   border: InputBorder.none,
                   contentPadding: const EdgeInsets.symmetric(
                     horizontal: 16,
@@ -84,57 +141,71 @@ class KnowledgeBaseScreen extends StatelessWidget {
             // Offline Status
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.grey.shade200),
-                ),
-                child: Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: AppColors.successGreen.withValues(alpha: 0.1),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        Icons.cloud_download,
-                        color: AppColors.successGreen,
-                        size: 20,
-                      ),
+              child: Consumer<ConnectivityProvider>(
+                builder: (context, connectivity, _) {
+                  return Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.grey.shade200),
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Offline Mode Available',
-                            style: GoogleFonts.lexend(
-                              fontSize: 14,
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.textPrimary,
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: AppColors.successGreen.withValues(
+                              alpha: 0.1,
                             ),
+                            shape: BoxShape.circle,
                           ),
-                          Text(
-                            'Content downloaded successfully',
-                            style: GoogleFonts.lexend(
-                              fontSize: 12,
-                              color: Colors.grey.shade500,
-                            ),
+                          child: Icon(
+                            connectivity.isOffline
+                                ? Icons.cloud_off
+                                : Icons.cloud_download,
+                            color: connectivity.isOffline
+                                ? Colors.grey
+                                : AppColors.successGreen,
+                            size: 20,
                           ),
-                        ],
-                      ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                connectivity.manualOffline
+                                    ? 'Offline Mode Active'
+                                    : 'Offline Mode Available',
+                                style: GoogleFonts.lexend(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppColors.textPrimary,
+                                ),
+                              ),
+                              Text(
+                                connectivity.manualOffline
+                                    ? 'Using cached data'
+                                    : 'Content downloaded successfully',
+                                style: GoogleFonts.lexend(
+                                  fontSize: 12,
+                                  color: Colors.grey.shade500,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Switch(
+                          value: connectivity.manualOffline,
+                          activeThumbColor: AppColors.successGreen,
+                          onChanged: (v) => connectivity.setManualOffline(v),
+                        ),
+                      ],
                     ),
-                    Switch(
-                      value: true,
-                      activeThumbColor: AppColors.successGreen,
-                      onChanged: (v) {},
-                    ),
-                  ],
-                ),
+                  );
+                },
               ),
             ),
 
@@ -273,11 +344,11 @@ class KnowledgeBaseScreen extends StatelessWidget {
 
             const SizedBox(height: 24),
 
-            // Recently Updated
+            // Recently Updated (External News)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Text(
-                'Recently Updated',
+                'External News & Updates',
                 style: GoogleFonts.lexend(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
@@ -286,65 +357,66 @@ class KnowledgeBaseScreen extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 12),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Column(
-                children: [
-                  GestureDetector(
-                    onTap: () {
-                      context.push(
-                        '/knowledge-base/detail',
-                        extra: {
-                          'title': 'Flood Safety Guide 2024',
-                          'category': 'Safety',
-                          'lastUpdated': '2 days ago',
-                        },
-                      );
-                    },
-                    child: _buildRecentItem(
-                      'Flood Safety Guide 2024',
-                      'Updated safety protocols',
-                      Icons.water,
+            Consumer<NewsProvider>(
+              builder: (context, newsProvider, _) {
+                if (newsProvider.isLoading) {
+                  return const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(24),
+                      child: CircularProgressIndicator(),
                     ),
-                  ),
-                  const SizedBox(height: 12),
-                  GestureDetector(
-                    onTap: () {
-                      context.push(
-                        '/knowledge-base/detail',
-                        extra: {
-                          'title': 'Community Response Plan',
-                          'category': 'Emergency',
-                          'lastUpdated': '1 week ago',
-                        },
-                      );
-                    },
-                    child: _buildRecentItem(
-                      'Community Response Plan',
-                      'New response strategies',
-                      Icons.people,
+                  );
+                }
+
+                if (newsProvider.error != null) {
+                  return Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Text(
+                        newsProvider.error!,
+                        style: GoogleFonts.lexend(color: Colors.red),
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 12),
-                  GestureDetector(
-                    onTap: () {
-                      context.push(
-                        '/knowledge-base/detail',
-                        extra: {
-                          'title': 'Weather Alert System',
-                          'category': 'Tech',
-                          'lastUpdated': '3 days ago',
-                        },
-                      );
-                    },
-                    child: _buildRecentItem(
-                      'Weather Alert System',
-                      'Alert notification guide',
-                      Icons.notifications,
+                  );
+                }
+
+                final news = _getFilteredNews(newsProvider.newsItems);
+
+                if (news.isEmpty) {
+                  return Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Text(
+                        'No recent news updates found.',
+                        style: GoogleFonts.lexend(color: Colors.grey),
+                      ),
                     ),
+                  );
+                }
+
+                return Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Column(
+                    children: news.map((item) {
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: GestureDetector(
+                          onTap: () {
+                            // Link to web or detail view
+                            // For now, show in detail view if possible or just log
+                            developer.log('Opening news: ${item['url']}');
+                          },
+                          child: _buildRecentItem(
+                            item['title'],
+                            '${item['source']} • ${item['date']}',
+                            Icons.public,
+                          ),
+                        ),
+                      );
+                    }).toList(),
                   ),
-                ],
-              ),
+                );
+              },
             ),
           ],
         ),

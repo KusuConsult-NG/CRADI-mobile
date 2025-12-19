@@ -9,7 +9,8 @@ import 'package:provider/provider.dart';
 import 'dart:async';
 
 class OtpScreen extends StatefulWidget {
-  const OtpScreen({super.key});
+  final String? email;
+  const OtpScreen({super.key, this.email});
 
   @override
   State<OtpScreen> createState() => _OtpScreenState();
@@ -49,21 +50,8 @@ class _OtpScreenState extends State<OtpScreen> {
   }
 
   void _startExpiryTimer() {
-    _expiryTimer?.cancel();
-    _expiryTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-      final authProvider = context.read<AuthProvider>();
-      final remaining = authProvider.getOtpExpiryRemaining();
-
-      if (mounted) {
-        setState(() {
-          _otpExpiry = remaining;
-        });
-
-        if (remaining == null || remaining.inSeconds <= 0) {
-          _expiryTimer?.cancel();
-        }
-      }
-    });
+    // Removed OTP expiry timer - not supported in Appwrite
+    // Appwrite handles token expiry internally
   }
 
   void _onChanged(String value, int index) {
@@ -95,8 +83,13 @@ class _OtpScreenState extends State<OtpScreen> {
     });
 
     try {
-      final success = await context.read<AuthProvider>().verifyOTP(otp);
+      // Use verifyEmailOTP or verifyPhoneOTP for Appwrite
+      final authProvider = context.read<AuthProvider>();
+      final success = widget.email != null
+          ? await authProvider.verifyEmailOTP(otp)
+          : await authProvider.verifyPhoneOTP(otp);
 
+      if (!mounted) return;
       setState(() => _isLoading = false);
 
       if (success && mounted) {
@@ -139,9 +132,10 @@ class _OtpScreenState extends State<OtpScreen> {
 
     try {
       final authProvider = context.read<AuthProvider>();
-      final phoneNumber = authProvider.phoneNumber ?? '';
+      final email =
+          widget.email ?? ''; // Fallback for safety, though should be passed
 
-      await authProvider.resendOTP(phoneNumber);
+      await authProvider.sendEmailOTP(email);
 
       if (mounted) {
         setState(() {
@@ -211,13 +205,13 @@ class _OtpScreenState extends State<OtpScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(
-                'Verify Phone Number',
+                'Verify Email Address',
                 style: Theme.of(context).textTheme.displayMedium,
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 8),
               Text(
-                'Enter the 4-digit code sent to your phone',
+                'Enter the 4-digit code sent to ${widget.email}',
                 style: Theme.of(context).textTheme.bodyMedium,
                 textAlign: TextAlign.center,
               ),

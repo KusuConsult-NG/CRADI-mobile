@@ -1,8 +1,12 @@
 import 'dart:io';
 
 import 'package:climate_app/core/theme/app_colors.dart';
+import 'package:climate_app/features/auth/providers/auth_provider.dart'
+    as app_auth;
 import 'package:climate_app/features/profile/providers/profile_provider.dart';
+import 'package:climate_app/features/chat/screens/chat_screen.dart';
 import 'package:climate_app/core/services/biometric_service.dart';
+import 'package:climate_app/features/contacts/providers/emergency_contacts_provider.dart';
 import 'package:climate_app/core/widgets/location_selector_widget.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -19,9 +23,7 @@ class UserProfileScreen extends StatefulWidget {
 }
 
 class _UserProfileScreenState extends State<UserProfileScreen> {
-  XFile? _imageFile;
   final ImagePicker _picker = ImagePicker();
-  final String _role = 'Early Warning Monitor';
 
   Future<void> _pickImage(ImageSource source) async {
     try {
@@ -32,15 +34,10 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
         imageQuality: 85,
       );
 
-      if (pickedFile != null) {
-        setState(() {
-          _imageFile = pickedFile;
-        });
-
-        // Save image path to ProfileProvider
-        if (mounted) {
-          final profileProvider = context.read<ProfileProvider>();
-          await profileProvider.updateProfileImage(pickedFile.path);
+      if (pickedFile != null && mounted) {
+        final profileProvider = context.read<ProfileProvider>();
+        try {
+          await profileProvider.uploadProfileImage(pickedFile);
 
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
@@ -48,6 +45,15 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                 content: Text('Profile photo updated!'),
                 backgroundColor: Colors.green,
                 duration: Duration(seconds: 2),
+              ),
+            );
+          }
+        } on Exception catch (e) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Upload failed: ${e.toString()}'),
+                backgroundColor: Colors.red,
               ),
             );
           }
@@ -311,12 +317,37 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                       ),
                     ),
                   ),
-                  Text(
-                    _role,
-                    style: GoogleFonts.lexend(
-                      fontSize: 16,
-                      color: AppColors.textSecondary,
-                    ),
+                  Consumer<app_auth.AuthProvider>(
+                    builder: (context, authProvider, _) {
+                      String roleText = 'Early Warning Monitor';
+                      if (authProvider.userRole != null) {
+                        // Simple formatted string from enum
+                        switch (authProvider.userRole!) {
+                          case app_auth.UserRole.ewm:
+                            roleText = 'Early Warning Monitor';
+                            break;
+                          case app_auth.UserRole.coordinator:
+                            roleText = 'Coordinator';
+                            break;
+                          case app_auth.UserRole.projectStaff:
+                            roleText = 'Project Staff';
+                            break;
+                          case app_auth.UserRole.earlyResponder:
+                            roleText = 'Early Responder';
+                            break;
+                          case app_auth.UserRole.media:
+                            roleText = 'Media & Press';
+                            break;
+                        }
+                      }
+                      return Text(
+                        roleText,
+                        style: GoogleFonts.lexend(
+                          fontSize: 16,
+                          color: AppColors.textSecondary,
+                        ),
+                      );
+                    },
                   ),
                   const SizedBox(height: 12),
                   Container(
@@ -340,13 +371,20 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                           color: AppColors.primaryRed,
                         ),
                         const SizedBox(width: 8),
-                        Text(
-                          'ID: EWM-2023-452',
-                          style: GoogleFonts.lexend(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w500,
-                            color: AppColors.primaryRed,
-                          ),
+                        Consumer<ProfileProvider>(
+                          builder: (context, profile, _) {
+                            // Show actual registration code from database
+                            final code = profile.registrationCode ?? 'N/A';
+
+                            return Text(
+                              'ID: $code',
+                              style: GoogleFonts.lexend(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w500,
+                                color: AppColors.primaryRed,
+                              ),
+                            );
+                          },
                         ),
                       ],
                     ),
@@ -373,17 +411,37 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
             const SizedBox(height: 24),
 
             // Stats
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Row(
-                children: [
-                  _buildStatCard('42', 'Reports'),
-                  const SizedBox(width: 12),
-                  _buildStatCard('18', 'Verified'),
-                  const SizedBox(width: 12),
-                  _buildStatCard('124', 'Days Active'),
-                ],
-              ),
+            Consumer<ProfileProvider>(
+              builder: (context, profile, _) =>
+                  StreamBuilder<List<Map<String, dynamic>>>(
+                    stream: profile.getUserReportsStream(),
+                    builder: (context, snapshot) {
+                      int totalReports = 0;
+                      int verifiedCount = 0;
+
+                      if (snapshot.hasData) {
+                        totalReports = snapshot.data!.length;
+                        verifiedCount = snapshot.data!.where((doc) {
+                          final status = doc['status'];
+                          return status == 'acknowledged' ||
+                              status == 'resolved';
+                        }).length;
+                      }
+
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Row(
+                          children: [
+                            _buildStatCard('$totalReports', 'Reports'),
+                            const SizedBox(width: 12),
+                            _buildStatCard('$verifiedCount', 'Verified'),
+                            const SizedBox(width: 12),
+                            _buildDaysActiveCard(profile),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
             ),
 
             const SizedBox(height: 24),
@@ -489,13 +547,42 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                     'Offline Data Sync',
                     subtitle: 'Up to date',
                     subtitleColor: AppColors.successGreen,
-                    onTap: () {
+                    onTap: () async {
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
                           content: Text(
                             'Syncing offline data...',
                             style: GoogleFonts.lexend(),
                           ),
+                        ),
+                      );
+                      // Refresh all major providers
+                      final profileProvider = context.read<ProfileProvider>();
+                      await profileProvider.loadProfile();
+
+                      if (context.mounted) {
+                        // For streams, the next event will have new data
+                        // For future-based ones, we re-call
+                        context.read<EmergencyContactsProvider>().getContacts();
+
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Sync complete!'),
+                            backgroundColor: AppColors.successGreen,
+                          ),
+                        );
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 8),
+                  _buildSettingsTile(
+                    Icons.chat_bubble_outline,
+                    'Support Chat',
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const ChatScreen(),
                         ),
                       );
                     },
@@ -655,6 +742,21 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     );
   }
 
+  // Calculate days active from user creation
+  Widget _buildDaysActiveCard(ProfileProvider profile) {
+    int daysActive = 0;
+
+    if (profile.registrationDate != null) {
+      daysActive = DateTime.now().difference(profile.registrationDate!).inDays;
+      // Ensure at least 1 day is shown if they registered today
+      if (daysActive <= 0) daysActive = 1;
+    } else {
+      daysActive = 1; // Default fallback
+    }
+
+    return _buildStatCard('$daysActive', 'Days Active');
+  }
+
   Widget _buildSectionHeader(IconData? icon, String title) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
@@ -725,57 +827,77 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
   }
 
   Widget _buildProfileImage() {
-    const defaultImageUrl =
-        'https://lh3.googleusercontent.com/aida-public/AB6AXuAKOslY66Vx7V0PKuqXmNQV--yPFmuLaNrTLZMTu5IXx2k0-BRtz6bL1ZVv2LpV9Ql0bWfyccTfRc8HlCgv9bu7Yz0tlP974WblLlZ5LQ-a49OlVrPKclfoEgwTXsmMpxbNIrhywiUf-HFp6P_hvAPMvGeXpwseJ-0TqbmgRVdDzrQQpS3taiMw-VP_8wI_DtIffhQcEJxii86T7MTEkgSGmjzKBtdJT4QHWu38cxPB8GBTNsq-hKjBkt6-tCJ4Z8-_DqizvGj0AdF5';
+    return Consumer<ProfileProvider>(
+      builder: (context, profileProvider, _) {
+        final imagePath = profileProvider.profileImagePath;
 
-    return Container(
-      width: 120,
-      height: 120,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        border: Border.all(color: Colors.white, width: 4),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.1),
-            blurRadius: 10,
-            offset: const Offset(0, 5),
+        return Container(
+          width: 120,
+          height: 120,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            border: Border.all(color: Colors.white, width: 4),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.1),
+                blurRadius: 10,
+                offset: const Offset(0, 5),
+              ),
+            ],
           ),
-        ],
-      ),
-      child: ClipOval(
-        child: _imageFile == null
-            ? Image.network(
-                defaultImageUrl,
-                fit: BoxFit.cover,
-                loadingBuilder: (context, child, loadingProgress) {
-                  if (loadingProgress == null) return child;
-                  return Center(
-                    child: CircularProgressIndicator(
-                      value: loadingProgress.expectedTotalBytes != null
-                          ? loadingProgress.cumulativeBytesLoaded /
-                                loadingProgress.expectedTotalBytes!
-                          : null,
+          child: ClipOval(
+            child: imagePath == null || imagePath.isEmpty
+                ? Container(
+                    color: Colors.grey.shade200,
+                    child: Icon(
+                      Icons.person,
+                      size: 60,
+                      color: Colors.grey.shade400,
                     ),
-                  );
-                },
-              )
-            : kIsWeb
-            ? FutureBuilder<List<int>>(
-                future: _imageFile!.readAsBytes(),
-                builder: (context, snapshot) {
-                  if (snapshot.hasData) {
-                    return Image.memory(
-                      Uint8List.fromList(snapshot.data!),
-                      fit: BoxFit.cover,
-                    );
-                  } else if (snapshot.hasError) {
-                    return const Icon(Icons.error);
-                  }
-                  return const Center(child: CircularProgressIndicator());
-                },
-              )
-            : Image.file(File(_imageFile!.path), fit: BoxFit.cover),
-      ),
+                  )
+                : imagePath.startsWith('http')
+                ? Image.network(
+                    imagePath,
+                    fit: BoxFit.cover,
+                    loadingBuilder: (context, child, loadingProgress) {
+                      if (loadingProgress == null) return child;
+                      return Center(
+                        child: CircularProgressIndicator(
+                          value: loadingProgress.expectedTotalBytes != null
+                              ? loadingProgress.cumulativeBytesLoaded /
+                                    loadingProgress.expectedTotalBytes!
+                              : null,
+                        ),
+                      );
+                    },
+                    errorBuilder: (context, error, stackTrace) {
+                      return Container(
+                        color: Colors.grey.shade200,
+                        child: Icon(
+                          Icons.error_outline,
+                          size: 60,
+                          color: Colors.grey.shade400,
+                        ),
+                      );
+                    },
+                  )
+                : Image.file(
+                    File(imagePath),
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) {
+                      return Container(
+                        color: Colors.grey.shade200,
+                        child: Icon(
+                          Icons.error_outline,
+                          size: 60,
+                          color: Colors.grey.shade400,
+                        ),
+                      );
+                    },
+                  ),
+          ),
+        );
+      },
     );
   }
 

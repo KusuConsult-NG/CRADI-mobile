@@ -5,25 +5,31 @@ import 'package:climate_app/features/reporting/providers/reporting_provider.dart
 import 'package:climate_app/core/providers/language_provider.dart';
 import 'package:climate_app/core/providers/connectivity_provider.dart';
 import 'package:climate_app/features/verification/providers/reports_status_provider.dart';
+import 'package:climate_app/features/contacts/providers/emergency_contacts_provider.dart';
 import 'package:climate_app/features/profile/providers/profile_provider.dart';
 import 'package:climate_app/features/chat/providers/chat_provider.dart';
+import 'package:climate_app/features/knowledge_base/providers/knowledge_provider.dart';
+import 'package:climate_app/features/knowledge_base/providers/news_provider.dart';
 import 'package:climate_app/core/services/secure_storage_service.dart';
 import 'package:climate_app/core/services/session_manager.dart';
-import 'package:climate_app/core/services/sync_service.dart';
-import 'package:climate_app/core/services/offline_queue_service.dart';
-import 'package:climate_app/firebase_options.dart';
-import 'package:firebase_core/firebase_core.dart';
-import 'package:flutter/foundation.dart';
+import 'package:climate_app/core/providers/settings_provider.dart';
+import 'package:climate_app/core/services/notification_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:provider/provider.dart';
-import 'package:firebase_crashlytics/firebase_crashlytics.dart';
-import 'dart:developer' as developer;
+import 'package:firebase_core/firebase_core.dart';
 
-void main() async {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
+  // Initialize Firebase
+  try {
+    await Firebase.initializeApp();
+  } on Exception catch (e) {
+    // Firebase not configured yet - app will work without push notifications
+    debugPrint('Firebase initialization failed: $e');
+  }
 
   // Security: Initialize secure storage (singleton pattern - no need to store reference)
   SecureStorageService();
@@ -34,44 +40,14 @@ void main() async {
   // Initialize Hive for local data storage
   await Hive.initFlutter();
 
-  // Initialize offline queue and sync service
-  await OfflineQueueService().initialize();
-  await SyncService().initialize();
-
   // Set preferred orientations
   SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
     DeviceOrientation.portraitDown,
   ]);
 
-  // Security: Disable debug banners in release mode
-  if (kReleaseMode) {
-    // Disable all debug prints in production
-    debugPrint = (String? message, {int? wrapWidth}) {};
-  }
-
-  // Initialize Crashlytics
-  FlutterError.onError = (errorDetails) {
-    FirebaseCrashlytics.instance.recordFlutterFatalError(errorDetails);
-    developer.log(
-      'Flutter Error: ${errorDetails.exception}',
-      name: 'Crashlytics',
-      error: errorDetails.exception,
-      stackTrace: errorDetails.stack,
-    );
-  };
-
-  // Capture errors not caught by Flutter framework
-  PlatformDispatcher.instance.onError = (error, stack) {
-    FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
-    developer.log(
-      'Platform Error: $error',
-      name: 'Crashlytics',
-      error: error,
-      stackTrace: stack,
-    );
-    return true;
-  };
+  // Initialize settings
+  await SettingsProvider().init();
 
   runApp(
     MultiProvider(
@@ -83,14 +59,39 @@ void main() async {
         ChangeNotifierProvider(create: (_) => ReportsStatusProvider()),
         ChangeNotifierProvider(create: (_) => ProfileProvider()),
         ChangeNotifierProvider(create: (_) => ChatProvider()),
+        ChangeNotifierProvider(create: (_) => EmergencyContactsProvider()),
+        ChangeNotifierProvider(create: (_) => SettingsProvider()),
+        ChangeNotifierProvider(create: (_) => KnowledgeProvider()),
+        ChangeNotifierProvider(create: (_) => NewsProvider()),
       ],
       child: const ClimateApp(),
     ),
   );
 }
 
-class ClimateApp extends StatelessWidget {
+class ClimateApp extends StatefulWidget {
   const ClimateApp({super.key});
+
+  @override
+  State<ClimateApp> createState() => _ClimateAppState();
+}
+
+class _ClimateAppState extends State<ClimateApp> {
+  @override
+  void initState() {
+    super.initState();
+    // Initialize FCM after app starts
+    _initializeNotifications();
+  }
+
+  Future<void> _initializeNotifications() async {
+    try {
+      await NotificationService().initialize();
+    } on Exception catch (e) {
+      debugPrint('FCM initialization error: $e');
+      // App continues to work without notifications
+    }
+  }
 
   @override
   Widget build(BuildContext context) {

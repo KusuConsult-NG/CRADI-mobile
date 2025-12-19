@@ -20,7 +20,7 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 4, vsync: this);
   }
 
   @override
@@ -69,6 +69,7 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
             Tab(text: 'Pending'),
             Tab(text: 'Acknowledged'),
             Tab(text: 'Resolved'),
+            Tab(text: 'Rejected'),
           ],
         ),
       ),
@@ -80,6 +81,7 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
               _buildReportsList(provider, ReportStatus.pending),
               _buildReportsList(provider, ReportStatus.acknowledged),
               _buildReportsList(provider, ReportStatus.resolved),
+              _buildReportsList(provider, ReportStatus.rejected),
             ],
           );
         },
@@ -100,34 +102,74 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
     ReportsStatusProvider provider,
     ReportStatus status,
   ) {
-    final reports = provider.getReportsByStatus(status);
-
-    if (reports.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.inbox_outlined, size: 64, color: Colors.grey.shade300),
-            const SizedBox(height: 16),
-            Text(
-              'No ${status.displayName} Reports',
-              style: GoogleFonts.lexend(
-                fontSize: 16,
-                color: AppColors.textSecondary,
-              ),
+    return StreamBuilder<List<VerificationReport>>(
+      stream: provider.getReportsStreamByStatus(status),
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.error_outline, size: 64, color: Colors.red.shade300),
+                const SizedBox(height: 16),
+                Text(
+                  'Error loading reports',
+                  style: GoogleFonts.lexend(
+                    fontSize: 16,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                Text(
+                  '${snapshot.error}',
+                  style: GoogleFonts.lexend(
+                    fontSize: 12,
+                    color: AppColors.textSecondary,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ],
             ),
-          ],
-        ),
-      );
-    }
+          );
+        }
 
-    return ListView.separated(
-      padding: const EdgeInsets.all(16),
-      itemCount: reports.length,
-      separatorBuilder: (_, _) => const SizedBox(height: 12),
-      itemBuilder: (context, index) {
-        final report = reports[index];
-        return _buildReportCard(report, provider);
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        final reports = snapshot.data ?? [];
+
+        if (reports.isEmpty) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.inbox_outlined,
+                  size: 64,
+                  color: Colors.grey.shade300,
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'No ${status.displayName} Reports',
+                  style: GoogleFonts.lexend(
+                    fontSize: 16,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
+
+        return ListView.separated(
+          padding: const EdgeInsets.all(16),
+          itemCount: reports.length,
+          separatorBuilder: (_, _) => const SizedBox(height: 12),
+          itemBuilder: (context, index) {
+            final report = reports[index];
+            return _buildReportCard(report, provider);
+          },
+        );
       },
     );
   }
@@ -197,7 +239,11 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
           const SizedBox(height: 12),
           Row(
             children: [
-              const Icon(Icons.location_on, size: 14, color: AppColors.textSecondary),
+              const Icon(
+                Icons.location_on,
+                size: 14,
+                color: AppColors.textSecondary,
+              ),
               const SizedBox(width: 4),
               Text(
                 report.location,
@@ -207,7 +253,11 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
                 ),
               ),
               const SizedBox(width: 12),
-              const Icon(Icons.schedule, size: 14, color: AppColors.textSecondary),
+              const Icon(
+                Icons.schedule,
+                size: 14,
+                color: AppColors.textSecondary,
+              ),
               const SizedBox(width: 4),
               Text(
                 report.time,
@@ -218,83 +268,128 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
               ),
             ],
           ),
-          if (report.verifiedAt != null) ...[
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                const Icon(
-                  Icons.check_circle,
-                  size: 14,
-                  color: AppColors.successGreen,
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  'Verified: ${_formatDateTime(report.verifiedAt!)}',
-                  style: GoogleFonts.lexend(
-                    fontSize: 11,
-                    color: AppColors.successGreen,
-                  ),
-                ),
-              ],
-            ),
-          ],
-          if (report.resolvedAt != null) ...[
-            const SizedBox(height: 4),
-            Row(
-              children: [
-                const Icon(Icons.done_all, size: 14, color: Colors.blue),
-                const SizedBox(width: 4),
-                Text(
-                  'Resolved: ${_formatDateTime(report.resolvedAt!)}',
-                  style: GoogleFonts.lexend(fontSize: 11, color: Colors.blue),
-                ),
-              ],
-            ),
-          ],
+
           const SizedBox(height: 12),
           Row(
             children: [
-              if (report.status == ReportStatus.pending) ...[
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: () {
-                      provider.verifyReport(report.id);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(
-                            'Report verified and moved to Acknowledged',
-                            style: GoogleFonts.lexend(),
-                          ),
-                          backgroundColor: AppColors.successGreen,
-                        ),
-                      );
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primaryRed,
-                      foregroundColor: Colors.white,
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                    child: const Text('Verify'),
+              TextButton(
+                onPressed: () {
+                  context.push('/report/details');
+                },
+                child: Text(
+                  'View Details',
+                  style: GoogleFonts.lexend(
+                    color: AppColors.primaryRed,
+                    fontWeight: FontWeight.bold,
                   ),
+                ),
+              ),
+              const Spacer(),
+              if (report.status == ReportStatus.pending) ...[
+                ElevatedButton(
+                  onPressed: () async {
+                    final scaffoldMessenger = ScaffoldMessenger.of(context);
+                    try {
+                      await provider.verifyReport(report.id);
+                      if (context.mounted) {
+                        scaffoldMessenger.showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              'Report verified and moved to Acknowledged',
+                              style: GoogleFonts.lexend(),
+                            ),
+                            backgroundColor: AppColors.successGreen,
+                          ),
+                        );
+                      }
+                    } on Exception catch (e) {
+                      if (context.mounted) {
+                        scaffoldMessenger.showSnackBar(
+                          SnackBar(
+                            content: Text('Error: $e'),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                      }
+                    }
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primaryRed,
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  child: const Text('Verify'),
+                ),
+                const SizedBox(width: 8),
+                OutlinedButton(
+                  onPressed: () async {
+                    final scaffoldMessenger = ScaffoldMessenger.of(context);
+                    try {
+                      await provider.rejectReport(report.id);
+                      if (context.mounted) {
+                        scaffoldMessenger.showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              'Report rejected',
+                              style: GoogleFonts.lexend(),
+                            ),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                      }
+                    } on Exception catch (e) {
+                      if (context.mounted) {
+                        scaffoldMessenger.showSnackBar(
+                          SnackBar(
+                            content: Text('Error: $e'),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                      }
+                    }
+                  },
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: Colors.red),
+                    foregroundColor: Colors.red,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  child: const Text('Reject'),
                 ),
               ],
               if (report.status == ReportStatus.acknowledged) ...[
                 Expanded(
+                  flex: 3,
                   child: ElevatedButton(
-                    onPressed: () {
-                      provider.resolveReport(report.id);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(
-                            'Report marked as Resolved',
-                            style: GoogleFonts.lexend(),
-                          ),
-                          backgroundColor: AppColors.successGreen,
-                        ),
-                      );
+                    onPressed: () async {
+                      final scaffoldMessenger = ScaffoldMessenger.of(context);
+                      try {
+                        await provider.resolveReport(report.id);
+                        if (context.mounted) {
+                          scaffoldMessenger.showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                'Report marked as Resolved',
+                                style: GoogleFonts.lexend(),
+                              ),
+                              backgroundColor: AppColors.successGreen,
+                            ),
+                          );
+                        }
+                      } on Exception catch (e) {
+                        if (context.mounted) {
+                          scaffoldMessenger.showSnackBar(
+                            SnackBar(
+                              content: Text('Error: $e'),
+                              backgroundColor: Colors.red,
+                            ),
+                          );
+                        }
+                      }
                     },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.blue,
@@ -308,25 +403,28 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
                   ),
                 ),
                 const SizedBox(width: 8),
-                OutlinedButton(
-                  onPressed: () {
-                    provider.moveBackToPending(report.id);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(
-                          'Report moved back to Pending',
-                          style: GoogleFonts.lexend(),
+                Expanded(
+                  flex: 2,
+                  child: OutlinedButton(
+                    onPressed: () {
+                      provider.moveBackToPending(report.id);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            'Report moved back to Pending',
+                            style: GoogleFonts.lexend(),
+                          ),
                         ),
+                      );
+                    },
+                    style: OutlinedButton.styleFrom(
+                      side: BorderSide(color: Colors.grey.shade300),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
                       ),
-                    );
-                  },
-                  style: OutlinedButton.styleFrom(
-                    side: BorderSide(color: Colors.grey.shade300),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
                     ),
+                    child: const Text('Reopen'),
                   ),
-                  child: const Text('Reopen'),
                 ),
               ],
               if (report.status == ReportStatus.resolved) ...[
@@ -371,6 +469,9 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
         break;
       case ReportStatus.resolved:
         color = Colors.blue;
+        break;
+      case ReportStatus.rejected:
+        color = Colors.red;
         break;
     }
 
@@ -498,19 +599,6 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
         return Icons.local_fire_department;
       default:
         return Icons.warning;
-    }
-  }
-
-  String _formatDateTime(DateTime dt) {
-    final now = DateTime.now();
-    final diff = now.difference(dt);
-
-    if (diff.inHours < 1) {
-      return '${diff.inMinutes}m ago';
-    } else if (diff.inHours < 24) {
-      return '${diff.inHours}h ago';
-    } else {
-      return '${diff.inDays}d ago';
     }
   }
 }

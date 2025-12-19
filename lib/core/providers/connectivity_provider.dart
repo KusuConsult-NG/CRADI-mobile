@@ -11,13 +11,17 @@ class ConnectivityProvider extends ChangeNotifier {
   StreamSubscription<List<ConnectivityResult>>? _subscription;
 
   bool _isOnline = true;
+  bool _manualOffline = false;
   bool _initialCheckDone = false;
 
-  /// Whether the device is currently online
-  bool get isOnline => _isOnline;
+  /// Whether the device is currently online (considering manual override)
+  bool get isOnline => _isOnline && !_manualOffline;
 
   /// Whether the device is currently offline
-  bool get isOffline => !_isOnline;
+  bool get isOffline => !isOnline;
+
+  /// Whether manual offline mode is enabled
+  bool get manualOffline => _manualOffline;
 
   /// Whether the initial connectivity check has been completed
   bool get initialCheckDone => _initialCheckDone;
@@ -91,6 +95,14 @@ class ConnectivityProvider extends ChangeNotifier {
         name: 'ConnectivityProvider',
       );
       return _isOnline; // Return cached status
+    }
+  }
+
+  /// Toggle manual offline mode
+  void setManualOffline(bool value) {
+    if (_manualOffline != value) {
+      _manualOffline = value;
+      notifyListeners();
     }
   }
 

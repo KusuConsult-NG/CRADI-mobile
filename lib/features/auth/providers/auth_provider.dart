@@ -1,47 +1,56 @@
 import 'dart:developer' as developer;
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/material.dart';
+import 'package:appwrite/appwrite.dart';
+import 'package:appwrite/models.dart' as models;
+import 'package:flutter/foundation.dart';
+import 'package:climate_app/core/services/appwrite_service.dart';
 import 'package:climate_app/core/services/secure_storage_service.dart';
 import 'package:climate_app/core/services/session_manager.dart';
 import 'package:climate_app/core/services/rate_limiter.dart';
 import 'package:climate_app/core/services/biometric_service.dart';
+import 'package:climate_app/core/services/device_fingerprint_service.dart';
+import 'package:climate_app/core/services/fraud_detection_service.dart';
 import 'package:climate_app/core/utils/error_handler.dart';
 
 enum UserRole { ewm, coordinator, projectStaff, earlyResponder, media }
 
 /// Provider for managing user authentication state and operations
 ///
-/// Handles Firebase phone authentication, biometric login, session management,
+/// Handles Appwrite authentication, biometric login, session management,
 /// and user role-based access control.
 class AuthProvider extends ChangeNotifier {
-  final FirebaseAuth _auth = FirebaseAuth.instance;
+  AuthProvider() {
+    _initializeSessionManager();
+    _checkExistingSession();
+  }
+
+  final AppwriteService _appwrite = AppwriteService();
   bool _isAuthenticated = false;
   UserRole? _userRole;
-  String? _registrationCode;
+  String? _phoneToken;
+  String? _emailToken;
   String? _phoneNumber;
   bool _isLoading = false;
-  String? _verificationId; // For Firebase Phone Auth
+  models.User? _currentUser;
 
   // Services
   final SecureStorageService _storage = SecureStorageService();
   final SessionManager _sessionManager = SessionManager();
   final RateLimiter _rateLimiter = RateLimiter();
   final BiometricService _biometricService = BiometricService();
+  // Security services
+  final DeviceFingerprintService _fingerprintService =
+      DeviceFingerprintService();
+  final FraudDetectionService _fraudService = FraudDetectionService();
 
   bool get isAuthenticated => _isAuthenticated;
   UserRole? get userRole => _userRole;
   bool get isLoading => _isLoading;
   String? get phoneNumber => _phoneNumber;
-
-  AuthProvider() {
-    _initializeSessionManager();
-    _checkExistingSession();
-  }
+  models.User? get currentUser => _currentUser;
 
   void _initializeSessionManager() {
     _sessionManager.onSessionExpired = () {
       logout();
-      // Notify listeners to show session expired dialog
       notifyListeners();
     };
   }
@@ -50,27 +59,20 @@ class AuthProvider extends ChangeNotifier {
   bool get isLocked => _isLocked;
 
   /// Checks for existing valid session on app start
-  ///
-  /// If biometrics are enabled and a Firebase user exists, the app will be
-  /// locked until biometric authentication succeeds.
   Future<void> _checkExistingSession() async {
     try {
-      final user = _auth.currentUser;
+      final user = await _appwrite.getCurrentUser();
       if (user != null) {
-        // User is signed in to Firebase
+        _currentUser = user;
         final bioEnabled = await _storage.isBiometricEnabled();
 
         if (bioEnabled) {
-          // Require biometric unlock
           _isLocked = true;
-          _isAuthenticated =
-              false; // Not fully authenticated yet (UI should show lock screen)
+          _isAuthenticated = false;
         } else {
-          // Auto login
           _isAuthenticated = true;
         }
 
-        // Restore other state
         final userRoleStr = await _storage.getUserRole();
         if (userRoleStr != null) {
           _userRole = _parseUserRole(userRoleStr);
@@ -110,212 +112,268 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
-  /// Verify registration code and phone number
-  /// Initiates Firebase Phone Authentication
-  Future<bool> verifyRegistrationCode(String code, String phone) async {
+  /// Send Sign-In Link to Email (OTP)
+  Future<bool> sendEmailOTP(String email) async {
     try {
       _isLoading = true;
       notifyListeners();
 
-      // Check rate limiting
+      final token = await _appwrite.createEmailToken(email: email);
+      _emailToken = token.userId;
+
+      _isLoading = false;
+      notifyListeners();
+      return true;
+    } on AppwriteException catch (e) {
+      _isLoading = false;
+      notifyListeners();
+      ErrorHandler.logError(e, context: 'AuthProvider.sendEmailOTP');
+      throw AuthException(e.message ?? 'Failed to send email');
+    } on Exception catch (e) {
+      _isLoading = false;
+      notifyListeners();
+      ErrorHandler.logError(e, context: 'AuthProvider.sendEmailOTP');
+      return false;
+    }
+  }
+
+  /// Sign up with email and password
+  Future<bool> signUpWithEmail({
+    required String email,
+    required String password,
+    String? name,
+    String? registrationCode,
+  }) async {
+    try {
+      _isLoading = true;
+      notifyListeners();
+
+      // 0. Clear any existing session first to prevent conflicts
+      // This is safe even if no session exists - errors are silently ignored
+      try {
+        await _appwrite.logout();
+        developer.log(
+          'Cleared existing session before signup',
+          name: 'AuthProvider',
+        );
+      } on Exception {
+        // Ignore errors - likely means no session exists, which is fine
+        developer.log('No existing session to clear', name: 'AuthProvider');
+      }
+
+      // 1. Create Appwrite User
+      final user = await _appwrite.createAccount(
+        email: email,
+        password: password,
+        name: name ?? 'User',
+      );
+
+      // 2. Create session
+      await _appwrite.createEmailPasswordSession(
+        email: email,
+        password: password,
+      );
+
+      // 3. Default role
+      const role = UserRole.ewm;
+
+      // 4. Create user document in database
+      await _createUserDocument(
+        userId: user.$id,
+        email: email,
+        role: role,
+        name: name,
+        registrationCode: registrationCode,
+      );
+
+      // 5. Start Session
+      await _startUserSession(user, role);
+
+      _isLoading = false;
+      notifyListeners();
+      return true;
+    } on AppwriteException catch (e) {
+      _isLoading = false;
+      notifyListeners();
+      developer.log('SignUp Error: ${e.code} - ${e.message}');
+      if (e.code == 409) {
+        throw AuthException('Email is already registered. Please login.');
+      }
+      if (e.code == 401 && e.message?.contains('session') == true) {
+        throw AuthException(
+          'Session error. Please restart the app and try again.',
+        );
+      }
+      throw AuthException(e.message ?? 'Registration failed');
+    } on Exception catch (e) {
+      _isLoading = false;
+      notifyListeners();
+      ErrorHandler.logError(e, context: 'AuthProvider.signUpWithEmail');
+      throw AuthException('An unexpected error occurred during registration');
+    }
+  }
+
+  /// Sign in with email and password
+  Future<bool> signInWithEmail({
+    required String email,
+    required String password,
+    String? registrationCode,
+  }) async {
+    String? deviceFingerprint;
+    try {
+      _isLoading = true;
+      notifyListeners();
+
+      // 1. Check rate limiting
       final rateLimitResult = await _rateLimiter.checkLoginAttempt();
       if (!rateLimitResult.allowed) {
         throw AuthException(rateLimitResult.userMessage);
       }
 
-      // 1. Verify Registration Code (Business Logic)
-      // Note: We check if the code maps to a role using _mockVerifyCode
+      // 2. Generate device fingerprint for security tracking
+      deviceFingerprint = await _fingerprintService.generateFingerprint();
+      final deviceName = await _fingerprintService.getDeviceName();
 
-      final isValidCode = await _mockVerifyCode(code);
-      if (!isValidCode) {
-        _isLoading = false;
-        notifyListeners();
-        await _rateLimiter.recordFailedLogin();
-        return false;
-      }
-
-      _registrationCode = code;
-      _phoneNumber = phone;
-
-      // 2. Trigger Firebase Phone Auth
-      // Completer to wait for the async callback result if needed,
-      // OR we just start the process and return true to indicate "OTP Sent"
-      // effectively moving UI to next screen.
-
-      await _auth.verifyPhoneNumber(
-        phoneNumber: phone,
-        verificationCompleted: (PhoneAuthCredential credential) async {
-          // Android only: Auto-resolution
-          try {
-            await _signInWithCredential(credential);
-          } on Exception catch (e) {
-            developer.log('Auto-sign-in failed: $e');
-          }
-        },
-        verificationFailed: (FirebaseAuthException e) {
-          _isLoading = false;
-          notifyListeners();
-          developer.log('Phone verification failed: ${e.message}');
-          // We can't easily throw here as it's a callback, but we should notify UI via error state
-          // For now, let's log. The UI will just sit on OTP screen or current screen.
-          // Ideally we expose an error stream or value.
-          throw AuthException('Verification failed: ${e.message}');
-        },
-        codeSent: (String verificationId, int? resendToken) {
-          _verificationId = verificationId;
-          _isLoading = false;
-          notifyListeners();
-          // Ready for OTP input
-        },
-        codeAutoRetrievalTimeout: (String verificationId) {
-          _verificationId = verificationId;
-        },
+      // 3. SignIn with Appwrite
+      await _appwrite.createEmailPasswordSession(
+        email: email,
+        password: password,
       );
 
-      // Return true to navigate to OTP screen
-      // Note: If verifyPhoneNumber fails immediately, we might not catch it here
-      // unless we await properly, but verifyPhoneNumber is void return usually.
-      // We assume success and let callbacks handle error.
+      final user = await _appwrite.getCurrentUser();
 
-      return true;
-    } on Exception catch (e) {
-      _isLoading = false;
-      notifyListeners();
-      ErrorHandler.logError(e, context: 'AuthProvider.verifyRegistrationCode');
-      rethrow;
-    }
-  }
-
-  /// Mock code verification (replace with real API call)
-  Future<bool> _mockVerifyCode(String code) async {
-    // SECURE: Valid codes should come from backend
-    // These are just examples for testing
-    final validCodes = {
-      'EWM123': UserRole.ewm,
-      'COORD456': UserRole.coordinator,
-      'ADMIN789': UserRole.projectStaff,
-      'RESP999': UserRole.earlyResponder,
-      'MEDIA888': UserRole.media,
-    };
-
-    return validCodes.containsKey(code.toUpperCase());
-  }
-
-  /// Verify OTP code using Firebase
-  Future<bool> verifyOTP(String smsCode) async {
-    try {
-      _isLoading = true;
-      notifyListeners();
-
-      if (_verificationId == null) {
-        throw AuthException(
-          'Verification ID is missing. Please request code again.',
-        );
+      if (user == null) {
+        throw AuthException('Login failed');
       }
 
-      // Create credential
-      PhoneAuthCredential credential = PhoneAuthProvider.credential(
-        verificationId: _verificationId!,
-        smsCode: smsCode,
+      _currentUser = user;
+
+      // 4. Fetch User data from database to verify registration code
+      final userDoc = await _appwrite.getDocument(
+        collectionId: AppwriteService.usersCollectionId,
+        documentId: user.$id,
       );
 
-      // Sign in
-      return await _signInWithCredential(credential);
-    } on Exception catch (e) {
-      _isLoading = false;
-      notifyListeners();
-      // Record failed attempt on Firebase error too?
-      await _rateLimiter.recordFailedLogin();
-      ErrorHandler.logError(e, context: 'AuthProvider.verifyOTP');
-      if (e is FirebaseAuthException) {
-        if (e.code == 'invalid-verification-code') {
-          return false; // Invalid OTP
+      // 5. Verify registration code if provided
+      if (registrationCode != null && registrationCode.isNotEmpty) {
+        final storedCode = userDoc.data['registrationCode'] as String?;
+        if (storedCode == null || storedCode != registrationCode) {
+          // Logout the session since credentials were wrong
+          await _appwrite.logout();
+          throw AuthException('Invalid registration code');
         }
-        throw AuthException(e.message ?? 'Authentication failed');
       }
-      rethrow;
-    }
-  }
 
-  /// Internal helper to sign in with credential
-  Future<bool> _signInWithCredential(PhoneAuthCredential credential) async {
-    try {
-      final userCredential = await _auth.signInWithCredential(credential);
+      // 6. Assess fraud risk
+      final fraudAssessment = await _fraudService.assessLoginRisk(
+        userId: user.$id,
+        deviceFingerprint: deviceFingerprint,
+      );
 
-      if (userCredential.user != null) {
-        // Success!
+      developer.log(
+        'Login fraud assessment: ${fraudAssessment.risk} - ${fraudAssessment.reason}',
+        name: 'AuthProvider',
+      );
 
-        // Get user role from registration code
-        final role = await _getUserRoleFromCode(_registrationCode!);
+      // 7. Record successful login attempt
+      await _fraudService.recordLoginAttempt(
+        userId: user.$id,
+        success: true,
+        deviceFingerprint: deviceFingerprint,
+        deviceName: deviceName,
+      );
 
-        // Get Firebase ID Token
-        final idToken = await userCredential.user!.getIdToken();
-
-        // Save authentication data
-        await _storage.saveAuthToken(
-          idToken ?? 'firebase-token',
-        ); // Use real token
-        await _storage.saveUserRole(role.name);
-        await _storage.savePhoneNumber(_phoneNumber!);
-
-        // Start session
-        await _sessionManager.startSession(
-          authToken: idToken,
-          userRole: role.name,
+      // 8. Register device as trusted if not already (for new devices)
+      if (fraudAssessment.flags.contains('new_device')) {
+        await _fraudService.registerTrustedDevice(
+          userId: user.$id,
+          deviceFingerprint: deviceFingerprint,
+          deviceName: deviceName,
         );
-
-        // Reset rate limiter
-        await _rateLimiter.resetLoginAttempts();
-
-        // Update state
-        _isAuthenticated = true;
-        _userRole = role;
-        _verificationId = null; // Cleanup
-
-        _isLoading = false;
-        notifyListeners();
-        return true;
-      }
-      return false;
-    } on Exception catch (_) {
-      rethrow;
-    }
-  }
-
-  /// Resend OTP
-  Future<bool> resendOTP(String phoneNumber) async {
-    try {
-      // Check rate limiting for OTP requests
-      final rateLimitResult = await _rateLimiter.checkOtpRequest(phoneNumber);
-      if (!rateLimitResult.allowed) {
-        throw AuthException(rateLimitResult.userMessage);
       }
 
-      // Re-trigger verification logic
-      if (_registrationCode != null) {
-        // This is a simplification; ideally we use forceResendingToken from codeSent callback
-        // But verifying again works for basic implementation
-        return verifyRegistrationCode(_registrationCode!, phoneNumber);
+      // 9. Get user role
+      final roleStr = userDoc.data['role'] as String?;
+      final role = _parseUserRole(roleStr) ?? UserRole.ewm;
+      _userRole = role;
+
+      // 10. Start user session
+      await _startUserSession(user, role);
+
+      // 11. Reset Rate Limiter
+      await _rateLimiter.resetLoginAttempts();
+
+      _isLoading = false;
+      notifyListeners();
+      return true;
+    } on AppwriteException catch (e) {
+      _isLoading = false;
+      notifyListeners();
+
+      // Record failed login attempt
+      if (deviceFingerprint != null) {
+        try {
+          // Note: we don't have user ID for failed login, skip for now
+          // Could track by email instead if needed
+        } on Exception {
+          // Intentionally silent - don't let logging failures block login flow
+        }
       }
 
-      return false;
+      developer.log('Login Error: ${e.code} - ${e.message}');
+      if (e.code == 401) {
+        throw AuthException('Invalid email or password');
+      }
+      throw AuthException('Login failed. Please check your connection.');
     } on Exception catch (e) {
-      ErrorHandler.logError(e, context: 'AuthProvider.resendOTP');
-      rethrow;
+      _isLoading = false;
+      notifyListeners();
+      ErrorHandler.logError(e, context: 'AuthProvider.signInWithEmail');
+      throw AuthException('An unexpected error occurred during login');
     }
   }
 
-  /// Get user role from registration code (mock - should be from backend)
-  Future<UserRole> _getUserRoleFromCode(String code) async {
-    final roleMap = {
-      'EWM123': UserRole.ewm,
-      'COORD456': UserRole.coordinator,
-      'ADMIN789': UserRole.projectStaff,
-      'RESP999': UserRole.earlyResponder,
-      'MEDIA888': UserRole.media,
-    };
+  /// Create user document in Appwrite database
+  Future<void> _createUserDocument({
+    required String userId,
+    required String email,
+    required UserRole role,
+    String? name,
+    String? registrationCode,
+  }) async {
+    await _appwrite.createDocument(
+      collectionId: AppwriteService.usersCollectionId,
+      documentId: userId,
+      data: {
+        'email': email,
+        'name': name ?? 'User',
+        'role': _roleToString(role),
+        'registrationCode': registrationCode ?? '',
+        'biometricsEnabled': false,
+        'createdAt': DateTime.now().toIso8601String(),
+        'lastLoginAt': DateTime.now().toIso8601String(),
+        'phoneNumber': null,
+        'profileImageId': null,
+      },
+      permissions: [
+        'read("user:$userId")', // User can read their own document
+        'update("user:$userId")', // User can update their own document
+        'delete("user:$userId")', // User can delete their own document
+      ],
+    );
+  }
 
-    return roleMap[code.toUpperCase()] ?? UserRole.ewm;
+  /// Start user session and save tokens
+  Future<void> _startUserSession(models.User user, UserRole role) async {
+    // Appwrite uses session cookies, so we just store user info
+    await _storage.saveUserRole(role.name);
+
+    await _sessionManager.startSession(
+      authToken: user.$id, // Use user ID as token
+      userRole: role.name,
+    );
+
+    _isAuthenticated = true;
   }
 
   /// Authenticate with biometrics
@@ -329,15 +387,9 @@ class AuthProvider extends ChangeNotifier {
       final authenticated = await _biometricService.authenticateForLogin();
 
       if (authenticated) {
-        // Check if we have a preserved auth token
         final authToken = await _storage.getAuthToken();
 
-        // If authToken is null, it means session really expired or logout cleared it too aggressively.
-        // For biometrics to work after logout, we need to KEEP the token (or a refresh token) in secure storage
-        // even after logout, IF biometrics is enabled.
-
         if (authToken != null) {
-          // Valid user returning with biometrics
           _isAuthenticated = true;
 
           final userRoleStr = await _storage.getUserRole();
@@ -346,7 +398,6 @@ class AuthProvider extends ChangeNotifier {
           final phoneNumber = await _storage.getPhoneNumber();
           _phoneNumber = phoneNumber;
 
-          // Start a new session
           await _sessionManager.startSession(
             authToken: authToken,
             userRole: userRoleStr,
@@ -355,13 +406,10 @@ class AuthProvider extends ChangeNotifier {
           notifyListeners();
           return true;
         } else {
-          // Token was missing.
           developer.log(
             'Biometric auth success but no token found',
             name: 'AuthProvider',
           );
-          // In a real app, we might prompt for PIN or Password here if token is gone.
-          // Or, we should have never cleared the token in logout() if bio was enabled.
           return false;
         }
       }
@@ -379,20 +427,45 @@ class AuthProvider extends ChangeNotifier {
   /// Enable/disable biometric authentication
   Future<void> setBiometricEnabled(bool enabled) async {
     if (enabled) {
-      // Test biometric authentication before enabling
       final canAuthenticate = await _biometricService.authenticate(
         reason: 'Enable biometric login for CRADI Mobile',
       );
 
       if (canAuthenticate) {
         await _storage.setBiometricEnabled(true);
+
+        // Sync to Appwrite to persist across sessions
+        final user = await _appwrite.getCurrentUser();
+        if (user != null) {
+          try {
+            await _appwrite.updateDocument(
+              collectionId: AppwriteService.usersCollectionId,
+              documentId: user.$id,
+              data: {'biometricsEnabled': true},
+            );
+          } on Exception catch (e) {
+            developer.log('Error syncing biometric to Appwrite: $e');
+          }
+        }
       } else {
         throw AuthException('Biometric authentication failed');
       }
     } else {
       await _storage.setBiometricEnabled(false);
-      // If disabling biometrics, we might want to clear preserved auth data meant for it?
-      // But for now, just disabling the flag is enough.
+
+      // Sync to Appwrite
+      final user = await _appwrite.getCurrentUser();
+      if (user != null) {
+        try {
+          await _appwrite.updateDocument(
+            collectionId: AppwriteService.usersCollectionId,
+            documentId: user.$id,
+            data: {'biometricsEnabled': false},
+          );
+        } on Exception catch (e) {
+          developer.log('Error syncing biometric to Appwrite: $e');
+        }
+      }
     }
     notifyListeners();
   }
@@ -422,34 +495,28 @@ class AuthProvider extends ChangeNotifier {
   /// Logout
   Future<void> logout() async {
     try {
+      _isLoading = true;
+      notifyListeners();
+
       await _sessionManager.logout();
-      await _auth.signOut(); // Firebase Sign Out
+      await _appwrite.logout();
 
-      // Keep phone number if biometrics is enabled so we can re-login
-      final bioEnabled = await _storage.isBiometricEnabled();
-      if (bioEnabled) {
-        // Phone number should be preserved by SessionManager.logout if implemented correctly there,
-        // but let's ensure our local state reflects that we are logged out but might know the user.
-        // Actually, local state _phoneNumber should probably be cleared from memory to force re-login/re-fetch,
-        // but the storage keeps it.
-      } else {
-        _phoneNumber = null;
-      }
+      // Clear all secure storage
+      await _storage.clearAll(keepPreferences: false);
 
+      // Reset internal state
       _isAuthenticated = false;
       _userRole = null;
-      _registrationCode = null;
-      // _phoneNumber = null; // Don't nullify immediately if we want to show "Welcome back, 080..."?
-      // User requested "biomatrics doesn't work after logout and trying to login again".
-      // This usually means the data needed to re-authenticate (like token or phone to lookup) is gone.
+      _currentUser = null;
+      _phoneNumber = null;
+      _emailToken = null;
+      _phoneToken = null;
 
-      // If we are strictly following "logout clears everything", then biometrics can't work without a fresh login.
-      // But "Log in with Biometrics" implies we have a stashed token or credentials.
-
-      _verificationId = null;
-
+      _isLoading = false;
       notifyListeners();
     } on Exception catch (e) {
+      _isLoading = false;
+      notifyListeners();
       ErrorHandler.logError(e, context: 'AuthProvider.logout');
     }
   }
@@ -465,11 +532,136 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
-  /// Get current OTP expiry time remaining (for UI)
-  /// Note: Firebase handles expiry internally, but we can simulate or remove this.
-  /// For now, removing returning null.
-  Duration? getOtpExpiryRemaining() {
-    return null;
+  /// Convert UserRole enum to string
+  String _roleToString(UserRole role) {
+    return role.name;
+  }
+
+  /// Create phone token for OTP
+  Future<void> sendPhoneOTP(String phoneNumber) async {
+    try {
+      _isLoading = true;
+      notifyListeners();
+
+      final token = await _appwrite.createPhoneToken(phone: phoneNumber);
+      _phoneToken = token.userId;
+      _phoneNumber = phoneNumber;
+
+      _isLoading = false;
+      notifyListeners();
+    } on AppwriteException catch (e) {
+      _isLoading = false;
+      notifyListeners();
+      throw AuthException(e.message ?? 'Failed to send OTP');
+    }
+  }
+
+  /// Verify email OTP
+  Future<bool> verifyEmailOTP(String otp) async {
+    try {
+      _isLoading = true;
+      notifyListeners();
+
+      if (_emailToken == null) {
+        throw AuthException('No email verification in progress');
+      }
+
+      await _appwrite.verifyEmailOTP(userId: _emailToken!, secret: otp);
+
+      final user = await _appwrite.getCurrentUser();
+      if (user == null) {
+        throw AuthException('Verification failed');
+      }
+
+      _currentUser = user;
+
+      // Check if user document exists or create one (Same logic as phone OTP)
+      try {
+        final userDoc = await _appwrite.getDocument(
+          collectionId: AppwriteService.usersCollectionId,
+          documentId: user.$id,
+        );
+
+        final roleStr = userDoc.data['role'] as String?;
+        _userRole = _parseUserRole(roleStr) ?? UserRole.ewm;
+      } on Exception {
+        _userRole = UserRole.ewm;
+        await _createUserDocument(
+          userId: user.$id,
+          email: user.email,
+          role: _userRole!,
+          name: user.name,
+        );
+      }
+
+      await _startUserSession(user, _userRole!);
+
+      _isAuthenticated = true;
+      _isLoading = false;
+      notifyListeners();
+      return true;
+    } on AppwriteException catch (e) {
+      _isLoading = false;
+      notifyListeners();
+      ErrorHandler.logError(e, context: 'AuthProvider.verifyEmailOTP');
+      throw AuthException(e.message ?? 'Invalid code');
+    } on Exception catch (e) {
+      _isLoading = false;
+      notifyListeners();
+      ErrorHandler.logError(e, context: 'AuthProvider.verifyEmailOTP');
+      return false;
+    }
+  }
+
+  /// Verify phone OTP
+  Future<bool> verifyPhoneOTP(String otp) async {
+    try {
+      _isLoading = true;
+      notifyListeners();
+
+      if (_phoneToken == null) {
+        throw AuthException('No phone verification in progress');
+      }
+
+      await _appwrite.createPhoneSession(userId: _phoneToken!, secret: otp);
+
+      final user = await _appwrite.getCurrentUser();
+      if (user == null) {
+        throw AuthException('Verification failed');
+      }
+
+      _currentUser = user;
+
+      // Check if user document exists
+      try {
+        final userDoc = await _appwrite.getDocument(
+          collectionId: AppwriteService.usersCollectionId,
+          documentId: user.$id,
+        );
+
+        final roleStr = userDoc.data['role'] as String?;
+        _userRole = _parseUserRole(roleStr) ?? UserRole.ewm;
+      } on Exception {
+        // User document doesn't exist, create it
+        _userRole = UserRole.ewm;
+        await _createUserDocument(
+          userId: user.$id,
+          email: user.email,
+          role: _userRole!,
+          name: user.name,
+        );
+      }
+
+      await _startUserSession(user, _userRole!);
+
+      _isLoading = false;
+      notifyListeners();
+      return true;
+    } on AppwriteException catch (e) {
+      _isLoading = false;
+      notifyListeners();
+      throw AuthException(e.message ?? 'Invalid OTP');
+    }
   }
 
   @override

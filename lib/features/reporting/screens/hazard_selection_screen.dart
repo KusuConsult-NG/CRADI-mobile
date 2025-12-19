@@ -2,6 +2,8 @@ import 'package:climate_app/core/theme/app_colors.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';
+import 'package:climate_app/features/reporting/providers/reporting_provider.dart';
 
 class HazardSelectionScreen extends StatefulWidget {
   const HazardSelectionScreen({super.key});
@@ -15,13 +17,37 @@ class _HazardSelectionScreenState extends State<HazardSelectionScreen> {
 
   final List<Map<String, dynamic>> _hazards = [
     {'name': 'Flooding', 'icon': Icons.flood, 'color': AppColors.hazardFlood},
-    {'name': 'Extreme Heat', 'icon': Icons.thermostat, 'color': AppColors.hazardTemp},
-    {'name': 'Drought', 'icon': Icons.grass, 'color': AppColors.hazardDrought}, // grass used as placeholder for dry
+    {
+      'name': 'Extreme Heat',
+      'icon': Icons.thermostat,
+      'color': AppColors.hazardTemp,
+    },
+    {
+      'name': 'Drought',
+      'icon': Icons.wb_sunny_rounded,
+      'color': AppColors.hazardDrought,
+    },
     {'name': 'Windstorms', 'icon': Icons.air, 'color': AppColors.hazardWind},
-    {'name': 'Wildfires', 'icon': Icons.local_fire_department, 'color': AppColors.hazardFire},
-    {'name': 'Erosion', 'icon': Icons.landslide, 'color': AppColors.hazardErosion},
-    {'name': 'Pest Outbreak', 'icon': Icons.pest_control, 'color': AppColors.hazardPest},
-    {'name': 'Crop Disease', 'icon': Icons.spa, 'color': Colors.green}, // spa as placeholder
+    {
+      'name': 'Wildfires',
+      'icon': Icons.local_fire_department,
+      'color': AppColors.hazardFire,
+    },
+    {
+      'name': 'Erosion',
+      'icon': Icons.landslide,
+      'color': AppColors.hazardErosion,
+    },
+    {
+      'name': 'Pest Outbreak',
+      'icon': Icons.pest_control,
+      'color': AppColors.hazardPest,
+    },
+    {
+      'name': 'Crop Disease',
+      'icon': Icons.coronavirus_rounded,
+      'color': Colors.green,
+    },
   ];
 
   @override
@@ -81,25 +107,35 @@ class _HazardSelectionScreenState extends State<HazardSelectionScreen> {
         ],
       ),
       bottomSheet: Container(
-        color: Colors.transparent, // Transparent to show gradient if needed, but simple for now
+        color: Colors.white, // White background for better button visibility
         padding: const EdgeInsets.all(16),
         child: SafeArea(
           child: ElevatedButton(
-            onPressed: _selectedindex != null 
-              ? () => context.push('/report/location') // Navigate to next step
-              : null,
+            onPressed: _selectedindex != null
+                ? () {
+                    final hazardName =
+                        _hazards[_selectedindex!]['name'] as String;
+                    context.read<ReportingProvider>().setHazardType(hazardName);
+                    context.push('/report/severity');
+                  }
+                : null,
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.primaryRed,
               disabledBackgroundColor: Colors.grey.shade300,
               foregroundColor: Colors.white,
               disabledForegroundColor: Colors.grey,
               minimumSize: const Size(double.infinity, 50),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
               elevation: 4,
             ),
             child: Text(
               'Continue',
-              style: GoogleFonts.lexend(fontSize: 16, fontWeight: FontWeight.bold),
+              style: GoogleFonts.lexend(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+              ),
             ),
           ),
         ),
@@ -107,7 +143,11 @@ class _HazardSelectionScreenState extends State<HazardSelectionScreen> {
     );
   }
 
-  Widget _buildHazardCard(Map<String, dynamic> hazard, int index, bool isSelected) {
+  Widget _buildHazardCard(
+    Map<String, dynamic> hazard,
+    int index,
+    bool isSelected,
+  ) {
     return GestureDetector(
       onTap: () => setState(() => _selectedindex = index),
       child: Container(
@@ -138,7 +178,7 @@ class _HazardSelectionScreenState extends State<HazardSelectionScreen> {
                   ),
                 ),
               ),
-            
+
             // Content
             Center(
               child: Column(
@@ -162,14 +202,16 @@ class _HazardSelectionScreenState extends State<HazardSelectionScreen> {
                     textAlign: TextAlign.center,
                     style: GoogleFonts.lexend(
                       fontSize: 14,
-                      fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                      fontWeight: isSelected
+                          ? FontWeight.bold
+                          : FontWeight.w500,
                       color: AppColors.textPrimary,
                     ),
                   ),
                 ],
               ),
             ),
-            
+
             // Selection Checkmark
             if (isSelected)
               Positioned(

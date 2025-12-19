@@ -26,18 +26,29 @@ class Validators {
     return null;
   }
 
-  /// Normalize phone number to standard format (without country code)
+  /// Normalize phone number to international format for Firebase
+  /// Accepts: 08012345678, +2348012345678, 2348012345678
+  /// Returns: +2348012345678
   static String normalizePhoneNumber(String phone) {
     final cleaned = phone.replaceAll(RegExp(r'[\s\-\(\)]'), '');
-    
-    // Remove country code if present
+
+    // Already in international format with +
     if (cleaned.startsWith('+234')) {
-      return '0${cleaned.substring(4)}';
-    } else if (cleaned.startsWith('234')) {
-      return '0${cleaned.substring(3)}';
+      return cleaned;
     }
-    
-    return cleaned;
+
+    // International format without +
+    if (cleaned.startsWith('234')) {
+      return '+$cleaned';
+    }
+
+    // Local format (starts with 0)
+    if (cleaned.startsWith('0')) {
+      return '+234${cleaned.substring(1)}';
+    }
+
+    // Assume it's missing everything, add +234
+    return '+234$cleaned';
   }
 
   /// Validate registration code
@@ -89,7 +100,8 @@ class Validators {
 
   /// Validate text input (general purpose)
   /// Prevents extremely long inputs and some special characters
-  static String? validateText(String? value, {
+  static String? validateText(
+    String? value, {
     String? fieldName,
     int? maxLength,
     int? minLength,
@@ -141,7 +153,10 @@ class Validators {
   static bool _containsSQLInjection(String value) {
     final sqlPatterns = [
       RegExp(r"('|(\\')|(--)|(/\\*.*\\*/)|(;))", caseSensitive: false),
-      RegExp(r'\b(SELECT|INSERT|UPDATE|DELETE|DROP|CREATE|ALTER|EXEC|EXECUTE)\b', caseSensitive: false),
+      RegExp(
+        r'\b(SELECT|INSERT|UPDATE|DELETE|DROP|CREATE|ALTER|EXEC|EXECUTE)\b',
+        caseSensitive: false,
+      ),
     ];
 
     return sqlPatterns.any((pattern) => pattern.hasMatch(value));

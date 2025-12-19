@@ -19,13 +19,33 @@ class _ReportReviewScreenState extends State<ReportReviewScreen> {
   Future<void> _submitReport() async {
     setState(() => _isSubmitting = true);
 
-    // Simulate API submission
-    await Future.delayed(const Duration(seconds: 2));
+    try {
+      final result = await context.read<ReportingProvider>().submitReport();
 
-    if (!mounted) return;
+      if (!mounted) return;
 
-    setState(() => _isSubmitting = false);
+      setState(() => _isSubmitting = false);
 
+      if (result['success'] == true) {
+        _showSuccessDialog(
+          result['queued'] == true,
+          reportId: result['reportId'],
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(result['message'] ?? 'Submission failed')),
+        );
+      }
+    } on Exception catch (e) {
+      if (!mounted) return;
+      setState(() => _isSubmitting = false);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error: ${e.toString()}')));
+    }
+  }
+
+  void _showSuccessDialog(bool isQueued, {String? reportId}) {
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -40,18 +60,19 @@ class _ReportReviewScreenState extends State<ReportReviewScreen> {
                 width: 80,
                 height: 80,
                 decoration: BoxDecoration(
-                  color: AppColors.primaryRed.withValues(alpha: 0.1),
+                  color: (isQueued ? Colors.orange : AppColors.primaryRed)
+                      .withValues(alpha: 0.1),
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(
-                  Icons.check_circle,
-                  color: AppColors.primaryRed,
+                child: Icon(
+                  isQueued ? Icons.cloud_off : Icons.check_circle,
+                  color: isQueued ? Colors.orange : AppColors.primaryRed,
                   size: 40,
                 ),
               ),
               const SizedBox(height: 24),
               Text(
-                'Report Submitted!',
+                isQueued ? 'Saved for Later' : 'Report Submitted!',
                 style: GoogleFonts.lexend(
                   fontSize: 24,
                   fontWeight: FontWeight.bold,
@@ -60,7 +81,9 @@ class _ReportReviewScreenState extends State<ReportReviewScreen> {
               ),
               const SizedBox(height: 8),
               Text(
-                'Your report has been successfully sent to central command.',
+                isQueued
+                    ? 'You are offline. The report will be sent automatically when you are back online.'
+                    : 'Your report has been successfully sent to central command.',
                 textAlign: TextAlign.center,
                 style: GoogleFonts.lexend(
                   fontSize: 14,
@@ -79,7 +102,7 @@ class _ReportReviewScreenState extends State<ReportReviewScreen> {
                 child: Column(
                   children: [
                     Text(
-                      'REPORT ID',
+                      isQueued ? 'STATUS' : 'REPORT ID',
                       style: GoogleFonts.lexend(
                         fontSize: 10,
                         fontWeight: FontWeight.bold,
@@ -88,11 +111,15 @@ class _ReportReviewScreenState extends State<ReportReviewScreen> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      '#${"EWM-${DateTime.now().year}-${1000 + DateTime.now().millisecond}"}',
+                      isQueued
+                          ? 'QUEUED'
+                          : (reportId != null
+                                ? '#${reportId.substring(0, 8)}...'
+                                : 'SENT'),
                       style: GoogleFonts.robotoMono(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
-                        color: AppColors.primaryRed,
+                        color: isQueued ? Colors.orange : AppColors.primaryRed,
                       ),
                     ),
                   ],
@@ -104,7 +131,7 @@ class _ReportReviewScreenState extends State<ReportReviewScreen> {
                 height: 48,
                 child: ElevatedButton(
                   onPressed: () {
-                    context.read<ReportingProvider>().reset();
+                    // Provider is already reset in submitReport
                     context.go('/dashboard');
                   },
                   style: ElevatedButton.styleFrom(

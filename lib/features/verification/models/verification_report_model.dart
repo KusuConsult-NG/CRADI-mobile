@@ -6,8 +6,6 @@ class VerificationReport {
   final String location;
   final String time;
   final ReportStatus status;
-  final DateTime? verifiedAt;
-  final DateTime? resolvedAt;
   final String iconName;
   final String iconColor;
   final String bgIconColor;
@@ -20,8 +18,6 @@ class VerificationReport {
     required this.location,
     required this.time,
     required this.status,
-    this.verifiedAt,
-    this.resolvedAt,
     required this.iconName,
     required this.iconColor,
     required this.bgIconColor,
@@ -35,8 +31,6 @@ class VerificationReport {
     String? location,
     String? time,
     ReportStatus? status,
-    DateTime? verifiedAt,
-    DateTime? resolvedAt,
     String? iconName,
     String? iconColor,
     String? bgIconColor,
@@ -49,8 +43,6 @@ class VerificationReport {
       location: location ?? this.location,
       time: time ?? this.time,
       status: status ?? this.status,
-      verifiedAt: verifiedAt ?? this.verifiedAt,
-      resolvedAt: resolvedAt ?? this.resolvedAt,
       iconName: iconName ?? this.iconName,
       iconColor: iconColor ?? this.iconColor,
       bgIconColor: bgIconColor ?? this.bgIconColor,
@@ -66,8 +58,6 @@ class VerificationReport {
       'location': location,
       'time': time,
       'status': status.toString(),
-      'verifiedAt': verifiedAt?.toIso8601String(),
-      'resolvedAt': resolvedAt?.toIso8601String(),
       'iconName': iconName,
       'iconColor': iconColor,
       'bgIconColor': bgIconColor,
@@ -75,11 +65,7 @@ class VerificationReport {
   }
 }
 
-enum ReportStatus {
-  pending,
-  acknowledged,
-  resolved,
-}
+enum ReportStatus { pending, acknowledged, resolved, rejected }
 
 extension ReportStatusExtension on ReportStatus {
   String get displayName {
@@ -90,6 +76,8 @@ extension ReportStatusExtension on ReportStatus {
         return 'Acknowledged';
       case ReportStatus.resolved:
         return 'Resolved';
+      case ReportStatus.rejected:
+        return 'Rejected';
     }
   }
 }

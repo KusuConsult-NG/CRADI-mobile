@@ -22,8 +22,6 @@ class _ReportDetailsScreenState extends State<ReportDetailsScreen> {
   bool _isListening = false;
   bool _speechAvailable = false;
   String _currentLocale = 'en_US';
-  final ImagePicker _imagePicker = ImagePicker();
-  final List<XFile> _selectedImages = [];
 
   @override
   void initState() {
@@ -119,29 +117,9 @@ class _ReportDetailsScreenState extends State<ReportDetailsScreen> {
   }
 
   // Pick image from camera
-  Future<void> _pickImageFromCamera() async {
-    if (_selectedImages.length >= 3) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Maximum 3 photos allowed')),
-        );
-      }
-      return;
-    }
-
+  Future<void> _pickImageFromCamera(ReportingProvider provider) async {
     try {
-      final XFile? photo = await _imagePicker.pickImage(
-        source: ImageSource.camera,
-        maxWidth: 1024,
-        maxHeight: 1024,
-        imageQuality: 85,
-      );
-
-      if (photo != null) {
-        setState(() {
-          _selectedImages.add(photo);
-        });
-      }
+      await provider.pickImage(ImageSource.camera);
     } on Exception catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -152,29 +130,9 @@ class _ReportDetailsScreenState extends State<ReportDetailsScreen> {
   }
 
   // Pick image from gallery
-  Future<void> _pickImageFromGallery() async {
-    if (_selectedImages.length >= 3) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Maximum 3 photos allowed')),
-        );
-      }
-      return;
-    }
-
+  Future<void> _pickImageFromGallery(ReportingProvider provider) async {
     try {
-      final XFile? photo = await _imagePicker.pickImage(
-        source: ImageSource.gallery,
-        maxWidth: 1024,
-        maxHeight: 1024,
-        imageQuality: 85,
-      );
-
-      if (photo != null) {
-        setState(() {
-          _selectedImages.add(photo);
-        });
-      }
+      await provider.pickImage(ImageSource.gallery);
     } on Exception catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -185,10 +143,8 @@ class _ReportDetailsScreenState extends State<ReportDetailsScreen> {
   }
 
   // Remove selected image
-  void _removeImage(int index) {
-    setState(() {
-      _selectedImages.removeAt(index);
-    });
+  void _removeImage(ReportingProvider provider, int index) {
+    provider.removeImage(index);
   }
 
   Future<void> _selectDateTime(
@@ -574,31 +530,36 @@ class _ReportDetailsScreenState extends State<ReportDetailsScreen> {
                   ),
                   const SizedBox(height: 16),
 
-                  GridView.builder(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount:
-                        _selectedImages.length +
-                        (_selectedImages.length < 3 ? 2 : 0),
-                    gridDelegate:
-                        const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 3,
-                          crossAxisSpacing: 12,
-                          mainAxisSpacing: 12,
-                        ),
-                    itemBuilder: (context, index) {
-                      // Show selected images first
-                      if (index < _selectedImages.length) {
-                        return _buildImageThumbnail(index);
-                      }
+                  Consumer<ReportingProvider>(
+                    builder: (context, provider, child) {
+                      final images = provider.photos;
 
-                      // Camera button
-                      if (index == _selectedImages.length) {
-                        return _buildCameraButton();
-                      }
+                      return GridView.builder(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        itemCount: images.length + (images.length < 3 ? 2 : 0),
+                        gridDelegate:
+                            const SliverGridDelegateWithFixedCrossAxisCount(
+                              crossAxisCount: 3,
+                              crossAxisSpacing: 12,
+                              mainAxisSpacing: 12,
+                            ),
+                        itemBuilder: (context, index) {
+                          // Show selected images first
+                          if (index < images.length) {
+                            // Pass provider to helper
+                            return _buildImageThumbnail(provider, index);
+                          }
 
-                      // Gallery button
-                      return _buildGalleryButton();
+                          // Camera button
+                          if (index == images.length) {
+                            return _buildCameraButton(provider);
+                          }
+
+                          // Gallery button
+                          return _buildGalleryButton(provider);
+                        },
+                      );
                     },
                   ),
 
@@ -661,7 +622,12 @@ class _ReportDetailsScreenState extends State<ReportDetailsScreen> {
             ),
             child: SafeArea(
               child: ElevatedButton(
-                onPressed: () => context.push('/report/review'),
+                onPressed: () {
+                  context.read<ReportingProvider>().setDescription(
+                    _descController.text,
+                  );
+                  context.push('/report/review');
+                },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.primaryRed,
                   foregroundColor: Colors.white,
@@ -701,14 +667,16 @@ class _ReportDetailsScreenState extends State<ReportDetailsScreen> {
     return DateFormat('h:mm a').format(date);
   }
 
-  Widget _buildImageThumbnail(int index) {
+  Widget _buildImageThumbnail(ReportingProvider provider, int index) {
+    // Images from provider
+    final images = provider.photos;
     return Stack(
       children: [
         Container(
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(12),
             image: DecorationImage(
-              image: FileImage(File(_selectedImages[index].path)),
+              image: FileImage(File(images[index].path)),
               fit: BoxFit.cover,
             ),
           ),
@@ -717,7 +685,7 @@ class _ReportDetailsScreenState extends State<ReportDetailsScreen> {
           top: 4,
           right: 4,
           child: GestureDetector(
-            onTap: () => _removeImage(index),
+            onTap: () => _removeImage(provider, index),
             child: Container(
               padding: const EdgeInsets.all(4),
               decoration: const BoxDecoration(
@@ -732,9 +700,9 @@ class _ReportDetailsScreenState extends State<ReportDetailsScreen> {
     );
   }
 
-  Widget _buildCameraButton() {
+  Widget _buildCameraButton(ReportingProvider provider) {
     return InkWell(
-      onTap: _pickImageFromCamera,
+      onTap: () => _pickImageFromCamera(provider),
       borderRadius: BorderRadius.circular(12),
       child: Container(
         decoration: BoxDecoration(
@@ -772,9 +740,9 @@ class _ReportDetailsScreenState extends State<ReportDetailsScreen> {
     );
   }
 
-  Widget _buildGalleryButton() {
+  Widget _buildGalleryButton(ReportingProvider provider) {
     return InkWell(
-      onTap: _pickImageFromGallery,
+      onTap: () => _pickImageFromGallery(provider),
       borderRadius: BorderRadius.circular(12),
       child: Container(
         decoration: BoxDecoration(

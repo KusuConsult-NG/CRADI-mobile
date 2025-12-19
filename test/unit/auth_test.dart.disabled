@@ -1,0 +1,40 @@
+import 'package:flutter_test/flutter_test.dart';
+import 'package:mockito/annotations.dart';
+import 'package:mockito/mockito.dart';
+import 'package:firebase_auth/firebase_auth.dart' hide AuthProvider;
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:climate_app/features/auth/providers/auth_provider.dart';
+
+@GenerateMocks([
+  FirebaseAuth,
+  FirebaseFirestore,
+  User,
+  CollectionReference,
+  DocumentReference,
+  DocumentSnapshot,
+])
+import 'auth_test.mocks.dart';
+
+void main() {
+  group('AuthProvider', () {
+    late AuthProvider authProvider;
+    late MockFirebaseAuth mockAuth;
+    late MockFirebaseFirestore mockFirestore;
+
+    setUp(() {
+      mockAuth = MockFirebaseAuth();
+      mockFirestore = MockFirebaseFirestore();
+
+      // Stubbing
+      when(mockAuth.currentUser).thenReturn(null);
+      when(mockAuth.authStateChanges()).thenAnswer((_) => Stream.value(null));
+
+      authProvider = AuthProvider(auth: mockAuth, firestore: mockFirestore);
+    });
+
+    test('Initial state is unauthenticated', () {
+      expect(authProvider.isAuthenticated, false);
+      expect(authProvider.isLoading, false);
+    });
+  });
+}
