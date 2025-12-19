@@ -1,0 +1,202 @@
+{
+  "@@locale": "ha",
+  
+  "appTitle": "CRADI Gargadi Na Wuri",
+  "@appTitle": {
+    "description": "The application title"
+  },
+
+  "monitoringZone": "YANKIN KULA",
+  "@monitoringZone": {
+    "description": "Label for monitoring zone header"
+  },
+
+  "toVerify": "Don Tabbatarwa",
+  "@toVerify": {
+    "description": "Tab label for reports pending verification"
+  },
+
+  "alerts": "Faɗakarwa",
+  "@alerts": {
+    "description": "Tab label for alerts"
+  },
+
+  "myReports": "Rahotannina",
+  "@myReports": {
+    "description": "Tab label for user's own reports"
+  },
+
+  "browseCategories": "Duba Nau'o'i",
+  "@browseCategories": {
+    "description": "Section header for hazard categories"
+  },
+
+  "recentlyUpdated": "An Sabunta Kwanan Nan",
+  "@recentlyUpdated": {
+    "description": "Section header for recent updates"
+  },
+
+  "noReportsYet": "Babu rahotanni har yanzu",
+  "@noReportsYet": {
+    "description": "Empty state message when no reports exist"
+  },
+
+  "noReportsToVerify": "Babu rahotanni don tabbatarwa",
+  "@noReportsToVerify": {
+    "description": "Empty state for verification tab"
+  },
+
+  "noActiveAlerts": "Babu faɗakarwa a yanzu",
+  "@noActiveAlerts": {
+    "description": "Empty state for alerts tab"
+  },
+
+  "reportHazard": "BAYAR DA RAHOTO",
+  "@reportHazard": {
+    "description": "Button label for reporting a hazard"
+  },
+
+  "seeAll": "Duba Duka",
+  "@seeAll": {
+    "description": "Link to view all items in a section"
+  },
+
+  "pleaseLoginToViewReports": "Don Allah shiga don kallon rahotanni",
+  "@pleaseLoginToViewReports": {
+    "description": "Message shown when user is not logged in"
+  },
+
+  "settings": "Saitunan",
+  "notifications": "SANARWA",
+  "pushNotifications": "Sanarwar Tura",
+  "criticalAlerts": "Faɗakarwar Gaggawa",
+  "dnd": "Kar a Damun Ni",
+  "dataStorage": "BAYANAI DA AJIYA",
+  "wifiOnly": "WiFi Kaɗai Don Daidaitawa",
+  "lowData": "Yanayin Ƙarancin Bayanai",
+  "general": "GABAƊAYA",
+  "language": "Harshe",
+  "helpFaq": "Taimako da Tambayoyi",
+  "aboutApp": "Game da App",
+  "logout": "Fita",
+  "back": "Komawa",
+  "ok": "To",
+  "cancel": "Soke",
+  "save": "Ajiye",
+  "delete": "Goge",
+  "edit": "Gyara",
+  "continueButton": "Ci gaba",
+  "submit": "Ƙaddamar",
+  "retry": "Sake Gwadawa",
+  "close": "Rufe",
+
+  "selectedLanguage": "Hausa",
+  "@selectedLanguage": {
+    "description": "Currently selected language name"
+  },
+
+  "settingsTitle": "Saitunan",
+  "@settingsTitle": {
+    "description": "Settings screen title"
+  },
+
+  "verifyPhoneNumber": "Tabbatar da Lambar Waya",
+  "enterOtpCode": "Shigar da lambar 4 da aka aiko zuwa wayarka",
+  "resendCode": "Sake Aika Lambar",
+  "verify": "Tabbatar",
+  "codeExpiresIn": "Lambar za ta ƙare cikin",
+  "neverShareCode": "Kada ka taɓa raba lambar tabbatarwarka da kowa",
+  
+  "selectHazard": "Zaɓi Haɗari",
+  "whatIncident": "Wane irin lamari kake bayar da rahoto?",
+  "flooding": "Ambaliya",
+  "extremeHeat": "Zafi Mai Tsanani",
+  "drought": "Fari",
+  "windstorms": "Guguwa",
+  "wildfires": "Gobara",
+  "erosion": "Zaizaya",
+  "pestOutbreak": "Annobar Kwari",
+  "cropDisease": "Cutar Amfani",
+
+  "selectSeverity": "Zaɓi Matsanancin",
+  "howSevere": "Yaya matsanancin haɗarin?",
+  "low": "Ƙarami",
+  "moderate": "Matsakaici",
+  "high": "Babba",
+  "critical": "Mai Gaggawa",
+
+  "reportDetails": "Bayanan Rahoto",
+  "description": "Bayani",
+  "describeHazard": "Yi bayanin haɗarin anan (misali: ruwan ambaliya yana ƙaruwa, gada ta ruguje)...",
+  "whenDidOccur": "Yaushe Wannan Ya Faru?",
+  "optional": "Ba Wajibi Ba",
+  "today": "Yau",
+  "evidence": "Shaida",
+  "maxPhotos": "Hotuna 3 ne kawai",
+  "camera": "Kamara",
+  "gallery": "Gallery",
+  "reviewReport": "Bincika Rahoto",
+  "listening": "Ina sauraron... Yi magana yanzu",
+  "beSpecific": "Ka bayyana wuri da matsanancin.",
+
+  "locationPicker": "Zaɓi Wuri",
+  "selectLocation": "Zaɓi wurinka yanzu ko nemo wuri",
+  "useCurrentLocation": "Yi Amfani da Wurin Yanzu",
+  "searchPlaces": "Nemo wurare...",
+  "confirmLocation": "Tabbatar da Wuri",
+
+  "myProfile": "Bayanan Kaina",
+  "editProfileDetails": "Gyara Bayanan Kaina",
+  "fullName": "Cikakken Suna",
+  "emailAddress": "Adireshin Imel",
+  "biometricLogin": "Shiga ta Biometric",
+  "enabled": "An Kunna",
+  "disabled": "An Kashe",
+  "languagePreference": "Zaɓin Harshe",
+  "offlineDataSync": "Daidaita Bayanai Ba Tare da Yanar Gizo",
+  "upToDate": "An sabunta",
+  "helpSupport": "Taimako da Goyon Baya",
+  "contactSupervisor": "Tuntubi Mai Kulawa / SOS",
+  
+  "errorOccurred": "An sami kuskure",
+  "tryAgain": "Don Allah sake gwadawa",
+  "networkError": "Kuskuren yanar gizo. Don Allah duba haɗinka",
+  "invalidOtp": "Lambar OTP ba daidai ba. Don Allah sake gwadawa.",
+  "otpExpired": "Lambar OTP ta ƙare. Don Allah nemi sabuwa.",
+  "biometricsNotAvailable": "Biometric ba ya samuwa akan wannan na'ura",
+  "biometricsEnabled": "An kunna shiga ta biometric",
+  "biometricsDisabled": "An kashe shiga ta biometric",
+  "profileUpdated": "An sabunta bayanan kaina cikin nasara!",
+  "reportSubmitted": "An ƙaddamar da rahoto cikin nasara!",
+  "reportQueued": "An jera rahoto don ƙaddamarwa lokacin da aka kasance a yanar gizo",
+  "syncing": "Ana daidaitawa...",
+  "syncComplete": "An gama daidaitawa",
+  "offline": "Ba Yanar Gizo",
+  "online": "A Yanar Gizo",
+  
+  "offlineModeReady": "Yanayin Ba Yanar Gizo A Shirye:",
+  "offlineModeDescription": "Za a ƙarfafa hotunanku ta atomatik. Ana adana rahotanni a gida har sai kun sami yanar gizo.",
+  
+  "validation_required": "Ana buƙatar wannan filin",
+  "validation_invalidEmail": "Don Allah shigar da ingantaccen adireshin imel",
+  "validation_invalidPhone": "Don Allah shigar da ingantaccen lambar waya",
+  "validation_minLength": "Dole ne ya zama aƙalla haruffa {length}",
+  "@validation_minLength": {
+    "description": "Validation message for minimum length",
+    "placeholders": {
+      "length": {
+        "type": "int"
+      }
+    }
+  },
+
+  "validation_maxLength": "Dole ne ya zama ko da yawa haruffa {length}",
+  "@validation_maxLength": {
+    "description": "Validation message for maximum length",
+    "placeholders": {
+      "length": {
+        "type": "int"
+      }
+    }
+  }
+}
