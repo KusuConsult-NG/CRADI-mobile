@@ -45,3 +45,12 @@ app.*.map.json
 /android/app/release
 serviceAccountKey.json
 node_modules/
+
+# Firebase Configuration (contains sensitive API keys)
+android/app/google-services.json
+ios/Runner/GoogleService-Info.plist
+
+# Environment variables
+.env
+.env.*
+!.env.example

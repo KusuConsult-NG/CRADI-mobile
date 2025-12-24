@@ -190,6 +190,87 @@ class Validators {
     return null;
   }
 
+  /// Enhanced password validation with security best practices
+  /// Requirements:
+  /// - Minimum 8 characters
+  /// - At least 1 uppercase letter
+  /// - At least 1 lowercase letter
+  /// - At least 1 number
+  /// - At least 1 special character
+  static String? validatePassword(String? value) {
+    if (value == null || value.isEmpty) {
+      return 'Password is required';
+    }
+
+    if (value.length < 8) {
+      return 'Password must be at least 8 characters';
+    }
+
+    if (!RegExp(r'[A-Z]').hasMatch(value)) {
+      return 'Must contain at least one uppercase letter';
+    }
+
+    if (!RegExp(r'[a-z]').hasMatch(value)) {
+      return 'Must contain at least one lowercase letter';
+    }
+
+    if (!RegExp(r'[0-9]').hasMatch(value)) {
+      return 'Must contain at least one number';
+    }
+
+    if (!RegExp(r'[!@#$%^&*(),.?":{}|<>_\-+=\[\]\\\/]').hasMatch(value)) {
+      return 'Must contain at least one special character';
+    }
+
+    return null;
+  }
+
+  /// Get password strength score (0-4)
+  /// 0 = Very Weak, 1 = Weak, 2 = Fair, 3 = Good, 4 = Strong
+  static int getPasswordStrength(String password) {
+    if (password.isEmpty) return 0;
+
+    int strength = 0;
+
+    // Length check
+    if (password.length >= 8) strength++;
+    if (password.length >= 12) strength++;
+
+    // Character variety checks
+    if (RegExp(r'[A-Z]').hasMatch(password) &&
+        RegExp(r'[a-z]').hasMatch(password)) {
+      strength++;
+    }
+
+    if (RegExp(r'[0-9]').hasMatch(password)) {
+      strength++;
+    }
+
+    if (RegExp(r'[!@#$%^&*(),.?":{}|<>_\-+=\[\]\\\/]').hasMatch(password)) {
+      strength++;
+    }
+
+    // Cap at 4
+    return strength > 4 ? 4 : strength;
+  }
+
+  /// Get password strength label and color
+  static Map<String, dynamic> getPasswordStrengthInfo(int strength) {
+    switch (strength) {
+      case 0:
+      case 1:
+        return {'label': 'Weak', 'color': 0xFFE53935}; // Red
+      case 2:
+        return {'label': 'Fair', 'color': 0xFFFB8C00}; // Orange
+      case 3:
+        return {'label': 'Good', 'color': 0xFF43A047}; // Green
+      case 4:
+        return {'label': 'Strong', 'color': 0xFF1E88E5}; // Blue
+      default:
+        return {'label': 'Unknown', 'color': 0xFF757575}; // Gray
+    }
+  }
+
   /// Validate location name
   static String? validateLocation(String? value, String locationType) {
     if (value == null || value.trim().isEmpty) {

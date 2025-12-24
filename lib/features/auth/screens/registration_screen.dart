@@ -323,11 +323,8 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                           color: AppColors.textSecondary.withValues(alpha: 0.5),
                         ),
                       ),
-                      validator: (v) {
-                        if (v == null || v.length < 6) {
-                          return 'Password must be at least 6 characters';
-                        }
-                        return null;
+                      validator: (value) {
+                        return Validators.validatePassword(value);
                       },
                     ),
                   ),
