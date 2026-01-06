@@ -1,0 +1,9 @@
+{
+    "name": "statistics-aggregation",
+    "version": "1.0.0",
+    "description": "Daily aggregation of hazard report statistics.",
+    "main": "src/index.js",
+    "dependencies": {
+        "node-appwrite": "^11.0.0"
+    }
+}

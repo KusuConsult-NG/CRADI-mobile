@@ -12,6 +12,7 @@ import 'package:climate_app/features/knowledge_base/providers/knowledge_provider
 import 'package:climate_app/features/knowledge_base/providers/news_provider.dart';
 import 'package:climate_app/core/services/secure_storage_service.dart';
 import 'package:climate_app/core/services/session_manager.dart';
+import 'package:climate_app/core/services/offline_storage_service.dart';
 import 'package:climate_app/core/providers/settings_provider.dart';
 import 'package:climate_app/core/services/notification_service.dart';
 import 'package:flutter/material.dart';
@@ -39,6 +40,9 @@ Future<void> main() async {
 
   // Initialize Hive for local data storage
   await Hive.initFlutter();
+
+  // Initialize offline storage service for drafts and sync queue
+  await OfflineStorageService().initialize();
 
   // Set preferred orientations
   SystemChrome.setPreferredOrientations([

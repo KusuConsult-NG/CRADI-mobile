@@ -1,5 +1,6 @@
 import 'package:climate_app/core/theme/app_colors.dart';
 import 'package:climate_app/features/reporting/widgets/osm_location_picker.dart';
+import 'package:climate_app/core/data/mvp_locations_data.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -24,6 +25,11 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
   String _locationError = '';
   String _lga = 'Loading...';
   String _ward = 'Loading...';
+
+  // Ward & LGA Selection (for MVP)
+  String? _selectedState;
+  String? _selectedLGA;
+  String? _selectedWard;
 
   // Severity Configuration
   final Map<int, Map<String, dynamic>> _severityLevels = {
@@ -531,6 +537,334 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                       ],
                     ),
                   ),
+
+                  const SizedBox(height: 24),
+
+                  // Ward & LGA Selection Section
+                  _buildSectionTitle(
+                    'Ward & LGA Selection',
+                    'Select your ward from the dropdown',
+                  ),
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: Colors.grey.shade200),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.04),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Info banner
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.blue.shade50,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.blue.shade200),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.info_outline,
+                                size: 20,
+                                color: Colors.blue.shade700,
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Text(
+                                  'Select the LGA and Ward where the incident occurred',
+                                  style: GoogleFonts.lexend(
+                                    fontSize: 12,
+                                    color: Colors.blue.shade900,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+
+                        // State Dropdown
+                        Text(
+                          'State',
+                          style: GoogleFonts.lexend(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        DropdownButtonFormField<String>(
+                          initialValue: _selectedState,
+                          decoration: InputDecoration(
+                            hintText: 'Select State',
+                            filled: true,
+                            fillColor: Colors.grey.shade50,
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide(
+                                color: Colors.grey.shade300,
+                              ),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide(
+                                color: Colors.grey.shade300,
+                              ),
+                            ),
+                            focusedBorder: const OutlineInputBorder(
+                              borderRadius: BorderRadius.all(
+                                Radius.circular(12),
+                              ),
+                              borderSide: BorderSide(
+                                color: AppColors.primaryRed,
+                                width: 2,
+                              ),
+                            ),
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 14,
+                            ),
+                          ),
+                          items: MVPLocationsData.getAllStates()
+                              .map(
+                                (state) => DropdownMenuItem(
+                                  value: state,
+                                  child: Text(
+                                    state,
+                                    style: GoogleFonts.lexend(fontSize: 15),
+                                  ),
+                                ),
+                              )
+                              .toList(),
+                          onChanged: (value) {
+                            setState(() {
+                              _selectedState = value;
+                              _selectedLGA = null; // Reset LGA
+                              _selectedWard = null; // Reset ward
+                            });
+                          },
+                        ),
+
+                        const SizedBox(height: 20),
+
+                        // LGA Dropdown
+                        Text(
+                          'LGA (Local Government Area)',
+                          style: GoogleFonts.lexend(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        DropdownButtonFormField<String>(
+                          initialValue: _selectedLGA,
+                          decoration: InputDecoration(
+                            hintText: _selectedState == null
+                                ? 'Select State first'
+                                : 'Select LGA',
+                            filled: true,
+                            fillColor: _selectedState == null
+                                ? Colors.grey.shade100
+                                : Colors.grey.shade50,
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide(
+                                color: Colors.grey.shade300,
+                              ),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide(
+                                color: Colors.grey.shade300,
+                              ),
+                            ),
+                            focusedBorder: const OutlineInputBorder(
+                              borderRadius: BorderRadius.all(
+                                Radius.circular(12),
+                              ),
+                              borderSide: BorderSide(
+                                color: AppColors.primaryRed,
+                                width: 2,
+                              ),
+                            ),
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 14,
+                            ),
+                          ),
+                          items: _selectedState == null
+                              ? []
+                              : MVPLocationsData.getLGAsForState(
+                                      _selectedState!,
+                                    )
+                                    .map(
+                                      (lga) => DropdownMenuItem(
+                                        value: lga,
+                                        child: Text(
+                                          lga,
+                                          style: GoogleFonts.lexend(
+                                            fontSize: 15,
+                                          ),
+                                        ),
+                                      ),
+                                    )
+                                    .toList(),
+                          onChanged: _selectedState == null
+                              ? null
+                              : (value) {
+                                  setState(() {
+                                    _selectedLGA = value;
+                                    _selectedWard = null; // Reset ward
+                                  });
+
+                                  // Update provider
+                                  if (value != null) {
+                                    context.read<ReportingProvider>().setLGA(
+                                      value,
+                                    );
+                                  }
+                                },
+                        ),
+
+                        const SizedBox(height: 20),
+
+                        // Ward Dropdown
+                        Text(
+                          'Ward',
+                          style: GoogleFonts.lexend(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        DropdownButtonFormField<String>(
+                          initialValue: _selectedWard,
+                          decoration: InputDecoration(
+                            hintText: _selectedLGA == null
+                                ? 'Select LGA first'
+                                : 'Select Ward',
+                            filled: true,
+                            fillColor: _selectedLGA == null
+                                ? Colors.grey.shade100
+                                : Colors.grey.shade50,
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide(
+                                color: Colors.grey.shade300,
+                              ),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide(
+                                color: Colors.grey.shade300,
+                              ),
+                            ),
+                            focusedBorder: const OutlineInputBorder(
+                              borderRadius: BorderRadius.all(
+                                Radius.circular(12),
+                              ),
+                              borderSide: BorderSide(
+                                color: AppColors.primaryRed,
+                                width: 2,
+                              ),
+                            ),
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 14,
+                            ),
+                          ),
+                          items: _selectedLGA == null
+                              ? []
+                              : MVPLocationsData.getWardsForLGA(_selectedLGA!)
+                                    .map(
+                                      (ward) => DropdownMenuItem(
+                                        value: ward,
+                                        child: Text(
+                                          ward,
+                                          style: GoogleFonts.lexend(
+                                            fontSize: 15,
+                                          ),
+                                        ),
+                                      ),
+                                    )
+                                    .toList(),
+                          onChanged: _selectedLGA == null
+                              ? null
+                              : (value) {
+                                  setState(() {
+                                    _selectedWard = value;
+                                  });
+
+                                  // Update provider
+                                  if (value != null) {
+                                    context.read<ReportingProvider>().setWard(
+                                      value,
+                                    );
+
+                                    // Update location details with formatted string
+                                    final locationString =
+                                        MVPLocationsData.getLocationString(
+                                          ward: value,
+                                          lga: _selectedLGA!,
+                                        );
+                                    context
+                                        .read<ReportingProvider>()
+                                        .setLocationDetails(locationString);
+                                  }
+                                },
+                        ),
+
+                        // Show selected location summary
+                        if (_selectedWard != null) ...[
+                          const SizedBox(height: 20),
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.green.shade50,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: Colors.green.shade200),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  Icons.check_circle,
+                                  color: Colors.green.shade700,
+                                  size: 20,
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Text(
+                                    MVPLocationsData.getLocationString(
+                                      ward: _selectedWard!,
+                                      lga: _selectedLGA!,
+                                    ),
+                                    style: GoogleFonts.lexend(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.green.shade900,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+
                   const SizedBox(height: 16),
                   Center(
                     child: GestureDetector(
@@ -602,16 +936,36 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
             child: SafeArea(
               child: ElevatedButton(
                 onPressed: () {
+                  // Validation
+                  if (_selectedState == null ||
+                      _selectedLGA == null ||
+                      _selectedWard == null) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text(
+                          'Please select State, LGA, and Ward before continuing',
+                        ),
+                        backgroundColor: Colors.red,
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                    return;
+                  }
+
                   // Sync Severity
                   final severityLabel =
                       _severityLevels[_severityValue.toInt()]!['label']
                           as String;
                   context.read<ReportingProvider>().setSeverity(severityLabel);
 
-                  // Sync Location if not null (it might have been set by GPS or Manual)
-                  // If location provider is null, we should block or warn?
-                  // For now, assume flow continues, provider check at end will catch it.
-                  // But setting it here ensures "default" value is captured.
+                  // Sync Location (already set via dropdowns)
+                  // Also sync GPS coordinates if available
+                  if (_currentPosition != null) {
+                    context.read<ReportingProvider>().setLocation(
+                      _currentPosition!.latitude,
+                      _currentPosition!.longitude,
+                    );
+                  }
 
                   context.push('/report/details');
                 },

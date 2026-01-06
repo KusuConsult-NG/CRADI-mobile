@@ -54,3 +54,7 @@ ios/Runner/GoogleService-Info.plist
 .env
 .env.*
 !.env.example
+
+# SMS Configuration (contains API keys - NEVER commit!)
+lib/core/config/sms_config.dart
+test_sms.dart

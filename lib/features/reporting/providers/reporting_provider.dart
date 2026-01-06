@@ -2,9 +2,14 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:climate_app/core/services/appwrite_service.dart';
+import 'package:climate_app/core/services/offline_storage_service.dart';
+import 'package:climate_app/core/services/peer_verification_service.dart';
+import 'package:climate_app/core/data/mvp_locations_data.dart';
+import 'package:climate_app/core/providers/connectivity_provider.dart';
 import 'package:uuid/uuid.dart';
 import 'dart:developer' as developer;
 import 'package:appwrite/appwrite.dart';
+import 'package:provider/provider.dart';
 
 enum HazardType { flood, drought, temp, wind, erosion, fire, pest }
 
@@ -21,6 +26,8 @@ class ReportingProvider extends ChangeNotifier {
   String? _severity;
   String? _locationDetails;
   String? _description;
+  String? _ward;
+  String? _lga;
   DateTime _reportDateTime = DateTime.now();
   List<XFile> _photos = [];
   double? _latitude;
@@ -32,6 +39,8 @@ class ReportingProvider extends ChangeNotifier {
   String? get severity => _severity;
   String? get locationDetails => _locationDetails;
   String? get description => _description;
+  String? get ward => _ward;
+  String? get lga => _lga;
   DateTime get reportDateTime => _reportDateTime;
   List<XFile> get photos => _photos;
   bool get isLoading => _isLoading;
@@ -67,6 +76,16 @@ class ReportingProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  void setWard(String ward) {
+    _ward = ward;
+    notifyListeners();
+  }
+
+  void setLGA(String lga) {
+    _lga = lga;
+    notifyListeners();
+  }
+
   /// Pick an image from gallery or camera
   Future<void> pickImage(ImageSource source) async {
     try {
@@ -77,8 +96,8 @@ class ReportingProvider extends ChangeNotifier {
       );
 
       if (image != null) {
-        if (_photos.length >= 5) {
-          throw Exception('Maximum 5 images allowed');
+        if (_photos.length >= 3) {
+          throw Exception('Maximum 3 images allowed');
         }
         _photos.add(image);
         notifyListeners();
@@ -102,6 +121,8 @@ class ReportingProvider extends ChangeNotifier {
     _severity = null;
     _locationDetails = null;
     _description = null;
+    _ward = null;
+    _lga = null;
     _reportDateTime = DateTime.now();
     _photos = [];
     _latitude = null;
@@ -109,17 +130,13 @@ class ReportingProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Submit report using Appwrite
-  Future<Map<String, dynamic>> submitReport() async {
+  /// Submit report using Appwrite (with offline support)
+  Future<Map<String, dynamic>> submitReport(BuildContext context) async {
     try {
       _isLoading = true;
       notifyListeners();
 
-      final user = await _appwrite.getCurrentUser();
-      if (user == null) {
-        throw Exception('User must be logged in to submit a report');
-      }
-
+      // Validation (no async operations here)
       if (_hazardType == null) {
         throw Exception('Hazard Type is missing');
       }
@@ -129,6 +146,46 @@ class ReportingProvider extends ChangeNotifier {
       if (_locationDetails == null) {
         throw Exception('Location Details are missing');
       }
+      if (_ward == null) {
+        throw Exception('Ward is missing');
+      }
+      if (_lga == null) {
+        throw Exception('LGA is missing');
+      }
+
+      // Check connectivity FIRST (synchronous, no async gap)
+      final hasInternet = context.read<ConnectivityProvider>().isOnline;
+
+      if (!hasInternet) {
+        // OFFLINE MODE - SAVE AS DRAFT (no user needed for drafts)
+        final draftId = await OfflineStorageService().saveDraft(
+          hazardType: _hazardType!,
+          severity: _severity!,
+          locationDetails: _locationDetails!,
+          latitude: _latitude,
+          longitude: _longitude,
+          description: _description,
+          reportDateTime: _reportDateTime,
+          imagePaths: _photos.map((p) => p.path).toList(),
+        );
+
+        reset();
+        _isLoading = false;
+        notifyListeners();
+
+        return {
+          'success': true,
+          'message': ' 📴 Saved as draft. Will sync when online.',
+          'draftId': draftId,
+          'offline': true,
+        };
+      }
+
+      // ONLINE MODE - Get user and proceed with submission
+      final user = await _appwrite.getCurrentUser();
+      if (user == null) {
+        throw Exception('User must be logged in to submit a report');
+      }
 
       // Generate unique ID for this report
       final reportId = _uuid.v4();
@@ -136,16 +193,13 @@ class ReportingProvider extends ChangeNotifier {
       // Upload images to Appwrite Storage
       List<String> imageIds = [];
       if (_photos.isNotEmpty) {
-        for (int i = 0; i < _photos.length; i++) {
-          final photo = _photos[i];
+        for (final photo in _photos) {
           final fileBytes = await File(photo.path).readAsBytes();
-
           final uploadedFile = await _appwrite.uploadFile(
             bucketId: AppwriteService.reportImagesBucketId,
             filePath: photo.path,
             fileBytes: fileBytes,
           );
-
           imageIds.add(uploadedFile.$id);
         }
       }
@@ -158,6 +212,9 @@ class ReportingProvider extends ChangeNotifier {
         'latitude': _latitude ?? 0.0,
         'longitude': _longitude ?? 0.0,
         'locationDetails': _locationDetails,
+        'ward': _ward,
+        'lga': _lga,
+        'state': MVPLocationsData.getStateForLGA(_lga!),
         'description': _description ?? '',
         'submittedAt': DateTime.now().toIso8601String(),
         'imageIds': imageIds,
@@ -166,33 +223,53 @@ class ReportingProvider extends ChangeNotifier {
         'verificationCount': 0,
       };
 
-      await _appwrite.createDocument(
-        collectionId: AppwriteService.reportsCollectionId,
-        documentId: reportId,
-        data: reportData,
-      );
+      try {
+        await _appwrite.createDocument(
+          collectionId: AppwriteService.reportsCollectionId,
+          documentId: reportId,
+          data: reportData,
+        );
 
-      developer.log('Report submitted: $reportId');
+        // ✨ SEND VERIFICATION REQUESTS TO PEERS ✨
+        await PeerVerificationService().sendVerificationRequests(
+          reportId: reportId,
+          ward: _ward!,
+          lga: _lga!,
+          reporterId: user.$id,
+        );
 
-      reset();
-      _isLoading = false;
-      notifyListeners();
+        developer.log('Report submitted: $reportId');
 
-      return {
-        'success': true,
-        'message': 'Report submitted successfully',
-        'reportId': reportId,
-      };
-    } on AppwriteException catch (e) {
-      _isLoading = false;
-      notifyListeners();
-      developer.log('Error submitting report: ${e.message}');
-      rethrow;
+        reset();
+        _isLoading = false;
+        notifyListeners();
+
+        return {
+          'success': true,
+          'message':
+              'Report submitted successfully! Verification requests sent to peers.',
+          'reportId': reportId,
+        };
+      } on AppwriteException {
+        // Submission failed - ADD TO SYNC QUEUE
+        await OfflineStorageService().addToSyncQueue(reportData);
+
+        reset();
+        _isLoading = false;
+        notifyListeners();
+
+        return {
+          'success': false,
+          'message':
+              '⚠️ Submission failed. Added to sync queue. Will retry automatically.',
+          'queued': true,
+        };
+      }
     } on Exception catch (e) {
       _isLoading = false;
       notifyListeners();
       developer.log('Error submitting report: $e');
-      rethrow;
+      return {'success': false, 'message': e.toString()};
     }
   }
 }

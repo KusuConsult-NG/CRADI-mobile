@@ -20,7 +20,9 @@ class _ReportReviewScreenState extends State<ReportReviewScreen> {
     setState(() => _isSubmitting = true);
 
     try {
-      final result = await context.read<ReportingProvider>().submitReport();
+      final result = await context.read<ReportingProvider>().submitReport(
+        context,
+      );
 
       if (!mounted) return;
 

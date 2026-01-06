@@ -3,12 +3,11 @@ plugins {
     id("kotlin-android")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
-    // Firebase disabled - needs correct google-services.json for this app
-    // id("com.google.gms.google-services")
+    id("com.google.gms.google-services")
 }
 
 android {
-    namespace = "com.westgatestratagem.climate_app.climate_app"
+    namespace = "com.cradi.mobile"
     compileSdk = 36  // Required by plugins (connectivity_plus, image_picker, etc.)
     ndkVersion = flutter.ndkVersion
 
@@ -23,8 +22,7 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.westgatestratagem.climate_app.climate_app"
+        applicationId = "com.cradi.mobile"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion  // Android 6.0 - broad compatibility

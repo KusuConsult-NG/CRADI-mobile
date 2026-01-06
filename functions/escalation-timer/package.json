@@ -1,0 +1,9 @@
+{
+    "name": "escalation-timer",
+    "version": "1.0.0",
+    "description": "Auto-escalates pending reports after 30 minutes of inactivity.",
+    "main": "src/index.js",
+    "dependencies": {
+        "node-appwrite": "^11.0.0"
+    }
+}

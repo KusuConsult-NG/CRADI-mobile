@@ -1,0 +1,9 @@
+{
+    "name": "alert-distribution",
+    "version": "1.0.0",
+    "description": "Distributes SMS and Push notifications when a report is validated.",
+    "main": "src/index.js",
+    "dependencies": {
+        "node-appwrite": "^11.0.0"
+    }
+}

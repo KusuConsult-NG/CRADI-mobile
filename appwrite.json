@@ -1,0 +1,89 @@
+{
+    "project": {
+        "projectId": "6941cdb400050e7249d5",
+        "projectName": "CRADI Mobile"
+    },
+    "functions": [
+        {
+            "$id": "escalation-timer",
+            "name": "Escalation Timer",
+            "runtime": "node-18.0",
+            "path": "functions/escalation-timer",
+            "entrypoint": "src/index.js",
+            "execute": [
+                "users"
+            ],
+            "events": [],
+            "schedule": "*/5 * * * *",
+            "timeout": 15,
+            "enabled": true,
+            "variables": {
+                "DATABASE_ID": "6941e2c2003705bb5a25",
+                "REPORTS_COLLECTION_ID": "reports"
+            }
+        },
+        {
+            "$id": "alert-distribution",
+            "name": "Alert Distribution",
+            "runtime": "node-18.0",
+            "path": "functions/alert-distribution",
+            "entrypoint": "src/index.js",
+            "execute": [
+                "users"
+            ],
+            "events": [
+                "databases.*.collections.reports.documents.*.update"
+            ],
+            "schedule": "",
+            "timeout": 30,
+            "enabled": true,
+            "variables": {
+                "DATABASE_ID": "6941e2c2003705bb5a25",
+                "AUTHORITIES_COLLECTION_ID": "authorities",
+                "AFRICASTALKING_USERNAME": "sandbox",
+                "AFRICASTALKING_API_KEY": "YOUR_KEY",
+                "AFRICASTALKING_SENDER_ID": "CRADI"
+            }
+        },
+        {
+            "$id": "verification-request",
+            "name": "Verification Request",
+            "runtime": "node-18.0",
+            "path": "functions/verification-request",
+            "entrypoint": "src/index.js",
+            "execute": [
+                "users"
+            ],
+            "events": [
+                "databases.*.collections.reports.documents.*.create"
+            ],
+            "schedule": "",
+            "timeout": 15,
+            "enabled": true,
+            "variables": {
+                "DATABASE_ID": "6941e2c2003705bb5a25",
+                "USERS_COLLECTION_ID": "users"
+            }
+        },
+        {
+            "$id": "statistics-aggregation",
+            "name": "Statistics Aggregation",
+            "runtime": "node-18.0",
+            "path": "functions/statistics-aggregation",
+            "entrypoint": "src/index.js",
+            "execute": [
+                "users"
+            ],
+            "events": [],
+            "schedule": "0 0 * * *",
+            "timeout": 30,
+            "enabled": true,
+            "variables": {
+                "DATABASE_ID": "6941e2c2003705bb5a25",
+                "REPORTS_COLLECTION_ID": "reports",
+                "STATS_COLLECTION_ID": "statistics"
+            }
+        }
+    ],
+    "projectId": "6941cdb400050e7249d5"
+}

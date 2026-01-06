@@ -1,0 +1,9 @@
+{
+    "name": "verification-request",
+    "version": "1.0.0",
+    "description": "Notifies peers in the same ward to verify a new report.",
+    "main": "src/index.js",
+    "dependencies": {
+        "node-appwrite": "^11.0.0"
+    }
+}
