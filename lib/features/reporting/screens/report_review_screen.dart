@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
+import 'package:climate_app/shared/widgets/custom_button.dart';
 
 class ReportReviewScreen extends StatefulWidget {
   const ReportReviewScreen({super.key});
@@ -130,21 +131,13 @@ class _ReportReviewScreenState extends State<ReportReviewScreen> {
               const SizedBox(height: 24),
               SizedBox(
                 width: double.infinity,
-                height: 48,
-                child: ElevatedButton(
+                child: CustomButton(
                   onPressed: () {
                     // Provider is already reset in submitReport
                     context.go('/dashboard');
                   },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.grey.shade200,
-                    foregroundColor: AppColors.textPrimary,
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                  ),
-                  child: const Text('Return to Dashboard'),
+                  text: 'Return to Dashboard',
+                  type: ButtonType.secondary,
                 ),
               ),
             ],
@@ -384,45 +377,11 @@ class _ReportReviewScreenState extends State<ReportReviewScreen> {
               border: Border(top: BorderSide(color: Colors.grey.shade100)),
             ),
             child: SafeArea(
-              child: ElevatedButton(
+              child: CustomButton(
                 onPressed: _isSubmitting ? null : _submitReport,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primaryRed,
-                  foregroundColor: Colors.white,
-                  minimumSize: const Size(double.infinity, 56),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  elevation: 4,
-                  disabledBackgroundColor: AppColors.primaryRed.withValues(
-                    alpha: 0.6,
-                  ),
-                ),
-                child: _isSubmitting
-                    ? const SizedBox(
-                        height: 20,
-                        width: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          valueColor: AlwaysStoppedAnimation<Color>(
-                            Colors.white,
-                          ),
-                        ),
-                      )
-                    : Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(
-                            'Submit Report',
-                            style: GoogleFonts.lexend(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          const Icon(Icons.send),
-                        ],
-                      ),
+                isLoading: _isSubmitting,
+                text: 'Submit Report',
+                icon: Icons.send,
               ),
             ),
           ),

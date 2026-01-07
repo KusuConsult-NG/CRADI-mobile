@@ -272,4 +272,130 @@ class ReportingProvider extends ChangeNotifier {
       return {'success': false, 'message': e.toString()};
     }
   }
+
+  /// Sync pending reports (drafts and queue)
+  Future<Map<String, dynamic>> syncPendingReports(BuildContext context) async {
+    _isLoading = true;
+    notifyListeners();
+
+    int successCount = 0;
+    int failCount = 0;
+
+    try {
+      final offlineService = OfflineStorageService();
+
+      // 1. Process Sync Queue (Failed submissions)
+      final queue = offlineService.getSyncQueue();
+      for (final item in queue) {
+        if (item['status'] == 'synced') continue;
+
+        try {
+          // Retry submission
+          await _appwrite.createDocument(
+            collectionId: AppwriteService.reportsCollectionId,
+            documentId:
+                item['queueId'], // Use original ID or queue ID? queue item has report data
+            data:
+                {
+                    ...item,
+                    'status': 'pending', // Reset status
+                  }
+                  ..remove('queueId')
+                  ..remove('addedToQueueAt')
+                  ..remove('retryCount')
+                  ..remove('lastError'), // Remove queue metadata
+          );
+
+          await offlineService.markAsSynced(item['queueId']);
+          successCount++;
+        } on Exception catch (e) {
+          await offlineService.markAsFailed(item['queueId'], e.toString());
+          failCount++;
+        }
+      }
+
+      // 2. Process Drafts (Saved offline)
+      // Note: For now, we only sync drafts that have all required fields.
+      // In a real app, we might want user confirmation for each.
+      final drafts = offlineService.getAllDrafts();
+      for (final draft in drafts) {
+        try {
+          // Sign in check
+          final user = await _appwrite.getCurrentUser();
+          if (user == null) throw Exception('User not logged in');
+
+          // Upload images if paths exist
+          List<String> imageIds = [];
+          if (draft['imagePaths'] != null) {
+            final paths = (draft['imagePaths'] as List).cast<String>();
+            for (final path in paths) {
+              if (File(path).existsSync()) {
+                final fileBytes = await File(path).readAsBytes();
+                final uploadedFile = await _appwrite.uploadFile(
+                  bucketId: AppwriteService.reportImagesBucketId,
+                  filePath: path,
+                  fileBytes: fileBytes,
+                );
+                imageIds.add(uploadedFile.$id);
+              }
+            }
+          }
+
+          final reportId = _uuid.v4();
+          final reportData = {
+            'userId': user.$id,
+            'hazardType': draft['hazardType'],
+            'severity': draft['severity'],
+            'latitude': draft['latitude'],
+            'longitude': draft['longitude'],
+            'locationDetails': draft['locationDetails'],
+            'ward':
+                MVPLocationsData.getWardsForLGA(
+                  MVPLocationsData.getLGAForWard(draft['locationDetails']!) ??
+                      'Makurdi',
+                ).firstOrNull ??
+                'Unknown', // Simplification for draft
+            'lga':
+                MVPLocationsData.getLGAForWard(draft['locationDetails']!) ??
+                'Makurdi',
+            'state': 'Benue', // Default/Derived
+            'description': draft['description'],
+            'submittedAt': DateTime.now().toIso8601String(),
+            'imageIds': imageIds,
+            'status': 'pending',
+            'isAlert':
+                draft['severity'] == 'critical' || draft['severity'] == 'high',
+            'verificationCount': 0,
+          };
+
+          await _appwrite.createDocument(
+            collectionId: AppwriteService.reportsCollectionId,
+            documentId: reportId,
+            data: reportData,
+          );
+
+          // Delete draft after success
+          await offlineService.deleteDraft(draft['id']);
+          successCount++;
+        } on Exception catch (e) {
+          developer.log('Failed to sync draft ${draft['id']}: $e');
+          failCount++;
+        }
+      }
+
+      _isLoading = false;
+      notifyListeners();
+
+      return {
+        'success': true,
+        'synced': successCount,
+        'failed': failCount,
+        'message': 'Synced $successCount items. $failCount failed.',
+      };
+    } on Exception catch (e) {
+      _isLoading = false;
+      notifyListeners();
+      return {'success': false, 'message': 'Sync failed: $e'};
+    }
+  }
 }

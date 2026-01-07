@@ -1,5 +1,7 @@
 import 'package:climate_app/core/theme/app_colors.dart';
 import 'package:climate_app/features/auth/providers/auth_provider.dart';
+import 'package:climate_app/shared/widgets/custom_button.dart';
+import 'package:climate_app/shared/widgets/custom_text_field.dart';
 import 'package:climate_app/core/utils/validators.dart';
 
 import 'package:climate_app/core/utils/error_handler.dart';
@@ -224,27 +226,21 @@ class _LoginScreenState extends State<LoginScreen> {
                     key: _formKey,
                     child: Column(
                       children: [
-                        TextFormField(
+                        CustomTextField(
+                          label: 'Email Address',
                           controller: _emailController,
                           keyboardType: TextInputType.emailAddress,
-                          decoration: const InputDecoration(
-                            labelText: 'Email Address',
-                            prefixIcon: Icon(Icons.email_outlined),
-                            hintText: 'name@example.com',
-                          ),
+                          prefixIcon: const Icon(Icons.email_outlined),
+                          hint: 'name@example.com',
                           validator: Validators.validateEmail,
                           enabled: !_isLoading,
                         ),
                         const SizedBox(height: 16),
-                        TextFormField(
+                        CustomTextField(
+                          label: 'Registration Code',
                           controller: _registrationCodeController,
-                          keyboardType: TextInputType.text,
-                          textCapitalization: TextCapitalization.characters,
-                          decoration: const InputDecoration(
-                            labelText: 'Registration Code',
-                            prefixIcon: Icon(Icons.verified_user),
-                            hintText: 'CRD######',
-                          ),
+                          prefixIcon: const Icon(Icons.verified_user),
+                          hint: 'CRD######',
                           validator: (value) => Validators.validateRequired(
                             value,
                             'Registration Code',
@@ -252,24 +248,22 @@ class _LoginScreenState extends State<LoginScreen> {
                           enabled: !_isLoading,
                         ),
                         const SizedBox(height: 16),
-                        TextFormField(
+                        CustomTextField(
+                          label: 'Password',
                           controller: _passwordController,
                           obscureText: !_isPasswordVisible,
-                          decoration: InputDecoration(
-                            labelText: 'Password',
-                            prefixIcon: const Icon(Icons.lock_outline),
-                            suffixIcon: IconButton(
-                              icon: Icon(
-                                _isPasswordVisible
-                                    ? Icons.visibility
-                                    : Icons.visibility_off,
-                              ),
-                              onPressed: () {
-                                setState(() {
-                                  _isPasswordVisible = !_isPasswordVisible;
-                                });
-                              },
+                          prefixIcon: const Icon(Icons.lock_outline),
+                          suffixIcon: IconButton(
+                            icon: Icon(
+                              _isPasswordVisible
+                                  ? Icons.visibility
+                                  : Icons.visibility_off,
                             ),
+                            onPressed: () {
+                              setState(() {
+                                _isPasswordVisible = !_isPasswordVisible;
+                              });
+                            },
                           ),
                           validator: (value) =>
                               Validators.validateRequired(value, 'Password'),
@@ -304,22 +298,10 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                         ),
                         const SizedBox(height: 24),
-                        SizedBox(
-                          width: double.infinity,
-                          height: 50,
-                          child: ElevatedButton(
-                            onPressed: _isLoading ? null : _submit,
-                            child: _isLoading
-                                ? const SizedBox(
-                                    height: 20,
-                                    width: 20,
-                                    child: CircularProgressIndicator(
-                                      color: Colors.white,
-                                      strokeWidth: 2,
-                                    ),
-                                  )
-                                : const Text('Login'),
-                          ),
+                        CustomButton(
+                          text: 'Login',
+                          onPressed: _isLoading ? null : _submit,
+                          isLoading: _isLoading,
                         ),
                         const SizedBox(height: 16),
 
@@ -384,55 +366,46 @@ class _LoginScreenState extends State<LoginScreen> {
                               ],
                             ),
                             const SizedBox(height: 16),
-                            SizedBox(
-                              width: double.infinity,
-                              height: 50,
-                              child: OutlinedButton.icon(
-                                onPressed: _isLoading
-                                    ? null
-                                    : () async {
-                                        // Capture router before async gap
-                                        final router = GoRouter.of(context);
+                            CustomButton(
+                              text: 'Login with Biometrics',
+                              onPressed: _isLoading
+                                  ? null
+                                  : () async {
+                                      // Capture router before async gap
+                                      final router = GoRouter.of(context);
 
-                                        setState(() => _isLoading = true);
-                                        final enabled = await authProvider
-                                            .isBiometricEnabled();
-                                        if (!enabled) {
-                                          setState(() {
-                                            _isLoading = false;
-                                            _errorMessage =
-                                                'Biometric login is not enabled. Please login with your email/code once and enable it in Settings.';
-                                          });
-                                          return;
-                                        }
+                                      setState(() => _isLoading = true);
+                                      final enabled = await authProvider
+                                          .isBiometricEnabled();
+                                      if (!enabled) {
+                                        setState(() {
+                                          _isLoading = false;
+                                          _errorMessage =
+                                              'Biometric login is not enabled. Please login with your email/code once and enable it in Settings.';
+                                        });
+                                        return;
+                                      }
 
-                                        final success = await authProvider
-                                            .authenticateWithBiometrics();
+                                      final success = await authProvider
+                                          .authenticateWithBiometrics();
 
-                                        if (!mounted) return;
+                                      if (!mounted) return;
 
-                                        setState(() => _isLoading = false);
+                                      setState(() => _isLoading = false);
 
-                                        if (!mounted) return;
+                                      if (!mounted) return;
 
-                                        if (success) {
-                                          router.go('/dashboard');
-                                        } else {
-                                          setState(() {
-                                            _errorMessage =
-                                                'Biometric authentication failed. Please try again or use email login.';
-                                          });
-                                        }
-                                      },
-                                icon: const Icon(Icons.fingerprint),
-                                label: const Text('Login with Biometrics'),
-                                style: OutlinedButton.styleFrom(
-                                  side: const BorderSide(
-                                    color: AppColors.primaryRed,
-                                  ),
-                                  foregroundColor: AppColors.primaryRed,
-                                ),
-                              ),
+                                      if (success) {
+                                        router.go('/dashboard');
+                                      } else {
+                                        setState(() {
+                                          _errorMessage =
+                                              'Biometric authentication failed. Please try again or use email login.';
+                                        });
+                                      }
+                                    },
+                              icon: Icons.fingerprint,
+                              type: ButtonType.secondary,
                             ),
                             const SizedBox(height: 24),
                           ],
@@ -504,23 +477,15 @@ class _LoginScreenState extends State<LoginScreen> {
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 48),
-              SizedBox(
-                width: double.infinity,
-                height: 50,
-                child: ElevatedButton.icon(
-                  onPressed: () async {
-                    final success = await authProvider.unlockApp();
-                    if (success && mounted) {
-                      context.go('/dashboard');
-                    }
-                  },
-                  icon: const Icon(Icons.fingerprint),
-                  label: const Text('Unlock with Biometrics'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primaryRed,
-                    foregroundColor: Colors.white,
-                  ),
-                ),
+              CustomButton(
+                text: 'Unlock with Biometrics',
+                onPressed: () async {
+                  final success = await authProvider.unlockApp();
+                  if (success && mounted) {
+                    context.go('/dashboard');
+                  }
+                },
+                icon: Icons.fingerprint,
               ),
               const SizedBox(height: 24),
               TextButton(

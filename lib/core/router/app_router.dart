@@ -19,24 +19,28 @@ import 'package:climate_app/features/settings/screens/settings_screen.dart';
 import 'package:climate_app/features/verification/screens/verification_list_screen.dart';
 import 'package:climate_app/features/verification/screens/reports_status_screen.dart';
 import 'package:climate_app/features/verification/screens/verification_request_screen.dart';
-import 'package:flutter/material.dart';
+
 import 'package:go_router/go_router.dart';
 
 import 'package:climate_app/features/auth/screens/registration_screen.dart';
+import 'package:climate_app/features/notifications/screens/notifications_screen.dart';
+import 'package:climate_app/features/offline_mode/screens/offline_home_screen.dart';
+import 'package:climate_app/features/settings/screens/about_app_screen.dart';
+import 'package:climate_app/features/settings/screens/help_support_screen.dart';
+import 'package:climate_app/features/onboarding/screens/onboarding_screen.dart';
+import 'package:climate_app/features/splash/screens/splash_screen.dart';
 
 // Placeholder screens for testing routing
-class SplashScreen extends StatelessWidget {
-  const SplashScreen({super.key});
-  @override
-  Widget build(BuildContext context) {
-    return const Scaffold(body: Center(child: Text('Splash Screen')));
-  }
-}
 
 final GoRouter appRouter = GoRouter(
   initialLocation: '/login', // Set to login as default entry
   routes: [
-    GoRoute(path: '/', builder: (context, state) => const SplashScreen()),
+    GoRoute(path: '/splash', builder: (context, state) => const SplashScreen()),
+    GoRoute(
+      path: '/onboarding',
+      builder: (context, state) => const OnboardingScreen(),
+    ),
+    GoRoute(path: '/', redirect: (context, state) => '/splash'),
     GoRoute(
       path: '/register',
       builder: (context, state) => const RegistrationScreen(),
@@ -140,5 +144,21 @@ final GoRouter appRouter = GoRouter(
       builder: (context, state) => const ReportsStatusScreen(),
     ),
     GoRoute(path: '/chat', builder: (context, state) => const ChatScreen()),
+    GoRoute(
+      path: '/offline',
+      builder: (context, state) => const OfflineHomeScreen(),
+    ),
+    GoRoute(
+      path: '/notifications',
+      builder: (context, state) => const NotificationsScreen(),
+    ),
+    GoRoute(
+      path: '/help',
+      builder: (context, state) => const HelpSupportScreen(),
+    ),
+    GoRoute(
+      path: '/about',
+      builder: (context, state) => const AboutAppScreen(),
+    ),
   ],
 );

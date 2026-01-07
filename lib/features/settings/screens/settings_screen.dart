@@ -410,46 +410,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       icon: Icons.help,
                       color: Colors.grey,
                       title: provider.helpFaq,
-                      onTap: () {
-                        showDialog(
-                          context: context,
-                          builder: (c) => AlertDialog(
-                            title: Text(provider.helpFaq),
-                            content: const Text(
-                              'Frequently Asked Questions would appear here.\n\n1. How to report?\n2. What is an alert?',
-                            ),
-                            actions: [
-                              TextButton(
-                                onPressed: () => Navigator.pop(c),
-                                child: Text(provider.ok),
-                              ),
-                            ],
-                          ),
-                        );
-                      },
+                      onTap: () => context.push('/help'),
                     ),
                     Divider(height: 1, color: Colors.grey.shade100, indent: 60),
                     _buildNavTile(
                       icon: Icons.info,
                       color: Colors.grey,
                       title: provider.aboutApp,
-                      onTap: () {
-                        showDialog(
-                          context: context,
-                          builder: (c) => AlertDialog(
-                            title: Text(provider.aboutApp),
-                            content: const Text(
-                              'Climate Early Warning System (CEWS)\nVersion 2.4.1\n\nDeveloped for CRADI.',
-                            ),
-                            actions: [
-                              TextButton(
-                                onPressed: () => Navigator.pop(c),
-                                child: Text(provider.ok),
-                              ),
-                            ],
-                          ),
-                        );
-                      },
+                      onTap: () => context.push('/about'),
                     ),
                   ],
                 ),

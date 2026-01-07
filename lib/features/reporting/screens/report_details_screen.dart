@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
+import 'package:climate_app/shared/widgets/custom_button.dart';
 
 class ReportDetailsScreen extends StatefulWidget {
   const ReportDetailsScreen({super.key});
@@ -621,36 +622,15 @@ class _ReportDetailsScreenState extends State<ReportDetailsScreen> {
               border: Border(top: BorderSide(color: Colors.grey.shade100)),
             ),
             child: SafeArea(
-              child: ElevatedButton(
+              child: CustomButton(
                 onPressed: () {
                   context.read<ReportingProvider>().setDescription(
                     _descController.text,
                   );
                   context.push('/report/review');
                 },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primaryRed,
-                  foregroundColor: Colors.white,
-                  minimumSize: const Size(double.infinity, 56),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  elevation: 4,
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      'Review Report',
-                      style: GoogleFonts.lexend(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    const Icon(Icons.arrow_forward),
-                  ],
-                ),
+                text: 'Review Report',
+                icon: Icons.arrow_forward,
               ),
             ),
           ),

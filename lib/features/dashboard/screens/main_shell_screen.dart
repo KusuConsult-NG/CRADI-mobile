@@ -44,7 +44,10 @@ class _MainShellScreenState extends State<MainShellScreen> {
       appBar: AppBar(
         title: const Text('CRADI Early Warning'),
         actions: [
-          IconButton(icon: const Icon(Icons.notifications), onPressed: () {}),
+          IconButton(
+            icon: const Icon(Icons.notifications),
+            onPressed: () => context.push('/notifications'),
+          ),
         ],
       ),
       drawer: Drawer(

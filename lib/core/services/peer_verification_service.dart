@@ -1,4 +1,5 @@
 import 'package:climate_app/core/services/appwrite_service.dart';
+import 'package:climate_app/core/services/notification_service.dart';
 import 'package:appwrite/appwrite.dart';
 import 'dart:developer' as developer;
 
@@ -11,6 +12,7 @@ class PeerVerificationService {
   PeerVerificationService._internal();
 
   final AppwriteService _appwrite = AppwriteService();
+  final NotificationService _notificationService = NotificationService();
 
   static const String verificationsCollectionId = 'verifications';
   static const Duration escalationTimeout = Duration(minutes: 30);
@@ -177,7 +179,12 @@ class PeerVerificationService {
       for (final peer in peers.documents) {
         final fcmToken = peer.data['fcmToken'] as String?;
         if (fcmToken != null && fcmToken.isNotEmpty) {
-          // TODO: Send push notification via Firebase Admin SDK or Appwrite Function
+          // Simulation: Visualize the notification that would be sent
+          _notificationService.showLocalNotification(
+            title: 'Verification Request (Simulation)',
+            body: 'Request sent to ${peer.data['name'] ?? 'User'}',
+          );
+
           developer.log(
             'Would send verification request to user ${peer.$id}',
             name: 'PeerVerificationService',
@@ -278,7 +285,12 @@ class PeerVerificationService {
       for (final recipient in recipients) {
         final fcmToken = recipient.data['fcmToken'] as String?;
         if (fcmToken != null && fcmToken.isNotEmpty) {
-          // TODO: Send push notification
+          // Simulation
+          _notificationService.showLocalNotification(
+            title: 'Escalation Notification (Simulation)',
+            body: 'Report escalated to ${recipient.data['name']}',
+          );
+
           developer.log(
             'Would send escalation notification to ${recipient.$id}',
             name: 'PeerVerificationService',
@@ -399,6 +411,11 @@ class PeerVerificationService {
       // - Send push notifications to EWMs
       // - Send SMS to authorities
       // - Send SMS to coordinators
+
+      _notificationService.showLocalNotification(
+        title: 'Alert Triggered (Simulation)',
+        body: 'Alert sent to ${recipients.length} recipients',
+      );
     } on Exception catch (e) {
       developer.log(
         'Error triggering alert: $e',
@@ -430,7 +447,12 @@ class PeerVerificationService {
       final fcmToken = reporter.data['fcmToken'] as String?;
 
       if (fcmToken != null && fcmToken.isNotEmpty) {
-        // TODO: Send push notification
+        // Simulation
+        _notificationService.showLocalNotification(
+          title: 'Report Status Update (Simulation)',
+          body: 'Reporter notified: $status',
+        );
+
         developer.log(
           'Would notify reporter $reporterId: status=$status',
           name: 'PeerVerificationService',

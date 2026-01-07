@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:climate_app/core/theme/app_colors.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:climate_app/shared/widgets/custom_button.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 class AlertsListScreen extends StatefulWidget {
@@ -433,7 +434,7 @@ class _AlertsListScreenState extends State<AlertsListScreen> {
               child: Row(
                 children: [
                   Expanded(
-                    child: OutlinedButton.icon(
+                    child: CustomButton(
                       onPressed: () async {
                         try {
                           await provider.rejectReport(report.id);
@@ -453,18 +454,16 @@ class _AlertsListScreenState extends State<AlertsListScreen> {
                           }
                         }
                       },
-                      icon: const Icon(Icons.close, size: 18),
-                      label: const Text('Cannot confirm'),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.red,
-                        side: const BorderSide(color: Colors.red),
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                      ),
+                      text: 'Cannot confirm',
+                      icon: Icons.close,
+                      type: ButtonType.secondary,
+                      foregroundColor: Colors.red,
+                      borderColor: Colors.red,
                     ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
-                    child: ElevatedButton.icon(
+                    child: CustomButton(
                       onPressed: () async {
                         try {
                           await provider.verifyReport(report.id);
@@ -484,14 +483,10 @@ class _AlertsListScreenState extends State<AlertsListScreen> {
                           }
                         }
                       },
-                      icon: const Icon(Icons.check, size: 18),
-                      label: const Text('Confirm this'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.successGreen,
-                        foregroundColor: Colors.black,
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        elevation: 0,
-                      ),
+                      text: 'Confirm this',
+                      icon: Icons.check,
+                      backgroundColor: AppColors.successGreen,
+                      foregroundColor: Colors.black,
                     ),
                   ),
                 ],

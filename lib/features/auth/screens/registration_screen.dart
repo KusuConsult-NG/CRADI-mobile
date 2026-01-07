@@ -1,5 +1,7 @@
 import 'package:climate_app/core/theme/app_colors.dart';
 import 'package:climate_app/features/auth/providers/auth_provider.dart';
+import 'package:climate_app/shared/widgets/custom_button.dart';
+import 'package:climate_app/shared/widgets/custom_text_field.dart';
 import 'package:climate_app/core/utils/error_handler.dart';
 import 'package:climate_app/core/utils/validators.dart';
 import 'package:flutter/material.dart';
@@ -214,36 +216,38 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                     ),
 
                   // Full Name
-                  _buildLabel('Full Name'),
-                  _buildTextField(
+                  CustomTextField(
+                    label: 'Full Name',
                     controller: _nameController,
                     hint: 'John Doe',
-                    icon: Icons.person_outline,
+                    prefixIcon: const Icon(Icons.person_outline),
                     validator: (v) => Validators.validateRequired(v, 'Name'),
+                    enabled: !_isLoading,
                   ),
                   const SizedBox(height: 16),
 
                   // Email
-                  _buildLabel('Email Address'),
-                  _buildTextField(
+                  CustomTextField(
+                    label: 'Email Address',
                     controller: _emailController,
                     hint: 'name@example.com',
-                    icon: Icons.email_outlined,
-                    inputType: TextInputType.emailAddress,
+                    prefixIcon: const Icon(Icons.email_outlined),
+                    keyboardType: TextInputType.emailAddress,
                     validator: Validators.validateEmail,
+                    enabled: !_isLoading,
                   ),
                   const SizedBox(height: 16),
 
                   // Registration Code
-                  _buildLabel('Registration Code'),
-                  _buildTextField(
+                  CustomTextField(
+                    label: 'Registration Code',
                     controller: _registrationCodeController,
                     hint: 'Auto-generated',
-                    icon: Icons.verified_user,
-                    isCapitalized: true,
+                    prefixIcon: const Icon(Icons.verified_user),
                     validator: (v) => v == null || v.isEmpty
                         ? 'Registration code is required'
                         : null,
+                    enabled: !_isLoading,
                   ),
                   const SizedBox(height: 12),
 
@@ -280,96 +284,36 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                   const SizedBox(height: 16),
 
                   // Password
-                  _buildLabel('Password'),
-                  Container(
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: AppColors.divider.withValues(alpha: 0.5),
-                        width: 2,
+                  CustomTextField(
+                    label: 'Password',
+                    controller: _passwordController,
+                    hint: 'Create a password',
+                    obscureText: !_isPasswordVisible,
+                    prefixIcon: const Icon(Icons.lock_outline),
+                    suffixIcon: IconButton(
+                      icon: Icon(
+                        _isPasswordVisible
+                            ? Icons.visibility
+                            : Icons.visibility_off,
+                        color: AppColors.textSecondary,
                       ),
-                    ),
-                    child: TextFormField(
-                      controller: _passwordController,
-                      enabled: !_isLoading,
-                      obscureText: !_isPasswordVisible,
-                      style: GoogleFonts.lexend(
-                        fontSize: 16,
-                        color: AppColors.textPrimary,
-                      ),
-                      decoration: InputDecoration(
-                        hintText: 'Create a password',
-                        prefixIcon: const Icon(
-                          Icons.lock_outline,
-                          color: AppColors.textSecondary,
-                        ),
-                        suffixIcon: IconButton(
-                          icon: Icon(
-                            _isPasswordVisible
-                                ? Icons.visibility
-                                : Icons.visibility_off,
-                            color: AppColors.textSecondary,
-                          ),
-                          onPressed: () {
-                            setState(() {
-                              _isPasswordVisible = !_isPasswordVisible;
-                            });
-                          },
-                        ),
-                        border: InputBorder.none,
-                        contentPadding: const EdgeInsets.all(16),
-                        hintStyle: GoogleFonts.lexend(
-                          color: AppColors.textSecondary.withValues(alpha: 0.5),
-                        ),
-                      ),
-                      validator: (value) {
-                        return Validators.validatePassword(value);
+                      onPressed: () {
+                        setState(() {
+                          _isPasswordVisible = !_isPasswordVisible;
+                        });
                       },
                     ),
+                    validator: (value) => Validators.validatePassword(value),
+                    enabled: !_isLoading,
                   ),
 
                   const SizedBox(height: 40),
 
                   // Register Button
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      onPressed: _isLoading ? null : _handleRegister,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.primaryRed,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 20),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        elevation: 4,
-                        shadowColor: AppColors.primaryRed.withValues(
-                          alpha: 0.25,
-                        ),
-                        disabledBackgroundColor: AppColors.primaryRed
-                            .withValues(alpha: 0.5),
-                      ),
-                      child: _isLoading
-                          ? const SizedBox(
-                              height: 20,
-                              width: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                valueColor: AlwaysStoppedAnimation<Color>(
-                                  Colors.white,
-                                ),
-                              ),
-                            )
-                          : Text(
-                              'Create Account',
-                              style: GoogleFonts.lexend(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white,
-                              ),
-                            ),
-                    ),
+                  CustomButton(
+                    text: 'Create Account',
+                    onPressed: _isLoading ? null : _handleRegister,
+                    isLoading: _isLoading,
                   ),
 
                   const SizedBox(height: 24),
@@ -382,60 +326,5 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
     );
   }
 
-  Widget _buildLabel(String label) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Text(
-        label,
-        style: GoogleFonts.lexend(
-          fontSize: 16,
-          fontWeight: FontWeight.w600,
-          color: AppColors.textPrimary,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTextField({
-    required TextEditingController controller,
-    required String hint,
-    required IconData icon,
-    bool isCapitalized = false,
-    TextInputType inputType = TextInputType.text,
-    String? Function(String?)? validator,
-  }) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: AppColors.divider.withValues(alpha: 0.5),
-          width: 2,
-        ),
-      ),
-      child: TextFormField(
-        controller: controller,
-        enabled: !_isLoading,
-        keyboardType: inputType,
-        textCapitalization: isCapitalized
-            ? TextCapitalization.characters
-            : TextCapitalization.none,
-        style: GoogleFonts.lexend(
-          fontSize: 16,
-          fontWeight: FontWeight.w500,
-          color: AppColors.textPrimary,
-        ),
-        decoration: InputDecoration(
-          hintText: hint,
-          prefixIcon: Icon(icon, color: AppColors.textSecondary),
-          border: InputBorder.none,
-          contentPadding: const EdgeInsets.all(16),
-          hintStyle: GoogleFonts.lexend(
-            color: AppColors.textSecondary.withValues(alpha: 0.5),
-          ),
-        ),
-        validator: validator,
-      ),
-    );
-  }
+  // Removed _buildLabel and _buildTextField as they are replaced by CustomTextField
 }

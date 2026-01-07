@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:climate_app/features/reporting/providers/reporting_provider.dart';
+import 'package:climate_app/shared/widgets/custom_button.dart';
 
 class HazardSelectionScreen extends StatefulWidget {
   const HazardSelectionScreen({super.key});
@@ -110,7 +111,7 @@ class _HazardSelectionScreenState extends State<HazardSelectionScreen> {
         color: Colors.white, // White background for better button visibility
         padding: const EdgeInsets.all(16),
         child: SafeArea(
-          child: ElevatedButton(
+          child: CustomButton(
             onPressed: _selectedindex != null
                 ? () {
                     final hazardName =
@@ -119,24 +120,7 @@ class _HazardSelectionScreenState extends State<HazardSelectionScreen> {
                     context.push('/report/severity');
                   }
                 : null,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primaryRed,
-              disabledBackgroundColor: Colors.grey.shade300,
-              foregroundColor: Colors.white,
-              disabledForegroundColor: Colors.grey,
-              minimumSize: const Size(double.infinity, 50),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              elevation: 4,
-            ),
-            child: Text(
-              'Continue',
-              style: GoogleFonts.lexend(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
+            text: 'Continue',
           ),
         ),
       ),

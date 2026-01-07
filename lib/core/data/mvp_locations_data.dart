@@ -1050,4 +1050,31 @@ class MVPLocationsData {
       'lastUpdated': '2025-12-30',
     };
   }
+
+  /// Get LGA for a given Ward name
+  static String? getLGAForWard(String wardName) {
+    // Search in all LGAs
+    try {
+      final lga = allLGAs.firstWhere(
+        (lga) => lga.wards.any(
+          (ward) => ward.name.toLowerCase() == wardName.toLowerCase(),
+        ),
+      );
+      return lga.name;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Get Wards for a given LGA by name (safe lookup)
+  static List<String> getWardsForLGASafe(String lgaName) {
+    try {
+      final lga = allLGAs.firstWhere(
+        (lga) => lga.name.toLowerCase() == lgaName.toLowerCase(),
+      );
+      return lga.wards.map((w) => w.name).toList();
+    } catch (_) {
+      return [];
+    }
+  }
 }

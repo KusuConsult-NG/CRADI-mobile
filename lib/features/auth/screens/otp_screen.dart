@@ -1,5 +1,6 @@
 import 'package:climate_app/core/theme/app_colors.dart';
 import 'package:climate_app/features/auth/providers/auth_provider.dart';
+import 'package:climate_app/shared/widgets/custom_button.dart';
 import 'package:climate_app/core/utils/validators.dart';
 import 'package:climate_app/core/utils/error_handler.dart';
 import 'package:flutter/material.dart';
@@ -50,8 +51,20 @@ class _OtpScreenState extends State<OtpScreen> {
   }
 
   void _startExpiryTimer() {
-    // Removed OTP expiry timer - not supported in Appwrite
-    // Appwrite handles token expiry internally
+    // Visual timer for UX (even if backend handles expiry)
+    _otpExpiry = const Duration(minutes: 10); // Standard OTP validity
+    _expiryTimer?.cancel();
+    _expiryTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (_otpExpiry!.inSeconds > 0) {
+        if (mounted) {
+          setState(() {
+            _otpExpiry = _otpExpiry! - const Duration(seconds: 1);
+          });
+        }
+      } else {
+        timer.cancel();
+      }
+    });
   }
 
   void _onChanged(String value, int index) {
@@ -373,12 +386,10 @@ class _OtpScreenState extends State<OtpScreen> {
 
               const SizedBox(height: 16),
 
-              SizedBox(
-                height: 50,
-                child: ElevatedButton(
-                  onPressed: _isLoading ? null : _verifyOtp,
-                  child: const Text('Verify'),
-                ),
+              CustomButton(
+                text: 'Verify',
+                onPressed: _isLoading ? null : _verifyOtp,
+                isLoading: _isLoading,
               ),
             ],
           ),

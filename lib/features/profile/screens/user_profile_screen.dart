@@ -14,6 +14,8 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
+import 'package:climate_app/shared/widgets/custom_button.dart';
+import 'package:climate_app/shared/widgets/custom_text_field.dart';
 
 class UserProfileScreen extends StatefulWidget {
   const UserProfileScreen({super.key});
@@ -172,16 +174,14 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  TextField(
+                  CustomTextField(
                     controller: nameController,
-                    decoration: const InputDecoration(labelText: 'Full Name'),
+                    label: 'Full Name',
                   ),
                   const SizedBox(height: 16),
-                  TextField(
+                  CustomTextField(
                     controller: emailController,
-                    decoration: const InputDecoration(
-                      labelText: 'Email Address',
-                    ),
+                    label: 'Email Address',
                     keyboardType: TextInputType.emailAddress,
                   ),
                   const SizedBox(height: 16),
@@ -199,23 +199,24 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
               ),
             ),
             actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Cancel'),
-              ),
-              ElevatedButton(
-                onPressed: () => Navigator.pop(context, {
-                  'name': nameController.text,
-                  'email': emailController.text,
-                  'state': selectedState,
-                  'lga': selectedLGA,
-                }),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primaryRed,
+              SizedBox(
+                width: 100,
+                child: CustomButton(
+                  text: 'Cancel',
+                  type: ButtonType.ghost,
+                  onPressed: () => Navigator.pop(context),
                 ),
-                child: const Text(
-                  'Save',
-                  style: TextStyle(color: Colors.white),
+              ),
+              SizedBox(
+                width: 100,
+                child: CustomButton(
+                  text: 'Save',
+                  onPressed: () => Navigator.pop(context, {
+                    'name': nameController.text,
+                    'email': emailController.text,
+                    'state': selectedState,
+                    'lga': selectedLGA,
+                  }),
                 ),
               ),
             ],
@@ -626,7 +627,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Column(
                 children: [
-                  ElevatedButton(
+                  CustomButton(
                     onPressed: () {
                       showDialog(
                         context: context,
@@ -646,7 +647,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                               onPressed: () => Navigator.pop(c),
                               child: const Text('Cancel'),
                             ),
-                            ElevatedButton(
+                            CustomButton(
                               onPressed: () {
                                 Navigator.pop(c);
                                 ScaffoldMessenger.of(context).showSnackBar(
@@ -659,50 +660,24 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                                   ),
                                 );
                               },
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.red,
-                              ),
-                              child: const Text('Send Alert'),
+                              text: 'Send Alert',
+                              width: 120, // Optional constraint
                             ),
                           ],
                         ),
                       );
                     },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.red.shade50,
-                      foregroundColor: Colors.red,
-                      elevation: 0,
-                      minimumSize: const Size(double.infinity, 56),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        side: BorderSide(
-                          color: Colors.red.withValues(alpha: 0.3),
-                        ),
-                      ),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Icon(Icons.sos),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Contact Supervisor / SOS',
-                          style: GoogleFonts.lexend(
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
+                    text: 'Contact Supervisor / SOS',
+                    icon: Icons.sos,
+                    // Note: Using primary red for SOS to make it prominent
                   ),
                   const SizedBox(height: 16),
-                  TextButton(
+                  CustomButton(
+                    text: 'Log Out',
+                    type: ButtonType.ghost,
                     onPressed: () {
                       context.go('/login');
                     },
-                    child: Text(
-                      'Log Out',
-                      style: GoogleFonts.lexend(color: Colors.grey),
-                    ),
                   ),
                 ],
               ),

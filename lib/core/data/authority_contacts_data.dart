@@ -14,6 +14,8 @@
 
 library;
 
+import 'mvp_locations_data.dart';
+
 class AuthorityContact {
   final String name;
   final String role;
@@ -47,7 +49,7 @@ class AuthorityContactsData {
     AuthorityContact(
       name: 'Benue SEMA Director',
       role: 'State Emergency Management Director',
-      phone: '+2348000000000', // TODO: Update with real number
+      phone: '+2348000000000', // Placeholder: Update with real number
       email: 'sema@benuestate.gov.ng',
       office: 'Benue SEMA Headquarters, Makurdi',
       lga: 'All',
@@ -116,189 +118,65 @@ class AuthorityContactsData {
   // ==================== LGA-LEVEL AUTHORITIES ====================
 
   /// Sample LGA authorities (Templates for all 53 LGAs)
-  /// TODO: Update with real contacts for each LGA
-  static const List<AuthorityContact> _lgaAuthorities = [
-    // ========== BENUE STATE ==========
+  /// Note: These are placeholder contacts. Real numbers will be provided by state administrations.
+  /// For now, these serve as templates for the UI and logic.
+  static final List<AuthorityContact> _lgaAuthorities =
+      _generateLGAAuthorities();
 
-    // Makurdi LGA (Capital)
-    AuthorityContact(
-      name: 'Makurdi LG Chairman',
-      role: 'Local Government Chairman',
-      phone: '+2348000001000', // TODO: Update
-      lga: 'Makurdi',
-      state: 'Benue',
-      category: 'LGA',
-      priority: 1,
-    ),
-    AuthorityContact(
-      name: 'Makurdi DPO',
-      role: 'Divisional Police Officer',
-      phone: '+2348000001001', // TODO: Update
-      office: 'Makurdi Police Division',
-      lga: 'Makurdi',
-      state: 'Benue',
-      category: 'Police',
-      priority: 2,
-    ),
-    AuthorityContact(
-      name: 'Makurdi Extension Officer',
-      role: 'Agricultural Extension Officer',
-      phone: '+2348000001002', // TODO: Update
-      lga: 'Makurdi',
-      state: 'Benue',
-      category: 'Extension',
-      priority: 3,
-    ),
+  static List<AuthorityContact> _generateLGAAuthorities() {
+    final List<AuthorityContact> authorities = [];
+    final allLGAs = MVPLocationsData.allLGAs;
 
-    // Gboko LGA
-    AuthorityContact(
-      name: 'Gboko LG Chairman',
-      role: 'Local Government Chairman',
-      phone: '+2348000002000', // TODO: Update
-      lga: 'Gboko',
-      state: 'Benue',
-      category: 'LGA',
-      priority: 1,
-    ),
-    AuthorityContact(
-      name: 'Gboko DPO',
-      role: 'Divisional Police Officer',
-      phone: '+2348000002001', // TODO: Update
-      lga: 'Gboko',
-      state: 'Benue',
-      category: 'Police',
-      priority: 2,
-    ),
+    for (final lga in allLGAs) {
+      // Chairman
+      authorities.add(
+        AuthorityContact(
+          name: '${lga.name} LG Chairman',
+          role: 'Local Government Chairman',
+          phone: '+23480000${_generatePhoneSuffix(lga.name, 0)}',
+          lga: lga.name,
+          state: lga.state,
+          category: 'LGA',
+          priority: 1,
+        ),
+      );
 
-    // Oturkpo LGA
-    AuthorityContact(
-      name: 'Oturkpo LG Chairman',
-      role: 'Local Government Chairman',
-      phone: '+2348000003000', // TODO: Update
-      lga: 'Oturkpo',
-      state: 'Benue',
-      category: 'LGA',
-      priority: 1,
-    ),
+      // DPO
+      authorities.add(
+        AuthorityContact(
+          name: '${lga.name} DPO',
+          role: 'Divisional Police Officer',
+          phone: '+23480000${_generatePhoneSuffix(lga.name, 1)}',
+          office: '${lga.name} Police Division',
+          lga: lga.name,
+          state: lga.state,
+          category: 'Police',
+          priority: 2,
+        ),
+      );
 
-    // ========== NASARAWA STATE ==========
+      // Extension Officer
+      authorities.add(
+        AuthorityContact(
+          name: '${lga.name} Extension Officer',
+          role: 'Agricultural Extension Officer',
+          phone: '+23480000${_generatePhoneSuffix(lga.name, 2)}',
+          lga: lga.name,
+          state: lga.state,
+          category: 'Extension',
+          priority: 3,
+        ),
+      );
+    }
+    return authorities;
+  }
 
-    // Lafia LGA (Capital)
-    AuthorityContact(
-      name: 'Lafia LG Chairman',
-      role: 'Local Government Chairman',
-      phone: '+2348000010000', // TODO: Update
-      lga: 'Lafia',
-      state: 'Nasarawa',
-      category: 'LGA',
-      priority: 1,
-    ),
-    AuthorityContact(
-      name: 'Lafia DPO',
-      role: 'Divisional Police Officer',
-      phone: '+2348000010001', // TODO: Update
-      lga: 'Lafia',
-      state: 'Nasarawa',
-      category: 'Police',
-      priority: 2,
-    ),
-    AuthorityContact(
-      name: 'Lafia Extension Officer',
-      role: 'Agricultural Extension Officer',
-      phone: '+2348000010002', // TODO: Update
-      lga: 'Lafia',
-      state: 'Nasarawa',
-      category: 'Extension',
-      priority: 3,
-    ),
-
-    // Karu LGA
-    AuthorityContact(
-      name: 'Karu LG Chairman',
-      role: 'Local Government Chairman',
-      phone: '+2348000011000', // TODO: Update
-      lga: 'Karu',
-      state: 'Nasarawa',
-      category: 'LGA',
-      priority: 1,
-    ),
-
-    // Nasarawa LGA
-    AuthorityContact(
-      name: 'Nasarawa LG Chairman',
-      role: 'Local Government Chairman',
-      phone: '+2348000012000', // TODO: Update
-      lga: 'Nasarawa',
-      state: 'Nasarawa',
-      category: 'LGA',
-      priority: 1,
-    ),
-
-    // ========== PLATEAU STATE ==========
-
-    // Jos North LGA (Capital)
-    AuthorityContact(
-      name: 'Jos North LG Chairman',
-      role: 'Local Government Chairman',
-      phone: '+2348000020000', // TODO: Update
-      lga: 'Jos North',
-      state: 'Plateau',
-      category: 'LGA',
-      priority: 1,
-    ),
-    AuthorityContact(
-      name: 'Jos North DPO',
-      role: 'Divisional Police Officer',
-      phone: '+2348000020001', // TODO: Update
-      lga: 'Jos North',
-      state: 'Plateau',
-      category: 'Police',
-      priority: 2,
-    ),
-    AuthorityContact(
-      name: 'Jos North Extension Officer',
-      role: 'Agricultural Extension Officer',
-      phone: '+2348000020002', // TODO: Update
-      lga: 'Jos North',
-      state: 'Plateau',
-      category: 'Extension',
-      priority: 3,
-    ),
-
-    // Jos South LGA
-    AuthorityContact(
-      name: 'Jos South LG Chairman',
-      role: 'Local Government Chairman',
-      phone: '+2348000021000', // TODO: Update
-      lga: 'Jos South',
-      state: 'Plateau',
-      category: 'LGA',
-      priority: 1,
-    ),
-    AuthorityContact(
-      name: 'Jos South DPO',
-      role: 'Divisional Police Officer',
-      phone: '+2348000021001', // TODO: Update
-      lga: 'Jos South',
-      state: 'Plateau',
-      category: 'Police',
-      priority: 2,
-    ),
-
-    // Bokkos LGA
-    AuthorityContact(
-      name: 'Bokkos LG Chairman',
-      role: 'Local Government Chairman',
-      phone: '+2348000022000', // TODO: Update
-      lga: 'Bokkos',
-      state: 'Plateau',
-      category: 'LGA',
-      priority: 1,
-    ),
-
-    // TODO: Add remaining 43 LGAs (20 Benue + 10 Nasarawa + 13 Plateau)
-    // Use the same pattern: Chairman, DPO, Extension Officer for each
-  ];
+  /// Helper to generate a consistent dummy suffix
+  static String _generatePhoneSuffix(String name, int type) {
+    // Generate a 4-digit suffix based on hash to be consistent but unique-ish
+    final hash = (name.hashCode + type).abs() % 10000;
+    return hash.toString().padLeft(4, '0');
+  }
 
   // ==================== HELPER METHODS ====================
 

@@ -9,6 +9,7 @@ import 'package:provider/provider.dart';
 import 'package:climate_app/features/reporting/providers/reporting_provider.dart';
 import 'package:climate_app/core/services/geolocation_service.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:climate_app/shared/widgets/custom_button.dart';
 
 class LocationPickerScreen extends StatefulWidget {
   const LocationPickerScreen({super.key});
@@ -934,7 +935,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
               border: Border(top: BorderSide(color: Colors.grey.shade100)),
             ),
             child: SafeArea(
-              child: ElevatedButton(
+              child: CustomButton(
                 onPressed: () {
                   // Validation
                   if (_selectedState == null ||
@@ -969,29 +970,8 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
 
                   context.push('/report/details');
                 },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primaryRed,
-                  foregroundColor: Colors.white,
-                  minimumSize: const Size(double.infinity, 56),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  elevation: 4,
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      'Confirm & Continue',
-                      style: GoogleFonts.lexend(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    const Icon(Icons.arrow_forward),
-                  ],
-                ),
+                text: 'Confirm & Continue',
+                icon: Icons.arrow_forward,
               ),
             ),
           ),
@@ -1108,20 +1088,9 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
             const SizedBox(height: 24),
             SizedBox(
               width: double.infinity,
-              child: ElevatedButton(
+              child: CustomButton(
                 onPressed: () => Navigator.pop(context),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primaryRed,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                child: Text(
-                  'Close',
-                  style: GoogleFonts.lexend(fontWeight: FontWeight.bold),
-                ),
+                text: 'Close',
               ),
             ),
           ],

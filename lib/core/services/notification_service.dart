@@ -1,4 +1,5 @@
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:climate_app/features/profile/providers/profile_provider.dart';
 import 'package:climate_app/core/router/app_router.dart';
@@ -23,14 +24,20 @@ class NotificationService {
   bool _initialized = false;
   String? _fcmToken;
 
+  static const String _notificationsBoxName = 'notifications_history';
+  Box<Map>? _notificationsBox;
+
   /// Get current FCM token
   String? get fcmToken => _fcmToken;
 
-  /// Initialize FCM and request permissions
+  /// Initialize FCM, Local Notifications, and Hive
   Future<void> initialize() async {
     if (_initialized) return;
 
     try {
+      // Initialize Hive box for notifications
+      _notificationsBox = await Hive.openBox<Map>(_notificationsBoxName);
+
       // Request permission for iOS
       final NotificationSettings settings = await _fcm.requestPermission(
         alert: true,
@@ -120,14 +127,91 @@ class NotificationService {
       name: 'NotificationService',
     );
 
+    // Save to history
+    await _saveNotification(
+      title: message.notification?.title ?? 'New Alert',
+      body: message.notification?.body ?? '',
+      data: message.data,
+    );
+
     // Show local notification when app is in foreground
     if (message.notification != null) {
-      await _showLocalNotification(
+      await showLocalNotification(
         title: message.notification!.title ?? 'New Alert',
         body: message.notification!.body ?? '',
         payload: message.data.toString(),
       );
     }
+  }
+
+  /// Save notification to local history
+  Future<void> _saveNotification({
+    required String title,
+    required String body,
+    Map<String, dynamic>? data,
+  }) async {
+    if (_notificationsBox == null) return;
+
+    final id = DateTime.now().millisecondsSinceEpoch.toString();
+    final notification = {
+      'id': id,
+      'title': title,
+      'body': body,
+      'data': data ?? {},
+      'timestamp': DateTime.now().toIso8601String(),
+      'isRead': false,
+      'type': data?['type'] ?? 'system',
+    };
+
+    await _notificationsBox!.put(id, notification);
+    developer.log('Notification saved: $id', name: 'NotificationService');
+  }
+
+  /// Get all notifications from history
+  List<Map<String, dynamic>> getNotifications() {
+    if (_notificationsBox == null) return [];
+
+    return _notificationsBox!.values
+        .map((e) => Map<String, dynamic>.from(e))
+        .toList()
+      ..sort((a, b) => b['timestamp'].compareTo(a['timestamp']));
+  }
+
+  /// Mark a notification as read
+  Future<void> markAsRead(String id) async {
+    if (_notificationsBox == null) return;
+
+    final notification = _notificationsBox!.get(id);
+    if (notification != null) {
+      final updated = Map<String, dynamic>.from(notification)
+        ..['isRead'] = true;
+      await _notificationsBox!.put(id, updated);
+      developer.log(
+        'Notification marked as read: $id',
+        name: 'NotificationService',
+      );
+    }
+  }
+
+  /// Mark all notifications as read
+  Future<void> markAllAsRead() async {
+    if (_notificationsBox == null) return;
+
+    final keys = _notificationsBox!.keys;
+    for (var key in keys) {
+      final notification = _notificationsBox!.get(key);
+      if (notification != null && notification['isRead'] == false) {
+        final updated = Map<String, dynamic>.from(notification)
+          ..['isRead'] = true;
+        await _notificationsBox!.put(key, updated);
+      }
+    }
+  }
+
+  /// Clear all notifications
+  Future<void> clearAll() async {
+    if (_notificationsBox == null) return;
+    await _notificationsBox!.clear();
   }
 
   /// Handle notification tap when app is in background
@@ -153,7 +237,7 @@ class NotificationService {
   }
 
   /// Show local notification
-  Future<void> _showLocalNotification({
+  Future<void> showLocalNotification({
     required String title,
     required String body,
     String? payload,

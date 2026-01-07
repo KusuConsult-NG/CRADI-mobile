@@ -37,6 +37,14 @@ class OSMLocationPicker extends StatelessWidget {
           urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
           userAgentPackageName: 'com.kusuconsult.cradimobile',
         ),
+        RichAttributionWidget(
+          attributions: [
+            TextSourceAttribution(
+              'OpenStreetMap contributors',
+              onTap: () {}, // Can add link launcher here if needed
+            ),
+          ],
+        ),
         MarkerLayer(
           markers: [
             Marker(

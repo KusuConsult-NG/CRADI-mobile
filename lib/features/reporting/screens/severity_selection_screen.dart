@@ -3,6 +3,7 @@ import 'package:climate_app/features/reporting/providers/reporting_provider.dart
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+import 'package:climate_app/shared/widgets/custom_button.dart';
 
 class SeveritySelectionScreen extends StatefulWidget {
   const SeveritySelectionScreen({super.key});
@@ -102,7 +103,7 @@ class _SeveritySelectionScreenState extends State<SeveritySelectionScreen> {
             SizedBox(
               width: double.infinity,
               height: 50,
-              child: ElevatedButton(
+              child: CustomButton(
                 onPressed: () {
                   context.read<ReportingProvider>().setSeverity(
                     _currentLevel.name,
@@ -112,7 +113,7 @@ class _SeveritySelectionScreenState extends State<SeveritySelectionScreen> {
                   // For now, let's just create a placeholder valid flow
                   context.push('/report/location');
                 },
-                child: const Text('Next: Location'),
+                text: 'Next: Location',
               ),
             ),
           ],

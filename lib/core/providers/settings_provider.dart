@@ -19,6 +19,7 @@ class SettingsProvider extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     _wifiOnly = prefs.getBool('wifi_only') ?? false;
     _lowData = prefs.getBool('low_data') ?? false;
+    _hasSeenOnboarding = prefs.getBool('onboarding_seen') ?? false;
     _isInitialized = true;
     notifyListeners();
   }
@@ -30,10 +31,21 @@ class SettingsProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  bool _hasSeenOnboarding = false;
+
+  bool get hasSeenOnboarding => _hasSeenOnboarding;
+
   Future<void> setLowData(bool value) async {
     _lowData = value;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('low_data', value);
+    notifyListeners();
+  }
+
+  Future<void> setOnboardingSeen(bool value) async {
+    _hasSeenOnboarding = value;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('onboarding_seen', value);
     notifyListeners();
   }
 }
