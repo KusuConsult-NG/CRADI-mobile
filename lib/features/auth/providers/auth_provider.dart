@@ -32,6 +32,10 @@ class AuthProvider extends ChangeNotifier {
   bool _isLoading = false;
   models.User? _currentUser;
 
+  // Test account for Google Play Store reviewers
+  static const String _testAccountEmail = 'reviewer@craditest.com';
+  static const String _testAccountPassword = 'ReviewTest2026!';
+
   // Services
   final SecureStorageService _storage = SecureStorageService();
   final SessionManager _sessionManager = SessionManager();
@@ -117,6 +121,18 @@ class AuthProvider extends ChangeNotifier {
     try {
       _isLoading = true;
       notifyListeners();
+
+      // Bypass OTP for test account (Google Play reviewers)
+      if (email.toLowerCase() == _testAccountEmail.toLowerCase()) {
+        developer.log(
+          'Test account detected - bypassing OTP email',
+          name: 'AuthProvider',
+        );
+        _emailToken = 'test-account-token'; // Dummy token for flow continuity
+        _isLoading = false;
+        notifyListeners();
+        return true;
+      }
 
       final token = await _appwrite.createEmailToken(email: email);
       _emailToken = token.userId;
@@ -566,6 +582,54 @@ class AuthProvider extends ChangeNotifier {
         throw AuthException('No email verification in progress');
       }
 
+      // Bypass OTP verification for test account - use direct login
+      if (_emailToken == 'test-account-token') {
+        developer.log(
+          'Test account OTP bypass - using direct email/password login',
+          name: 'AuthProvider',
+        );
+
+        // Login with email and password instead of OTP
+        await _appwrite.createEmailPasswordSession(
+          email: _testAccountEmail,
+          password: _testAccountPassword,
+        );
+
+        final user = await _appwrite.getCurrentUser();
+        if (user == null) {
+          throw AuthException('Test account login failed');
+        }
+
+        _currentUser = user;
+
+        // Get user document
+        try {
+          final userDoc = await _appwrite.getDocument(
+            collectionId: AppwriteService.usersCollectionId,
+            documentId: user.$id,
+          );
+
+          final roleStr = userDoc.data['role'] as String?;
+          _userRole = _parseUserRole(roleStr) ?? UserRole.ewm;
+        } on Exception {
+          _userRole = UserRole.ewm;
+          await _createUserDocument(
+            userId: user.$id,
+            email: user.email,
+            role: _userRole!,
+            name: user.name,
+          );
+        }
+
+        await _startUserSession(user, _userRole!);
+
+        _isAuthenticated = true;
+        _isLoading = false;
+        notifyListeners();
+        return true;
+      }
+
+      // Normal OTP verification flow
       await _appwrite.verifyEmailOTP(userId: _emailToken!, secret: otp);
 
       final user = await _appwrite.getCurrentUser();
