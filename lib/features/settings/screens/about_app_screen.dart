@@ -40,7 +40,7 @@ class AboutAppScreen extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Image.asset(
-                'assets/images/cradi_logo.jpg',
+                'assets/images/ewer_logo.jpg',
                 width: 120,
                 height: 120,
                 fit: BoxFit.contain,
@@ -52,7 +52,7 @@ class AboutAppScreen extends StatelessWidget {
               ),
               const SizedBox(height: 24),
               Text(
-                'CRADI Mobile',
+                'EWER Mobile',
                 style: GoogleFonts.outfit(
                   fontSize: 24,
                   fontWeight: FontWeight.bold,
@@ -88,7 +88,7 @@ class AboutAppScreen extends StatelessWidget {
               ),
               const SizedBox(height: 48),
               Text(
-                '© 2024 CRADI. All rights reserved.',
+                '© 2024 EWER. All rights reserved.',
                 style: GoogleFonts.lexend(
                   fontSize: 12,
                   color: Colors.grey.shade500,

@@ -1061,7 +1061,7 @@ class MVPLocationsData {
         ),
       );
       return lga.name;
-    } catch (_) {
+    } on StateError catch (_) {
       return null;
     }
   }
@@ -1073,7 +1073,7 @@ class MVPLocationsData {
         (lga) => lga.name.toLowerCase() == lgaName.toLowerCase(),
       );
       return lga.wards.map((w) => w.name).toList();
-    } catch (_) {
+    } on StateError catch (_) {
       return [];
     }
   }

@@ -152,6 +152,11 @@ class ReportingProvider extends ChangeNotifier {
       if (_lga == null) {
         throw Exception('LGA is missing');
       }
+      if (_latitude == null || _longitude == null) {
+        throw Exception(
+          'GPS coordinates are missing. Please refresh location or enable GPS.',
+        );
+      }
 
       // Check connectivity FIRST (synchronous, no async gap)
       final hasInternet = context.read<ConnectivityProvider>().isOnline;
@@ -209,8 +214,8 @@ class ReportingProvider extends ChangeNotifier {
         'userId': user.$id,
         'hazardType': _hazardType,
         'severity': _severity,
-        'latitude': _latitude ?? 0.0,
-        'longitude': _longitude ?? 0.0,
+        'latitude': _latitude!,
+        'longitude': _longitude!,
         'locationDetails': _locationDetails,
         'ward': _ward,
         'lga': _lga,

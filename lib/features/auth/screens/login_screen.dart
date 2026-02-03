@@ -20,7 +20,6 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
-  final _registrationCodeController = TextEditingController();
   final _passwordController = TextEditingController();
 
   final _rateLimiter = RateLimiter();
@@ -38,7 +37,6 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   void dispose() {
     _emailController.dispose();
-    _registrationCodeController.dispose();
     _passwordController.dispose();
     super.dispose();
   }
@@ -75,14 +73,12 @@ class _LoginScreenState extends State<LoginScreen> {
         }
 
         final email = _emailController.text.trim();
-        final registrationCode = _registrationCodeController.text.trim();
         final password = _passwordController.text;
 
-        // Direct email/password login (no OTP)
+        // Direct email/password login
         final success = await authProvider.signInWithEmail(
           email: email,
           password: password,
-          registrationCode: registrationCode,
         );
 
         if (!mounted) return;
@@ -134,15 +130,53 @@ class _LoginScreenState extends State<LoginScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   const SizedBox(height: 48),
-                  // Logo
-                  Image.asset(
-                    'assets/images/cradi_logo.jpg',
-                    height: 100,
-                    fit: BoxFit.contain,
-                    errorBuilder: (context, error, stackTrace) => const Icon(
-                      Icons.shield,
-                      size: 80,
-                      color: AppColors.primaryRed,
+                  // EWER Logo
+                  Center(
+                    child: Container(
+                      width: 120,
+                      height: 120,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.1),
+                            blurRadius: 10,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: ClipOval(
+                        child: Image.asset(
+                          'assets/images/ewer_logo.jpg',
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) =>
+                              Container(
+                                decoration: const BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  gradient: LinearGradient(
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
+                                    colors: [
+                                      Color(0xFFE53935),
+                                      Color(0xFFB71C1C),
+                                      Color(0xFF5D5D5D),
+                                    ],
+                                  ),
+                                ),
+                                child: const Center(
+                                  child: Text(
+                                    'EWER',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 32,
+                                      fontWeight: FontWeight.bold,
+                                      letterSpacing: 2,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                        ),
+                      ),
                     ),
                   ),
                   const SizedBox(height: 32),
@@ -235,19 +269,6 @@ class _LoginScreenState extends State<LoginScreen> {
                           validator: Validators.validateEmail,
                           enabled: !_isLoading,
                         ),
-                        const SizedBox(height: 16),
-                        CustomTextField(
-                          label: 'Registration Code',
-                          controller: _registrationCodeController,
-                          prefixIcon: const Icon(Icons.verified_user),
-                          hint: 'CRD######',
-                          validator: (value) => Validators.validateRequired(
-                            value,
-                            'Registration Code',
-                          ),
-                          enabled: !_isLoading,
-                        ),
-                        const SizedBox(height: 16),
                         CustomTextField(
                           label: 'Password',
                           controller: _passwordController,

@@ -1,0 +1,11 @@
+{
+    "name": "ewer-mobile-scripts",
+    "version": "1.0.0",
+    "description": "Database migration scripts for EWER Mobile",
+    "scripts": {
+        "migrate": "node add_database_attributes.js"
+    },
+    "dependencies": {
+        "node-appwrite": "^14.0.0"
+    }
+}

@@ -78,7 +78,7 @@ class BiometricService {
   /// Authenticate for login
   Future<bool> authenticateForLogin() async {
     return await authenticate(
-      reason: 'Authenticate to login to CRADI Mobile',
+      reason: 'Authenticate to login to EWER Mobile',
       useErrorDialogs: true,
       stickyAuth: true,
     );

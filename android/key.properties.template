@@ -1,0 +1,14 @@
+# Android Keystore Properties
+# IMPORTANT: Copy this file to key.properties and fill in your actual values
+# NEVER commit key.properties to version control!
+
+storePassword=<your-keystore-password>
+keyPassword=<your-key-password>
+keyAlias=cradi
+storeFile=<path-to-your-keystore-file>
+
+# Example:
+# storePassword=MySecurePassword123!
+# keyPassword=MyKeyPassword456!
+# keyAlias=cradi
+# storeFile=/Users/yourusername/cradi-release-key.jks

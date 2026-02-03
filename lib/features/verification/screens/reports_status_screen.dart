@@ -362,92 +362,105 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
                 ),
               ],
               if (report.status == ReportStatus.acknowledged) ...[
-                Expanded(
-                  flex: 3,
-                  child: ElevatedButton(
-                    onPressed: () async {
-                      final scaffoldMessenger = ScaffoldMessenger.of(context);
-                      try {
-                        await provider.resolveReport(report.id);
-                        if (context.mounted) {
-                          scaffoldMessenger.showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                'Report marked as Resolved',
-                                style: GoogleFonts.lexend(),
-                              ),
-                              backgroundColor: AppColors.successGreen,
+                ElevatedButton(
+                  onPressed: () async {
+                    final scaffoldMessenger = ScaffoldMessenger.of(context);
+                    try {
+                      await provider.resolveReport(report.id);
+                      if (context.mounted) {
+                        scaffoldMessenger.showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              'Report marked as Resolved',
+                              style: GoogleFonts.lexend(),
                             ),
-                          );
-                        }
-                      } on Exception catch (e) {
-                        if (context.mounted) {
-                          scaffoldMessenger.showSnackBar(
-                            SnackBar(
-                              content: Text('Error: $e'),
-                              backgroundColor: Colors.red,
-                            ),
-                          );
-                        }
+                            backgroundColor: AppColors.successGreen,
+                          ),
+                        );
                       }
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blue,
-                      foregroundColor: Colors.white,
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
+                    } on Exception catch (e) {
+                      if (context.mounted) {
+                        scaffoldMessenger.showSnackBar(
+                          SnackBar(
+                            content: Text('Error: $e'),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                      }
+                    }
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blue,
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 10,
                     ),
-                    child: const Text('Mark Resolved'),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  child: Text(
+                    'Mark Resolved',
+                    style: GoogleFonts.lexend(fontSize: 13),
                   ),
                 ),
                 const SizedBox(width: 8),
-                Expanded(
-                  flex: 2,
-                  child: OutlinedButton(
-                    onPressed: () {
-                      provider.moveBackToPending(report.id);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(
-                            'Report moved back to Pending',
-                            style: GoogleFonts.lexend(),
-                          ),
+                OutlinedButton(
+                  onPressed: () {
+                    provider.moveBackToPending(report.id);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          'Report moved back to Pending',
+                          style: GoogleFonts.lexend(),
                         ),
-                      );
-                    },
-                    style: OutlinedButton.styleFrom(
-                      side: BorderSide(color: Colors.grey.shade300),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
                       ),
+                    );
+                  },
+                  style: OutlinedButton.styleFrom(
+                    side: BorderSide(color: Colors.grey.shade300),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 10,
                     ),
-                    child: const Text('Reopen'),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  child: Text(
+                    'Reopen',
+                    style: GoogleFonts.lexend(fontSize: 13),
                   ),
                 ),
               ],
               if (report.status == ReportStatus.resolved) ...[
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: () {
-                      provider.moveBackToPending(report.id);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(
-                            'Report reopened and moved to Pending',
-                            style: GoogleFonts.lexend(),
-                          ),
+                OutlinedButton(
+                  onPressed: () {
+                    provider.moveBackToPending(report.id);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          'Report reopened and moved to Pending',
+                          style: GoogleFonts.lexend(),
                         ),
-                      );
-                    },
-                    style: OutlinedButton.styleFrom(
-                      side: BorderSide(color: Colors.grey.shade300),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
                       ),
+                    );
+                  },
+                  style: OutlinedButton.styleFrom(
+                    side: BorderSide(color: Colors.grey.shade300),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 10,
                     ),
-                    child: const Text('Reopen'),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  child: Text(
+                    'Reopen',
+                    style: GoogleFonts.lexend(fontSize: 13),
                   ),
                 ),
               ],

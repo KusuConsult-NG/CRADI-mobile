@@ -8,8 +8,8 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import 'package:fluttertoast/fluttertoast.dart';
 import 'dart:developer' as developer;
-import 'package:climate_app/core/services/registration_code_service.dart';
 
 class RegistrationScreen extends StatefulWidget {
   const RegistrationScreen({super.key});
@@ -20,38 +20,41 @@ class RegistrationScreen extends StatefulWidget {
 
 class _RegistrationScreenState extends State<RegistrationScreen> {
   final TextEditingController _nameController = TextEditingController();
+  final TextEditingController _addressController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
-  final TextEditingController _registrationCodeController =
+  final TextEditingController _confirmPasswordController =
       TextEditingController();
 
   final _formKey = GlobalKey<FormState>();
   bool _isLoading = false;
   bool _isPasswordVisible = false;
-  String? _errorMessage;
+  bool _isConfirmPasswordVisible = false;
 
   @override
   void initState() {
     super.initState();
-    _loadRegistrationCode();
-  }
-
-  /// Load or generate registration code on app first open
-  Future<void> _loadRegistrationCode() async {
-    final regCodeService = RegistrationCodeService();
-    final code = await regCodeService.getRegistrationCode();
-    setState(() {
-      _registrationCodeController.text = code;
-    });
   }
 
   @override
   void dispose() {
     _nameController.dispose();
+    _addressController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
-    _registrationCodeController.dispose();
+    _confirmPasswordController.dispose();
     super.dispose();
+  }
+
+  void _showToast(String message, {bool isError = false}) {
+    Fluttertoast.showToast(
+      msg: message,
+      toastLength: Toast.LENGTH_LONG,
+      gravity: ToastGravity.BOTTOM,
+      backgroundColor: isError ? Colors.red.shade700 : Colors.green.shade700,
+      textColor: Colors.white,
+      fontSize: 16.0,
+    );
   }
 
   Future<void> _handleRegister() async {
@@ -59,15 +62,13 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
       return;
     }
 
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-    });
+    setState(() => _isLoading = true);
 
     try {
       final authProvider = context.read<AuthProvider>();
 
       final name = _nameController.text.trim();
+      final address = _addressController.text.trim();
       final email = _emailController.text.trim();
       final password = _passwordController.text;
 
@@ -75,39 +76,40 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
         'Registration attempt: email=$email',
         name: 'RegistrationScreen',
       );
+      print(
+        '🔵 REGISTRATION: Name being sent: "$name" (isEmpty: ${name.isEmpty})',
+      );
 
       final success = await authProvider.signUpWithEmail(
         email: email,
         password: password,
         name: name,
-        registrationCode: _registrationCodeController.text.trim(),
+        address: address,
       );
 
       if (mounted) {
         setState(() => _isLoading = false);
 
         if (success) {
-          // Navigate to dashboard directly
-          context.go('/dashboard');
+          _showToast('Account created successfully!');
+          // Small delay to ensure loading overlay is dismissed before navigation
+          await Future.delayed(const Duration(milliseconds: 500));
+          if (mounted) {
+            context.go('/dashboard');
+          }
         } else {
-          setState(
-            () => _errorMessage = 'Registration failed. Please try again.',
-          );
+          _showToast('Registration failed. Please try again.', isError: true);
         }
       }
     } on AuthException catch (e) {
       if (mounted) {
-        setState(() {
-          _isLoading = false;
-          _errorMessage = e.userMessage;
-        });
+        setState(() => _isLoading = false);
+        _showToast(e.userMessage, isError: true);
       }
     } on Exception catch (e) {
       if (mounted) {
-        setState(() {
-          _isLoading = false;
-          _errorMessage = ErrorHandler.getUserMessage(e);
-        });
+        setState(() => _isLoading = false);
+        _showToast(ErrorHandler.getUserMessage(e), isError: true);
       }
       ErrorHandler.logError(e, context: 'RegistrationScreen._handleRegister');
     }
@@ -118,210 +120,221 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
     return Scaffold(
       backgroundColor: AppColors.background,
       resizeToAvoidBottomInset: true,
-      body: SafeArea(
-        child: SingleChildScrollView(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-            child: Form(
-              key: _formKey,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  // Header
-                  Row(
+      body: Stack(
+        children: [
+          SafeArea(
+            child: SingleChildScrollView(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 16,
+                ),
+                child: Form(
+                  key: _formKey,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      GestureDetector(
-                        onTap: () => Navigator.pop(context),
-                        child: Container(
-                          width: 40,
-                          height: 40,
-                          decoration: const BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: Colors.transparent,
-                          ),
-                          child: const Icon(
-                            Icons.arrow_back,
-                            color: AppColors.textPrimary,
-                          ),
-                        ),
-                      ),
-                      Expanded(
-                        child: Text(
-                          'Create Account',
-                          textAlign: TextAlign.center,
-                          style: GoogleFonts.lexend(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.textPrimary,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 40),
-                    ],
-                  ),
-
-                  const SizedBox(height: 32),
-
-                  // Title
-                  Text(
-                    'Join the Network',
-                    style: GoogleFonts.lexend(
-                      fontSize: 30,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.textPrimary,
-                      height: 1.1,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    'Fill in your details to register as a monitor.',
-                    style: GoogleFonts.lexend(
-                      fontSize: 16,
-                      color: AppColors.textSecondary,
-                      height: 1.5,
-                    ),
-                  ),
-
-                  const SizedBox(height: 32),
-
-                  // Error Message
-                  if (_errorMessage != null)
-                    Container(
-                      margin: const EdgeInsets.only(bottom: 20),
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Colors.red.shade50,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.red.shade200),
-                      ),
-                      child: Row(
+                      // Header
+                      Row(
                         children: [
-                          Icon(
-                            Icons.error_outline,
-                            color: Colors.red.shade700,
-                            size: 20,
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              _errorMessage!,
-                              style: TextStyle(
-                                color: Colors.red.shade700,
-                                fontSize: 14,
+                          GestureDetector(
+                            onTap: () => context.go('/login'),
+                            child: Container(
+                              width: 40,
+                              height: 40,
+                              decoration: const BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: Colors.transparent,
+                              ),
+                              child: const Icon(
+                                Icons.arrow_back,
+                                color: AppColors.textPrimary,
                               ),
                             ),
                           ),
-                        ],
-                      ),
-                    ),
-
-                  // Full Name
-                  CustomTextField(
-                    label: 'Full Name',
-                    controller: _nameController,
-                    hint: 'John Doe',
-                    prefixIcon: const Icon(Icons.person_outline),
-                    validator: (v) => Validators.validateRequired(v, 'Name'),
-                    enabled: !_isLoading,
-                  ),
-                  const SizedBox(height: 16),
-
-                  // Email
-                  CustomTextField(
-                    label: 'Email Address',
-                    controller: _emailController,
-                    hint: 'name@example.com',
-                    prefixIcon: const Icon(Icons.email_outlined),
-                    keyboardType: TextInputType.emailAddress,
-                    validator: Validators.validateEmail,
-                    enabled: !_isLoading,
-                  ),
-                  const SizedBox(height: 16),
-
-                  // Registration Code
-                  CustomTextField(
-                    label: 'Registration Code',
-                    controller: _registrationCodeController,
-                    hint: 'Auto-generated',
-                    prefixIcon: const Icon(Icons.verified_user),
-                    validator: (v) => v == null || v.isEmpty
-                        ? 'Registration code is required'
-                        : null,
-                    enabled: !_isLoading,
-                  ),
-                  const SizedBox(height: 12),
-
-                  // Important Notice
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.orange.shade50,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.orange.shade200),
-                    ),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Icon(
-                          Icons.info_outline,
-                          color: Colors.orange.shade700,
-                          size: 20,
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            'Important: Save this registration code! You will need it to login.',
-                            style: GoogleFonts.lexend(
-                              color: Colors.orange.shade700,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w500,
+                          Expanded(
+                            child: Text(
+                              'Create Account',
+                              textAlign: TextAlign.center,
+                              style: GoogleFonts.lexend(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.textPrimary,
+                              ),
                             ),
                           ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-
-                  // Password
-                  CustomTextField(
-                    label: 'Password',
-                    controller: _passwordController,
-                    hint: 'Create a password',
-                    obscureText: !_isPasswordVisible,
-                    prefixIcon: const Icon(Icons.lock_outline),
-                    suffixIcon: IconButton(
-                      icon: Icon(
-                        _isPasswordVisible
-                            ? Icons.visibility
-                            : Icons.visibility_off,
-                        color: AppColors.textSecondary,
+                          const SizedBox(width: 40),
+                        ],
                       ),
-                      onPressed: () {
-                        setState(() {
-                          _isPasswordVisible = !_isPasswordVisible;
-                        });
-                      },
-                    ),
-                    validator: (value) => Validators.validatePassword(value),
-                    enabled: !_isLoading,
+
+                      const SizedBox(height: 32),
+
+                      // Title
+                      Text(
+                        'Join the Network',
+                        style: GoogleFonts.lexend(
+                          fontSize: 30,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.textPrimary,
+                          height: 1.1,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        'Fill in your details to register as a monitor.',
+                        style: GoogleFonts.lexend(
+                          fontSize: 16,
+                          color: AppColors.textSecondary,
+                          height: 1.5,
+                        ),
+                      ),
+
+                      const SizedBox(height: 32),
+
+                      // Full Name
+                      CustomTextField(
+                        label: 'Full Name',
+                        controller: _nameController,
+                        hint: 'John Doe',
+                        prefixIcon: const Icon(Icons.person_outline),
+                        validator: (v) =>
+                            Validators.validateRequired(v, 'Name'),
+                        enabled: !_isLoading,
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Address
+                      CustomTextField(
+                        label: 'Address',
+                        controller: _addressController,
+                        hint: 'Your full address',
+                        prefixIcon: const Icon(Icons.location_on_outlined),
+                        validator: (v) =>
+                            Validators.validateRequired(v, 'Address'),
+                        enabled: !_isLoading,
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Email
+                      CustomTextField(
+                        label: 'Email Address',
+                        controller: _emailController,
+                        hint: 'name@example.com',
+                        prefixIcon: const Icon(Icons.email_outlined),
+                        keyboardType: TextInputType.emailAddress,
+                        validator: Validators.validateEmail,
+                        enabled: !_isLoading,
+                      ),
+
+                      // Password
+                      CustomTextField(
+                        label: 'Password',
+                        controller: _passwordController,
+                        hint: 'Create a password',
+                        obscureText: !_isPasswordVisible,
+                        prefixIcon: const Icon(Icons.lock_outline),
+                        suffixIcon: IconButton(
+                          icon: Icon(
+                            _isPasswordVisible
+                                ? Icons.visibility
+                                : Icons.visibility_off,
+                            color: AppColors.textSecondary,
+                          ),
+                          onPressed: () {
+                            setState(() {
+                              _isPasswordVisible = !_isPasswordVisible;
+                            });
+                          },
+                        ),
+                        validator: (value) =>
+                            Validators.validatePassword(value),
+                        enabled: !_isLoading,
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Confirm Password
+                      CustomTextField(
+                        label: 'Confirm Password',
+                        controller: _confirmPasswordController,
+                        hint: 'Re-enter your password',
+                        obscureText: !_isConfirmPasswordVisible,
+                        prefixIcon: const Icon(Icons.lock_outline),
+                        suffixIcon: IconButton(
+                          icon: Icon(
+                            _isConfirmPasswordVisible
+                                ? Icons.visibility
+                                : Icons.visibility_off,
+                            color: AppColors.textSecondary,
+                          ),
+                          onPressed: () {
+                            setState(() {
+                              _isConfirmPasswordVisible =
+                                  !_isConfirmPasswordVisible;
+                            });
+                          },
+                        ),
+                        validator: (value) {
+                          if (value == null || value.isEmpty) {
+                            return 'Please confirm your password';
+                          }
+                          if (value != _passwordController.text) {
+                            return 'Passwords do not match';
+                          }
+                          return null;
+                        },
+                        enabled: !_isLoading,
+                      ),
+
+                      const SizedBox(height: 40),
+
+                      // Register Button
+                      CustomButton(
+                        text: 'Create Account',
+                        onPressed: _isLoading ? null : _handleRegister,
+                        isLoading: _isLoading,
+                      ),
+
+                      const SizedBox(height: 24),
+                    ],
                   ),
-
-                  const SizedBox(height: 40),
-
-                  // Register Button
-                  CustomButton(
-                    text: 'Create Account',
-                    onPressed: _isLoading ? null : _handleRegister,
-                    isLoading: _isLoading,
-                  ),
-
-                  const SizedBox(height: 24),
-                ],
+                ),
               ),
             ),
           ),
-        ),
+          // Loading Overlay
+          if (_isLoading)
+            Container(
+              color: Colors.black.withOpacity(0.5),
+              child: Center(
+                child: Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const CircularProgressIndicator(
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          AppColors.gradientStart,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'Creating account...',
+                        style: GoogleFonts.lexend(
+                          fontSize: 16,
+                          color: AppColors.textPrimary,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }

@@ -132,25 +132,31 @@ class _ChatViewState extends State<_ChatView> {
         primaryColor: AppColors.primaryRed,
         backgroundColor: AppColors.background,
         inputBackgroundColor: Colors.white,
-        inputTextColor: Colors.black, // Fix white text color issue
-        inputBorderRadius: const BorderRadius.all(Radius.circular(12)),
-        inputPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        inputMargin: const EdgeInsets.all(16),
+        inputTextColor: Colors.black,
+        inputBorderRadius: const BorderRadius.all(Radius.circular(16)),
+        inputPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+        inputMargin: const EdgeInsets.all(20),
         inputTextStyle: const TextStyle(
-          fontSize: 16,
-          color: Colors.black, // Ensure text is black, not white
+          fontSize: 17,
+          color: Colors.black,
           height: 1.5,
+          fontWeight: FontWeight.w400,
         ),
-        // Make input box larger
+        // Make input box larger with premium styling
         inputContainerDecoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.grey.shade300),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.grey.shade300, width: 1.5),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.05),
-              blurRadius: 4,
-              offset: const Offset(0, 2),
+              color: Colors.black.withValues(alpha: 0.08),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
+            ),
+            BoxShadow(
+              color: AppColors.primaryRed.withValues(alpha: 0.05),
+              blurRadius: 20,
+              offset: const Offset(0, 8),
             ),
           ],
         ),

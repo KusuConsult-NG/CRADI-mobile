@@ -97,53 +97,6 @@ class AppwriteService {
     }
   }
 
-  /// Create email token (Email OTP)
-  Future<models.Token> createEmailToken({required String email}) async {
-    try {
-      return await _account.createEmailToken(userId: ID.unique(), email: email);
-    } catch (e) {
-      developer.log('Email token error: $e', name: 'AppwriteService');
-      rethrow;
-    }
-  }
-
-  /// Create email session (Verify Email OTP)
-  Future<models.Session> verifyEmailOTP({
-    required String userId,
-    required String secret,
-  }) async {
-    try {
-      return await _account.createSession(userId: userId, secret: secret);
-    } catch (e) {
-      developer.log('Email session error: $e', name: 'AppwriteService');
-      rethrow;
-    }
-  }
-
-  /// Create phone session (SMS OTP)
-  Future<models.Token> createPhoneToken({required String phone}) async {
-    try {
-      return await _account.createPhoneToken(userId: ID.unique(), phone: phone);
-    } catch (e) {
-      developer.log('Phone token error: $e', name: 'AppwriteService');
-      rethrow;
-    }
-  }
-
-  /// Verify phone with OTP
-  Future<models.Session> createPhoneSession({
-    required String userId,
-    required String secret,
-  }) async {
-    try {
-      // ignore: deprecated_member_use
-      return await _account.updatePhoneSession(userId: userId, secret: secret);
-    } on Exception catch (e) {
-      developer.log('Phone session error: $e', name: 'AppwriteService');
-      rethrow;
-    }
-  }
-
   /// Get current user
   Future<models.User?> getCurrentUser() async {
     try {

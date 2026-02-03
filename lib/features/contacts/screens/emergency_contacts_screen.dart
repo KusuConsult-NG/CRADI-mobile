@@ -268,66 +268,77 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
 
           // Contacts List
           Expanded(
-            child: StreamBuilder<List<EmergencyContact>>(
-              stream: _selectedCategory == 'all'
-                  ? provider.getContactsStream()
-                  : provider.getContactsByCategory(_selectedCategory),
-              builder: (context, snapshot) {
-                if (snapshot.hasError) {
-                  return Center(child: Text('Error: ${snapshot.error}'));
-                }
-
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-
-                var contacts = snapshot.data ?? [];
-
-                // Apply search filter
-                if (_searchController.text.isNotEmpty) {
-                  final query = _searchController.text.toLowerCase();
-                  contacts = contacts
-                      .where(
-                        (c) =>
-                            c.name.toLowerCase().contains(query) ||
-                            c.role.toLowerCase().contains(query) ||
-                            (c.lga?.toLowerCase().contains(query) ?? false),
-                      )
-                      .toList();
-                }
-
-                if (contacts.isEmpty) {
-                  return Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.contacts_outlined,
-                          size: 64,
-                          color: Colors.grey.shade300,
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          'No contacts found',
-                          style: GoogleFonts.lexend(
-                            color: AppColors.textSecondary,
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                }
-
-                return ListView.separated(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 100),
-                  itemCount: contacts.length,
-                  separatorBuilder: (c, i) => const SizedBox(height: 12),
-                  itemBuilder: (context, index) {
-                    final contact = contacts[index];
-                    return _buildContactCard(contact, provider);
-                  },
-                );
+            child: RefreshIndicator(
+              onRefresh: () async {
+                await provider.getContacts();
               },
+              child: StreamBuilder<List<EmergencyContact>>(
+                stream: _selectedCategory == 'all'
+                    ? provider.getContactsStream()
+                    : provider.getContactsByCategory(_selectedCategory),
+                builder: (context, snapshot) {
+                  if (snapshot.hasError) {
+                    return Center(child: Text('Error: ${snapshot.error}'));
+                  }
+
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+
+                  var contacts = snapshot.data ?? [];
+
+                  // Apply search filter
+                  if (_searchController.text.isNotEmpty) {
+                    final query = _searchController.text.toLowerCase();
+                    contacts = contacts
+                        .where(
+                          (c) =>
+                              c.name.toLowerCase().contains(query) ||
+                              c.role.toLowerCase().contains(query) ||
+                              (c.lga?.toLowerCase().contains(query) ?? false),
+                        )
+                        .toList();
+                  }
+
+                  if (contacts.isEmpty) {
+                    return Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.contacts_outlined,
+                            size: 64,
+                            color: Colors.grey.shade300,
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            'No contacts found',
+                            style: GoogleFonts.lexend(
+                              color: AppColors.textSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }
+
+                  return ListView.separated(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.only(
+                      left: 16,
+                      right: 16,
+                      top: 0,
+                      bottom: 120, // Extra padding for floating action button
+                    ),
+                    itemCount: contacts.length,
+                    separatorBuilder: (c, i) => const SizedBox(height: 12),
+                    itemBuilder: (context, index) {
+                      final contact = contacts[index];
+                      return _buildContactCard(contact, provider);
+                    },
+                  );
+                },
+              ),
             ),
           ),
         ],

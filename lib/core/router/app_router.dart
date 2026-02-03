@@ -2,7 +2,6 @@ import 'package:climate_app/features/alerts/screens/alerts_list_screen.dart';
 import 'package:climate_app/features/alerts/screens/alert_detail_screen.dart';
 import 'package:climate_app/features/auth/screens/login_screen.dart';
 import 'package:climate_app/features/chat/screens/chat_screen.dart';
-import 'package:climate_app/features/auth/screens/otp_screen.dart';
 import 'package:climate_app/features/contacts/screens/emergency_contacts_screen.dart';
 import 'package:climate_app/features/dashboard/screens/home_screen.dart';
 import 'package:climate_app/features/dashboard/screens/main_shell_screen.dart';
@@ -33,7 +32,7 @@ import 'package:climate_app/features/splash/screens/splash_screen.dart';
 // Placeholder screens for testing routing
 
 final GoRouter appRouter = GoRouter(
-  initialLocation: '/login', // Set to login as default entry
+  initialLocation: '/splash', // Start at splash to check onboarding status
   routes: [
     GoRoute(path: '/splash', builder: (context, state) => const SplashScreen()),
     GoRoute(
@@ -46,13 +45,6 @@ final GoRouter appRouter = GoRouter(
       builder: (context, state) => const RegistrationScreen(),
     ),
     GoRoute(path: '/login', builder: (context, state) => const LoginScreen()),
-    GoRoute(
-      path: '/otp',
-      builder: (context, state) {
-        final email = state.extra as String?;
-        return OtpScreen(email: email);
-      },
-    ),
     ShellRoute(
       builder: (context, state, child) => MainShellScreen(child: child),
       routes: [

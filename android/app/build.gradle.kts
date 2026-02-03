@@ -1,3 +1,12 @@
+import java.util.Properties
+import java.io.FileInputStream
+
+val keystoreProperties = Properties()
+val keystorePropertiesFile = rootProject.file("key.properties")
+if (keystorePropertiesFile.exists()) {
+    keystoreProperties.load(FileInputStream(keystorePropertiesFile))
+}
+
 plugins {
     id("com.android.application")
     id("kotlin-android")
@@ -7,7 +16,7 @@ plugins {
 }
 
 android {
-    namespace = "com.cradi.mobile"
+    namespace = "com.westgatestratagem.climate_app.climate_app"
     compileSdk = 36  // Required by plugins (connectivity_plus, image_picker, etc.)
     ndkVersion = flutter.ndkVersion
 
@@ -22,13 +31,23 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.cradi.mobile"
+        applicationId = "com.westgatestratagem.climate_app.climate_app"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion  // Android 6.0 - broad compatibility
         targetSdk = 36  // Latest Android SDK
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+    }
+
+
+    signingConfigs {
+        create("release") {
+            keyAlias = keystoreProperties["keyAlias"] as String
+            keyPassword = keystoreProperties["keyPassword"] as String
+            storeFile = file(keystoreProperties["storeFile"] as String)
+            storePassword = keystoreProperties["storePassword"] as String
+        }
     }
 
     buildTypes {
@@ -41,9 +60,8 @@ android {
                 "proguard-rules.pro"
             )
             
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            // Release signing config
+            signingConfig = signingConfigs.getByName("release")
         }
         debug {
             // Disable minification for debug builds

@@ -26,15 +26,9 @@ class AuthProvider extends ChangeNotifier {
   final AppwriteService _appwrite = AppwriteService();
   bool _isAuthenticated = false;
   UserRole? _userRole;
-  String? _phoneToken;
-  String? _emailToken;
   String? _phoneNumber;
   bool _isLoading = false;
   models.User? _currentUser;
-
-  // Test account for Google Play Store reviewers
-  static const String _testAccountEmail = 'reviewer@craditest.com';
-  static const String _testAccountPassword = 'ReviewTest2026!';
 
   // Services
   final SecureStorageService _storage = SecureStorageService();
@@ -116,49 +110,12 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
-  /// Send Sign-In Link to Email (OTP)
-  Future<bool> sendEmailOTP(String email) async {
-    try {
-      _isLoading = true;
-      notifyListeners();
-
-      // Bypass OTP for test account (Google Play reviewers)
-      if (email.toLowerCase() == _testAccountEmail.toLowerCase()) {
-        developer.log(
-          'Test account detected - bypassing OTP email',
-          name: 'AuthProvider',
-        );
-        _emailToken = 'test-account-token'; // Dummy token for flow continuity
-        _isLoading = false;
-        notifyListeners();
-        return true;
-      }
-
-      final token = await _appwrite.createEmailToken(email: email);
-      _emailToken = token.userId;
-
-      _isLoading = false;
-      notifyListeners();
-      return true;
-    } on AppwriteException catch (e) {
-      _isLoading = false;
-      notifyListeners();
-      ErrorHandler.logError(e, context: 'AuthProvider.sendEmailOTP');
-      throw AuthException(e.message ?? 'Failed to send email');
-    } on Exception catch (e) {
-      _isLoading = false;
-      notifyListeners();
-      ErrorHandler.logError(e, context: 'AuthProvider.sendEmailOTP');
-      return false;
-    }
-  }
-
   /// Sign up with email and password
   Future<bool> signUpWithEmail({
     required String email,
     required String password,
     String? name,
-    String? registrationCode,
+    String? address,
   }) async {
     try {
       _isLoading = true;
@@ -178,32 +135,50 @@ class AuthProvider extends ChangeNotifier {
       }
 
       // 1. Create Appwrite User
+      developer.log('Creating Appwrite account...', name: 'AuthProvider');
       final user = await _appwrite.createAccount(
         email: email,
         password: password,
         name: name ?? 'User',
       );
+      developer.log('Account created: ${user.$id}', name: 'AuthProvider');
+      print('✅ SIGNUP: Account created successfully - User ID: ${user.$id}');
 
       // 2. Create session
+      developer.log('Creating session...', name: 'AuthProvider');
       await _appwrite.createEmailPasswordSession(
         email: email,
         password: password,
       );
+      developer.log('Session created', name: 'AuthProvider');
+      print('✅ SIGNUP: Session created successfully');
 
       // 3. Default role
       const role = UserRole.ewm;
 
       // 4. Create user document in database
+      developer.log('Creating user document...', name: 'AuthProvider');
       await _createUserDocument(
         userId: user.$id,
         email: email,
         role: role,
         name: name,
-        registrationCode: registrationCode,
+        address: address,
       );
+      developer.log('User document created', name: 'AuthProvider');
 
-      // 5. Start Session
-      await _startUserSession(user, role);
+      // 5. Start Session (non-critical - allow registration to succeed even if this fails)
+      developer.log('Starting user session...', name: 'AuthProvider');
+      try {
+        await _startUserSession(user, role);
+        developer.log('User session started', name: 'AuthProvider');
+      } on Exception catch (e) {
+        developer.log(
+          'Session setup warning: $e (non-critical)',
+          name: 'AuthProvider',
+        );
+        // Continue anyway - user can login again to establish session properly
+      }
 
       _isLoading = false;
       notifyListeners();
@@ -211,7 +186,10 @@ class AuthProvider extends ChangeNotifier {
     } on AppwriteException catch (e) {
       _isLoading = false;
       notifyListeners();
-      developer.log('SignUp Error: ${e.code} - ${e.message}');
+      developer.log(
+        'SignUp AppwriteException: ${e.code} - ${e.message}',
+        name: 'AuthProvider',
+      );
       if (e.code == 409) {
         throw AuthException('Email is already registered. Please login.');
       }
@@ -224,8 +202,19 @@ class AuthProvider extends ChangeNotifier {
     } on Exception catch (e) {
       _isLoading = false;
       notifyListeners();
+      developer.log('SignUp General Exception: $e', name: 'AuthProvider');
       ErrorHandler.logError(e, context: 'AuthProvider.signUpWithEmail');
-      throw AuthException('An unexpected error occurred during registration');
+      // Show more specific error to help debugging
+      final errorMsg = e.toString();
+      if (errorMsg.contains('Document')) {
+        throw AuthException('Database error. Please contact support.');
+      } else if (errorMsg.contains('network') ||
+          errorMsg.contains('connection')) {
+        throw AuthException('Network error. Please check your connection.');
+      }
+      throw AuthException(
+        'Registration error: ${errorMsg.length > 100 ? errorMsg.substring(0, 100) : errorMsg}',
+      );
     }
   }
 
@@ -233,12 +222,23 @@ class AuthProvider extends ChangeNotifier {
   Future<bool> signInWithEmail({
     required String email,
     required String password,
-    String? registrationCode,
   }) async {
     String? deviceFingerprint;
     try {
       _isLoading = true;
       notifyListeners();
+
+      // 0. Clear any existing session first to prevent 401 "session already active" error
+      try {
+        await _appwrite.logout();
+        developer.log(
+          'Cleared existing session before login',
+          name: 'AuthProvider',
+        );
+      } on Exception {
+        // Ignore errors - likely means no session exists, which is fine
+        developer.log('No existing session to clear', name: 'AuthProvider');
+      }
 
       // 1. Check rate limiting
       final rateLimitResult = await _rateLimiter.checkLoginAttempt();
@@ -264,47 +264,45 @@ class AuthProvider extends ChangeNotifier {
 
       _currentUser = user;
 
-      // 4. Fetch User data from database to verify registration code
+      // 4. Fetch User data from database
       final userDoc = await _appwrite.getDocument(
         collectionId: AppwriteService.usersCollectionId,
         documentId: user.$id,
       );
 
-      // 5. Verify registration code if provided
-      if (registrationCode != null && registrationCode.isNotEmpty) {
-        final storedCode = userDoc.data['registrationCode'] as String?;
-        if (storedCode == null || storedCode != registrationCode) {
-          // Logout the session since credentials were wrong
-          await _appwrite.logout();
-          throw AuthException('Invalid registration code');
-        }
-      }
-
-      // 6. Assess fraud risk
-      final fraudAssessment = await _fraudService.assessLoginRisk(
-        userId: user.$id,
-        deviceFingerprint: deviceFingerprint,
-      );
-
-      developer.log(
-        'Login fraud assessment: ${fraudAssessment.risk} - ${fraudAssessment.reason}',
-        name: 'AuthProvider',
-      );
-
-      // 7. Record successful login attempt
-      await _fraudService.recordLoginAttempt(
-        userId: user.$id,
-        success: true,
-        deviceFingerprint: deviceFingerprint,
-        deviceName: deviceName,
-      );
-
-      // 8. Register device as trusted if not already (for new devices)
-      if (fraudAssessment.flags.contains('new_device')) {
-        await _fraudService.registerTrustedDevice(
+      // 6. Assess fraud risk (non-critical - don't block login if this fails)
+      try {
+        final fraudAssessment = await _fraudService.assessLoginRisk(
           userId: user.$id,
           deviceFingerprint: deviceFingerprint,
+        );
+
+        developer.log(
+          'Login fraud assessment: ${fraudAssessment.risk} - ${fraudAssessment.reason}',
+          name: 'AuthProvider',
+        );
+
+        // 7. Record successful login attempt
+        await _fraudService.recordLoginAttempt(
+          userId: user.$id,
+          success: true,
+          deviceFingerprint: deviceFingerprint,
           deviceName: deviceName,
+        );
+
+        // 8. Register device as trusted if not already (for new devices)
+        if (fraudAssessment.flags.contains('new_device')) {
+          await _fraudService.registerTrustedDevice(
+            userId: user.$id,
+            deviceFingerprint: deviceFingerprint,
+            deviceName: deviceName,
+          );
+        }
+      } on Exception catch (e) {
+        // Non-critical - log but don't block login
+        developer.log(
+          'Fraud detection warning: $e (non-critical)',
+          name: 'AuthProvider',
         );
       }
 
@@ -337,6 +335,7 @@ class AuthProvider extends ChangeNotifier {
       }
 
       developer.log('Login Error: ${e.code} - ${e.message}');
+      print('❌ LOGIN ERROR: Code ${e.code} - ${e.message}');
       if (e.code == 401) {
         throw AuthException('Invalid email or password');
       }
@@ -355,7 +354,7 @@ class AuthProvider extends ChangeNotifier {
     required String email,
     required UserRole role,
     String? name,
-    String? registrationCode,
+    String? address,
   }) async {
     await _appwrite.createDocument(
       collectionId: AppwriteService.usersCollectionId,
@@ -364,18 +363,14 @@ class AuthProvider extends ChangeNotifier {
         'email': email,
         'name': name ?? 'User',
         'role': _roleToString(role),
-        'registrationCode': registrationCode ?? '',
+        'address': address ?? '',
         'biometricsEnabled': false,
         'createdAt': DateTime.now().toIso8601String(),
         'lastLoginAt': DateTime.now().toIso8601String(),
         'phoneNumber': null,
         'profileImageId': null,
       },
-      permissions: [
-        'read("user:$userId")', // User can read their own document
-        'update("user:$userId")', // User can update their own document
-        'delete("user:$userId")', // User can delete their own document
-      ],
+      // Permissions are managed at collection level in Appwrite console
     );
   }
 
@@ -525,8 +520,6 @@ class AuthProvider extends ChangeNotifier {
       _userRole = null;
       _currentUser = null;
       _phoneNumber = null;
-      _emailToken = null;
-      _phoneToken = null;
 
       _isLoading = false;
       notifyListeners();
@@ -551,181 +544,6 @@ class AuthProvider extends ChangeNotifier {
   /// Convert UserRole enum to string
   String _roleToString(UserRole role) {
     return role.name;
-  }
-
-  /// Create phone token for OTP
-  Future<void> sendPhoneOTP(String phoneNumber) async {
-    try {
-      _isLoading = true;
-      notifyListeners();
-
-      final token = await _appwrite.createPhoneToken(phone: phoneNumber);
-      _phoneToken = token.userId;
-      _phoneNumber = phoneNumber;
-
-      _isLoading = false;
-      notifyListeners();
-    } on AppwriteException catch (e) {
-      _isLoading = false;
-      notifyListeners();
-      throw AuthException(e.message ?? 'Failed to send OTP');
-    }
-  }
-
-  /// Verify email OTP
-  Future<bool> verifyEmailOTP(String otp) async {
-    try {
-      _isLoading = true;
-      notifyListeners();
-
-      if (_emailToken == null) {
-        throw AuthException('No email verification in progress');
-      }
-
-      // Bypass OTP verification for test account - use direct login
-      if (_emailToken == 'test-account-token') {
-        developer.log(
-          'Test account OTP bypass - using direct email/password login',
-          name: 'AuthProvider',
-        );
-
-        // Login with email and password instead of OTP
-        await _appwrite.createEmailPasswordSession(
-          email: _testAccountEmail,
-          password: _testAccountPassword,
-        );
-
-        final user = await _appwrite.getCurrentUser();
-        if (user == null) {
-          throw AuthException('Test account login failed');
-        }
-
-        _currentUser = user;
-
-        // Get user document
-        try {
-          final userDoc = await _appwrite.getDocument(
-            collectionId: AppwriteService.usersCollectionId,
-            documentId: user.$id,
-          );
-
-          final roleStr = userDoc.data['role'] as String?;
-          _userRole = _parseUserRole(roleStr) ?? UserRole.ewm;
-        } on Exception {
-          _userRole = UserRole.ewm;
-          await _createUserDocument(
-            userId: user.$id,
-            email: user.email,
-            role: _userRole!,
-            name: user.name,
-          );
-        }
-
-        await _startUserSession(user, _userRole!);
-
-        _isAuthenticated = true;
-        _isLoading = false;
-        notifyListeners();
-        return true;
-      }
-
-      // Normal OTP verification flow
-      await _appwrite.verifyEmailOTP(userId: _emailToken!, secret: otp);
-
-      final user = await _appwrite.getCurrentUser();
-      if (user == null) {
-        throw AuthException('Verification failed');
-      }
-
-      _currentUser = user;
-
-      // Check if user document exists or create one (Same logic as phone OTP)
-      try {
-        final userDoc = await _appwrite.getDocument(
-          collectionId: AppwriteService.usersCollectionId,
-          documentId: user.$id,
-        );
-
-        final roleStr = userDoc.data['role'] as String?;
-        _userRole = _parseUserRole(roleStr) ?? UserRole.ewm;
-      } on Exception {
-        _userRole = UserRole.ewm;
-        await _createUserDocument(
-          userId: user.$id,
-          email: user.email,
-          role: _userRole!,
-          name: user.name,
-        );
-      }
-
-      await _startUserSession(user, _userRole!);
-
-      _isAuthenticated = true;
-      _isLoading = false;
-      notifyListeners();
-      return true;
-    } on AppwriteException catch (e) {
-      _isLoading = false;
-      notifyListeners();
-      ErrorHandler.logError(e, context: 'AuthProvider.verifyEmailOTP');
-      throw AuthException(e.message ?? 'Invalid code');
-    } on Exception catch (e) {
-      _isLoading = false;
-      notifyListeners();
-      ErrorHandler.logError(e, context: 'AuthProvider.verifyEmailOTP');
-      return false;
-    }
-  }
-
-  /// Verify phone OTP
-  Future<bool> verifyPhoneOTP(String otp) async {
-    try {
-      _isLoading = true;
-      notifyListeners();
-
-      if (_phoneToken == null) {
-        throw AuthException('No phone verification in progress');
-      }
-
-      await _appwrite.createPhoneSession(userId: _phoneToken!, secret: otp);
-
-      final user = await _appwrite.getCurrentUser();
-      if (user == null) {
-        throw AuthException('Verification failed');
-      }
-
-      _currentUser = user;
-
-      // Check if user document exists
-      try {
-        final userDoc = await _appwrite.getDocument(
-          collectionId: AppwriteService.usersCollectionId,
-          documentId: user.$id,
-        );
-
-        final roleStr = userDoc.data['role'] as String?;
-        _userRole = _parseUserRole(roleStr) ?? UserRole.ewm;
-      } on Exception {
-        // User document doesn't exist, create it
-        _userRole = UserRole.ewm;
-        await _createUserDocument(
-          userId: user.$id,
-          email: user.email,
-          role: _userRole!,
-          name: user.name,
-        );
-      }
-
-      await _startUserSession(user, _userRole!);
-
-      _isLoading = false;
-      notifyListeners();
-      return true;
-    } on AppwriteException catch (e) {
-      _isLoading = false;
-      notifyListeners();
-      throw AuthException(e.message ?? 'Invalid OTP');
-    }
   }
 
   @override

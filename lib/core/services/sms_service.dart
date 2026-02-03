@@ -222,7 +222,7 @@ class SmsService {
   }) async {
     final message =
         '''
-🚨 CRADI ALERT
+🚨 EWER ALERT
 Severity: ${severity.toUpperCase()}
 Type: $alertTitle
 Location: $location
@@ -256,7 +256,7 @@ Respond immediately.
 ⚠️ CLIMATE ALERT
 $alertTitle in $location
 Safety: $safetyInstructions
-Stay safe. For updates, check CRADI app.
+Stay safe. For updates, check EWER app.
 ''';
 
     final results = await sendBulkSms(
@@ -276,12 +276,12 @@ Stay safe. For updates, check CRADI app.
   Future<String?> sendOtp({required String to, required String otp}) async {
     final message =
         '''
-Your CRADI verification code is: $otp
+Your EWER verification code is: $otp
 Valid for 10 minutes.
 Do not share this code.
 ''';
 
-    return await sendSms(to: to, message: message, senderId: 'CRADI-OTP');
+    return await sendSms(to: to, message: message, senderId: 'EWER-OTP');
   }
 
   // ==================== HELPER METHODS ====================

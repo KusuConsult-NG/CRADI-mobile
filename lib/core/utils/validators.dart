@@ -51,40 +51,21 @@ class Validators {
     return '+234$cleaned';
   }
 
-  /// Validate registration code
-  /// Format: Alphanumeric, 6-10 characters
-  static String? validateRegistrationCode(String? value) {
-    if (value == null || value.isEmpty) {
-      return 'Registration code is required';
+  /// Validate address
+  /// Basic validation for user address
+  static String? validateAddress(String? value) {
+    if (value == null || value.trim().isEmpty) {
+      return 'Address is required';
     }
 
-    final cleaned = value.trim().toUpperCase();
+    final cleaned = value.trim();
 
-    if (cleaned.length < 6 || cleaned.length > 10) {
-      return 'Registration code must be 6-10 characters';
+    if (cleaned.length < 10) {
+      return 'Address must be at least 10 characters';
     }
 
-    // Allow only alphanumeric characters
-    if (!RegExp(r'^[A-Z0-9]+$').hasMatch(cleaned)) {
-      return 'Registration code can only contain letters and numbers';
-    }
-
-    return null;
-  }
-
-  /// Validate OTP code
-  /// Format: 4-6 digits
-  static String? validateOTP(String? value, {int length = 4}) {
-    if (value == null || value.isEmpty) {
-      return 'OTP is required';
-    }
-
-    if (value.length != length) {
-      return 'OTP must be $length digits';
-    }
-
-    if (!RegExp(r'^\d+$').hasMatch(value)) {
-      return 'OTP must contain only numbers';
+    if (cleaned.length > 200) {
+      return 'Address is too long (max 200 characters)';
     }
 
     return null;

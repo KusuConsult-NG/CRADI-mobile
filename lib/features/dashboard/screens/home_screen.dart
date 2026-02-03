@@ -1,4 +1,7 @@
 import 'package:climate_app/core/theme/app_colors.dart';
+import 'package:climate_app/core/design/glass_container.dart';
+import 'package:climate_app/core/design/animated_card.dart';
+import 'package:climate_app/core/design/typography.dart';
 import 'package:climate_app/core/providers/language_provider.dart';
 import 'package:flutter/material.dart';
 import 'dart:io';
@@ -69,12 +72,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                 '{name}',
                                 profile.name,
                               ),
-                              style: GoogleFonts.lexend(
-                                fontSize: 28,
-                                fontWeight: FontWeight.bold,
-                                color: AppColors.textPrimary,
-                                height: 1.1,
-                              ),
+                              style: PremiumTypography.heading1(context),
                             ),
                             const SizedBox(height: 4),
                             RichText(
@@ -369,13 +367,18 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     Consumer<ProfileProvider>(
                       builder: (context, profile, _) => Row(
+                        mainAxisSize: MainAxisSize.min,
                         children: [
-                          Text(
-                            profile.monitoringZone ?? 'Benue State',
-                            style: GoogleFonts.lexend(
-                              fontSize: 14,
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.textPrimary,
+                          Flexible(
+                            child: Text(
+                              profile.monitoringZone ?? 'Benue State',
+                              style: GoogleFonts.lexend(
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.textPrimary,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                              maxLines: 1,
                             ),
                           ),
                           const SizedBox(width: 2),
@@ -478,67 +481,61 @@ class _HomeScreenState extends State<HomeScreen> {
     required Color color,
     required Color bgColor,
   }) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.grey.shade100),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: ClipRect(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: bgColor,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Icon(icon, color: color, size: 20),
-                ),
-                Icon(
-                  Icons.arrow_forward,
-                  color: Colors.grey.shade300,
-                  size: 20,
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  count,
-                  style: GoogleFonts.lexend(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.textPrimary,
-                  ),
-                ),
-                Text(
-                  label,
-                  style: GoogleFonts.lexend(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                    color: AppColors.textSecondary,
-                  ),
-                ),
-              ],
-            ),
-          ],
+    return AnimatedCard(
+      borderRadius: 20,
+      backgroundColor: Colors.white,
+      padding: const EdgeInsets.all(18),
+      shadows: [
+        BoxShadow(
+          color: color.withOpacity(0.15),
+          blurRadius: 25,
+          offset: const Offset(0, 12),
         ),
+        BoxShadow(
+          color: Colors.black.withOpacity(0.06),
+          blurRadius: 15,
+          offset: const Offset(0, 6),
+        ),
+      ],
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [color.withOpacity(0.2), color.withOpacity(0.1)],
+                  ),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: color.withOpacity(0.3), width: 1),
+                ),
+                child: Icon(icon, color: color, size: 22),
+              ),
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: Colors.grey.withOpacity(0.08),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(Icons.arrow_forward, color: color, size: 16),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          Text(
+            count,
+            style: PremiumTypography.heading2(
+              context,
+              color: AppColors.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(label, style: PremiumTypography.subtitle(context)),
+        ],
       ),
     );
   }
@@ -861,39 +858,64 @@ class _HomeScreenState extends State<HomeScreen> {
       builder: (context) {
         return Container(
           padding: const EdgeInsets.symmetric(vertical: 20),
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height * 0.7,
+          ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(
-                'Select Monitoring Zone',
-                style: GoogleFonts.lexend(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: Text(
+                  'Select Monitoring Zone',
+                  style: GoogleFonts.lexend(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
               const SizedBox(height: 16),
-              ...zones.map(
-                (zone) => ListTile(
-                  title: Text(zone, style: GoogleFonts.lexend(fontSize: 16)),
-                  trailing: Consumer<ProfileProvider>(
-                    builder: (context, profile, _) =>
-                        profile.monitoringZone == zone
-                        ? const Icon(Icons.check, color: AppColors.primaryRed)
-                        : const SizedBox(),
+              Flexible(
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: zones
+                        .map(
+                          (zone) => ListTile(
+                            title: Text(
+                              zone,
+                              style: GoogleFonts.lexend(fontSize: 16),
+                              overflow: TextOverflow.ellipsis,
+                              maxLines: 1,
+                            ),
+                            trailing: Consumer<ProfileProvider>(
+                              builder: (context, profile, _) =>
+                                  profile.monitoringZone == zone
+                                  ? const Icon(
+                                      Icons.check,
+                                      color: AppColors.primaryRed,
+                                    )
+                                  : const SizedBox(),
+                            ),
+                            onTap: () async {
+                              final provider = context.read<ProfileProvider>();
+                              await provider.updateMonitoringZone(zone);
+                              if (context.mounted) {
+                                Navigator.pop(context);
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      'Monitoring zone changed to $zone',
+                                    ),
+                                    backgroundColor: AppColors.successGreen,
+                                  ),
+                                );
+                              }
+                            },
+                          ),
+                        )
+                        .toList(),
                   ),
-                  onTap: () async {
-                    final provider = context.read<ProfileProvider>();
-                    await provider.updateMonitoringZone(zone);
-                    if (context.mounted) {
-                      Navigator.pop(context);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('Monitoring zone changed to $zone'),
-                          backgroundColor: AppColors.successGreen,
-                        ),
-                      );
-                    }
-                  },
                 ),
               ),
             ],

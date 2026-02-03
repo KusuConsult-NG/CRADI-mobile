@@ -128,14 +128,20 @@ class KnowledgeDetailScreen extends StatelessWidget {
               height: 200,
               width: double.infinity,
               decoration: BoxDecoration(
-                color: Colors.grey.shade200,
-                borderRadius: BorderRadius.circular(16),
-                image: const DecorationImage(
-                  image: NetworkImage(
-                    'https://images.unsplash.com/photo-1544465554-044abc734aa0?auto=format&fit=crop&w=800&q=80',
-                  ),
-                  fit: BoxFit.cover,
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    categoryColor.withValues(alpha: 0.1),
+                    categoryColor.withValues(alpha: 0.05),
+                  ],
                 ),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Icon(
+                categoryIcon,
+                size: 80,
+                color: categoryColor.withValues(alpha: 0.3),
               ),
             ),
             const SizedBox(height: 24),

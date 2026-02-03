@@ -66,6 +66,7 @@ dependencies:
   # Speech recognition - Used for voice input in reports
   speech_to_text: ^7.0.0
   flutter_local_notifications: ^18.0.0
+  fluttertoast: ^8.2.8
   # Maps removed - using flutter_map instead (lighter weight)
   
   # Image handling

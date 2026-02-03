@@ -49,7 +49,8 @@ class AuthorityContactsData {
     AuthorityContact(
       name: 'Benue SEMA Director',
       role: 'State Emergency Management Director',
-      phone: '+2348000000000', // Placeholder: Update with real number
+      phone:
+          '112', // National Emergency Number (Update with state-specific when available)
       email: 'sema@benuestate.gov.ng',
       office: 'Benue SEMA Headquarters, Makurdi',
       lga: 'All',
@@ -58,9 +59,10 @@ class AuthorityContactsData {
       priority: 1,
     ),
     AuthorityContact(
-      name: 'Benue State Police Commissioner',
-      role: 'Commissioner of Police',
-      phone: '+2348000000001', // TODO: Update
+      name: 'Benue State Police Command',
+      role: 'Emergency Hotline',
+      phone:
+          '112', // National Police Emergency (Update with state command number when available)
       office: 'Benue State Police Command, Makurdi',
       lga: 'All',
       state: 'Benue',
@@ -72,7 +74,8 @@ class AuthorityContactsData {
     AuthorityContact(
       name: 'Nasarawa SEMA Director',
       role: 'State Emergency Management Director',
-      phone: '+2348000000002', // TODO: Update
+      phone:
+          '112', // National Emergency Number (Update with state-specific when available)
       email: 'sema@nasarawastate.gov.ng',
       office: 'Nasarawa SEMA Headquarters, Lafia',
       lga: 'All',
@@ -81,9 +84,10 @@ class AuthorityContactsData {
       priority: 1,
     ),
     AuthorityContact(
-      name: 'Nasarawa State Police Commissioner',
-      role: 'Commissioner of Police',
-      phone: '+2348000000003', // TODO: Update
+      name: 'Nasarawa State Police Command',
+      role: 'Emergency Hotline',
+      phone:
+          '112', // National Police Emergency (Update with state command number when available)
       office: 'Nasarawa State Police Command, Lafia',
       lga: 'All',
       state: 'Nasarawa',
@@ -95,7 +99,8 @@ class AuthorityContactsData {
     AuthorityContact(
       name: 'Plateau SEMA Director',
       role: 'State Emergency Management Director',
-      phone: '+2348000000004', // TODO: Update
+      phone:
+          '112', // National Emergency Number (Update with state-specific when available)
       email: 'sema@plateaustate.gov.ng',
       office: 'Plateau SEMA Headquarters, Jos',
       lga: 'All',
@@ -104,9 +109,10 @@ class AuthorityContactsData {
       priority: 1,
     ),
     AuthorityContact(
-      name: 'Plateau State Police Commissioner',
-      role: 'Commissioner of Police',
-      phone: '+2348000000005', // TODO: Update
+      name: 'Plateau State Police Command',
+      role: 'Emergency Hotline',
+      phone:
+          '112', // National Police Emergency (Update with state command number when available)
       office: 'Plateau State Police Command, Jos',
       lga: 'All',
       state: 'Plateau',
@@ -125,7 +131,7 @@ class AuthorityContactsData {
 
   static List<AuthorityContact> _generateLGAAuthorities() {
     final List<AuthorityContact> authorities = [];
-    final allLGAs = MVPLocationsData.allLGAs;
+    const allLGAs = MVPLocationsData.allLGAs;
 
     for (final lga in allLGAs) {
       // Chairman

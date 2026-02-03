@@ -100,7 +100,7 @@ class _ClimateAppState extends State<ClimateApp> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp.router(
-      title: 'CRADI Mobile - Early Warning System',
+      title: 'EWER Mobile - Early Warning System',
       theme: AppTheme.lightTheme,
       routerConfig: appRouter,
       debugShowCheckedModeBanner: false,

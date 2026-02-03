@@ -88,8 +88,15 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
           _ward = details['ward'] ?? 'Unknown Ward';
         });
 
-        // Update reporting provider with coordinates
+        // Update reporting provider with coordinates AND location string
         if (mounted) {
+          // Set coordinates immediately to prevent null values
+          context.read<ReportingProvider>().setLocation(
+            position.latitude,
+            position.longitude,
+          );
+
+          // Also set location details as string
           context.read<ReportingProvider>().setLocationDetails(
             '${position.latitude},${position.longitude}',
           );
