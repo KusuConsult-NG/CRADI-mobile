@@ -98,7 +98,7 @@ class PremiumTypography {
       letterSpacing: 0.2,
       color:
           color ??
-          Theme.of(context).textTheme.bodySmall?.color?.withOpacity(0.7),
+          Theme.of(context).textTheme.bodySmall?.color?.withValues(alpha: 0.7),
     );
   }
 
@@ -110,7 +110,7 @@ class PremiumTypography {
       height: 1.5,
       color:
           color ??
-          Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.8),
+          Theme.of(context).textTheme.bodyMedium?.color?.withValues(alpha: 0.8),
     );
   }
 }

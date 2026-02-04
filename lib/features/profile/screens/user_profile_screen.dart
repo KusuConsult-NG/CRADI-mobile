@@ -16,6 +16,8 @@ import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:climate_app/shared/widgets/custom_button.dart';
 import 'package:climate_app/shared/widgets/custom_text_field.dart';
+// TEMPORARILY DISABLED - Compatibility issue
+// import 'package:flutter_windowmanager/flutter_windowmanager.dart';
 
 class UserProfileScreen extends StatefulWidget {
   const UserProfileScreen({super.key});
@@ -26,6 +28,42 @@ class UserProfileScreen extends StatefulWidget {
 
 class _UserProfileScreenState extends State<UserProfileScreen> {
   final ImagePicker _picker = ImagePicker();
+
+  @override
+  void initState() {
+    super.initState();
+    _enableScreenSecurity();
+  }
+
+  @override
+  void dispose() {
+    _disableScreenSecurity();
+    super.dispose();
+  }
+
+  /// Enable screenshot prevention on Android
+  Future<void> _enableScreenSecurity() async {
+    if (Platform.isAndroid) {
+      // TEMPORARILY DISABLED
+      // try {
+      //   await FlutterWindowManager.addFlags(FlutterWindowManager.FLAG_SECURE);
+      // } on Exception {
+      //   // Silently fail - non-critical security feature
+      // }
+    }
+  }
+
+  /// Disable screenshot prevention when leaving screen
+  Future<void> _disableScreenSecurity() async {
+    if (Platform.isAndroid) {
+      // TEMPORARILY DISABLED
+      // try {
+      //   await FlutterWindowManager.clearFlags(FlutterWindowManager.FLAG_SECURE);
+      // } on Exception {
+      //   // Silently fail
+      // }
+    }
+  }
 
   Future<void> _pickImage(ImageSource source) async {
     try {

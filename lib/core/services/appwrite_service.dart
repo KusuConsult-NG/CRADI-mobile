@@ -1,5 +1,6 @@
 import 'package:appwrite/appwrite.dart';
 import 'package:appwrite/models.dart' as models;
+import 'dart:async';
 import 'dart:developer' as developer;
 import 'package:climate_app/core/services/rate_limiter.dart';
 
@@ -26,6 +27,10 @@ class AppwriteService {
   late final Storage _storage;
   late final Realtime _realtime;
   final RateLimiter _rateLimiter = RateLimiter();
+
+  // Session refresh state
+  Timer? _sessionRefreshTimer;
+  bool _isRefreshing = false;
 
   // Database and Collection IDs (will be created in Appwrite Console)
   static const String databaseId = '6941e2c2003705bb5a25'; // Actual database ID
@@ -107,9 +112,98 @@ class AppwriteService {
     }
   }
 
+  /// Get current session
+  Future<models.Session?> getCurrentSession() async {
+    try {
+      return await _account.getSession(sessionId: 'current');
+    } on AppwriteException catch (e) {
+      developer.log('Get session error: $e', name: 'AppwriteService');
+      return null;
+    }
+  }
+
+  /// Check if session needs refresh and refresh if necessary
+  Future<bool> refreshSessionIfNeeded() async {
+    if (_isRefreshing) {
+      developer.log(
+        'Session refresh already in progress',
+        name: 'AppwriteService',
+      );
+      return false;
+    }
+
+    try {
+      _isRefreshing = true;
+      final session = await getCurrentSession();
+
+      if (session == null) {
+        developer.log('No active session to refresh', name: 'AppwriteService');
+        return false;
+      }
+
+      final expiry = DateTime.parse(session.expire);
+      final now = DateTime.now();
+      final timeUntilExpiry = expiry.difference(now);
+
+      // Refresh if less than 5 minutes remaining
+      if (timeUntilExpiry.inMinutes < 5 && timeUntilExpiry.inSeconds > 0) {
+        developer.log(
+          'Refreshing session (expires in ${timeUntilExpiry.inMinutes} minutes)',
+          name: 'AppwriteService',
+        );
+
+        // Update session to extend it
+        await _account.updateSession(sessionId: 'current');
+
+        developer.log(
+          'Session refreshed successfully',
+          name: 'AppwriteService',
+        );
+        return true;
+      }
+
+      return false;
+    } on AppwriteException catch (e) {
+      if (e.code == 401 || e.code == 403) {
+        developer.log(
+          'Session expired or unauthorized: ${e.message}',
+          name: 'AppwriteService',
+        );
+        // Session is invalid, caller should handle logout
+        return false;
+      }
+      developer.log('Session refresh error: $e', name: 'AppwriteService');
+      return false;
+    } finally {
+      _isRefreshing = false;
+    }
+  }
+
+  /// Start automatic session monitoring
+  void startSessionMonitoring() {
+    _sessionRefreshTimer?.cancel();
+
+    // Check session every 2 minutes
+    _sessionRefreshTimer = Timer.periodic(const Duration(minutes: 2), (
+      _,
+    ) async {
+      await refreshSessionIfNeeded();
+    });
+
+    developer.log('Session monitoring started', name: 'AppwriteService');
+  }
+
+  /// Stop session monitoring
+  void stopSessionMonitoring() {
+    _sessionRefreshTimer?.cancel();
+    _sessionRefreshTimer = null;
+    developer.log('Session monitoring stopped', name: 'AppwriteService');
+  }
+
   /// Logout (delete current session)
   Future<void> logout() async {
     try {
+      stopSessionMonitoring();
       await _account.deleteSession(sessionId: 'current');
     } catch (e) {
       developer.log('Logout error: $e', name: 'AppwriteService');
@@ -120,9 +214,39 @@ class AppwriteService {
   /// Logout from all sessions
   Future<void> logoutAll() async {
     try {
+      stopSessionMonitoring();
       await _account.deleteSessions();
     } catch (e) {
       developer.log('Logout all error: $e', name: 'AppwriteService');
+      rethrow;
+    }
+  }
+
+  /// Execute API call with automatic session refresh and error handling
+  Future<T> executeWithAuth<T>(Future<T> Function() apiCall) async {
+    try {
+      // Try to refresh session if needed before API call
+      await refreshSessionIfNeeded();
+
+      // Execute the API call
+      return await apiCall();
+    } on AppwriteException catch (e) {
+      // Handle authentication errors
+      if (e.code == 401) {
+        developer.log(
+          'Unauthorized (401): Session expired - ${e.message}',
+          name: 'AppwriteService',
+        );
+        stopSessionMonitoring();
+        throw Exception('SESSION_EXPIRED');
+      } else if (e.code == 403) {
+        developer.log(
+          'Forbidden (403): Insufficient permissions - ${e.message}',
+          name: 'AppwriteService',
+        );
+        throw Exception('PERMISSION_DENIED');
+      }
+
       rethrow;
     }
   }

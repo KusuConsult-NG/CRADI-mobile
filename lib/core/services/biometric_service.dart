@@ -61,14 +61,7 @@ class BiometricService {
         return false;
       }
 
-      return await _localAuth.authenticate(
-        localizedReason: reason,
-        options: AuthenticationOptions(
-          useErrorDialogs: useErrorDialogs,
-          stickyAuth: stickyAuth,
-          biometricOnly: false,
-        ),
-      );
+      return await _localAuth.authenticate(localizedReason: reason);
     } on PlatformException catch (e) {
       developer.log('Authentication error: $e', name: 'BiometricService');
       return false;

@@ -9,6 +9,7 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:fluttertoast/fluttertoast.dart';
+import 'package:climate_app/core/design/glass_container.dart';
 import 'dart:developer' as developer;
 
 class RegistrationScreen extends StatefulWidget {
@@ -75,9 +76,6 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
       developer.log(
         'Registration attempt: email=$email',
         name: 'RegistrationScreen',
-      );
-      print(
-        '🔵 REGISTRATION: Name being sent: "$name" (isEmpty: ${name.isEmpty})',
       );
 
       final success = await authProvider.signUpWithEmail(
@@ -191,98 +189,108 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
 
                       const SizedBox(height: 32),
 
-                      // Full Name
-                      CustomTextField(
-                        label: 'Full Name',
-                        controller: _nameController,
-                        hint: 'John Doe',
-                        prefixIcon: const Icon(Icons.person_outline),
-                        validator: (v) =>
-                            Validators.validateRequired(v, 'Name'),
-                        enabled: !_isLoading,
-                      ),
-                      const SizedBox(height: 16),
+                      // Glassmorphic form container
+                      GlassCard(
+                        padding: const EdgeInsets.all(20),
+                        child: Column(
+                          children: [
+                            // Full Name
+                            CustomTextField(
+                              label: 'Full Name',
+                              controller: _nameController,
+                              hint: 'John Doe',
+                              prefixIcon: const Icon(Icons.person_outline),
+                              validator: (v) =>
+                                  Validators.validateRequired(v, 'Name'),
+                              enabled: !_isLoading,
+                            ),
+                            const SizedBox(height: 16),
 
-                      // Address
-                      CustomTextField(
-                        label: 'Address',
-                        controller: _addressController,
-                        hint: 'Your full address',
-                        prefixIcon: const Icon(Icons.location_on_outlined),
-                        validator: (v) =>
-                            Validators.validateRequired(v, 'Address'),
-                        enabled: !_isLoading,
-                      ),
-                      const SizedBox(height: 16),
+                            // Address
+                            CustomTextField(
+                              label: 'Address',
+                              controller: _addressController,
+                              hint: 'Your full address',
+                              prefixIcon: const Icon(
+                                Icons.location_on_outlined,
+                              ),
+                              validator: (v) =>
+                                  Validators.validateRequired(v, 'Address'),
+                              enabled: !_isLoading,
+                            ),
+                            const SizedBox(height: 16),
 
-                      // Email
-                      CustomTextField(
-                        label: 'Email Address',
-                        controller: _emailController,
-                        hint: 'name@example.com',
-                        prefixIcon: const Icon(Icons.email_outlined),
-                        keyboardType: TextInputType.emailAddress,
-                        validator: Validators.validateEmail,
-                        enabled: !_isLoading,
-                      ),
+                            // Email
+                            CustomTextField(
+                              label: 'Email Address',
+                              controller: _emailController,
+                              hint: 'name@example.com',
+                              prefixIcon: const Icon(Icons.email_outlined),
+                              keyboardType: TextInputType.emailAddress,
+                              validator: Validators.validateEmail,
+                              enabled: !_isLoading,
+                            ),
 
-                      // Password
-                      CustomTextField(
-                        label: 'Password',
-                        controller: _passwordController,
-                        hint: 'Create a password',
-                        obscureText: !_isPasswordVisible,
-                        prefixIcon: const Icon(Icons.lock_outline),
-                        suffixIcon: IconButton(
-                          icon: Icon(
-                            _isPasswordVisible
-                                ? Icons.visibility
-                                : Icons.visibility_off,
-                            color: AppColors.textSecondary,
-                          ),
-                          onPressed: () {
-                            setState(() {
-                              _isPasswordVisible = !_isPasswordVisible;
-                            });
-                          },
+                            // Password
+                            CustomTextField(
+                              label: 'Password',
+                              controller: _passwordController,
+                              hint: 'Create a password',
+                              obscureText: !_isPasswordVisible,
+                              prefixIcon: const Icon(Icons.lock_outline),
+                              suffixIcon: IconButton(
+                                icon: Icon(
+                                  _isPasswordVisible
+                                      ? Icons.visibility
+                                      : Icons.visibility_off,
+                                  color: AppColors.textSecondary,
+                                ),
+                                onPressed: () {
+                                  setState(() {
+                                    _isPasswordVisible = !_isPasswordVisible;
+                                  });
+                                },
+                              ),
+                              validator: (value) =>
+                                  Validators.validatePassword(value),
+                              enabled: !_isLoading,
+                            ),
+                            const SizedBox(height: 16),
+
+                            // Confirm Password
+                            CustomTextField(
+                              label: 'Confirm Password',
+                              controller: _confirmPasswordController,
+                              hint: 'Re-enter your password',
+                              obscureText: !_isConfirmPasswordVisible,
+                              prefixIcon: const Icon(Icons.lock_outline),
+                              suffixIcon: IconButton(
+                                icon: Icon(
+                                  _isConfirmPasswordVisible
+                                      ? Icons.visibility
+                                      : Icons.visibility_off,
+                                  color: AppColors.textSecondary,
+                                ),
+                                onPressed: () {
+                                  setState(() {
+                                    _isConfirmPasswordVisible =
+                                        !_isConfirmPasswordVisible;
+                                  });
+                                },
+                              ),
+                              validator: (value) {
+                                if (value == null || value.isEmpty) {
+                                  return 'Please confirm your password';
+                                }
+                                if (value != _passwordController.text) {
+                                  return 'Passwords do not match';
+                                }
+                                return null;
+                              },
+                              enabled: !_isLoading,
+                            ),
+                          ],
                         ),
-                        validator: (value) =>
-                            Validators.validatePassword(value),
-                        enabled: !_isLoading,
-                      ),
-                      const SizedBox(height: 16),
-
-                      // Confirm Password
-                      CustomTextField(
-                        label: 'Confirm Password',
-                        controller: _confirmPasswordController,
-                        hint: 'Re-enter your password',
-                        obscureText: !_isConfirmPasswordVisible,
-                        prefixIcon: const Icon(Icons.lock_outline),
-                        suffixIcon: IconButton(
-                          icon: Icon(
-                            _isConfirmPasswordVisible
-                                ? Icons.visibility
-                                : Icons.visibility_off,
-                            color: AppColors.textSecondary,
-                          ),
-                          onPressed: () {
-                            setState(() {
-                              _isConfirmPasswordVisible =
-                                  !_isConfirmPasswordVisible;
-                            });
-                          },
-                        ),
-                        validator: (value) {
-                          if (value == null || value.isEmpty) {
-                            return 'Please confirm your password';
-                          }
-                          if (value != _passwordController.text) {
-                            return 'Passwords do not match';
-                          }
-                          return null;
-                        },
-                        enabled: !_isLoading,
                       ),
 
                       const SizedBox(height: 40),
@@ -304,7 +312,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
           // Loading Overlay
           if (_isLoading)
             Container(
-              color: Colors.black.withOpacity(0.5),
+              color: Colors.black.withValues(alpha: 0.5),
               child: Center(
                 child: Container(
                   padding: const EdgeInsets.all(20),

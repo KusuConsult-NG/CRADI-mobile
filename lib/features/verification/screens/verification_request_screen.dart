@@ -1,4 +1,5 @@
 import 'package:climate_app/core/services/appwrite_service.dart';
+import 'package:climate_app/core/utils/validators.dart';
 import 'package:flutter/material.dart';
 
 /// Verification request screen - submit verification request
@@ -139,12 +140,8 @@ class _VerificationRequestScreenState extends State<VerificationRequestScreen> {
                 border: OutlineInputBorder(),
               ),
               maxLines: 5,
-              validator: (value) {
-                if (value == null || value.isEmpty) {
-                  return 'Please enter a description';
-                }
-                return null;
-              },
+              validator: (value) =>
+                  Validators.validateDescription(value, maxLength: 500),
             ),
             const SizedBox(height: 24),
             ElevatedButton(

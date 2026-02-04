@@ -1,8 +1,10 @@
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:climate_app/core/services/hive_encryption_service.dart';
 import 'dart:developer' as developer;
 
 /// Service for storing draft reports offline using Hive
 /// Allows users to create reports without internet and sync later
+/// All data is encrypted with AES-256 for security
 class OfflineStorageService {
   static final OfflineStorageService _instance =
       OfflineStorageService._internal();
@@ -16,13 +18,22 @@ class OfflineStorageService {
   Box<Map>? _draftsBox;
   Box<Map>? _syncQueueBox;
 
-  /// Initialize Hive boxes for offline storage
+  /// Initialize Hive boxes for offline storage with encryption
   Future<void> initialize() async {
     try {
-      _draftsBox = await Hive.openBox<Map>(_draftsBoxName);
-      _syncQueueBox = await Hive.openBox<Map>(_syncQueueBoxName);
+      // Get encryption cipher
+      final cipher = await HiveEncryptionService().getCipher();
+
+      _draftsBox = await Hive.openBox<Map>(
+        _draftsBoxName,
+        encryptionCipher: cipher,
+      );
+      _syncQueueBox = await Hive.openBox<Map>(
+        _syncQueueBoxName,
+        encryptionCipher: cipher,
+      );
       developer.log(
-        'Offline storage initialized. Drafts: ${_draftsBox!.length}, Queue: ${_syncQueueBox!.length}',
+        'Offline storage initialized with AES-256 encryption. Drafts: ${_draftsBox!.length}, Queue: ${_syncQueueBox!.length}',
         name: 'OfflineStorageService',
       );
     } on Exception catch (e) {

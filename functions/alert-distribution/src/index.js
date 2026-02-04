@@ -46,8 +46,9 @@ module.exports = async ({ req, res, log, error }) => {
             ]
         );
 
-        const authorityPhones = authResponse.documents.map(a => a.phone);
-        log(`Found ${authorityPhones.length} authority contacts.`);
+        const authorityPhones = authResponse.documents.map(a => a.phone).filter(Boolean);
+        const authorityEmails = authResponse.documents.map(a => a.email).filter(Boolean);
+        log(`Found ${authorityPhones.length} authority phone numbers and ${authorityEmails.length} emails.`);
 
         // 2. Prepare Alert Message
         const alertMessage = `🚨 CRADI ALERT: ${report.severity.toUpperCase()} ${report.hazardType} reported in ${report.ward}, ${report.lga}. Safety: ${report.description.substring(0, 100)}`;
@@ -76,7 +77,49 @@ module.exports = async ({ req, res, log, error }) => {
             }
         }
 
-        // 4. Send Push Notifications (Topic-based if supported, or targeted)
+        // 4. Send Email Notifications to Authorities
+        if (authorityEmails.length > 0) {
+            try {
+                const emailPayload = {
+                    to: authorityEmails,
+                    template: 'alert',
+                    data: {
+                        hazardType: report.hazardType,
+                        severity: report.severity,
+                        ward: report.ward,
+                        lga: report.lga,
+                        state: report.state,
+                        description: report.description,
+                        timestamp: new Date(report.$createdAt).toLocaleString('en-US', {
+                            dateStyle: 'medium',
+                            timeStyle: 'short'
+                        }),
+                        recommendations: report.recommendations || null
+                    }
+                };
+
+                const emailResponse = await fetch(`${process.env.APPWRITE_FUNCTION_ENDPOINT}/functions/send-email/executions`, {
+                    method: 'POST',
+                    headers: {
+                        'X-Appwrite-Project': process.env.APPWRITE_FUNCTION_PROJECT_ID,
+                        'X-Appwrite-Key': process.env.APPWRITE_API_KEY,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(emailPayload)
+                });
+
+                if (emailResponse.ok) {
+                    log(`Email alerts sent to ${authorityEmails.length} authorities`);
+                } else {
+                    const errorText = await emailResponse.text();
+                    error(`Email sending failed: ${errorText}`);
+                }
+            } catch (e) {
+                error(`Email alert distribution failed: ${e.message}`);
+            }
+        }
+
+        // 5. Send Push Notifications (Topic-based if supported, or targeted)
         // Here we send to a topic named after the LGA or State
         try {
             await messaging.createPush(

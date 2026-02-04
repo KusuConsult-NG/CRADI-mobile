@@ -69,6 +69,9 @@ class AuthProvider extends ChangeNotifier {
           _isAuthenticated = false;
         } else {
           _isAuthenticated = true;
+          // Start session monitoring if authenticated
+          _appwrite.startSessionMonitoring();
+          developer.log('Session monit oring resumed', name: 'AuthProvider');
         }
 
         final userRoleStr = await _storage.getUserRole();
@@ -95,6 +98,14 @@ class AuthProvider extends ChangeNotifier {
       if (authenticated) {
         _isLocked = false;
         _isAuthenticated = true;
+
+        // Start session monitoring after biometric unlock
+        _appwrite.startSessionMonitoring();
+        developer.log(
+          'Session monitoring started after biometric unlock',
+          name: 'AuthProvider',
+        );
+
         _isLoading = false;
         notifyListeners();
         return true;
@@ -142,7 +153,6 @@ class AuthProvider extends ChangeNotifier {
         name: name ?? 'User',
       );
       developer.log('Account created: ${user.$id}', name: 'AuthProvider');
-      print('✅ SIGNUP: Account created successfully - User ID: ${user.$id}');
 
       // 2. Create session
       developer.log('Creating session...', name: 'AuthProvider');
@@ -151,7 +161,6 @@ class AuthProvider extends ChangeNotifier {
         password: password,
       );
       developer.log('Session created', name: 'AuthProvider');
-      print('✅ SIGNUP: Session created successfully');
 
       // 3. Default role
       const role = UserRole.ewm;
@@ -270,7 +279,28 @@ class AuthProvider extends ChangeNotifier {
         documentId: user.$id,
       );
 
-      // 6. Assess fraud risk (non-critical - don't block login if this fails)
+      // 5. Validate user document fields
+      final requiredFields = ['email', 'name', 'role', 'address'];
+      final missingFields = requiredFields
+          .where((field) => !userDoc.data.containsKey(field))
+          .toList();
+
+      if (missingFields.isNotEmpty) {
+        developer.log(
+          'CRITICAL: Missing fields in user document: $missingFields',
+          name: 'AuthProvider',
+        );
+        throw AuthException(
+          'User account data is incomplete. Please contact support.',
+        );
+      }
+
+      // 6. Get user role
+      final roleStr = userDoc.data['role'] as String?;
+      final role = _parseUserRole(roleStr) ?? UserRole.ewm;
+      _userRole = role;
+
+      // 7. Assess fraud risk (non-critical - don't block login if this fails)
       try {
         final fraudAssessment = await _fraudService.assessLoginRisk(
           userId: user.$id,
@@ -282,7 +312,7 @@ class AuthProvider extends ChangeNotifier {
           name: 'AuthProvider',
         );
 
-        // 7. Record successful login attempt
+        // Record successful login attempt
         await _fraudService.recordLoginAttempt(
           userId: user.$id,
           success: true,
@@ -290,7 +320,7 @@ class AuthProvider extends ChangeNotifier {
           deviceName: deviceName,
         );
 
-        // 8. Register device as trusted if not already (for new devices)
+        // Register device as trusted if not already (for new devices)
         if (fraudAssessment.flags.contains('new_device')) {
           await _fraudService.registerTrustedDevice(
             userId: user.$id,
@@ -299,22 +329,21 @@ class AuthProvider extends ChangeNotifier {
           );
         }
       } on Exception catch (e) {
-        // Non-critical - log but don't block login
+        // Non-critical - log but don't  block login
         developer.log(
           'Fraud detection warning: $e (non-critical)',
           name: 'AuthProvider',
         );
       }
 
-      // 9. Get user role
-      final roleStr = userDoc.data['role'] as String?;
-      final role = _parseUserRole(roleStr) ?? UserRole.ewm;
-      _userRole = role;
-
-      // 10. Start user session
+      // 8. Start user session
       await _startUserSession(user, role);
 
-      // 11. Reset Rate Limiter
+      // 9. Start automatic session monitoring for token refresh
+      _appwrite.startSessionMonitoring();
+      developer.log('Session monitoring started', name: 'AuthProvider');
+
+      // 10. Reset Rate Limiter
       await _rateLimiter.resetLoginAttempts();
 
       _isLoading = false;
@@ -335,7 +364,6 @@ class AuthProvider extends ChangeNotifier {
       }
 
       developer.log('Login Error: ${e.code} - ${e.message}');
-      print('❌ LOGIN ERROR: Code ${e.code} - ${e.message}');
       if (e.code == 401) {
         throw AuthException('Invalid email or password');
       }
@@ -496,6 +524,30 @@ class AuthProvider extends ChangeNotifier {
     if (_isAuthenticated) {
       _sessionManager.recordActivity();
     }
+  }
+
+  /// Validate current session with server
+  ///
+  /// This method proactively validates the Appwrite session and extends
+  /// the client-side timeout if valid. Returns true if session is valid.
+  Future<bool> validateSession() async {
+    try {
+      final user = await _appwrite.getCurrentUser();
+      if (user != null) {
+        // Session is valid - extend client timeout
+        await _sessionManager.extendSession();
+        developer.log('Session validated and extended', name: 'AuthProvider');
+        return true;
+      }
+    } on AppwriteException catch (e) {
+      if (e.code == 401 || e.code == 403) {
+        developer.log('Session expired on server', name: 'AuthProvider');
+        await logout();
+      }
+    } on Exception catch (e) {
+      developer.log('Session validation error: $e', name: 'AuthProvider');
+    }
+    return false;
   }
 
   /// Get remaining session time

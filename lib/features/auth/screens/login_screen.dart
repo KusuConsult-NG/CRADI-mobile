@@ -1,14 +1,18 @@
 import 'package:climate_app/core/theme/app_colors.dart';
 import 'package:climate_app/features/auth/providers/auth_provider.dart';
+import 'package:climate_app/features/profile/providers/profile_provider.dart';
 import 'package:climate_app/shared/widgets/custom_button.dart';
 import 'package:climate_app/shared/widgets/custom_text_field.dart';
 import 'package:climate_app/core/utils/validators.dart';
 
 import 'package:climate_app/core/utils/error_handler.dart';
 import 'package:climate_app/core/services/rate_limiter.dart';
+import 'package:climate_app/core/design/glass_container.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+// TEMPORARILY DISABLED - Compatibility issue\n// import 'package:flutter_windowmanager/flutter_windowmanager.dart';
+import 'dart:io' show Platform;
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -31,11 +35,37 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   void initState() {
     super.initState();
+    _enableScreenSecurity();
     _checkRateLimit();
+  }
+
+  /// Enable screenshot prevention on Android
+  Future<void> _enableScreenSecurity() async {
+    if (Platform.isAndroid) {
+      // TEMPORARILY DISABLED - flutter_windowmanager compatibility issue
+      // try {
+      //   await FlutterWindowManager.addFlags(FlutterWindowManager.FLAG_SECURE);
+      // } on Exception catch (e) {
+      //   // Silently fail - non-critical security feature
+      //   ErrorHandler.logError(e, context: 'LoginScreen.enableScreenSecurity');
+      // }
+    }
+  }
+
+  Future<void> _disableScreenSecurity() async {
+    if (Platform.isAndroid) {
+      // TEMPORARILY DISABLED
+      // try {
+      //   await FlutterWindowManager.clearFlags(FlutterWindowManager.FLAG_SECURE);
+      // } on Exception {
+      //   // Silently fail
+      // }
+    }
   }
 
   @override
   void dispose() {
+    _disableScreenSecurity();
     _emailController.dispose();
     _passwordController.dispose();
     super.dispose();
@@ -86,7 +116,11 @@ class _LoginScreenState extends State<LoginScreen> {
         setState(() => _isLoading = false);
 
         if (success) {
-          // Navigate directly to dashboard
+          // Reload profile to get fresh user data from Appwrite
+          if (!mounted) return;
+          await context.read<ProfileProvider>().loadProfile();
+
+          // Navigate to dashboard
           if (!mounted) return;
           context.go('/dashboard');
         } else {
@@ -130,51 +164,56 @@ class _LoginScreenState extends State<LoginScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   const SizedBox(height: 48),
-                  // EWER Logo
+                  // EWER Logo with glass effect
                   Center(
-                    child: Container(
-                      width: 120,
-                      height: 120,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.1),
-                            blurRadius: 10,
-                            offset: const Offset(0, 4),
-                          ),
-                        ],
-                      ),
-                      child: ClipOval(
-                        child: Image.asset(
-                          'assets/images/ewer_logo.jpg',
-                          fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) =>
-                              Container(
-                                decoration: const BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  gradient: LinearGradient(
-                                    begin: Alignment.topLeft,
-                                    end: Alignment.bottomRight,
-                                    colors: [
-                                      Color(0xFFE53935),
-                                      Color(0xFFB71C1C),
-                                      Color(0xFF5D5D5D),
-                                    ],
+                    child: GlassContainer(
+                      width: 140,
+                      height: 140,
+                      borderRadius: 70,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: AppColors.primaryRed.withValues(
+                                alpha: 0.3,
+                              ),
+                              blurRadius: 20,
+                              offset: const Offset(0, 8),
+                            ),
+                          ],
+                        ),
+                        child: ClipOval(
+                          child: Image.asset(
+                            'assets/images/ewer_logo.jpg',
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) =>
+                                Container(
+                                  decoration: const BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    gradient: LinearGradient(
+                                      begin: Alignment.topLeft,
+                                      end: Alignment.bottomRight,
+                                      colors: [
+                                        Color(0xFFE53935),
+                                        Color(0xFFB71C1C),
+                                        Color(0xFF5D5D5D),
+                                      ],
+                                    ),
                                   ),
-                                ),
-                                child: const Center(
-                                  child: Text(
-                                    'EWER',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 32,
-                                      fontWeight: FontWeight.bold,
-                                      letterSpacing: 2,
+                                  child: const Center(
+                                    child: Text(
+                                      'EWER',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 32,
+                                        fontWeight: FontWeight.bold,
+                                        letterSpacing: 2,
+                                      ),
                                     ),
                                   ),
                                 ),
-                              ),
+                          ),
                         ),
                       ),
                     ),
@@ -194,163 +233,169 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                   const SizedBox(height: 48),
 
-                  // Error message display
-                  if (_errorMessage != null)
-                    Container(
-                      margin: const EdgeInsets.only(bottom: 16),
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Colors.red.shade50,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.red.shade200),
-                      ),
-                      child: Row(
+                  // Glassmorphic form container
+                  GlassCard(
+                    padding: const EdgeInsets.all(24),
+                    child: Form(
+                      key: _formKey,
+                      child: Column(
                         children: [
-                          Icon(
-                            Icons.error_outline,
-                            color: Colors.red.shade700,
-                            size: 20,
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              _errorMessage!,
-                              style: TextStyle(
-                                color: Colors.red.shade700,
-                                fontSize: 14,
+                          // Error message display
+                          if (_errorMessage != null)
+                            Container(
+                              margin: const EdgeInsets.only(bottom: 16),
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: Colors.red.shade50,
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: Colors.red.shade200),
                               ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-
-                  // Rate limit warning
-                  if (_remainingAttempts < 5 && _remainingAttempts > 0)
-                    Container(
-                      margin: const EdgeInsets.only(bottom: 16),
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Colors.orange.shade50,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.orange.shade200),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.warning_amber,
-                            color: Colors.orange.shade700,
-                            size: 20,
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              '$_remainingAttempts login attempts remaining',
-                              style: TextStyle(
-                                color: Colors.orange.shade700,
-                                fontSize: 14,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-
-                  Form(
-                    key: _formKey,
-                    child: Column(
-                      children: [
-                        CustomTextField(
-                          label: 'Email Address',
-                          controller: _emailController,
-                          keyboardType: TextInputType.emailAddress,
-                          prefixIcon: const Icon(Icons.email_outlined),
-                          hint: 'name@example.com',
-                          validator: Validators.validateEmail,
-                          enabled: !_isLoading,
-                        ),
-                        CustomTextField(
-                          label: 'Password',
-                          controller: _passwordController,
-                          obscureText: !_isPasswordVisible,
-                          prefixIcon: const Icon(Icons.lock_outline),
-                          suffixIcon: IconButton(
-                            icon: Icon(
-                              _isPasswordVisible
-                                  ? Icons.visibility
-                                  : Icons.visibility_off,
-                            ),
-                            onPressed: () {
-                              setState(() {
-                                _isPasswordVisible = !_isPasswordVisible;
-                              });
-                            },
-                          ),
-                          validator: (value) =>
-                              Validators.validateRequired(value, 'Password'),
-                          enabled: !_isLoading,
-                        ),
-                        const SizedBox(height: 16),
-                        // Forgot Password
-                        Align(
-                          alignment: Alignment.centerRight,
-                          child: TextButton(
-                            onPressed: _isLoading
-                                ? null
-                                : () {
-                                    showDialog(
-                                      context: context,
-                                      builder: (context) => AlertDialog(
-                                        title: const Text('Forgot Password'),
-                                        content: const Text(
-                                          'Please contact your system administrator to reset your password.',
-                                        ),
-                                        actions: [
-                                          TextButton(
-                                            onPressed: () =>
-                                                Navigator.pop(context),
-                                            child: const Text('OK'),
-                                          ),
-                                        ],
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    Icons.error_outline,
+                                    color: Colors.red.shade700,
+                                    size: 20,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      _errorMessage!,
+                                      style: TextStyle(
+                                        color: Colors.red.shade700,
+                                        fontSize: 14,
                                       ),
-                                    );
-                                  },
-                            child: const Text('Forgot Password?'),
-                          ),
-                        ),
-                        const SizedBox(height: 24),
-                        CustomButton(
-                          text: 'Login',
-                          onPressed: _isLoading ? null : _submit,
-                          isLoading: _isLoading,
-                        ),
-                        const SizedBox(height: 16),
-
-                        // Sign Up Link is removed from plan?
-                        // Plan: "Remove Sign Up link"
-                        // Wait, user said "do not remove registration screen".
-                        // So I should KEEP the link.
-                        // Correcting my own plan deviation.
-                        // "remove registration code... but i dont want registration code in the auth and also i wan't email OTP verification for every login"
-                        // "remove the registration code... OTHER FIELDS REMAIN".
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(
-                              "Don't have an account? ",
-                              style: TextStyle(color: Colors.grey.shade600),
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
-                            TextButton(
+
+                          // Rate limit warning
+                          if (_remainingAttempts < 5 && _remainingAttempts > 0)
+                            Container(
+                              margin: const EdgeInsets.only(bottom: 16),
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: Colors.orange.shade50,
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                  color: Colors.orange.shade200,
+                                ),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    Icons.warning_amber,
+                                    color: Colors.orange.shade700,
+                                    size: 20,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      '$_remainingAttempts login attempts remaining',
+                                      style: TextStyle(
+                                        color: Colors.orange.shade700,
+                                        fontSize: 14,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+
+                          // Email field
+                          CustomTextField(
+                            label: 'Email Address',
+                            controller: _emailController,
+                            keyboardType: TextInputType.emailAddress,
+                            prefixIcon: const Icon(Icons.email_outlined),
+                            hint: 'name@example.com',
+                            validator: Validators.validateEmail,
+                            enabled: !_isLoading,
+                          ),
+
+                          // Password field
+                          CustomTextField(
+                            label: 'Password',
+                            controller: _passwordController,
+                            obscureText: !_isPasswordVisible,
+                            prefixIcon: const Icon(Icons.lock_outline),
+                            suffixIcon: IconButton(
+                              icon: Icon(
+                                _isPasswordVisible
+                                    ? Icons.visibility
+                                    : Icons.visibility_off,
+                              ),
+                              onPressed: () {
+                                setState(() {
+                                  _isPasswordVisible = !_isPasswordVisible;
+                                });
+                              },
+                            ),
+                            validator: (value) =>
+                                Validators.validateRequired(value, 'Password'),
+                            enabled: !_isLoading,
+                          ),
+                          const SizedBox(height: 16),
+
+                          // Forgot Password
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: TextButton(
                               onPressed: _isLoading
                                   ? null
-                                  : () => context.push('/register'),
-                              child: const Text('Sign Up'),
+                                  : () {
+                                      showDialog(
+                                        context: context,
+                                        builder: (context) => AlertDialog(
+                                          title: const Text('Forgot Password'),
+                                          content: const Text(
+                                            'Please contact your system administrator to reset your password.',
+                                          ),
+                                          actions: [
+                                            TextButton(
+                                              onPressed: () =>
+                                                  Navigator.pop(context),
+                                              child: const Text('OK'),
+                                            ),
+                                          ],
+                                        ),
+                                      );
+                                    },
+                              child: const Text('Forgot Password?'),
                             ),
-                          ],
-                        ),
-                      ],
+                          ),
+                          const SizedBox(height: 24),
+
+                          // Login button
+                          CustomButton(
+                            text: 'Login',
+                            onPressed: _isLoading ? null : _submit,
+                            isLoading: _isLoading,
+                          ),
+                          const SizedBox(height: 16),
+
+                          // Sign Up Link
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                "Don't have an account? ",
+                                style: TextStyle(color: Colors.grey.shade600),
+                              ),
+                              TextButton(
+                                onPressed: _isLoading
+                                    ? null
+                                    : () => context.push('/register'),
+                                child: const Text('Sign Up'),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
+                  ), // Close GlassCard
 
                   const SizedBox(height: 24),
 

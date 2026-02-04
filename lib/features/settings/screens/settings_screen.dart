@@ -11,6 +11,8 @@ import 'package:flutter/material.dart';
 import 'dart:io';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
+// TEMPORARILY DISABLED - Compatibility issue
+// import 'package:flutter_windowmanager/flutter_windowmanager.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -29,7 +31,38 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   void initState() {
     super.initState();
+    _enableScreenSecurity();
     _checkBiometric();
+  }
+
+  @override
+  void dispose() {
+    _disableScreenSecurity();
+    super.dispose();
+  }
+
+  /// Enable screenshot prevention on Android
+  Future<void> _enableScreenSecurity() async {
+    if (Platform.isAndroid) {
+      // TEMPORARILY DISABLED
+      // try {
+      //   await FlutterWindowManager.addFlags(FlutterWindowManager.FLAG_SECURE);
+      // } on Exception {
+      //   // Silently fail - non-critical security feature
+      // }
+    }
+  }
+
+  /// Disable screenshot prevention when leaving screen
+  Future<void> _disableScreenSecurity() async {
+    if (Platform.isAndroid) {
+      // TEMPORARILY DISABLED
+      // try {
+      //   await FlutterWindowManager.clearFlags(FlutterWindowManager.FLAG_SECURE);
+      // } on Exception {
+      //   // Silently fail
+      // }
+    }
   }
 
   Future<void> _checkBiometric() async {

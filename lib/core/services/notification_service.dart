@@ -3,6 +3,7 @@ import 'package:hive_flutter/hive_flutter.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:climate_app/features/profile/providers/profile_provider.dart';
 import 'package:climate_app/core/router/app_router.dart';
+import 'package:climate_app/core/services/hive_encryption_service.dart';
 import 'dart:developer' as developer;
 
 /// Handle background messages
@@ -35,8 +36,14 @@ class NotificationService {
     if (_initialized) return;
 
     try {
-      // Initialize Hive box for notifications
-      _notificationsBox = await Hive.openBox<Map>(_notificationsBoxName);
+      // Get encryption cipher for secure notification storage
+      final cipher = await HiveEncryptionService().getCipher();
+
+      // Initialize Hive box for notifications with encryption
+      _notificationsBox = await Hive.openBox<Map>(
+        _notificationsBoxName,
+        encryptionCipher: cipher,
+      );
 
       // Request permission for iOS
       final NotificationSettings settings = await _fcm.requestPermission(
@@ -74,7 +81,7 @@ class NotificationService {
       );
 
       await _localNotifications.initialize(
-        initSettings,
+        settings: initSettings,
         onDidReceiveNotificationResponse: _onNotificationTapped,
       );
 
@@ -264,10 +271,10 @@ class NotificationService {
     );
 
     await _localNotifications.show(
-      DateTime.now().millisecondsSinceEpoch ~/ 1000,
-      title,
-      body,
-      details,
+      id: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+      title: title,
+      body: body,
+      notificationDetails: details,
       payload: payload,
     );
   }

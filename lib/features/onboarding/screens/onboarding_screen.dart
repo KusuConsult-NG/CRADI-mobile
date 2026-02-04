@@ -111,7 +111,10 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                   ),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(20),
-                    side: BorderSide(color: AppColors.glassBorder, width: 1.5),
+                    side: const BorderSide(
+                      color: AppColors.glassBorder,
+                      width: 1.5,
+                    ),
                   ),
                 ),
                 child: const Text(

@@ -63,7 +63,7 @@ class _AnimatedCardState extends State<AnimatedCard> {
             boxShadow: _isPressed
                 ? [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.08),
+                      color: Colors.black.withValues(alpha: 0.08),
                       blurRadius: 10,
                       offset: const Offset(0, 5),
                     ),
@@ -71,7 +71,7 @@ class _AnimatedCardState extends State<AnimatedCard> {
                 : widget.shadows ??
                       [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.12),
+                          color: Colors.black.withValues(alpha: 0.12),
                           blurRadius: 20,
                           offset: const Offset(0, 10),
                         ),
@@ -148,7 +148,7 @@ class _PremiumButtonState extends State<PremiumButton> {
             gradient: widget.onPressed == null || widget.isLoading
                 ? null
                 : LinearGradient(
-                    colors: [bgColor, bgColor.withOpacity(0.8)],
+                    colors: [bgColor, bgColor.withValues(alpha: 0.8)],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
@@ -160,12 +160,12 @@ class _PremiumButtonState extends State<PremiumButton> {
                 ? null
                 : [
                     BoxShadow(
-                      color: bgColor.withOpacity(0.4),
+                      color: bgColor.withValues(alpha: 0.4),
                       blurRadius: 20,
                       offset: const Offset(0, 10),
                     ),
                     BoxShadow(
-                      color: bgColor.withOpacity(0.2),
+                      color: bgColor.withValues(alpha: 0.2),
                       blurRadius: 40,
                       offset: const Offset(0, 20),
                     ),

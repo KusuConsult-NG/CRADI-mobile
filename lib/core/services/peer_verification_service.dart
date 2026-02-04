@@ -407,10 +407,10 @@ class PeerVerificationService {
         name: 'PeerVerificationService',
       );
 
-      // TODO: Actual alert sending would be done via Cloud Function
-      // - Send push notifications to EWMs
-      // - Send SMS to authorities
-      // - Send SMS to coordinators
+      // NOTE: Alert distribution is handled by the alert-distribution Cloud Function
+      // which sends push notifications to EWMs, SMS to authorities via Africa's Talking,
+      // and emails to authorities via the send-email Cloud Function.
+      // The function is triggered automatically when report status becomes 'validated'.
 
       _notificationService.showLocalNotification(
         title: 'Alert Triggered (Simulation)',

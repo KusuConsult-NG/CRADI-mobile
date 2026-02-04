@@ -241,10 +241,57 @@ class _AlertsListScreenState extends State<AlertsListScreen> {
                       if (filteredReports.isEmpty)
                         Center(
                           child: Padding(
-                            padding: const EdgeInsets.all(32),
-                            child: Text(
-                              'No alerts found for this category.',
-                              style: GoogleFonts.lexend(color: Colors.grey),
+                            padding: const EdgeInsets.all(48),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(24),
+                                  decoration: BoxDecoration(
+                                    color: Colors.grey.shade100,
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: Icon(
+                                    _selectedFilterIndex == 0
+                                        ? Icons.notifications_off_outlined
+                                        : Icons.filter_list_off,
+                                    size: 64,
+                                    color: Colors.grey.shade400,
+                                  ),
+                                ),
+                                const SizedBox(height: 24),
+                                Text(
+                                  _selectedFilterIndex == 0
+                                      ? 'No Alerts Yet'
+                                      : 'No ${_filters[_selectedFilterIndex]}',
+                                  style: GoogleFonts.lexend(
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.textPrimary,
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                Text(
+                                  _selectedFilterIndex == 0
+                                      ? 'When hazards are reported in your area,\nthey\'ll appear here'
+                                      : 'No ${_filters[_selectedFilterIndex].toLowerCase()} alerts\nfound in this area',
+                                  textAlign: TextAlign.center,
+                                  style: GoogleFonts.lexend(
+                                    fontSize: 14,
+                                    color: AppColors.textSecondary,
+                                    height: 1.5,
+                                  ),
+                                ),
+                                const SizedBox(height: 24),
+                                if (_selectedFilterIndex == 0)
+                                  CustomButton(
+                                    onPressed: () => context.push('/report'),
+                                    text: 'Create New Report',
+                                    icon: Icons.add_alert,
+                                    backgroundColor: AppColors.successGreen,
+                                    foregroundColor: Colors.black,
+                                  ),
+                              ],
                             ),
                           ),
                         )

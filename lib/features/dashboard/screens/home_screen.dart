@@ -1,5 +1,4 @@
 import 'package:climate_app/core/theme/app_colors.dart';
-import 'package:climate_app/core/design/glass_container.dart';
 import 'package:climate_app/core/design/animated_card.dart';
 import 'package:climate_app/core/design/typography.dart';
 import 'package:climate_app/core/providers/language_provider.dart';
@@ -487,12 +486,12 @@ class _HomeScreenState extends State<HomeScreen> {
       padding: const EdgeInsets.all(18),
       shadows: [
         BoxShadow(
-          color: color.withOpacity(0.15),
+          color: color.withValues(alpha: 0.15),
           blurRadius: 25,
           offset: const Offset(0, 12),
         ),
         BoxShadow(
-          color: Colors.black.withOpacity(0.06),
+          color: Colors.black.withValues(alpha: 0.06),
           blurRadius: 15,
           offset: const Offset(0, 6),
         ),
@@ -508,17 +507,17 @@ class _HomeScreenState extends State<HomeScreen> {
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
-                    colors: [color.withOpacity(0.2), color.withOpacity(0.1)],
+                    colors: [color.withValues(alpha: 0.2), color.withValues(alpha: 0.1)],
                   ),
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: color.withOpacity(0.3), width: 1),
+                  border: Border.all(color: color.withValues(alpha: 0.3), width: 1),
                 ),
                 child: Icon(icon, color: color, size: 22),
               ),
               Container(
                 padding: const EdgeInsets.all(6),
                 decoration: BoxDecoration(
-                  color: Colors.grey.withOpacity(0.08),
+                  color: Colors.grey.withValues(alpha: 0.08),
                   shape: BoxShape.circle,
                 ),
                 child: Icon(Icons.arrow_forward, color: color, size: 16),
