@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:climate_app/core/theme/app_colors.dart';
 import 'package:climate_app/features/reporting/providers/reporting_provider.dart';
 import 'package:flutter/material.dart';
@@ -334,45 +335,64 @@ class _ReportReviewScreenState extends State<ReportReviewScreen> {
 
                   // Evidence
                   _buildSectionHeader('Evidence', onEdit: () => context.pop()),
-                  SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      children: [
-                        _buildEvidenceThumb(),
-                        const SizedBox(width: 12),
-                        _buildEvidenceThumb(),
-                        const SizedBox(width: 12),
-                        Container(
-                          width: 80,
-                          height: 80,
-                          decoration: BoxDecoration(
-                            border: Border.all(
-                              color: Colors.grey.shade300,
-                              style: BorderStyle.solid,
-                            ),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: const Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                Icons.add_a_photo,
-                                size: 20,
-                                color: Colors.grey,
-                              ),
-                              SizedBox(height: 4),
-                              Text(
-                                'Add',
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  color: Colors.grey,
+                  Consumer<ReportingProvider>(
+                    builder: (context, provider, _) {
+                      final photos = provider.photos;
+                      return SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: [
+                            ...photos.map(
+                              (photo) => Padding(
+                                padding: const EdgeInsets.only(right: 12),
+                                child: Container(
+                                  width: 80,
+                                  height: 80,
+                                  decoration: BoxDecoration(
+                                    color: Colors.grey.shade300,
+                                    borderRadius: BorderRadius.circular(8),
+                                    image: DecorationImage(
+                                      image: FileImage(File(photo.path)),
+                                      fit: BoxFit.cover,
+                                    ),
+                                  ),
                                 ),
                               ),
-                            ],
-                          ),
+                            ),
+                            if (photos.length < 3)
+                              Container(
+                                width: 80,
+                                height: 80,
+                                decoration: BoxDecoration(
+                                  border: Border.all(
+                                    color: Colors.grey.shade300,
+                                    style: BorderStyle.solid,
+                                  ),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: const Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(
+                                      Icons.add_a_photo,
+                                      size: 20,
+                                      color: Colors.grey,
+                                    ),
+                                    SizedBox(height: 4),
+                                    Text(
+                                      'Add',
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        color: Colors.grey,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                          ],
                         ),
-                      ],
-                    ),
+                      );
+                    },
                   ),
                 ],
               ),
