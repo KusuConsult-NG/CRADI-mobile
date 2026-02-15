@@ -21,6 +21,7 @@ import 'package:climate_app/features/verification/screens/verification_request_s
 import 'package:climate_app/features/auth/screens/registration_screen.dart';
 import 'package:climate_app/features/auth/screens/pending_approval_screen.dart';
 import 'package:climate_app/features/auth/screens/welcome_screen.dart';
+import 'package:climate_app/features/auth/screens/activate_account_screen.dart';
 import 'package:climate_app/features/notifications/screens/notifications_screen.dart';
 import 'package:climate_app/features/offline_mode/screens/offline_home_screen.dart';
 import 'package:climate_app/features/settings/screens/about_app_screen.dart';
@@ -97,6 +98,10 @@ GoRouter createRouter(BuildContext context) {
         builder: (context, state) => const WelcomeScreen(),
       ),
       GoRoute(path: '/login', builder: (context, state) => const LoginScreen()),
+      GoRoute(
+        path: '/activate',
+        builder: (context, state) => const ActivateAccountScreen(),
+      ),
       GoRoute(
         path: '/pending-approval',
         builder: (context, state) => const PendingApprovalScreen(),

@@ -70,7 +70,7 @@ class WelcomeScreen extends StatelessWidget {
                 width: double.infinity,
                 height: 56,
                 child: ElevatedButton(
-                  onPressed: () => context.go('/login'),
+                  onPressed: () => context.go('/activate'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.primaryRed,
                     foregroundColor: Colors.white,
@@ -97,39 +97,6 @@ class WelcomeScreen extends StatelessWidget {
                 ),
               ),
 
-              const SizedBox(height: 24),
-
-              // Don't have account text
-              Center(
-                child: Text(
-                  "Don't have an account?",
-                  style: GoogleFonts.lexend(
-                    fontSize: 15,
-                    color: Colors.black87,
-                  ),
-                ),
-              ),
-
-              const SizedBox(height: 8),
-
-              // Open Surveys Link
-              Center(
-                child: TextButton(
-                  onPressed: () => context.go('/register'),
-                  child: Text(
-                    'Click here to view open surveys',
-                    style: GoogleFonts.lexend(
-                      fontSize: 15,
-                      color: AppColors.primaryRed,
-                      fontWeight: FontWeight.w600,
-                      decoration: TextDecoration.underline,
-                      decorationColor: AppColors.primaryRed,
-                    ),
-                  ),
-                ),
-              ),
-
-              const SizedBox(height: 20),
             ],
           ),
         ),
