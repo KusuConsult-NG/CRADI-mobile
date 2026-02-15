@@ -506,15 +506,6 @@ class _ReportReviewScreenState extends State<ReportReviewScreen> {
                   fontSize: 16,
                   fontWeight: FontWeight.w600,
                   color: AppColors.textPrimary,
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildEvidenceThumb() {
     return Container(
       width: 80,
