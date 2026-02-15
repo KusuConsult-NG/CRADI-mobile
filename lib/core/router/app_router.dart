@@ -97,6 +97,10 @@ GoRouter createRouter(BuildContext context) {
         path: '/welcome',
         builder: (context, state) => const WelcomeScreen(),
       ),
+      GoRoute(
+        path: '/activate',
+        builder: (context, state) => const ActivateAccountScreen(),
+      ),
       GoRoute(path: '/login', builder: (context, state) => const LoginScreen()),
       GoRoute(
         path: '/activate',
