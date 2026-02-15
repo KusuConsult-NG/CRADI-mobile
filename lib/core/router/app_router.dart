@@ -103,10 +103,6 @@ GoRouter createRouter(BuildContext context) {
       ),
       GoRoute(path: '/login', builder: (context, state) => const LoginScreen()),
       GoRoute(
-        path: '/activate',
-        builder: (context, state) => const ActivateAccountScreen(),
-      ),
-      GoRoute(
         path: '/pending-approval',
         builder: (context, state) => const PendingApprovalScreen(),
       ),
