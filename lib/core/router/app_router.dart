@@ -147,6 +147,10 @@ GoRouter createRouter(BuildContext context) {
               ),
             ],
           ),
+          GoRoute(
+            path: '/settings',
+            builder: (context, state) => const SettingsScreen(),
+          ),
         ],
       ),
 
@@ -175,10 +179,6 @@ GoRouter createRouter(BuildContext context) {
       ),
 
       // Profile & Settings
-      GoRoute(
-        path: '/profile',
-        builder: (context, state) => const UserProfileScreen(),
-      ),
       GoRoute(
         path: '/settings',
         builder: (context, state) => const SettingsScreen(),
