@@ -101,7 +101,7 @@ abstract class AppLocalizations {
   /// The application title
   ///
   /// In en, this message translates to:
-  /// **'CRADI Early Warning'**
+  /// **'EWER Early Warning'**
   String get appTitle;
 
   /// Label for monitoring zone header

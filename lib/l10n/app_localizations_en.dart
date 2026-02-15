@@ -9,7 +9,7 @@ class AppLocalizationsEn extends AppLocalizations {
   AppLocalizationsEn([String locale = 'en']) : super(locale);
 
   @override
-  String get appTitle => 'CRADI Early Warning';
+  String get appTitle => 'EWER Early Warning';
 
   @override
   String get monitoringZone => 'MONITORING ZONE';
