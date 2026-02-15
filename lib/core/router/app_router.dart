@@ -50,6 +50,7 @@ GoRouter createRouter(BuildContext context) {
         '/splash',
         '/onboarding',
         '/welcome',
+        '/activate',
         '/login',
         '/register',
         '/pending-approval',
