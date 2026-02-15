@@ -73,25 +73,6 @@ class _HomeScreenState extends State<HomeScreen> {
                               ),
                               style: PremiumTypography.heading1(context),
                             ),
-                            const SizedBox(height: 4),
-                            RichText(
-                              text: TextSpan(
-                                style: GoogleFonts.lexend(
-                                  fontSize: 14,
-                                  color: AppColors.textSecondary,
-                                ),
-                                children: [
-                                  const TextSpan(text: 'You have '),
-                                  TextSpan(
-                                    text: language.attentionText,
-                                    style: GoogleFonts.lexend(
-                                      fontWeight: FontWeight.bold,
-                                      color: AppColors.textPrimary,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
                           ],
                         ),
                       ),
@@ -857,7 +838,6 @@ class _HomeScreenState extends State<HomeScreen> {
       'Plateau Zone A',
       'Plateau Zone B',
       'Plateau Zone C',
-      'Kogi State',
     ];
 
     showModalBottomSheet(

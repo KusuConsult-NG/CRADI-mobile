@@ -65,16 +65,6 @@ class LanguageProvider extends ChangeNotifier {
     );
   }
 
-  String get attentionText {
-    return _t(
-      en: '3 new items requiring attention.',
-      ha: 'Abubuwan 3 na buƙatar kulawa.',
-      yo: 'Awọn ohun 3 nilo akiyesi.',
-      ig: 'Ihe 3 chọrọ nlebara anya.',
-      pi: '3 things wey need ur attention.',
-    );
-  }
-
   // --- Navigation ---
   String get navHome =>
       _t(en: 'Home', ha: 'Gida', yo: 'Ile', ig: 'Ụlọ', pi: 'Home');
