@@ -101,9 +101,11 @@ class _ReportDetailsScreenState extends State<ReportDetailsScreen> {
         },
         localeId: _currentLocale,
         listenOptions: stt.SpeechListenOptions(
-          listenMode: stt.ListenMode.dictation,
-          cancelOnError: true,
-          partialResults: true,
+          listenMode: stt.ListenMode.confirmation, // Continues through pauses
+          cancelOnError: false, // Don't stop on errors
+          partialResults: true, // Show results as user speaks
+          pauseFor: const Duration(seconds: 5), // Allow 5 second pauses
+          listenFor: const Duration(seconds: 60), // Listen for up to 1 minute
         ),
       );
     }
