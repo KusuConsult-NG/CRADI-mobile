@@ -187,7 +187,9 @@ class ReportingProvider extends ChangeNotifier {
       }
 
       // ONLINE MODE - Get user and proceed with submission
-      final user = await _appwrite.getCurrentUser();
+      final user = await _appwrite.executeWithAuth(
+        () => _appwrite.getCurrentUser(),
+      );
       if (user == null) {
         throw Exception('User must be logged in to submit a report');
       }

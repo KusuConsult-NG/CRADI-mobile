@@ -197,7 +197,7 @@ class _ReportReviewScreenState extends State<ReportReviewScreen> {
                   // Hazard Details
                   _buildSectionHeader(
                     'Hazard Details',
-                    onEdit: () => context.go('/report'),
+                    onEdit: () => context.go('/report/severity'),
                   ),
                   Consumer<ReportingProvider>(
                     builder: (context, provider, _) {
@@ -235,7 +235,7 @@ class _ReportReviewScreenState extends State<ReportReviewScreen> {
                   // Date & Time
                   _buildSectionHeader(
                     'Date & Time',
-                    onEdit: () => context.pop(),
+                    onEdit: () => context.go('/report/details'),
                   ),
                   Consumer<ReportingProvider>(
                     builder: (context, provider, _) {

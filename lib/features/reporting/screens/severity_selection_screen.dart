@@ -105,8 +105,9 @@ class _SeveritySelectionScreenState extends State<SeveritySelectionScreen> {
               height: 50,
               child: CustomButton(
                 onPressed: () {
+                  // Save full label, not just name
                   context.read<ReportingProvider>().setSeverity(
-                    _currentLevel.name,
+                    _getLabel(_currentLevel),
                   );
                   // For MVP flow, skipping explicit location screen if auto-detect is assumed,
                   // but sticking to PRD plan, location is next.
