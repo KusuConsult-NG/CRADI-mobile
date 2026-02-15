@@ -29,6 +29,7 @@ class AuthProvider extends ChangeNotifier {
   String? _phoneNumber;
   bool _isLoading = false;
   models.User? _currentUser;
+  bool? _isApproved; // Track admin approval status
 
   // Services
   final SecureStorageService _storage = SecureStorageService();
@@ -45,6 +46,7 @@ class AuthProvider extends ChangeNotifier {
   bool get isLoading => _isLoading;
   String? get phoneNumber => _phoneNumber;
   models.User? get currentUser => _currentUser;
+  bool? get isApproved => _isApproved; // Getter for approval status
 
   void _initializeSessionManager() {
     _sessionManager.onSessionExpired = () {
@@ -299,6 +301,10 @@ class AuthProvider extends ChangeNotifier {
       final roleStr = userDoc.data['role'] as String?;
       final role = _parseUserRole(roleStr) ?? UserRole.ewm;
       _userRole = role;
+
+      // 6.5. Get approval status
+      final isApproved = userDoc.data['isApproved'] as bool? ?? false;
+      _isApproved = isApproved;
 
       // 7. Assess fraud risk (non-critical - don't block login if this fails)
       try {

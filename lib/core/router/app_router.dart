@@ -19,6 +19,7 @@ import 'package:climate_app/features/verification/screens/verification_list_scre
 import 'package:climate_app/features/verification/screens/reports_status_screen.dart';
 import 'package:climate_app/features/verification/screens/verification_request_screen.dart';
 import 'package:climate_app/features/auth/screens/registration_screen.dart';
+import 'package:climate_app/features/auth/screens/pending_approval_screen.dart';
 import 'package:climate_app/features/notifications/screens/notifications_screen.dart';
 import 'package:climate_app/features/offline_mode/screens/offline_home_screen.dart';
 import 'package:climate_app/features/settings/screens/about_app_screen.dart';
@@ -48,6 +49,7 @@ GoRouter createRouter(BuildContext context) {
         '/onboarding',
         '/login',
         '/register',
+        '/pending-approval',
         '/',
       ];
 
@@ -89,6 +91,10 @@ GoRouter createRouter(BuildContext context) {
         builder: (context, state) => const RegistrationScreen(),
       ),
       GoRoute(path: '/login', builder: (context, state) => const LoginScreen()),
+      GoRoute(
+        path: '/pending-approval',
+        builder: (context, state) => const PendingApprovalScreen(),
+      ),
 
       // Protected routes with Shell
       ShellRoute(
