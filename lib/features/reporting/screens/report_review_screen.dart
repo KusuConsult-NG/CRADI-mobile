@@ -197,33 +197,37 @@ class _ReportReviewScreenState extends State<ReportReviewScreen> {
                   _buildSectionHeader(
                     'Hazard Details',
                     onEdit: () => context.go('/report'),
-                  ), // Go back to start or specific step? go/pop might be better
-                  Container(
-                    decoration: _cardDecoration(),
-                    child: Column(
-                      children: [
-                        _buildListItem(
-                          icon: Icons.flood,
-                          iconColor: Colors.red,
-                          iconBg: Colors.red.shade50,
-                          label: 'Hazard Type',
-                          value: 'Flash Flood',
+                  ),
+                  Consumer<ReportingProvider>(
+                    builder: (context, provider, _) {
+                      return Container(
+                        decoration: _cardDecoration(),
+                        child: Column(
+                          children: [
+                            _buildListItem(
+                              icon: Icons.warning_amber_rounded,
+                              iconColor: Colors.red,
+                              iconBg: Colors.red.shade50,
+                              label: 'Hazard Type',
+                              value: provider.hazardType ?? 'Not Selected',
+                            ),
+                            Divider(
+                              height: 1,
+                              color: Colors.grey.shade100,
+                              indent: 16,
+                              endIndent: 16,
+                            ),
+                            _buildListItem(
+                              icon: Icons.warning,
+                              iconColor: Colors.orange,
+                              iconBg: Colors.orange.shade50,
+                              label: 'Severity Level',
+                              value: provider.severity ?? 'Not Selected',
+                            ),
+                          ],
                         ),
-                        Divider(
-                          height: 1,
-                          color: Colors.grey.shade100,
-                          indent: 16,
-                          endIndent: 16,
-                        ),
-                        _buildListItem(
-                          icon: Icons.warning,
-                          iconColor: Colors.orange,
-                          iconBg: Colors.orange.shade50,
-                          label: 'Severity Level',
-                          value: 'High Severity',
-                        ),
-                      ],
-                    ),
+                      );
+                    },
                   ),
                   const SizedBox(height: 24),
 
@@ -257,49 +261,51 @@ class _ReportReviewScreenState extends State<ReportReviewScreen> {
                   const SizedBox(height: 24),
 
                   // Location
-                  _buildSectionHeader(
-                    'Location',
-                    onEdit: () => context.pop(),
-                  ), // Assuming pop goes back to details, need to go back 2 steps? Context.go is safer if we know path
-                  Container(
-                    decoration: _cardDecoration(),
-                    padding: const EdgeInsets.all(12),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Container(
-                          height: 120,
-                          width: double.infinity,
-                          decoration: BoxDecoration(
-                            color: Colors.grey.shade200,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Center(
-                            child: Icon(
-                              Icons.map,
-                              color: Colors.grey.shade400,
-                              size: 40,
+                  _buildSectionHeader('Location', onEdit: () => context.pop()),
+                  Consumer<ReportingProvider>(
+                    builder: (context, provider, _) {
+                      return Container(
+                        decoration: _cardDecoration(),
+                        padding: const EdgeInsets.all(12),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Container(
+                              height: 120,
+                              width: double.infinity,
+                              decoration: BoxDecoration(
+                                color: Colors.grey.shade200,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Center(
+                                child: Icon(
+                                  Icons.map,
+                                  color: Colors.grey.shade400,
+                                  size: 40,
+                                ),
+                              ),
                             ),
-                          ),
+                            const SizedBox(height: 12),
+                            Text(
+                              provider.locationDetails ?? 'Not Provided',
+                              style: GoogleFonts.lexend(
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.textPrimary,
+                              ),
+                            ),
+                            if (provider.ward != null && provider.lga != null)
+                              Text(
+                                '${provider.ward}, ${provider.lga}',
+                                style: GoogleFonts.lexend(
+                                  fontSize: 12,
+                                  color: Colors.grey.shade600,
+                                ),
+                              ),
+                          ],
                         ),
-                        const SizedBox(height: 12),
-                        Text(
-                          'Benue River Bank, Makurdi',
-                          style: GoogleFonts.lexend(
-                            fontSize: 14,
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.textPrimary,
-                          ),
-                        ),
-                        Text(
-                          'Lat: 7.7322° N, Long: 8.5218° E',
-                          style: GoogleFonts.robotoMono(
-                            fontSize: 12,
-                            color: Colors.grey.shade500,
-                          ),
-                        ),
-                      ],
-                    ),
+                      );
+                    },
                   ),
                   const SizedBox(height: 24),
 
@@ -308,17 +314,21 @@ class _ReportReviewScreenState extends State<ReportReviewScreen> {
                     'Monitor Notes',
                     onEdit: () => context.pop(),
                   ),
-                  Container(
-                    decoration: _cardDecoration(),
-                    padding: const EdgeInsets.all(16),
-                    child: Text(
-                      'Water levels have risen rapidly over the last 3 hours. Several households in the lower ward are already displaced. Immediate evacuation assistance is required.',
-                      style: GoogleFonts.lexend(
-                        fontSize: 14,
-                        color: AppColors.textPrimary,
-                        height: 1.5,
-                      ),
-                    ),
+                  Consumer<ReportingProvider>(
+                    builder: (context, provider, _) {
+                      return Container(
+                        decoration: _cardDecoration(),
+                        padding: const EdgeInsets.all(16),
+                        child: Text(
+                          provider.description ?? 'No description provided',
+                          style: GoogleFonts.lexend(
+                            fontSize: 14,
+                            color: AppColors.textPrimary,
+                            height: 1.5,
+                          ),
+                        ),
+                      );
+                    },
                   ),
                   const SizedBox(height: 24),
 
