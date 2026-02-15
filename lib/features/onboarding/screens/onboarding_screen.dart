@@ -66,7 +66,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   Future<void> _completeOnboarding() async {
     await _onboardingService.setOnboardingCompleted();
     if (mounted) {
-      context.go('/register'); // New users go to registration
+      context.go('/welcome'); // Go to welcome screen with Sign Up/Login options
     }
   }
 

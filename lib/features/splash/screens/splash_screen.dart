@@ -72,10 +72,10 @@ class _SplashScreenState extends State<SplashScreen>
         }
       } else {
         if (hasCompletedOnboarding) {
-          // Returning user (has seen onboarding) → login page
-          context.go('/login');
+          // Returning user (has seen onboarding) → welcome page
+          context.go('/welcome');
         } else {
-          // New user (first launch) → onboarding then registration
+          // New user (first launch) → onboarding then welcome
           context.go('/onboarding');
         }
       }
