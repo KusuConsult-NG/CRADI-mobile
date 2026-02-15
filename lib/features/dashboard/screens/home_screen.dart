@@ -12,6 +12,7 @@ import 'package:provider/provider.dart';
 import 'package:climate_app/features/knowledge_base/providers/news_provider.dart';
 import 'package:climate_app/features/verification/models/verification_report_model.dart';
 import 'package:climate_app/features/verification/providers/reports_status_provider.dart';
+import 'package:climate_app/core/providers/connectivity_provider.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -77,59 +78,82 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                       ),
                       // Sync Status
-                      Consumer<ReportsStatusProvider>(
-                        builder: (context, provider, _) => Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              'SYNC STATUS',
-                              style: GoogleFonts.lexend(
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.grey.shade500,
-                                letterSpacing: 1.0,
-                              ),
-                            ),
-                            GestureDetector(
-                              onTap: () => provider.refreshReports(),
-                              child: Row(
+                      Consumer2<ReportsStatusProvider, ConnectivityProvider>(
+                        builder:
+                            (
+                              context,
+                              reportsProvider,
+                              connectivityProvider,
+                              _,
+                            ) {
+                              final isOffline = connectivityProvider.isOffline;
+                              final isSyncing = reportsProvider.isLoading;
+
+                              return Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
                                 children: [
-                                  Container(
-                                    width: 8,
-                                    height: 8,
-                                    decoration: BoxDecoration(
-                                      color: provider.isLoading
-                                          ? Colors.orange
-                                          : AppColors.successGreen,
-                                      shape: BoxShape.circle,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
                                   Text(
-                                    provider.isLoading
-                                        ? 'Synchronizing...'
-                                        : 'Online • Just now',
+                                    'SYNC STATUS',
                                     style: GoogleFonts.lexend(
                                       fontSize: 10,
                                       fontWeight: FontWeight.bold,
-                                      color: provider.isLoading
-                                          ? Colors.orange
-                                          : AppColors.successGreen,
+                                      color: Colors.grey.shade500,
+                                      letterSpacing: 1.0,
                                     ),
                                   ),
-                                  const SizedBox(width: 4),
-                                  Icon(
-                                    Icons.refresh,
-                                    size: 12,
-                                    color: provider.isLoading
-                                        ? Colors.orange
-                                        : AppColors.successGreen,
+                                  GestureDetector(
+                                    onTap: () =>
+                                        reportsProvider.refreshReports(),
+                                    child: Row(
+                                      children: [
+                                        Container(
+                                          width: 8,
+                                          height: 8,
+                                          decoration: BoxDecoration(
+                                            color: isOffline
+                                                ? Colors.red
+                                                : (isSyncing
+                                                      ? Colors.orange
+                                                      : AppColors.successGreen),
+                                            shape: BoxShape.circle,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Text(
+                                          isOffline
+                                              ? 'Offline'
+                                              : (isSyncing
+                                                    ? 'Synchronizing...'
+                                                    : 'Online • Just now'),
+                                          style: GoogleFonts.lexend(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.bold,
+                                            color: isOffline
+                                                ? Colors.red
+                                                : (isSyncing
+                                                      ? Colors.orange
+                                                      : AppColors.successGreen),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 4),
+                                        Icon(
+                                          isOffline
+                                              ? Icons.cloud_off
+                                              : Icons.refresh,
+                                          size: 12,
+                                          color: isOffline
+                                              ? Colors.red
+                                              : (isSyncing
+                                                    ? Colors.orange
+                                                    : AppColors.successGreen),
+                                        ),
+                                      ],
+                                    ),
                                   ),
                                 ],
-                              ),
-                            ),
-                          ],
-                        ),
+                              );
+                            },
                       ),
                       const SizedBox(height: 16),
 
