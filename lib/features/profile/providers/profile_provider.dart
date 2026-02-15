@@ -130,8 +130,7 @@ class ProfileProvider extends ChangeNotifier {
               await _storage.write('monitoring_zone', remoteZone);
             } else {
               // Try to load from local storage if remote is empty
-              _monitoringZone =
-                  await _storage.read('monitoring_zone') ?? 'Benue State';
+              _monitoringZone = await _storage.read('monitoring_zone');
             }
 
             _registrationCode = data['registrationCode'];
@@ -174,8 +173,7 @@ class ProfileProvider extends ChangeNotifier {
         _profileImagePath = await _storage.read('profile_image');
         _state = await _storage.read('profile_state');
         _lga = await _storage.read('profile_lga');
-        _monitoringZone =
-            await _storage.read('monitoring_zone') ?? 'Benue State';
+        _monitoringZone = await _storage.read('monitoring_zone');
         final bioEnabled = await _storage.read('biometric_enabled');
         _biometricsEnabled = bioEnabled == 'true';
         developer.log('Profile loaded from local storage for current user');
@@ -199,7 +197,7 @@ class ProfileProvider extends ChangeNotifier {
     _profileImagePath = null;
     _state = null;
     _lga = null;
-    _monitoringZone = 'Benue State';
+    _monitoringZone = null; // Let user select their actual zone
     _registrationCode = null;
     _registrationDate = null;
     _biometricsEnabled = false;

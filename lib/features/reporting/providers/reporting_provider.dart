@@ -363,7 +363,10 @@ class ReportingProvider extends ChangeNotifier {
             'lga':
                 MVPLocationsData.getLGAForWard(draft['locationDetails']!) ??
                 'Makurdi',
-            'state': 'Benue', // Default/Derived
+            'state': MVPLocationsData.getStateForLGA(
+              MVPLocationsData.getLGAForWard(draft['locationDetails']!) ??
+                  'Makurdi',
+            ), // Derive from LGA instead of hardcoding
             'description': draft['description'],
             'submittedAt': DateTime.now().toIso8601String(),
             'imageIds': imageIds,

@@ -49,6 +49,7 @@ class _HazardSelectionScreenState extends State<HazardSelectionScreen> {
       'icon': Icons.coronavirus_rounded,
       'color': Colors.green,
     },
+    {'name': 'Conflict', 'icon': Icons.shield, 'color': AppColors.errorRed},
   ];
 
   @override

@@ -370,7 +370,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         children: [
                           Flexible(
                             child: Text(
-                              profile.monitoringZone ?? 'Benue State',
+                              '${profile.monitoringZone ?? "Select Zone"} • ${profile.monitoringZone != null ? "Active" : "Not Set"}',
                               style: GoogleFonts.lexend(
                                 fontSize: 14,
                                 fontWeight: FontWeight.bold,
@@ -507,10 +507,16 @@ class _HomeScreenState extends State<HomeScreen> {
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
-                    colors: [color.withValues(alpha: 0.2), color.withValues(alpha: 0.1)],
+                    colors: [
+                      color.withValues(alpha: 0.2),
+                      color.withValues(alpha: 0.1),
+                    ],
                   ),
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: color.withValues(alpha: 0.3), width: 1),
+                  border: Border.all(
+                    color: color.withValues(alpha: 0.3),
+                    width: 1,
+                  ),
                 ),
                 child: Icon(icon, color: color, size: 22),
               ),
@@ -845,8 +851,13 @@ class _HomeScreenState extends State<HomeScreen> {
       'Benue Zone B',
       'Benue Zone C',
       'Nasarawa State',
-      'Kogi State',
+      'Nasarawa Zone A',
+      'Nasarawa Zone B',
       'Plateau State',
+      'Plateau Zone A',
+      'Plateau Zone B',
+      'Plateau Zone C',
+      'Kogi State',
     ];
 
     showModalBottomSheet(

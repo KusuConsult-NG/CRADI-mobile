@@ -244,7 +244,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 ),
                               ),
                               Text(
-                                '${profile.monitoringZone ?? "Benue State"} • Active',
+                                '${profile.monitoringZone ?? "Not Set"} • ${profile.monitoringZone != null ? "Active" : "Select Zone"}',
                                 style: GoogleFonts.lexend(
                                   fontSize: 14,
                                   color: AppColors.primaryRed,
