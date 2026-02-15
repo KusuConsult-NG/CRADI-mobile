@@ -39,10 +39,7 @@
             "enabled": true,
             "variables": {
                 "DATABASE_ID": "6941e2c2003705bb5a25",
-                "AUTHORITIES_COLLECTION_ID": "authorities",
-                "AFRICASTALKING_USERNAME": "sandbox",
-                "AFRICASTALKING_API_KEY": "YOUR_KEY",
-                "AFRICASTALKING_SENDER_ID": "CRADI"
+                "AUTHORITIES_COLLECTION_ID": "authorities"
             }
         },
         {

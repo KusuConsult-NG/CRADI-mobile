@@ -1,5 +1,6 @@
 import 'dart:convert';
-import 'package:climate_app/core/config/appwrite_config.dart';
+import 'package:climate_app/core/services/appwrite_service.dart';
+import 'package:appwrite/appwrite.dart';
 import 'package:flutter/foundation.dart';
 
 /// Service for sending emails via Resend through Appwrite Cloud Functions
@@ -126,7 +127,8 @@ class EmailService {
       }
 
       // Call Appwrite Cloud Function
-      final response = await AppwriteConfig.functions.createExecution(
+      final functions = Functions(AppwriteService().appwriteClient);
+      final response = await functions.createExecution(
         functionId: _emailFunctionId,
         body: jsonEncode({'type': type, 'to': to, 'data': data}),
       );
@@ -142,7 +144,7 @@ class EmailService {
       }
 
       return success;
-    } catch (e) {
+    } on Exception catch (e) {
       debugPrint('Email service error: $e');
       return false;
     }

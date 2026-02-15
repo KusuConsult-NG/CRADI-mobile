@@ -26,13 +26,13 @@ module.exports = async ({ req, res, log, error }) => {
         // 30 minutes in milliseconds
         const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString();
 
-        // Get pending reports created > 30 mins ago that aren't already escalated
+        // Get pending reports submitted > 30 mins ago that aren't already escalated
         const response = await databases.listDocuments(
             DATABASE_ID,
             REPORTS_COLLECTION_ID,
             [
                 sdk.Query.equal('status', 'pending'),
-                sdk.Query.lessThan('$createdAt', thirtyMinutesAgo),
+                sdk.Query.lessThan('submittedAt', thirtyMinutesAgo),
                 sdk.Query.limit(100) // Process in chunks
             ]
         );

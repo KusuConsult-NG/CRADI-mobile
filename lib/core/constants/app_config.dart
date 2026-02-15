@@ -10,13 +10,14 @@ class AppConfig {
   /// This allows testing without actual SMS verification
   ///
   /// IMPORTANT: Set this to false in production builds!
-  static const bool enableOtpBypass = true;
+  static const bool enableOtpBypass = false;
 
   /// The development bypass OTP code
   static const String devBypassOtp = "1111";
 
-  /// Enable verbose logging
-  static const bool verboseLogging = true;
+  /// Enable verbose logging (automatically disabled in release builds)
+  static const bool verboseLogging =
+      bool.fromEnvironment('dart.vm.product') == false;
 
   /// Session timeout duration (in minutes)
   static const int sessionTimeoutMinutes = 30;

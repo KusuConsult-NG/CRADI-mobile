@@ -1,12 +1,12 @@
 const sdk = require('node-appwrite');
 
 /**
- * Escalation Timer Function
+ * Escalation Timer Function - FIXED VERSION
  * 
- * Scheduled: Every 5 minutes (*/5 * * * *)
- * Logic: 
+ * Scheduled: Every 5 minutes (*/5 * * * *) 
+ * Logic:
  * 1. Queries reports with status 'pending'
-    * 2. Filters those where 'submittedAt' is older than 30 minutes
+    * 2. Filters those created more than 30 minutes ago
         * 3. Updates status to 'escalated' and notifies coordinators
             */
 
@@ -26,7 +26,7 @@ module.exports = async ({ req, res, log, error }) => {
         // 30 minutes in milliseconds
         const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString();
 
-        // Get pending reports created > 30 mins ago that aren't already escalated
+        // Get pending reports created > 30 mins ago (FIXED: using $createdAt instead of submittedAt)
         const response = await databases.listDocuments(
             DATABASE_ID,
             REPORTS_COLLECTION_ID,
@@ -47,7 +47,7 @@ module.exports = async ({ req, res, log, error }) => {
                     report.$id,
                     {
                         status: 'escalated',
-                        escalatedAt: new Date().toISOString(),
+                        escalatedAt: new Date().toISONOString(),
                         escalationReason: 'Peer verification timeout (30m)'
                     }
                 );

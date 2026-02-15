@@ -1,14 +1,12 @@
 const sdk = require('node-appwrite');
 
 /**
- * Alert Distribution Function
+ * Email Alert Distribution Function
  * 
  * Trigger: databases.*.collections.reports.documents.*.update
- * Logic:
- * 1. Checks if status changed to 'validated'
- * 2. Fetches authority contacts for the report's LGA/State
- * 3. Sends SMS via Africa's Talking
- * 4. Sends Push Notifications via Appwrite Messaging (or FCM)
+ * 
+ * Sends email notifications to authorities when reports are validated.
+ * Replaces SMS-based alert system with email-only notifications.
  */
 
 module.exports = async ({ req, res, log, error }) => {
@@ -21,22 +19,20 @@ module.exports = async ({ req, res, log, error }) => {
     const messaging = new sdk.Messaging(client);
 
     const DATABASE_ID = process.env.DATABASE_ID;
-    const AUTHORITIES_COLLECTION_ID = process.env.AUTHORITIES_COLLECTION_ID;
-    const AT_API_KEY = process.env.AFRICASTALKING_API_KEY;
-    const AT_USERNAME = process.env.AFRICASTALKING_USERNAME;
-    const AT_SENDER_ID = process.env.AFRICASTALKING_SENDER_ID || 'CRADI';
+    const AUTHORITIES_COLLECTION_ID = process.env.AUTHORITIES_COLLECTION_ID || 'authorities';
 
     try {
         const report = JSON.parse(req.payload);
 
-        // Only proceed if status is 'validated'
+        // Only process validated reports
         if (report.status !== 'validated') {
-            return res.json({ success: true, message: 'Status is not validated. Skipping.' });
+            log(`Report ${report.$id} status is '${report.status}', not sending alerts`);
+            return res.json({ success: true, message: 'Status not validated. Skipped.' });
         }
 
-        log(`Distributing alerts for validated report: ${report.$id} (${report.hazardType})`);
+        log(`Processing validated report: ${report.$id} (${report.hazardType})`);
 
-        // 1. Fetch Authorities for this LGA & State
+        // Fetch authorities for this location
         const authResponse = await databases.listDocuments(
             DATABASE_ID,
             AUTHORITIES_COLLECTION_ID,
@@ -46,108 +42,159 @@ module.exports = async ({ req, res, log, error }) => {
             ]
         );
 
-        const authorityPhones = authResponse.documents.map(a => a.phone).filter(Boolean);
-        const authorityEmails = authResponse.documents.map(a => a.email).filter(Boolean);
-        log(`Found ${authorityPhones.length} authority phone numbers and ${authorityEmails.length} emails.`);
+        const authorities = authResponse.documents;
+        const authorityEmails = authorities.map(a => a.email).filter(Boolean);
 
-        // 2. Prepare Alert Message
-        const alertMessage = `🚨 CRADI ALERT: ${report.severity.toUpperCase()} ${report.hazardType} reported in ${report.ward}, ${report.lga}. Safety: ${report.description.substring(0, 100)}`;
+        log(`Found ${authorities.length} authorities, ${authorityEmails.length} with emails`);
 
-        // 3. Send SMS via Africa's Talking (using global fetch in Node 18)
-        if (authorityPhones.length > 0 && AT_API_KEY && AT_USERNAME) {
-            try {
-                const atResponse = await fetch('https://api.africastalking.com/version1/messaging', {
-                    method: 'POST',
-                    headers: {
-                        'Accept': 'application/json',
-                        'Content-Type': 'application/x-www-form-urlencoded',
-                        'apiKey': AT_API_KEY
-                    },
-                    body: new URLSearchParams({
-                        username: AT_USERNAME,
-                        to: authorityPhones.join(','),
-                        message: alertMessage,
-                        from: AT_SENDER_ID
-                    })
-                });
-                const atResult = await atResponse.json();
-                log('SMS distribution result:', JSON.stringify(atResult));
-            } catch (e) {
-                error(`SMS distribution failed: ${e.message}`);
-            }
+        if (authorityEmails.length === 0) {
+            log('No authority emails found for this location');
+            return res.json({
+                success: true,
+                message: 'No authority emails found',
+                authoritiesFound: authorities.length
+            });
         }
 
-        // 4. Send Email Notifications to Authorities
-        if (authorityEmails.length > 0) {
-            try {
-                const emailPayload = {
-                    to: authorityEmails,
-                    template: 'alert',
-                    data: {
-                        hazardType: report.hazardType,
-                        severity: report.severity,
-                        ward: report.ward,
-                        lga: report.lga,
-                        state: report.state,
-                        description: report.description,
-                        timestamp: new Date(report.$createdAt).toLocaleString('en-US', {
-                            dateStyle: 'medium',
-                            timeStyle: 'short'
-                        }),
-                        recommendations: report.recommendations || null
-                    }
-                };
+        // Prepare email content
+        const emailSubject = `[CRADI ALERT] ${report.severity.toUpperCase()} ${report.hazardType} - ${report.lga}`;
 
-                const emailResponse = await fetch(`${process.env.APPWRITE_FUNCTION_ENDPOINT}/functions/send-email/executions`, {
-                    method: 'POST',
-                    headers: {
-                        'X-Appwrite-Project': process.env.APPWRITE_FUNCTION_PROJECT_ID,
-                        'X-Appwrite-Key': process.env.APPWRITE_API_KEY,
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify(emailPayload)
-                });
+        const emailBody = `
+CRADI DISASTER ALERT
+
+Severity: ${report.severity.toUpperCase()}
+Hazard Type: ${report.hazardType}
+
+Location Details:
+- Ward: ${report.ward}
+- LGA: ${report.lga}
+- State: ${report.state}
+
+Description:
+${report.description}
+
+${report.recommendations ? `Recommendations:\n${report.recommendations}\n` : ''}
+
+Reported: ${new Date(report.$createdAt).toLocaleString('en-US', {
+            dateStyle: 'full',
+            timeStyle: 'short'
+        })}
+
+Validated: ${new Date(report.$updatedAt).toLocaleString('en-US', {
+            dateStyle: 'full',
+            timeStyle: 'short'
+        })}
+
+---
+This is an automated alert from the Climate Risk & Disaster Intelligence (CRADI) system.
+Please take appropriate action as per your emergency response protocols.
+        `.trim();
+
+        // Send emails to all authorities
+        let emailsSent = 0;
+        let emailsFailed = 0;
+
+        for (const email of authorityEmails) {
+            try {
+                // Using Appwrite's send-email function
+                const emailResponse = await fetch(
+                    `${process.env.APPWRITE_FUNCTION_ENDPOINT}/functions/send-email/executions`,
+                    {
+                        method: 'POST',
+                        headers: {
+                            'X-Appwrite-Project': process.env.APPWRITE_FUNCTION_PROJECT_ID,
+                            'X-Appwrite-Key': process.env.APPWRITE_API_KEY,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            to: email,
+                            subject: emailSubject,
+                            body: emailBody,
+                            template: 'alert',
+                            data: {
+                                hazardType: report.hazardType,
+                                severity: report.severity,
+                                ward: report.ward,
+                                lga: report.lga,
+                                state: report.state,
+                                description: report.description,
+                                recommendations: report.recommendations || '',
+                                reportedAt: report.$createdAt,
+                                validatedAt: report.$updatedAt
+                            }
+                        })
+                    }
+                );
 
                 if (emailResponse.ok) {
-                    log(`Email alerts sent to ${authorityEmails.length} authorities`);
+                    emailsSent++;
+                    log(`Email sent to: ${email}`);
                 } else {
+                    emailsFailed++;
                     const errorText = await emailResponse.text();
-                    error(`Email sending failed: ${errorText}`);
+                    error(`Failed to send email to ${email}: ${errorText}`);
                 }
             } catch (e) {
-                error(`Email alert distribution failed: ${e.message}`);
+                emailsFailed++;
+                error(`Email send error for ${email}: ${e.message}`);
             }
         }
 
-        // 5. Send Push Notifications (Topic-based if supported, or targeted)
-        // Here we send to a topic named after the LGA or State
+        // Send push notifications to affected areas
         try {
+            const topics = [
+                report.lga.replace(/\s+/g, '_').toLowerCase(),
+                report.state.toLowerCase().replace(/\s+/g, '_')
+            ];
+
+            const pushTitle = `${report.severity.toUpperCase()} ${report.hazardType}`;
+            const pushBody = `${report.hazardType} reported in ${report.ward}, ${report.lga}. Stay safe!`;
+
             await messaging.createPush(
                 sdk.ID.unique(),
-                alertMessage,
-                [], // Target users
-                [], // Target slots
-                [report.lga.replace(/\s+/g, '_').toLowerCase(), report.state.toLowerCase()], // Topics
-                report.hazardType, // Title
-                alertMessage, // Body
-                null, // Data
-                null, // Action
-                null, // Icon
-                null, // Sound
-                null, // Color
-                null, // Tag
-                null, // Badge
-                null  // Image
+                pushBody,
+                [], // userIds
+                [], // targets
+                topics, // topics
+                pushTitle, // title
+                pushBody, // body
+                { reportId: report.$id }, // data
+                null, // action
+                null, // icon
+                null, // sound
+                null, // color
+                null, // tag
+                null  // badge
             );
-            log('Push notification sent to topics.');
+
+            log(`Push notifications sent to topics: ${topics.join(', ')}`);
         } catch (e) {
-            error(`Push notification failed: ${e.message}`);
+            error(`Push notification error: ${e.message}`);
+            // Non-critical - continue even if push fails
         }
 
-        return res.json({ success: true });
+        // Summary
+        const summary = {
+            success: true,
+            reportId: report.$id,
+            hazardType: report.hazardType,
+            severity: report.severity,
+            location: `${report.ward}, ${report.lga}, ${report.state}`,
+            authoritiesFound: authorities.length,
+            emailsSent,
+            emailsFailed,
+            totalRecipients: authorityEmails.length
+        };
+
+        log(`Alert distribution complete: ${emailsSent}/${authorityEmails.length} emails sent`);
+        return res.json(summary);
 
     } catch (err) {
-        error(`Alert Distribution error: ${err.message}`);
-        return res.json({ success: false, error: err.message }, 500);
+        error(`Alert distribution error: ${err.message}`);
+        error(`Stack: ${err.stack}`);
+        return res.json({
+            success: false,
+            error: err.message
+        }, 500);
     }
 };

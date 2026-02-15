@@ -17,9 +17,19 @@ import 'package:climate_app/core/providers/settings_provider.dart';
 import 'package:climate_app/core/services/notification_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'dart:ui';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
+
+/// Background message handler (must be top-level function)
+@pragma('vm:entry-point')
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  await Firebase.initializeApp();
+  debugPrint('📬 Background notification: ${message.notification?.title}');
+}
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -27,8 +37,29 @@ Future<void> main() async {
   // Initialize Firebase
   try {
     await Firebase.initializeApp();
+
+    // Set up background message handler
+    FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+    debugPrint('✅ FCM background handler registered');
+
+    // Initialize Crashlytics
+    // Pass all uncaught "fatal" errors from the framework to Crashlytics
+    FlutterError.onError = (errorDetails) {
+      FirebaseCrashlytics.instance.recordFlutterFatalError(errorDetails);
+      // Also log to console in debug mode
+      debugPrint('Flutter error: ${errorDetails.exception}');
+    };
+
+    // Pass all uncaught asynchronous errors that aren't handled by the Flutter framework to Crashlytics
+    PlatformDispatcher.instance.onError = (error, stack) {
+      FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
+      debugPrint('Platform error: $error');
+      return true;
+    };
+
+    debugPrint('✅ Firebase Crashlytics initialized');
   } on Exception catch (e) {
-    // Firebase not configured yet - app will work without push notifications
+    // Firebase not configured yet - app will work without crash reporting
     debugPrint('Firebase initialization failed: $e');
   }
 
