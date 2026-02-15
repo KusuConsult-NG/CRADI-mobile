@@ -1,7 +1,7 @@
 {
   "@@locale": "en",
   
-  "appTitle": "CRADI Early Warning",
+  "appTitle": "EWER Early Warning",
   "@appTitle": {
     "description": "The application title"
   },

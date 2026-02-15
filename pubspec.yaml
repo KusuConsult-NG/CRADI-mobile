@@ -1,5 +1,5 @@
 name: climate_app
-description: "A new Flutter project."
+description: "Early Warning and Emergency Response System"
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
@@ -108,6 +108,15 @@ dev_dependencies:
   # Testing dependencies
   mockito: ^5.4.4
   build_runner: ^2.4.13
+  flutter_launcher_icons: ^0.14.1
+
+# App icon configuration
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/images/ewer_logo.jpg"
+  adaptive_icon_background: "#E63946"
+  adaptive_icon_foreground: "assets/images/ewer_logo.jpg"
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
