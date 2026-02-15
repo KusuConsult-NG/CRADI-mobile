@@ -428,6 +428,53 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                       ],
                     ),
                   ),
+                  const SizedBox(height: 8),
+                  // Account Status Badge
+                  Consumer<app_auth.AuthProvider>(
+                    builder: (context, authProvider, _) {
+                      final isApproved = authProvider.isApproved ?? false;
+                      return Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: isApproved
+                              ? AppColors.successGreen.withValues(alpha: 0.1)
+                              : Colors.orange.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: isApproved
+                                ? AppColors.successGreen.withValues(alpha: 0.3)
+                                : Colors.orange.withValues(alpha: 0.3),
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              isApproved ? Icons.verified : Icons.pending,
+                              size: 16,
+                              color: isApproved
+                                  ? AppColors.successGreen
+                                  : Colors.orange,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              isApproved ? 'Active' : 'Pending Approval',
+                              style: GoogleFonts.lexend(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                                color: isApproved
+                                    ? AppColors.successGreen
+                                    : Colors.orange,
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
                   Consumer<ProfileProvider>(
                     builder: (context, profile, _) {
                       if (profile.email.isEmpty) return const SizedBox.shrink();
