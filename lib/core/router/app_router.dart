@@ -252,7 +252,15 @@ final GoRouter appRouter = GoRouter(
       path: '/register',
       builder: (context, state) => const RegistrationScreen(),
     ),
+    GoRoute(
+      path: '/welcome',
+      builder: (context, state) => const WelcomeScreen(),
+    ),
     GoRoute(path: '/login', builder: (context, state) => const LoginScreen()),
+    GoRoute(
+      path: '/pending-approval',
+      builder: (context, state) => const PendingApprovalScreen(),
+    ),
     ShellRoute(
       builder: (context, state, child) => MainShellScreen(child: child),
       routes: [
