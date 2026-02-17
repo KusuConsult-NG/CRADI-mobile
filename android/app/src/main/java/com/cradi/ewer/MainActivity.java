@@ -1,4 +1,4 @@
-package com.westgatestratagem.climate_app.climate_app;
+package com.cradi.ewer;
 
 import io.flutter.embedding.android.FlutterFragmentActivity;
 

@@ -1,5 +1,6 @@
 import 'package:climate_app/core/services/appwrite_service.dart';
 import 'package:climate_app/core/services/notification_service.dart';
+import 'package:climate_app/core/services/sms_service.dart';
 import 'package:appwrite/appwrite.dart';
 import 'dart:developer' as developer;
 
@@ -407,13 +408,32 @@ class PeerVerificationService {
         name: 'PeerVerificationService',
       );
 
-      // NOTE: Alert distribution is handled by the alert-distribution Cloud Function
-      // which sends push notifications to EWMs, SMS to authorities via Africa's Talking,
-      // and emails to authorities via the send-email Cloud Function.
-      // The function is triggered automatically when report status becomes 'validated'.
+      // NOTE: Alert distribution is handled by the cloud function, but we verify client-side logic here
+
+      // Extract phone numbers for SMS
+      final authorityContacts = authorities.documents
+          .map((doc) => doc.data['phone'] as String?)
+          .where((phone) => phone != null && phone.isNotEmpty)
+          .cast<String>()
+          .toList();
+
+      if (authorityContacts.isNotEmpty) {
+        // Send SMS to authorities
+        final sentCount = await SmsService().sendAlertToAuthorities(
+          alertTitle: report.data['hazardType'] ?? 'Hazard',
+          location: '$lga (Ward: ${report.data['ward']})',
+          severity: report.data['severity'] ?? 'HIGH',
+          authorityContacts: authorityContacts,
+        );
+
+        developer.log(
+          'SMS Alerts sent to $sentCount/${authorityContacts.length} authorities',
+          name: 'PeerVerificationService',
+        );
+      }
 
       _notificationService.showLocalNotification(
-        title: 'Alert Triggered (Simulation)',
+        title: 'Alert Triggered',
         body: 'Alert sent to ${recipients.length} recipients',
       );
     } on Exception catch (e) {
@@ -500,6 +520,50 @@ class PeerVerificationService {
         'requiresEscalation': false,
         'canValidate': false,
       };
+    }
+  }
+
+  /// Lazy Escalation: Check for pending reports older than 30 minutes and escalate them
+  Future<void> checkAndEscalatePendingReports() async {
+    try {
+      final reports = await _appwrite.listDocuments(
+        collectionId: AppwriteService.reportsCollectionId,
+        queries: [Query.equal('status', 'pending')],
+      );
+
+      final now = DateTime.now();
+      int escalatedCount = 0;
+
+      for (final doc in reports.documents) {
+        final submittedAtStr = doc.data['submittedAt'] as String?;
+        if (submittedAtStr == null) continue;
+
+        final submittedAt = DateTime.tryParse(submittedAtStr);
+        if (submittedAt == null) continue;
+
+        if (now.difference(submittedAt) > escalationTimeout) {
+          // Double check if it's already escalated or validated to be safe
+          // (though query said pending)
+
+          await escalateToCoordinator(
+            reportId: doc.$id,
+            reason: 'Auto-escalation: No verification within 30 minutes',
+          );
+          escalatedCount++;
+        }
+      }
+
+      if (escalatedCount > 0) {
+        developer.log(
+          'Lazy Escalation: Escalated $escalatedCount reports.',
+          name: 'PeerVerificationService',
+        );
+      }
+    } on Exception catch (e) {
+      developer.log(
+        'Error in checkAndEscalatePendingReports: $e',
+        name: 'PeerVerificationService',
+      );
     }
   }
 }

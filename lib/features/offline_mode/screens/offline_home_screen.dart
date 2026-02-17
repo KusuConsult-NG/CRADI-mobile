@@ -7,7 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
-import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:climate_app/core/providers/connectivity_provider.dart';
 
 class OfflineHomeScreen extends StatefulWidget {
   const OfflineHomeScreen({super.key});
@@ -86,39 +86,65 @@ class _OfflineHomeScreenState extends State<OfflineHomeScreen> {
                   }
 
                   final drafts = snapshot.data!;
-                  return ListView.builder(
-                    itemCount: drafts.length,
-                    itemBuilder: (context, index) {
-                      final draft = drafts[index];
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: AppCard(
-                          child: ListTile(
-                            leading: const Icon(
-                              Icons.description,
-                              color: AppColors.primaryRed,
-                            ),
-                            title: Text(
-                              draft['hazardType'] ?? 'Unknown Hazard',
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            subtitle: Text(
-                              '${draft['locationDetails']}\n${_formatDate(draft['createdAt'])}',
-                            ),
-                            isThreeLine: true,
-                            trailing: const Icon(
-                              Icons.arrow_forward_ios,
-                              size: 16,
-                            ),
-                            onTap: () {
-                              // Future: Navigate to edit/submit draft
-                            },
+                  return RefreshIndicator(
+                    onRefresh: () async {
+                      // Trigger sync check
+                      final connectivityProvider = context
+                          .read<ConnectivityProvider>();
+                      final isOnline = await connectivityProvider
+                          .checkConnectivity();
+
+                      if (context.mounted && isOnline) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Syncing pending data...'),
                           ),
-                        ),
-                      );
+                        );
+                        await context
+                            .read<ReportingProvider>()
+                            .syncPendingReports(context);
+                        if (context.mounted) {
+                          context.go('/dashboard');
+                        }
+                      }
+                      // Refresh UI to show updated drafts
+                      setState(() {});
                     },
+                    child: ListView.builder(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      itemCount: drafts.length,
+                      itemBuilder: (context, index) {
+                        final draft = drafts[index];
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: AppCard(
+                            child: ListTile(
+                              leading: const Icon(
+                                Icons.description,
+                                color: AppColors.primaryRed,
+                              ),
+                              title: Text(
+                                draft['hazardType'] ?? 'Unknown Hazard',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              subtitle: Text(
+                                '${draft['locationDetails']}\n${_formatDate(draft['createdAt'])}',
+                              ),
+                              isThreeLine: true,
+                              trailing: const Icon(
+                                Icons.arrow_forward_ios,
+                                size: 16,
+                              ),
+                              onTap: () {
+                                // Future: Navigate to edit/submit draft
+                              },
+                            ),
+                          ),
+                        );
+                      },
+                    ),
                   );
                 },
               ),
@@ -129,9 +155,32 @@ class _OfflineHomeScreenState extends State<OfflineHomeScreen> {
             CustomButton(
               text: 'Try Reconnecting & Sync',
               onPressed: () async {
-                final connectivityResult = await Connectivity()
-                    .checkConnectivity();
-                if (connectivityResult.contains(ConnectivityResult.none)) {
+                final connectivityProvider = context
+                    .read<ConnectivityProvider>();
+
+                // Force check connectivity
+                final isOnline = await connectivityProvider.checkConnectivity();
+
+                // If manually offline, we should probably tell the user
+                if (connectivityProvider.manualOffline) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: const Text(
+                          'Offline Mode is enabled in Settings.',
+                        ),
+                        backgroundColor: Colors.orange,
+                        action: SnackBarAction(
+                          label: 'Settings',
+                          onPressed: () => context.push('/settings'),
+                          textColor: Colors.white,
+                        ),
+                      ),
+                    );
+                  }
+                }
+
+                if (!isOnline && !connectivityProvider.manualOffline) {
                   if (context.mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(
@@ -143,38 +192,44 @@ class _OfflineHomeScreenState extends State<OfflineHomeScreen> {
                   return;
                 }
 
-                if (context.mounted) {
+                if (context.mounted && isOnline) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(content: Text('Syncing pending data...')),
                   );
 
-                  final result = await context
-                      .read<ReportingProvider>()
-                      .syncPendingReports(context);
+                  await context.read<ReportingProvider>().syncPendingReports(
+                    context,
+                  );
+
+                  // refresh UI
+                  setState(() {});
 
                   if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(result['message']),
-                        backgroundColor: result['success']
-                            ? Colors.green
-                            : AppColors.primaryRed,
-                      ),
-                    );
-
-                    // Refresh the list if sync happened
-                    if (result['success'] && result['synced'] > 0) {
-                      setState(() {});
-                    }
+                    // If online and synced, suggest going to dashboard
+                    context.go('/dashboard');
                   }
                 }
               },
             ),
             const SizedBox(height: 16),
             CustomButton(
-              text: 'Go to Dashboard',
+              text: 'Create New Report',
+              onPressed: () => context.push('/report'),
+              icon: Icons.add_circle_outline,
+            ),
+            const SizedBox(height: 16),
+            CustomButton(
+              text: 'Open Settings',
               type: ButtonType.secondary,
-              onPressed: () => context.go('/dashboard'),
+              onPressed: () => context.push('/settings'),
+              icon: Icons.settings,
+            ),
+            const SizedBox(height: 16),
+            CustomButton(
+              text: 'View Saved Guides',
+              type: ButtonType.secondary,
+              onPressed: () => context.push('/knowledge-base'),
+              icon: Icons.menu_book,
             ),
           ],
         ),

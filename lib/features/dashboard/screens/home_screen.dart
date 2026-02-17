@@ -8,11 +8,15 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:climate_app/features/profile/providers/profile_provider.dart';
 import 'package:provider/provider.dart';
+import 'package:climate_app/core/utils/error_handler.dart';
 
 import 'package:climate_app/features/knowledge_base/providers/news_provider.dart';
 import 'package:climate_app/features/verification/models/verification_report_model.dart';
 import 'package:climate_app/features/verification/providers/reports_status_provider.dart';
 import 'package:climate_app/core/providers/connectivity_provider.dart';
+import 'package:climate_app/core/services/peer_verification_service.dart';
+import 'package:climate_app/core/services/notification_service.dart';
+import 'package:climate_app/features/reporting/providers/reporting_provider.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -28,6 +32,47 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     // Initial fetch if needed, though StreamBuilder handles it
+
+    // Lazy Escalation Check
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      PeerVerificationService().checkAndEscalatePendingReports();
+
+      // Setup connectivity listener for auto-sync
+      try {
+        final connectivity = context.read<ConnectivityProvider>();
+        connectivity.addListener(_onConnectivityChange);
+
+        if (!connectivity.isOffline) {
+          context.read<ReportingProvider>().syncPendingReports(context);
+        }
+      } on Exception catch (e) {
+        ErrorHandler.logError(e, context: 'HomeScreen.refresh');
+      }
+    });
+  }
+
+  late ConnectivityProvider _connectivityProvider;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _connectivityProvider = context.read<ConnectivityProvider>();
+  }
+
+  @override
+  void dispose() {
+    try {
+      _connectivityProvider.removeListener(_onConnectivityChange);
+    } on Exception catch (_) {}
+    super.dispose();
+  }
+
+  void _onConnectivityChange() {
+    if (!mounted) return;
+    final connectivity = context.read<ConnectivityProvider>();
+    if (!connectivity.isOffline) {
+      context.read<ReportingProvider>().syncPendingReports(context);
+    }
   }
 
   @override
@@ -87,7 +132,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               _,
                             ) {
                               final isOffline = connectivityProvider.isOffline;
-                              final isSyncing = reportsProvider.isLoading;
+                              final isSyncing = reportsProvider.isLoading(null);
 
                               return Row(
                                 mainAxisAlignment:
@@ -158,23 +203,19 @@ class _HomeScreenState extends State<HomeScreen> {
                       const SizedBox(height: 16),
 
                       // Quick Stats
-                      StreamBuilder<List<VerificationReport>>(
-                        stream: context
-                            .read<ReportsStatusProvider>()
-                            .reportsStatusStream,
-                        builder: (context, snapshot) {
-                          final reports = snapshot.data ?? [];
-                          final activeCount = reports
-                              .where(
-                                (r) => r.status == ReportStatus.acknowledged,
-                              )
-                              .length;
-                          final pendingCount = reports
-                              .where((r) => r.status == ReportStatus.pending)
-                              .length;
-                          final resolvedCount = reports
-                              .where((r) => r.status == ReportStatus.resolved)
-                              .length;
+                      Consumer<ReportsStatusProvider>(
+                        builder: (context, provider, _) {
+                          // Using total counts from provider (requires fetch to be populated)
+                          // Assuming refreshReports() is called in initState
+                          final activeCount = provider.getTotal(
+                            ReportStatus.acknowledged,
+                          );
+                          final pendingCount = provider.getTotal(
+                            ReportStatus.pending,
+                          );
+                          final resolvedCount = provider.getTotal(
+                            ReportStatus.resolved,
+                          );
 
                           return Row(
                             children: [
@@ -456,17 +497,23 @@ class _HomeScreenState extends State<HomeScreen> {
                         size: 22,
                       ),
                     ),
-                    Positioned(
-                      top: 10,
-                      right: 12,
-                      child: Container(
-                        width: 8,
-                        height: 8,
-                        decoration: const BoxDecoration(
-                          color: AppColors.errorRed,
-                          shape: BoxShape.circle,
-                        ),
-                      ),
+                    ValueListenableBuilder<int>(
+                      valueListenable: NotificationService().unreadCount,
+                      builder: (context, count, _) {
+                        if (count == 0) return const SizedBox.shrink();
+                        return Positioned(
+                          top: 10,
+                          right: 12,
+                          child: Container(
+                            width: 8,
+                            height: 8,
+                            decoration: const BoxDecoration(
+                              color: AppColors.errorRed,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                        );
+                      },
                     ),
                   ],
                 ),
@@ -592,86 +639,82 @@ class _HomeScreenState extends State<HomeScreen> {
 
     if (_selectedFilterIndex == 2) {
       // To Verify
-      return _buildStreamFeed(
-        statusProvider.getReportsStreamByStatus(ReportStatus.pending),
+      return _buildListFeed(
+        statusProvider.getReports(ReportStatus.pending),
+        statusProvider.isLoading(ReportStatus.pending),
         'No reports to verify',
       );
     } else if (_selectedFilterIndex == 1) {
-      // My Reports
-      return _buildStreamFeed(
-        statusProvider.getReportsStreamByStatus(
-          ReportStatus.pending,
-        ), // Fallback or implement My Reports stream
+      // My Reports - For now showing pending as placeholder or need new provider method
+      // Assuming My Reports should filter by user ID, which getReports doesn't do yet.
+      // We will show empty for now or pending. Let's show pending for demo.
+      return _buildListFeed(
+        statusProvider.getReports(ReportStatus.pending),
+        statusProvider.isLoading(ReportStatus.pending),
         'You haven\'t submitted any reports yet',
       );
     } else {
       // Recent (All)
-      return _buildStreamFeed(
-        statusProvider.getReportsStreamByStatus(
-          ReportStatus.pending,
-        ), // Temporary, should show all
+      return _buildListFeed(
+        statusProvider.getReports(null),
+        statusProvider.isLoading(null),
         'No recent reports',
       );
     }
   }
 
-  Widget _buildStreamFeed(
-    Stream<List<VerificationReport>> stream,
+  Widget _buildListFeed(
+    List<VerificationReport> reports,
+    bool isLoading,
     String emptyMessage,
   ) {
-    return StreamBuilder<List<VerificationReport>>(
-      stream: stream,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(
-            child: Padding(
-              padding: EdgeInsets.all(40),
-              child: CircularProgressIndicator(),
-            ),
-          );
-        }
+    if (isLoading && reports.isEmpty) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(40),
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
 
-        final reports = snapshot.data ?? [];
-        if (reports.isEmpty) {
-          return Center(
-            child: Padding(
-              padding: const EdgeInsets.all(40),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.inventory_2_outlined,
-                    size: 48,
-                    color: Colors.grey.shade400,
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    emptyMessage,
-                    style: GoogleFonts.lexend(
-                      fontSize: 14,
-                      color: AppColors.textSecondary,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                ],
+    if (reports.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(40),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.inventory_2_outlined,
+                size: 48,
+                color: Colors.grey.shade400,
               ),
-            ),
-          );
-        }
+              const SizedBox(height: 16),
+              Text(
+                emptyMessage,
+                style: GoogleFonts.lexend(
+                  fontSize: 14,
+                  color: AppColors.textSecondary,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+      );
+    }
 
-        return ListView.separated(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          itemCount: reports.length > 5
-              ? 5
-              : reports.length, // Show only top 5 on home
-          separatorBuilder: (_, _) => const SizedBox(height: 12),
-          itemBuilder: (context, index) {
-            final report = reports[index];
-            return _buildReportItem(report);
-          },
-        );
+    return ListView.separated(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      itemCount: reports.length > 5
+          ? 5
+          : reports.length, // Show only top 5 on home
+      separatorBuilder: (_, _) => const SizedBox(height: 12),
+      itemBuilder: (context, index) {
+        final report = reports[index];
+        return _buildReportItem(report);
       },
     );
   }

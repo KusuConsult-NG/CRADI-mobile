@@ -38,7 +38,7 @@ class FCMVerificationScript {
           '✅ Firebase initialized: ${app.options.projectId}',
           name: 'FCMVerification',
         );
-      } catch (e) {
+      } on Object catch (e) {
         results['tests']['firebase_initialized'] = {
           'status': 'fail',
           'error': e.toString(),
@@ -95,7 +95,7 @@ class FCMVerificationScript {
             name: 'FCMVerification',
           );
         }
-      } catch (e) {
+      } on Object catch (e) {
         results['tests']['permissions'] = {
           'status': 'fail',
           'error': e.toString(),
@@ -133,7 +133,7 @@ class FCMVerificationScript {
           };
           developer.log('❌ Failed to get FCM token', name: 'FCMVerification');
         }
-      } catch (e) {
+      } on Object catch (e) {
         results['tests']['token_generation'] = {
           'status': 'fail',
           'error': e.toString(),
@@ -162,7 +162,7 @@ class FCMVerificationScript {
           '✅ Token refresh listener active',
           name: 'FCMVerification',
         );
-      } catch (e) {
+      } on Object catch (e) {
         results['tests']['token_refresh_listener'] = {
           'status': 'warning',
           'error': e.toString(),
@@ -203,7 +203,7 @@ class FCMVerificationScript {
           '✅ Foreground message handler active',
           name: 'FCMVerification',
         );
-      } catch (e) {
+      } on Object catch (e) {
         results['tests']['foreground_handler'] = {
           'status': 'fail',
           'error': e.toString(),
@@ -269,7 +269,7 @@ class FCMVerificationScript {
       developer.log('Warnings: $warnings', name: 'FCMVerification');
 
       return results;
-    } catch (e, stackTrace) {
+    } on Object catch (e, stackTrace) {
       developer.log(
         '❌ Critical error during verification',
         name: 'FCMVerification',
@@ -332,7 +332,7 @@ class FCMVerificationScript {
     }
 
     return Card(
-      color: color.withOpacity(0.1),
+      color: color.withValues(alpha: 0.1),
       child: ListTile(
         leading: Icon(icon, color: color, size: 40),
         title: Text(

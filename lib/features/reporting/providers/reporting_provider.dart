@@ -44,6 +44,8 @@ class ReportingProvider extends ChangeNotifier {
   DateTime get reportDateTime => _reportDateTime;
   List<XFile> get photos => _photos;
   bool get isLoading => _isLoading;
+  double? get latitude => _latitude;
+  double? get longitude => _longitude;
 
   void setHazardType(String type) {
     _hazardType = type;
@@ -172,6 +174,8 @@ class ReportingProvider extends ChangeNotifier {
           description: _description,
           reportDateTime: _reportDateTime,
           imagePaths: _photos.map((p) => p.path).toList(),
+          ward: _ward,
+          lga: _lga,
         );
 
         reset();
@@ -219,11 +223,14 @@ class ReportingProvider extends ChangeNotifier {
         'latitude': _latitude,
         'longitude': _longitude,
         'locationDetails': _locationDetails,
+        'location': _locationDetails, // Added for schema compatibility
+        'address': _locationDetails, // Added for schema compatibility
         'ward': _ward,
         'lga': _lga,
         'state': MVPLocationsData.getStateForLGA(_lga!),
         'description': _description ?? '',
         'submittedAt': DateTime.now().toIso8601String(),
+        'createdAt': DateTime.now().toIso8601String(), // Required by schema
         'imageIds': imageIds,
         'status': 'pending',
         'isAlert': _severity == 'critical' || _severity == 'high',
@@ -238,12 +245,20 @@ class ReportingProvider extends ChangeNotifier {
         );
 
         // ✨ SEND VERIFICATION REQUESTS TO PEERS ✨
-        await PeerVerificationService().sendVerificationRequests(
-          reportId: reportId,
-          ward: _ward!,
-          lga: _lga!,
-          reporterId: user.$id,
-        );
+        try {
+          await PeerVerificationService().sendVerificationRequests(
+            reportId: reportId,
+            ward: _ward!,
+            lga: _lga!,
+            reporterId: user.$id,
+          );
+        } on Exception catch (e) {
+          // Log but don't fail the submission
+          developer.log(
+            'Warning: Verification requests failed to send: $e',
+            name: 'ReportingProvider',
+          );
+        }
 
         developer.log('Report submitted: $reportId');
 
@@ -257,7 +272,7 @@ class ReportingProvider extends ChangeNotifier {
               'Report submitted successfully! Verification requests sent to peers.',
           'reportId': reportId,
         };
-      } on AppwriteException {
+      } on AppwriteException catch (e) {
         // Submission failed - ADD TO SYNC QUEUE
         await OfflineStorageService().addToSyncQueue(reportData);
 
@@ -268,7 +283,7 @@ class ReportingProvider extends ChangeNotifier {
         return {
           'success': false,
           'message':
-              '⚠️ Submission failed. Added to sync queue. Will retry automatically.',
+              '⚠️ Submission failed: ${e.message ?? e.toString()}. Added to sync queue.',
           'queued': true,
         };
       }
@@ -276,7 +291,8 @@ class ReportingProvider extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
       developer.log('Error submitting report: $e');
-      return {'success': false, 'message': e.toString()};
+      // Return specific error for UI
+      return {'success': false, 'message': 'Submission Error: $e'};
     }
   }
 
@@ -356,19 +372,26 @@ class ReportingProvider extends ChangeNotifier {
             'latitude': draft['latitude'],
             'longitude': draft['longitude'],
             'locationDetails': draft['locationDetails'],
+            'location':
+                draft['locationDetails'], // Added for schema compatibility
+            'address':
+                draft['locationDetails'], // Added for schema compatibility
             'ward':
+                draft['ward'] ??
                 MVPLocationsData.getWardsForLGA(
                   MVPLocationsData.getLGAForWard(draft['locationDetails']!) ??
                       'Makurdi',
                 ).firstOrNull ??
-                'Unknown', // Simplification for draft
+                'Unknown',
             'lga':
+                draft['lga'] ??
                 MVPLocationsData.getLGAForWard(draft['locationDetails']!) ??
                 'Makurdi',
             'state': MVPLocationsData.getStateForLGA(
-              MVPLocationsData.getLGAForWard(draft['locationDetails']!) ??
+              draft['lga'] ??
+                  MVPLocationsData.getLGAForWard(draft['locationDetails']!) ??
                   'Makurdi',
-            ), // Derive from LGA instead of hardcoding
+            ),
             'description': draft['description'],
             'submittedAt': DateTime.now().toIso8601String(),
             'imageIds': imageIds,

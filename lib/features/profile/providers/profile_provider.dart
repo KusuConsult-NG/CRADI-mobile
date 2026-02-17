@@ -1,5 +1,6 @@
 import 'package:climate_app/core/services/secure_storage_service.dart';
 import 'package:climate_app/core/services/appwrite_service.dart';
+import 'package:climate_app/core/services/offline_storage_service.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
@@ -20,6 +21,8 @@ class ProfileProvider extends ChangeNotifier {
 
   final SecureStorageService _storage = SecureStorageService();
   final AppwriteService _appwrite;
+  final OfflineStorageService _offlineStorage = OfflineStorageService();
+  Map<String, dynamic>? _userProfile;
   final Connectivity _connectivity;
 
   String _name = 'User';
@@ -28,6 +31,7 @@ class ProfileProvider extends ChangeNotifier {
   String? _profileImagePath;
   String? _state;
   String? _lga;
+  String? _ward;
   String? _monitoringZone;
   String? _registrationCode;
   DateTime? _registrationDate;
@@ -41,6 +45,7 @@ class ProfileProvider extends ChangeNotifier {
   String? get profileImagePath => _profileImagePath;
   String? get state => _state;
   String? get lga => _lga;
+  String? get ward => _ward;
   String? get monitoringZone => _monitoringZone;
   String? get registrationCode => _registrationCode;
   DateTime? get registrationDate => _registrationDate;
@@ -115,6 +120,10 @@ class ProfileProvider extends ChangeNotifier {
 
           if (doc.data.isNotEmpty) {
             final data = doc.data;
+            _userProfile = data;
+
+            // Cache the fresh profile
+            await _offlineStorage.cacheUserProfile(_userProfile!);
 
             // Update local state from Appwrite
             _name = data['name'] ?? 'User';
@@ -122,6 +131,7 @@ class ProfileProvider extends ChangeNotifier {
             _phone = data['phone'] ?? user.phone ?? '';
             _state = data['state'];
             _lga = data['lga'];
+            _ward = data['ward'];
 
             // Only overwrite monitoring zone if remote value is not null/empty
             final remoteZone = data['monitoringZone'] as String?;
@@ -136,8 +146,8 @@ class ProfileProvider extends ChangeNotifier {
             _registrationCode = data['registrationCode'];
             _biometricsEnabled = data['biometricsEnabled'] ?? false;
 
-            if (data['profileImage'] != null) {
-              _profileImagePath = data['profileImage'];
+            if (data['profileImageId'] != null) {
+              _profileImagePath = data['profileImageId'];
             }
 
             // Secure cache to local storage
@@ -147,6 +157,7 @@ class ProfileProvider extends ChangeNotifier {
 
             if (_state != null) await _storage.write('profile_state', _state!);
             if (_lga != null) await _storage.write('profile_lga', _lga!);
+            if (_ward != null) await _storage.write('profile_ward', _ward!);
             if (_monitoringZone != null) {
               await _storage.write('monitoring_zone', _monitoringZone!);
             }
@@ -162,6 +173,15 @@ class ProfileProvider extends ChangeNotifier {
           }
         } on AppwriteException catch (e) {
           developer.log('Appwrite error, sliding to local fallback: $e');
+          // Fallback to offline cache
+          final cached = _offlineStorage.getCachedUserProfile();
+          if (cached != null) {
+            _userProfile = cached;
+            developer.log(
+              'Loaded profile from offline cache',
+              name: 'ProfileProvider',
+            );
+          }
         }
       }
 
@@ -173,6 +193,7 @@ class ProfileProvider extends ChangeNotifier {
         _profileImagePath = await _storage.read('profile_image');
         _state = await _storage.read('profile_state');
         _lga = await _storage.read('profile_lga');
+        _ward = await _storage.read('profile_ward');
         _monitoringZone = await _storage.read('monitoring_zone');
         final bioEnabled = await _storage.read('biometric_enabled');
         _biometricsEnabled = bioEnabled == 'true';
@@ -190,17 +211,23 @@ class ProfileProvider extends ChangeNotifier {
   }
 
   /// Resets all profile data to default values (called on logout)
-  void clearProfile() {
+  Future<void> clearProfile() async {
     _name = 'User';
     _email = '';
     _phone = '';
     _profileImagePath = null;
     _state = null;
     _lga = null;
+    _ward = null;
     _monitoringZone = null; // Let user select their actual zone
     _registrationCode = null;
     _registrationDate = null;
     _biometricsEnabled = false;
+    _userProfile = null; // Clear local memory cache
+
+    // Clear offline storage cache (including drafts and sync queue)
+    await _offlineStorage.clearUserData();
+
     notifyListeners();
   }
 
@@ -239,9 +266,17 @@ class ProfileProvider extends ChangeNotifier {
     }
   }
 
+  /// Helper to update local state and cache
+  Future<void> _updateLocalState(Map<String, dynamic> updates) async {
+    _userProfile ??= {};
+    _userProfile!.addAll(updates);
+    await _offlineStorage.cacheUserProfile(_userProfile!);
+  }
+
   Future<void> updateName(String name) async {
     _name = name;
     await _storage.write('profile_name', name);
+    await _updateLocalState({'name': name});
     notifyListeners();
     await _syncToAppwrite({'name': name});
   }
@@ -249,6 +284,7 @@ class ProfileProvider extends ChangeNotifier {
   Future<void> updateEmail(String email) async {
     _email = email;
     await _storage.write('profile_email', email);
+    await _updateLocalState({'email': email});
     notifyListeners();
     await _syncToAppwrite({'email': email});
   }
@@ -256,6 +292,7 @@ class ProfileProvider extends ChangeNotifier {
   Future<void> updatePhone(String phone) async {
     _phone = phone;
     await _storage.write('profile_phone', phone);
+    await _updateLocalState({'phone': phone});
     notifyListeners();
     await _syncToAppwrite({'phone': phone});
   }
@@ -263,8 +300,9 @@ class ProfileProvider extends ChangeNotifier {
   Future<void> updateProfileImage(String imagePath) async {
     _profileImagePath = imagePath;
     await _storage.write('profile_image', imagePath);
+    await _updateLocalState({'profileImageId': imagePath});
     notifyListeners();
-    await _syncToAppwrite({'profileImage': imagePath});
+    await _syncToAppwrite({'profileImageId': imagePath});
   }
 
   /// Upload profile image to Appwrite Storage and update Database
@@ -310,9 +348,10 @@ class ProfileProvider extends ChangeNotifier {
       // Update local state and storage
       _profileImagePath = fileUrl;
       await _storage.write('profile_image', fileUrl);
+      await _updateLocalState({'profileImageId': fileUrl});
 
       // Sync to Appwrite Database
-      await _syncToAppwrite({'profileImage': fileUrl});
+      await _syncToAppwrite({'profileImageId': fileUrl});
 
       developer.log('Profile image uploaded successfully: $fileUrl');
     } on AppwriteException catch (e) {
@@ -327,22 +366,28 @@ class ProfileProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> updateLocation(String? state, String? lga) async {
+  Future<void> updateLocation(String? state, String? lga, String? ward) async {
     _state = state;
     _lga = lga;
+    _ward = ward;
     if (state != null) {
       await _storage.write('profile_state', state);
     }
     if (lga != null) {
       await _storage.write('profile_lga', lga);
     }
+    if (ward != null) {
+      await _storage.write('profile_ward', ward);
+    }
+    await _updateLocalState({'state': state, 'lga': lga, 'ward': ward});
     notifyListeners();
-    await _syncToAppwrite({'state': state, 'lga': lga});
+    await _syncToAppwrite({'state': state, 'lga': lga, 'ward': ward});
   }
 
   Future<void> updateMonitoringZone(String zone) async {
     _monitoringZone = zone;
     await _storage.write('monitoring_zone', zone);
+    await _updateLocalState({'monitoringZone': zone});
     notifyListeners();
     await _syncToAppwrite({'monitoringZone': zone});
   }
@@ -350,11 +395,13 @@ class ProfileProvider extends ChangeNotifier {
   Future<void> setBiometricsEnabled(bool enabled) async {
     _biometricsEnabled = enabled;
     await _storage.write('biometric_enabled', enabled.toString());
+    await _updateLocalState({'biometricsEnabled': enabled});
     notifyListeners();
     await _syncToAppwrite({'biometricsEnabled': enabled});
   }
 
   Future<void> updateFCMToken(String token) async {
+    await _updateLocalState({'fcmToken': token});
     await _syncToAppwrite({'fcmToken': token});
   }
 }

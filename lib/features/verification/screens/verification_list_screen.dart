@@ -1,6 +1,6 @@
 import 'package:climate_app/core/services/appwrite_service.dart';
 import 'package:appwrite/appwrite.dart';
-import 'package:go_router/go_router.dart';
+import 'package:climate_app/features/verification/screens/verification_detail_screen.dart';
 import 'package:flutter/material.dart';
 
 /// Verification list screen - shows reports for verification
@@ -51,19 +51,12 @@ class VerificationListScreen extends StatelessWidget {
                 subtitle: Text(report['location'] ?? ''),
                 trailing: const Icon(Icons.arrow_forward_ios, size: 16),
                 onTap: () {
-                  final alertData = {
-                    'title': report['title'],
-                    'time': report['time'],
-                    'location': report['location'],
-                    'icon': Icons
-                        .warning, // Fallback if icon mapping not available here
-                    'color': Colors.orange,
-                    'severity': 'Pending Verification',
-                    'status': 'Pending',
-                    'description':
-                        'Reported by ${report['reporter']}. Type: ${report['type']}',
-                  };
-                  context.push('/alerts/detail', extra: alertData);
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (context) =>
+                          VerificationDetailScreen(report: report),
+                    ),
+                  );
                 },
               );
             },
@@ -80,7 +73,15 @@ class VerificationListScreen extends StatelessWidget {
         collectionId: AppwriteService.reportsCollectionId,
         queries: [Query.equal('status', 'pending')],
       );
-      return docs.documents.map((doc) => doc.data).toList();
+      return docs.documents.map((doc) {
+        final data = doc.data;
+        // Ensure ID is passed
+        data['\$id'] = doc.$id;
+        // Map fields if needed (e.g. title/hazardType fallback)
+        data['hazardType'] =
+            data['hazardType'] ?? data['title'] ?? 'Unknown Hazard';
+        return data;
+      }).toList();
     } on Exception {
       return [];
     }

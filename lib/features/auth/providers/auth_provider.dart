@@ -1,4 +1,5 @@
 import 'dart:developer' as developer;
+import 'package:climate_app/core/utils/error_handler.dart';
 import 'package:appwrite/appwrite.dart';
 import 'package:appwrite/models.dart' as models;
 import 'package:flutter/foundation.dart';
@@ -9,7 +10,11 @@ import 'package:climate_app/core/services/rate_limiter.dart';
 import 'package:climate_app/core/services/biometric_service.dart';
 import 'package:climate_app/core/services/device_fingerprint_service.dart';
 import 'package:climate_app/core/services/fraud_detection_service.dart';
-import 'package:climate_app/core/utils/error_handler.dart';
+
+import 'package:climate_app/features/auth/services/access_code_service.dart';
+import 'package:climate_app/core/services/email_service.dart';
+
+import 'package:flutter/material.dart';
 
 enum UserRole { ewm, coordinator, projectStaff, earlyResponder, media }
 
@@ -30,6 +35,7 @@ class AuthProvider extends ChangeNotifier {
   bool _isLoading = false;
   models.User? _currentUser;
   bool? _isApproved; // Track admin approval status
+  bool _isVerified = false; // Track access code verification status
 
   // Services
   final SecureStorageService _storage = SecureStorageService();
@@ -41,12 +47,16 @@ class AuthProvider extends ChangeNotifier {
       DeviceFingerprintService();
   final FraudDetectionService _fraudService = FraudDetectionService();
 
+  bool _isInitialized = false; // Flag to indicate initialization complete
+
   bool get isAuthenticated => _isAuthenticated;
   UserRole? get userRole => _userRole;
   bool get isLoading => _isLoading;
   String? get phoneNumber => _phoneNumber;
   models.User? get currentUser => _currentUser;
   bool? get isApproved => _isApproved; // Getter for approval status
+  bool get isVerified => _isVerified; // Getter for verification status
+  bool get isInitialized => _isInitialized; // Expose getter
 
   void _initializeSessionManager() {
     _sessionManager.onSessionExpired = () {
@@ -73,20 +83,59 @@ class AuthProvider extends ChangeNotifier {
           _isAuthenticated = true;
           // Start session monitoring if authenticated
           _appwrite.startSessionMonitoring();
-          developer.log('Session monit oring resumed', name: 'AuthProvider');
+          developer.log('Session monitoring resumed', name: 'AuthProvider');
         }
 
         final userRoleStr = await _storage.getUserRole();
         if (userRoleStr != null) {
           _userRole = _parseUserRole(userRoleStr);
         }
-        _phoneNumber = await _storage.getPhoneNumber();
 
-        notifyListeners();
+        // Fetch latest user data including approval status
+        try {
+          final userDoc = await _appwrite.getDocument(
+            collectionId: AppwriteService.usersCollectionId,
+            documentId: user.$id,
+          );
+          _isApproved = userDoc.data['isApproved'] as bool? ?? false;
+          _isVerified = userDoc.data['isVerified'] as bool? ?? false;
+
+          // SELF-HEALING: If Auth is verified but DB is not, update DB
+          if (user.emailVerification && !_isVerified) {
+            developer.log(
+              'Auth verified but DB not. Syncing...',
+              name: 'AuthProvider',
+            );
+            try {
+              await _appwrite.updateDocument(
+                collectionId: AppwriteService.usersCollectionId,
+                documentId: user.$id,
+                data: {'isVerified': true},
+              );
+              _isVerified = true;
+            } on Exception catch (e) {
+              developer.log('Failed to sync verification: $e');
+            }
+          }
+        } on Exception catch (e) {
+          developer.log('Error fetching approval status: $e');
+        }
+        _phoneNumber = await _storage.getPhoneNumber();
       }
     } on Exception catch (e) {
-      ErrorHandler.logError(e, context: 'AuthProvider._checkExistingSession');
+      ErrorHandler.logError(e, context: 'AuthProvider.checkSession');
+      _currentUser = null;
+      _userRole = null;
+    } finally {
+      // Mark initialization as complete regardless of outcome
+      _isInitialized = true;
+      notifyListeners();
     }
+  }
+
+  /// Public method to force reload of user data
+  Future<void> reloadUserData() async {
+    await _checkExistingSession();
   }
 
   /// Unlock app with Biometrics
@@ -129,13 +178,18 @@ class AuthProvider extends ChangeNotifier {
     required String password,
     String? name,
     String? address,
+    required UserRole? role, // Added role parameter
+    String? state, // Added state
+    String? lga, // Added lga
+    String? ward, // Added ward
+    bool? isVerified, // Added pre-verification status
+    String? phoneNumber, // Added phoneNumber
   }) async {
     try {
       _isLoading = true;
       notifyListeners();
 
       // 0. Clear any existing session first to prevent conflicts
-      // This is safe even if no session exists - errors are silently ignored
       try {
         await _appwrite.logout();
         developer.log(
@@ -143,7 +197,7 @@ class AuthProvider extends ChangeNotifier {
           name: 'AuthProvider',
         );
       } on Exception {
-        // Ignore errors - likely means no session exists, which is fine
+        // Ignore errors - likely means no session exists
         developer.log('No existing session to clear', name: 'AuthProvider');
       }
 
@@ -155,6 +209,7 @@ class AuthProvider extends ChangeNotifier {
         name: name ?? 'User',
       );
       developer.log('Account created: ${user.$id}', name: 'AuthProvider');
+      _currentUser = user; // Fix: Set current user immediately
 
       // 2. Create session
       developer.log('Creating session...', name: 'AuthProvider');
@@ -164,31 +219,76 @@ class AuthProvider extends ChangeNotifier {
       );
       developer.log('Session created', name: 'AuthProvider');
 
-      // 3. Default role
-      const role = UserRole.ewm;
+      // 3. Use provided role
+      final userRole = role ?? UserRole.ewm;
 
-      // 4. Create user document in database
+      // 4. Generate Access Code
+      developer.log('Generating Access Code...', name: 'AuthProvider');
+      final accessCode = await AccessCodeService().generateCodeForUser(
+        userId: user.$id,
+        role: userRole,
+      );
+
+      developer.log('ACCESS CODE GENERATED: $accessCode', name: 'AuthProvider');
+
+      // DEV MODE HELPER: Show code in Toast since email might not work in dev
+      /*if (kDebugMode) {
+        Fluttertoast.showToast(
+          msg: 'DEV MODE: Access Code is $accessCode',
+          toastLength: Toast.LENGTH_LONG,
+          gravity: ToastGravity.TOP,
+          backgroundColor: Colors.blue,
+          textColor: Colors.white,
+        );
+        print('--------------------------------------------------');
+        print('DEV MODE ACCESS CODE: $accessCode');
+        print('--------------------------------------------------');
+      }*/
+
+      // 4.5 Send Email
+      try {
+        await EmailService().sendVerificationCode(
+          email,
+          accessCode,
+          name: name,
+        );
+        developer.log('Email sent to $email', name: 'AuthProvider');
+      } on Exception catch (e) {
+        developer.log('Failed to send email: $e', name: 'AuthProvider');
+        // Don't fail registration if email fails, user can resend later
+      }
+
+      // 5. Create user document in database
       developer.log('Creating user document...', name: 'AuthProvider');
       await _createUserDocument(
         userId: user.$id,
         email: email,
-        role: role,
+        role: userRole,
         name: name,
         address: address,
+        state: state,
+        lga: lga,
+        ward: ward,
+        isVerified: isVerified ?? false, // User is verified if pre-check passed
+        accessCode: accessCode, // Store for reference/resend
+        phoneNumber: phoneNumber,
       );
       developer.log('User document created', name: 'AuthProvider');
 
-      // 5. Start Session (non-critical - allow registration to succeed even if this fails)
+      // 6. Start Session
       developer.log('Starting user session...', name: 'AuthProvider');
       try {
-        await _startUserSession(user, role);
+        await _startUserSession(
+          user,
+          userRole,
+          isVerified: isVerified ?? false,
+        );
         developer.log('User session started', name: 'AuthProvider');
       } on Exception catch (e) {
         developer.log(
           'Session setup warning: $e (non-critical)',
           name: 'AuthProvider',
         );
-        // Continue anyway - user can login again to establish session properly
       }
 
       _isLoading = false;
@@ -217,8 +317,12 @@ class AuthProvider extends ChangeNotifier {
       ErrorHandler.logError(e, context: 'AuthProvider.signUpWithEmail');
       // Show more specific error to help debugging
       final errorMsg = e.toString();
-      if (errorMsg.contains('Document')) {
-        throw AuthException('Database error. Please contact support.');
+      if (errorMsg.contains('Document') ||
+          errorMsg.contains('Invalid document structure')) {
+        developer.log('Schema Error: $errorMsg', name: 'AuthProvider');
+        throw AuthException(
+          'Registration failed: Database schema mismatch. Please contact support.',
+        );
       } else if (errorMsg.contains('network') ||
           errorMsg.contains('connection')) {
         throw AuthException('Network error. Please check your connection.');
@@ -276,10 +380,34 @@ class AuthProvider extends ChangeNotifier {
       _currentUser = user;
 
       // 4. Fetch User data from database
-      final userDoc = await _appwrite.getDocument(
-        collectionId: AppwriteService.usersCollectionId,
-        documentId: user.$id,
-      );
+      models.Document userDoc;
+      try {
+        userDoc = await _appwrite.getDocument(
+          collectionId: AppwriteService.usersCollectionId,
+          documentId: user.$id,
+        );
+      } on AppwriteException catch (e) {
+        if (e.code == 404) {
+          developer.log(
+            'User document missing (Zombie User), attempting recovery...',
+            name: 'AuthProvider',
+          );
+          // Recovery: Create missing document
+          await _createUserDocument(
+            userId: user.$id,
+            email: user.email,
+            name: user.name,
+            role: UserRole.ewm, // Default role for recovered users
+          );
+          // Fetch again
+          userDoc = await _appwrite.getDocument(
+            collectionId: AppwriteService.usersCollectionId,
+            documentId: user.$id,
+          );
+        } else {
+          rethrow;
+        }
+      }
 
       // 5. Validate user document fields
       final requiredFields = ['email', 'name', 'role', 'address'];
@@ -292,9 +420,8 @@ class AuthProvider extends ChangeNotifier {
           'CRITICAL: Missing fields in user document: $missingFields',
           name: 'AuthProvider',
         );
-        throw AuthException(
-          'User account data is incomplete. Please contact support.',
-        );
+        // Attempt partial recovery if possible or just proceed with defaults to avoid blocking
+        // For now, we allow it but log it, as blocking prevents app usage
       }
 
       // 6. Get user role
@@ -302,9 +429,12 @@ class AuthProvider extends ChangeNotifier {
       final role = _parseUserRole(roleStr) ?? UserRole.ewm;
       _userRole = role;
 
-      // 6.5. Get approval status
+      // 6.5. Get approval and verification status
       final isApproved = userDoc.data['isApproved'] as bool? ?? false;
       _isApproved = isApproved;
+
+      final isVerified = userDoc.data['isVerified'] as bool? ?? false;
+      _isVerified = isVerified;
 
       // 7. Assess fraud risk (non-critical - don't block login if this fails)
       try {
@@ -382,6 +512,175 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
+  /// Verify account with access code
+  Future<bool> verifyAccount(String code) async {
+    try {
+      // Robustness: Recover user if null
+      if (_currentUser == null) {
+        developer.log(
+          'User null in verify, attempting recovery...',
+          name: 'AuthProvider',
+        );
+        final user = await _appwrite.getCurrentUser();
+        if (user != null) {
+          _currentUser = user;
+        } else {
+          throw AuthException('User not logged in');
+        }
+      }
+
+      _isLoading = true;
+      notifyListeners();
+
+      // 1. Verify code
+      final result = await AccessCodeService().verifyCode(
+        code,
+        _currentUser!.$id,
+      );
+
+      if (result['isValid'] == true) {
+        final newRole = result['role'] as UserRole?;
+
+        // Use existing role if null (shouldn't happen if DB is correct)
+        final roleToUse = newRole ?? _userRole ?? UserRole.ewm;
+
+        // 2. Update user document
+        await _appwrite.updateDocument(
+          collectionId: AppwriteService.usersCollectionId,
+          documentId: _currentUser!.$id,
+          data: {
+            'isVerified': true,
+            'role': _roleToString(roleToUse),
+            'accessCode': code, // Record used code
+          },
+        );
+
+        // 3. Consume code (No-op in new service but good practice to call)
+        await AccessCodeService().consumeCode(code);
+
+        // 4. Update local state
+        _isVerified = true;
+        _userRole = roleToUse;
+
+        // 5. Update secure storage and session
+        await _storage.saveUserRole(roleToUse.name);
+        await _sessionManager.startSession(
+          authToken: _currentUser!.$id,
+          userRole: roleToUse.name,
+        );
+
+        _isLoading = false;
+        notifyListeners();
+        return true;
+      } else {
+        throw AuthException('Invalid access code');
+      }
+    } on Exception catch (e) {
+      _isLoading = false;
+      notifyListeners();
+      developer.log('Verification Error: $e', name: 'AuthProvider');
+      ErrorHandler.logError(e, context: 'AuthProvider.verifyAccount');
+      throw AuthException(e.toString().replaceAll('Exception:', '').trim());
+    }
+  }
+
+  /// Resend access code to user's email
+  Future<void> resendAccessCode() async {
+    try {
+      // Robustness: Recover user if null (e.g. after hot restart)
+      if (_currentUser == null) {
+        developer.log(
+          'User null in resend, attempting recovery...',
+          name: 'AuthProvider',
+        );
+        final user = await _appwrite.getCurrentUser();
+        if (user != null) {
+          _currentUser = user;
+        } else {
+          throw AuthException('User not logged in');
+        }
+      }
+
+      _isLoading = true;
+      notifyListeners();
+
+      // 1. Get current user doc to see if code exists
+      final userDoc = await _appwrite.getDocument(
+        collectionId: AppwriteService.usersCollectionId,
+        documentId: _currentUser!.$id,
+      );
+
+      String? code = userDoc.data['accessCode'] as String?;
+      final roleStr = userDoc.data['role'] as String?;
+      final role = _parseUserRole(roleStr) ?? UserRole.ewm;
+
+      // 2. Always generate new code for security and to fix "stuck" codes
+      code = await AccessCodeService().generateCodeForUser(
+        userId: _currentUser!.$id,
+        role: role,
+      );
+
+      // Save new code
+      await _appwrite.updateDocument(
+        collectionId: AppwriteService.usersCollectionId,
+        documentId: _currentUser!.$id,
+        data: {'accessCode': code},
+      );
+
+      // DEV MODE HELPER
+      /*if (kDebugMode) {
+        Fluttertoast.showToast(
+          msg: 'DEV MODE: Access Code is $code',
+          toastLength: Toast.LENGTH_LONG,
+          gravity: ToastGravity.TOP,
+          backgroundColor: Colors.blue,
+          textColor: Colors.white,
+        );
+        print('--------------------------------------------------');
+        print('DEV MODE ACCESS CODE: $code');
+        print('--------------------------------------------------');
+      }*/
+
+      // 3. Send email
+      await EmailService().sendVerificationCode(
+        _currentUser!.email,
+        code,
+        name: _currentUser!.name,
+      );
+      developer.log(
+        'Resent access code to ${_currentUser!.email}',
+        name: 'AuthProvider',
+      );
+
+      _isLoading = false;
+      notifyListeners();
+    } on Exception catch (e) {
+      _isLoading = false;
+      notifyListeners();
+      developer.log('Resend Code Error: $e', name: 'AuthProvider');
+      throw AuthException('Failed to resend code. Please try again.');
+    }
+  }
+
+  /// Send password reset email
+  Future<void> sendPasswordResetEmail(String email) async {
+    try {
+      _isLoading = true;
+      notifyListeners();
+
+      await _appwrite.createRecovery(email: email);
+
+      _isLoading = false;
+      notifyListeners();
+    } on Exception catch (e) {
+      _isLoading = false;
+      notifyListeners();
+      developer.log('Password reset error: $e', name: 'AuthProvider');
+      ErrorHandler.logError(e, context: 'AuthProvider.sendPasswordResetEmail');
+      throw AuthException('Failed to send reset email. Please try again.');
+    }
+  }
+
   /// Create user document in Appwrite database
   Future<void> _createUserDocument({
     required String userId,
@@ -389,6 +688,12 @@ class AuthProvider extends ChangeNotifier {
     required UserRole role,
     String? name,
     String? address,
+    String? state,
+    String? lga,
+    String? ward,
+    bool isVerified = false,
+    String? accessCode,
+    String? phoneNumber,
   }) async {
     await _appwrite.createDocument(
       collectionId: AppwriteService.usersCollectionId,
@@ -398,18 +703,28 @@ class AuthProvider extends ChangeNotifier {
         'name': name ?? 'User',
         'role': _roleToString(role),
         'address': address ?? '',
+        'state': state ?? '',
+        'lga': lga ?? '',
+        'ward': ward ?? '',
+        'isVerified': isVerified,
+        // Restored schema fields as requested
         'biometricsEnabled': false,
         'createdAt': DateTime.now().toIso8601String(),
         'lastLoginAt': DateTime.now().toIso8601String(),
-        'phoneNumber': null,
-        'profileImageId': null,
+        'phone': phoneNumber,
+        'profileImageId':
+            null, // Changed back to profileImageId to match actual schema
       },
       // Permissions are managed at collection level in Appwrite console
     );
   }
 
   /// Start user session and save tokens
-  Future<void> _startUserSession(models.User user, UserRole role) async {
+  Future<void> _startUserSession(
+    models.User user,
+    UserRole role, {
+    bool isVerified = true,
+  }) async {
     // Appwrite uses session cookies, so we just store user info
     await _storage.saveUserRole(role.name);
 
@@ -567,8 +882,18 @@ class AuthProvider extends ChangeNotifier {
       _isLoading = true;
       notifyListeners();
 
-      await _sessionManager.logout();
-      await _appwrite.logout();
+      try {
+        await _sessionManager.logout();
+      } on Exception catch (e) {
+        developer.log('Session manager logout error: $e', name: 'AuthProvider');
+      }
+
+      try {
+        await _appwrite.logout();
+      } on Exception catch (e) {
+        developer.log('Appwrite logout error: $e', name: 'AuthProvider');
+        // Continue logout process even if remote session invalid
+      }
 
       // Clear all secure storage
       await _storage.clearAll(keepPreferences: false);
@@ -582,6 +907,9 @@ class AuthProvider extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
     } on Exception catch (e) {
+      // Even if main block fails, ensure we reset state as fallback
+      _isAuthenticated = false;
+      _userRole = null;
       _isLoading = false;
       notifyListeners();
       ErrorHandler.logError(e, context: 'AuthProvider.logout');

@@ -1,5 +1,5 @@
 import 'package:climate_app/core/theme/app_colors.dart';
-import 'package:climate_app/shared/widgets/custom_button.dart';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -70,7 +70,7 @@ class WelcomeScreen extends StatelessWidget {
                 width: double.infinity,
                 height: 56,
                 child: ElevatedButton(
-                  onPressed: () => context.go('/activate'),
+                  onPressed: () => context.go('/login'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.primaryRed,
                     foregroundColor: Colors.white,
@@ -96,7 +96,6 @@ class WelcomeScreen extends StatelessWidget {
                   ),
                 ),
               ),
-
             ],
           ),
         ),

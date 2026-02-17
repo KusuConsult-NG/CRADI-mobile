@@ -21,6 +21,10 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
   void initState() {
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
+    // Initial fetch for all tabs
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<ReportsStatusProvider>().refreshReports();
+    });
   }
 
   @override
@@ -40,7 +44,13 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
             size: 20,
             color: AppColors.textPrimary,
           ),
-          onPressed: () => context.pop(),
+          onPressed: () {
+            if (context.canPop()) {
+              context.pop();
+            } else {
+              context.go('/dashboard');
+            }
+          },
         ),
         title: Text(
           'Reports Status',
@@ -87,6 +97,7 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
         },
       ),
       floatingActionButton: FloatingActionButton.extended(
+        heroTag: 'reports_status_fab',
         onPressed: _showReportGenerationDialog,
         backgroundColor: AppColors.primaryRed,
         icon: const Icon(Icons.download, color: Colors.white),
@@ -102,75 +113,68 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
     ReportsStatusProvider provider,
     ReportStatus status,
   ) {
-    return StreamBuilder<List<VerificationReport>>(
-      stream: provider.getReportsStreamByStatus(status),
-      builder: (context, snapshot) {
-        if (snapshot.hasError) {
-          return Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.error_outline, size: 64, color: Colors.red.shade300),
-                const SizedBox(height: 16),
-                Text(
-                  'Error loading reports',
-                  style: GoogleFonts.lexend(
-                    fontSize: 16,
-                    color: AppColors.textPrimary,
-                  ),
-                ),
-                Text(
-                  '${snapshot.error}',
-                  style: GoogleFonts.lexend(
-                    fontSize: 12,
-                    color: AppColors.textSecondary,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-              ],
+    final reports = provider.getReports(status);
+    final isLoading = provider.isLoading(status);
+    final hasMore = provider.hasMore(status);
+
+    if (reports.isEmpty && isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (reports.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.inbox_outlined, size: 64, color: Colors.grey.shade300),
+            const SizedBox(height: 16),
+            Text(
+              'No ${status.displayName} Reports',
+              style: GoogleFonts.lexend(
+                fontSize: 16,
+                color: AppColors.textSecondary,
+              ),
             ),
-          );
-        }
-
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
-        }
-
-        final reports = snapshot.data ?? [];
-
-        if (reports.isEmpty) {
-          return Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  Icons.inbox_outlined,
-                  size: 64,
-                  color: Colors.grey.shade300,
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  'No ${status.displayName} Reports',
-                  style: GoogleFonts.lexend(
-                    fontSize: 16,
-                    color: AppColors.textSecondary,
-                  ),
-                ),
-              ],
+            ElevatedButton(
+              onPressed: () => provider.fetchReports(status: status),
+              child: const Text("Refresh"),
             ),
-          );
-        }
+          ],
+        ),
+      );
+    }
 
-        return ListView.separated(
+    return RefreshIndicator(
+      onRefresh: () async {
+        await provider.fetchReports(status: status);
+      },
+      child: NotificationListener<ScrollNotification>(
+        onNotification: (ScrollNotification scrollInfo) {
+          if (!isLoading &&
+              hasMore &&
+              scrollInfo.metrics.pixels == scrollInfo.metrics.maxScrollExtent) {
+            provider.fetchReports(loadMore: true, status: status);
+          }
+          return false;
+        },
+        child: ListView.separated(
           padding: const EdgeInsets.all(16),
-          itemCount: reports.length,
+          itemCount: reports.length + (hasMore ? 1 : 0),
           separatorBuilder: (_, _) => const SizedBox(height: 12),
           itemBuilder: (context, index) {
+            if (index == reports.length) {
+              return const Center(
+                child: Padding(
+                  padding: EdgeInsets.all(8.0),
+                  child: CircularProgressIndicator(),
+                ),
+              );
+            }
             final report = reports[index];
             return _buildReportCard(report, provider);
           },
-        );
-      },
+        ),
+      ),
     );
   }
 

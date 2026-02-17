@@ -15,7 +15,7 @@ class EmergencyContactsProvider extends ChangeNotifier {
 
       final docs = await _appwrite.listDocuments(
         collectionId: AppwriteService.contactsCollectionId,
-        queries: [Query.equal('userId', user.$id), Query.orderAsc('name')],
+        queries: [Query.orderAsc('name')],
       );
 
       return docs.documents

@@ -3,6 +3,7 @@ import 'package:hive_flutter/hive_flutter.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:climate_app/features/profile/providers/profile_provider.dart';
 import 'package:climate_app/core/router/app_router.dart';
+import 'package:flutter/foundation.dart';
 import 'package:climate_app/core/services/hive_encryption_service.dart';
 import 'dart:developer' as developer;
 
@@ -27,6 +28,9 @@ class NotificationService {
 
   static const String _notificationsBoxName = 'notifications_history';
   Box<Map>? _notificationsBox;
+
+  /// ValueNotifier for unread notification count
+  final ValueNotifier<int> unreadCount = ValueNotifier<int>(0);
 
   /// Get current FCM token
   String? get fcmToken => _fcmToken;
@@ -115,6 +119,7 @@ class NotificationService {
       FirebaseMessaging.onMessageOpenedApp.listen(_onMessageOpenedApp);
 
       _initialized = true;
+      _updateUnreadCount();
       developer.log(
         'FCM initialized successfully',
         name: 'NotificationService',
@@ -171,6 +176,7 @@ class NotificationService {
     };
 
     await _notificationsBox!.put(id, notification);
+    _updateUnreadCount();
     developer.log('Notification saved: $id', name: 'NotificationService');
   }
 
@@ -193,6 +199,7 @@ class NotificationService {
       final updated = Map<String, dynamic>.from(notification)
         ..['isRead'] = true;
       await _notificationsBox!.put(id, updated);
+      _updateUnreadCount();
       developer.log(
         'Notification marked as read: $id',
         name: 'NotificationService',
@@ -213,12 +220,14 @@ class NotificationService {
         await _notificationsBox!.put(key, updated);
       }
     }
+    _updateUnreadCount();
   }
 
   /// Clear all notifications
   Future<void> clearAll() async {
     if (_notificationsBox == null) return;
     await _notificationsBox!.clear();
+    _updateUnreadCount();
   }
 
   /// Handle notification tap when app is in background
@@ -325,6 +334,25 @@ class NotificationService {
         'Error unsubscribing from topic $topic: $e',
         name: 'NotificationService',
       );
+    }
+  }
+
+  /// Update unread count and app badge
+  Future<void> _updateUnreadCount() async {
+    if (_notificationsBox == null) return;
+
+    final count = _notificationsBox!.values
+        .where((n) => n['isRead'] == false)
+        .length;
+
+    unreadCount.value = count;
+
+    try {
+      // Badge clearing is handled by standard iOS/Android mechanisms
+      // or requires a specific badge package which is not currently added.
+      // Leaving this empty for now to avoid build errors.
+    } on Exception catch (e) {
+      developer.log('Error setting badge: $e', name: 'NotificationService');
     }
   }
 

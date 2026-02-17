@@ -115,7 +115,34 @@ class GeolocationService {
     }
   }
 
-  /// Check if location accuracy is sufficient
+  /// Get coordinates from address/location name
+  Future<Position?> getCoordinatesFromAddress(String locationName) async {
+    try {
+      List<Location> locations = await locationFromAddress(locationName);
+      if (locations.isNotEmpty) {
+        final loc = locations.first;
+        return Position(
+          latitude: loc.latitude,
+          longitude: loc.longitude,
+          timestamp: DateTime.now(),
+          accuracy: 0,
+          altitude: 0,
+          heading: 0,
+          speed: 0,
+          speedAccuracy: 0,
+          altitudeAccuracy: 0,
+          headingAccuracy: 0,
+        );
+      }
+      return null;
+    } on Exception catch (e) {
+      developer.log(
+        'Error geocoding location: $e',
+      ); // Assuming ErrorHandler.logError is not defined in this context, keeping developer.log for consistency.
+      return null;
+    }
+  }
+
   Future<bool> isAccuracySufficient(Position position) async {
     // Consider accuracy sufficient if it's within 50 meters
     return position.accuracy <= 50.0;

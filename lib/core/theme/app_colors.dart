@@ -26,7 +26,10 @@ class AppColors {
   static const Color surface = Color(0xFFFFFFFF); // Pure white
   static const Color surfaceGlass = Color(0x40FFFFFF); // Glassmorphism overlay
   static const Color textPrimary = Color(0xFF1A1A2E); // Deep navy-black
-  static const Color textSecondary = Color(0xFF6B7280); // Modern grey
+  static const Color textSecondary = Color(0xFF6B7280);
+  static const Color textPlaceholder = Color(
+    0xFF9CA3AF,
+  ); // Added placeholder color // Modern grey
   static const Color divider = Color(0xFFE5E7EB); // Light grey
 
   // Glassmorphism colors

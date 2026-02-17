@@ -29,7 +29,6 @@ class MockEmergencyContactsProvider extends ChangeNotifier
 class MockLanguageProvider extends ChangeNotifier implements LanguageProvider {
   @override
   String get back => 'Back';
-  @override
   String get attentionText => 'Please verify your safety';
   @override
   String get settingsTitle => 'Settings';

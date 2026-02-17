@@ -314,17 +314,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 decoration: _cardDecoration(),
                 child: Column(
                   children: [
-                    Consumer<ConnectivityProvider>(
-                      builder: (context, connectivity, _) => _buildSwitchTile(
-                        icon: Icons.offline_bolt,
-                        color: Colors.orange,
-                        title: 'Offline Mode',
-                        subtitle: 'Use app without internet connection',
-                        value: connectivity.manualOffline,
-                        onChanged: (v) => connectivity.setManualOffline(v),
-                      ),
-                    ),
-                    Divider(height: 1, color: Colors.grey.shade100, indent: 60),
                     Consumer<SettingsProvider>(
                       builder: (context, settings, _) => Column(
                         children: [
@@ -439,6 +428,54 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       onTap: () => _showLanguageSelector(context, provider),
                     ),
                     Divider(height: 1, color: Colors.grey.shade100, indent: 60),
+
+                    // Offline Mode Toggle
+                    SwitchListTile(
+                      secondary: Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                          color: Colors.orange.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Icon(
+                          Icons.wifi_off,
+                          color: Colors.orange,
+                          size: 20,
+                        ),
+                      ),
+                      title: Text(
+                        'Offline Mode',
+                        style: GoogleFonts.lexend(
+                          fontSize: 16,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                      value: context
+                          .watch<ConnectivityProvider>()
+                          .manualOffline,
+                      onChanged: (value) {
+                        context.read<ConnectivityProvider>().setManualOffline(
+                          value,
+                        );
+                        if (value) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Offline mode enabled'),
+                              backgroundColor: Colors.orange,
+                            ),
+                          );
+                        } else {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Restoring connection...'),
+                              backgroundColor: Colors.green,
+                            ),
+                          );
+                        }
+                      },
+                    ),
+                    Divider(height: 1, color: Colors.grey.shade100, indent: 60),
+
                     _buildNavTile(
                       icon: Icons.help,
                       color: Colors.grey,

@@ -1,6 +1,7 @@
 import 'dart:developer' as developer;
 import 'package:local_auth/local_auth.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 /// Biometric authentication service
 class BiometricService {
@@ -9,6 +10,8 @@ class BiometricService {
   BiometricService._internal();
 
   final LocalAuthentication _localAuth = LocalAuthentication();
+  final FlutterSecureStorage _storage = const FlutterSecureStorage();
+  static const String _sessionTokenKey = 'biometric_session_token';
 
   /// Check if biometric authentication is available on device
   Future<bool> isBiometricAvailable() async {
@@ -124,5 +127,37 @@ class BiometricService {
   Future<bool> isFingerprintAvailable() async {
     final biometrics = await getAvailableBiometrics();
     return biometrics.contains(BiometricType.fingerprint);
+  }
+
+  /// Securely store session token
+  Future<void> secureSessionToken(String token) async {
+    await _storage.write(
+      key: _sessionTokenKey,
+      value: token,
+      aOptions: const AndroidOptions(),
+      iOptions: const IOSOptions(accessibility: KeychainAccessibility.passcode),
+    );
+  }
+
+  /// Retrieve session token (requires biometric auth)
+  Future<String?> getSessionToken() async {
+    // 1. Check if token exists first
+    final hasToken = await _storage.containsKey(key: _sessionTokenKey);
+    if (!hasToken) return null;
+
+    // 2. Require Biometric Auth to "Unlock"
+    final isAuthenticated = await authenticate(
+      reason: 'Scan fingerprint to unlock your session',
+    );
+
+    if (isAuthenticated) {
+      return await _storage.read(key: _sessionTokenKey);
+    }
+    return null;
+  }
+
+  /// Clear session token
+  Future<void> clearSessionToken() async {
+    await _storage.delete(key: _sessionTokenKey);
   }
 }

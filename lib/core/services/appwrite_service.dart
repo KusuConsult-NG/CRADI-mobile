@@ -1,3 +1,4 @@
+import 'package:climate_app/core/config/app_config.dart';
 import 'package:appwrite/appwrite.dart';
 import 'package:appwrite/models.dart' as models;
 import 'dart:async';
@@ -6,8 +7,8 @@ import 'package:climate_app/core/services/rate_limiter.dart';
 
 /// Global Appwrite client instance
 final Client client = Client()
-    .setProject("6941cdb400050e7249d5")
-    .setEndpoint("https://fra.cloud.appwrite.io/v1");
+    .setProject(AppConfig.appwriteProjectId)
+    .setEndpoint(AppConfig.appwriteEndpoint);
 
 /// Comprehensive Appwrite service for managing backend operations
 class AppwriteService {
@@ -32,22 +33,22 @@ class AppwriteService {
   Timer? _sessionRefreshTimer;
   bool _isRefreshing = false;
 
-  // Database and Collection IDs (will be created in Appwrite Console)
-  static const String databaseId = '6941e2c2003705bb5a25'; // Actual database ID
-  static const String usersCollectionId = 'users';
-  static const String reportsCollectionId = 'reports';
-  static const String chatsCollectionId = 'chats';
-  static const String messagesCollectionId = 'messages';
-  static const String contactsCollectionId = 'emergency_contacts';
-  static const String trustedDevicesCollectionId = 'trusted_devices';
-  static const String loginHistoryCollectionId = 'login_history';
-  static const String knowledgeCollectionId = 'knowledge_base';
+  // Database and Collection IDs
+  static const String databaseId = AppConfig.appwriteDatabaseId;
+  static const String usersCollectionId = AppConfig.usersCollection;
+  static const String reportsCollectionId = AppConfig.reportsCollection;
+  static const String chatsCollectionId = AppConfig.chatsCollection;
+  static const String messagesCollectionId = AppConfig.messagesCollection;
+  static const String contactsCollectionId = AppConfig.contactsCollection;
+  static const String trustedDevicesCollectionId = AppConfig.devicesCollection;
+  static const String loginHistoryCollectionId =
+      AppConfig.loginHistoryCollection;
+  static const String knowledgeCollectionId = AppConfig.knowledgeBaseCollection;
+  static const String alertsCollectionId = AppConfig.alertsCollection;
 
-  // Storage Bucket IDs (using existing bucket due to plan limit)
-  static const String profileImagesBucketId =
-      '6941e4e10034186aded8'; // Shared bucket for all images
-  static const String reportImagesBucketId =
-      '6941e4e10034186aded8'; // Shared bucket for all images
+  // Storage Bucket IDs
+  static const String profileImagesBucketId = AppConfig.storageBucketId;
+  static const String reportImagesBucketId = AppConfig.storageBucketId;
 
   /// Get the global client instance
   Client get appwriteClient => client;
@@ -98,6 +99,33 @@ class AppwriteService {
       await _rateLimiter.recordFailedLogin();
       developer.log('Login error: $e', name: 'AppwriteService');
 
+      rethrow;
+    }
+  }
+
+  /// Send password recovery email
+  Future<models.Token> createRecovery({required String email}) async {
+    try {
+      // url to redirect user to after resetting password
+      // For mobile, this should be a deep link handled by the app
+      // e.g. 'climate-app://reset-password'
+      const url = 'https://cloud.appwrite.io/v1/account/recovery';
+      return await _account.createRecovery(email: email, url: url);
+    } catch (e) {
+      developer.log('Create recovery error: $e', name: 'AppwriteService');
+      rethrow;
+    }
+  }
+
+  /// Send email verification
+  Future<models.Token> createVerification() async {
+    try {
+      // url to redirect user to after verifying email
+      // For mobile, this should be a deep link handled by the app
+      const url = 'https://cloud.appwrite.io/v1/account/verification';
+      return await _account.createEmailVerification(url: url);
+    } catch (e) {
+      developer.log('Create verification error: $e', name: 'AppwriteService');
       rethrow;
     }
   }

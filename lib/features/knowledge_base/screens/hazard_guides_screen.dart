@@ -16,9 +16,12 @@ class _HazardGuidesScreenState extends State<HazardGuidesScreen> {
   int _selectedFilterIndex = 0;
   final List<String> _filters = [
     'All',
-    'Hydrological',
-    'Meteorological',
-    'Agricultural',
+    'Flood',
+    'Fire',
+    'Accident',
+    'Erosion',
+    'Disease',
+    'Conflict',
     'Safety',
   ];
 
@@ -253,8 +256,7 @@ class _HazardGuidesScreenState extends State<HazardGuidesScreen> {
                           guide['subtitle'] ?? guide['category'] ?? 'Manual',
                           guide['tag'] ?? 'GUIDE',
                           _getTagColor(guide['tag']),
-                          guide['imageUrl'] ??
-                              'https://via.placeholder.com/300x400',
+                          guide['imageUrl'] ?? 'assets/images/ewer_logo.jpg',
                           isDownloaded: guide['isOffline'] ?? true,
                           onTap: () {
                             context.push(
@@ -309,13 +311,46 @@ class _HazardGuidesScreenState extends State<HazardGuidesScreen> {
           image: DecorationImage(
             image: NetworkImage(imageUrl),
             fit: BoxFit.cover,
-            onError: (e, s) =>
-                const AssetImage('assets/images/placeholder.png'),
+            onError: (e, s) {
+              // Fallback to local asset if network fails
+              // We'll use the logo as a fallback if no specific placeholder exists
+            },
           ),
           color: Colors.grey.shade900,
         ),
+        // Additional layer if image fails to load
         child: Stack(
           children: [
+            if (imageUrl.startsWith('http'))
+              Image.network(
+                imageUrl,
+                fit: BoxFit.cover,
+                width: double.infinity,
+                height: double.infinity,
+                errorBuilder: (context, error, stackTrace) {
+                  return Image.asset(
+                    'assets/images/ewer_logo.jpg',
+                    fit: BoxFit.cover,
+                    width: double.infinity,
+                    height: double.infinity,
+                  );
+                },
+              )
+            else
+              Image.asset(
+                imageUrl,
+                fit: BoxFit.cover,
+                width: double.infinity,
+                height: double.infinity,
+                errorBuilder: (context, error, stackTrace) {
+                  return Image.asset(
+                    'assets/images/ewer_logo.jpg',
+                    fit: BoxFit.cover,
+                    width: double.infinity,
+                    height: double.infinity,
+                  );
+                },
+              ),
             Container(
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(12),

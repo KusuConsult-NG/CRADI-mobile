@@ -9,6 +9,7 @@ import 'package:climate_app/features/contacts/providers/emergency_contacts_provi
 import 'package:climate_app/features/profile/providers/profile_provider.dart';
 import 'package:climate_app/features/chat/providers/chat_provider.dart';
 import 'package:climate_app/features/knowledge_base/providers/knowledge_provider.dart';
+import 'package:climate_app/features/alerts/providers/alerts_provider.dart';
 import 'package:climate_app/features/knowledge_base/providers/news_provider.dart';
 import 'package:climate_app/core/services/secure_storage_service.dart';
 import 'package:climate_app/core/services/session_manager.dart';
@@ -97,6 +98,7 @@ Future<void> main() async {
         ChangeNotifierProvider(create: (_) => EmergencyContactsProvider()),
         ChangeNotifierProvider(create: (_) => SettingsProvider()),
         ChangeNotifierProvider(create: (_) => KnowledgeProvider()),
+        ChangeNotifierProvider(create: (_) => AlertsProvider()),
         ChangeNotifierProvider(create: (_) => NewsProvider()),
       ],
       child: const ClimateApp(),
@@ -133,7 +135,7 @@ class _ClimateAppState extends State<ClimateApp> {
     return MaterialApp.router(
       title: 'EWER Mobile - Early Warning System',
       theme: AppTheme.lightTheme,
-      routerConfig: appRouter,
+      routerConfig: createRouter(context),
       debugShowCheckedModeBanner: false,
     );
   }

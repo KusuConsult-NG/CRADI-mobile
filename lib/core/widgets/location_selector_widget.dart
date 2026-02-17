@@ -7,13 +7,15 @@ import 'package:google_fonts/google_fonts.dart';
 class LocationSelectorWidget extends StatefulWidget {
   final String? initialState;
   final String? initialLGA;
-  final Function(String? state, String? lga) onLocationChanged;
+  final String? initialWard;
+  final Function(String? state, String? lga, String? ward) onLocationChanged;
   final bool required;
 
   const LocationSelectorWidget({
     super.key,
     this.initialState,
     this.initialLGA,
+    this.initialWard,
     required this.onLocationChanged,
     this.required = false,
   });
@@ -25,15 +27,24 @@ class LocationSelectorWidget extends StatefulWidget {
 class _LocationSelectorWidgetState extends State<LocationSelectorWidget> {
   String? _selectedState;
   String? _selectedLGA;
+  String? _selectedWard;
   List<String> _availableLGAs = [];
+  List<String> _availableWards = [];
 
   @override
   void initState() {
     super.initState();
     _selectedState = widget.initialState;
     _selectedLGA = widget.initialLGA;
+    _selectedWard = widget.initialWard;
     if (_selectedState != null) {
       _availableLGAs = NigeriaLocationsData.getLGAsForState(_selectedState!);
+    }
+    if (_selectedLGA != null) {
+      _availableWards = NigeriaLocationsData.getWardsForLGA(
+        _selectedState!,
+        _selectedLGA!,
+      );
     }
   }
 
@@ -41,18 +52,36 @@ class _LocationSelectorWidgetState extends State<LocationSelectorWidget> {
     setState(() {
       _selectedState = state;
       _selectedLGA = null; // Reset LGA when state changes
+      _selectedWard = null; // Reset Ward when state changes
       _availableLGAs = state != null
           ? NigeriaLocationsData.getLGAsForState(state)
           : [];
+      _availableWards = [];
     });
-    widget.onLocationChanged(_selectedState, _selectedLGA);
+    widget.onLocationChanged(_selectedState, _selectedLGA, _selectedWard);
   }
 
   void _onLGAChanged(String? lga) {
     setState(() {
       _selectedLGA = lga;
+      _selectedWard = null; // Reset Ward when LGA changes
+      if (_selectedState != null && lga != null) {
+        _availableWards = NigeriaLocationsData.getWardsForLGA(
+          _selectedState!,
+          lga,
+        );
+      } else {
+        _availableWards = [];
+      }
     });
-    widget.onLocationChanged(_selectedState, _selectedLGA);
+    widget.onLocationChanged(_selectedState, _selectedLGA, _selectedWard);
+  }
+
+  void _onWardChanged(String? ward) {
+    setState(() {
+      _selectedWard = ward;
+    });
+    widget.onLocationChanged(_selectedState, _selectedLGA, _selectedWard);
   }
 
   @override
@@ -64,7 +93,7 @@ class _LocationSelectorWidgetState extends State<LocationSelectorWidget> {
         _buildDropdown(
           label: 'State${widget.required ? ' *' : ''}',
           value: _selectedState,
-          items: NigeriaLocationsData.states,
+          items: NigeriaLocationsData.focalStates,
           onChanged: _onStateChanged,
           hint: 'Select State',
         ),
@@ -77,6 +106,16 @@ class _LocationSelectorWidgetState extends State<LocationSelectorWidget> {
           items: _availableLGAs,
           onChanged: _selectedState != null ? _onLGAChanged : null,
           hint: _selectedState != null ? 'Select LGA' : 'Select state first',
+        ),
+        const SizedBox(height: 16),
+
+        // Ward Dropdown
+        _buildDropdown(
+          label: 'Ward${widget.required ? ' *' : ''}',
+          value: _selectedWard,
+          items: _availableWards,
+          onChanged: _selectedLGA != null ? _onWardChanged : null,
+          hint: _selectedLGA != null ? 'Select Ward' : 'Select LGA first',
         ),
       ],
     );
@@ -108,6 +147,7 @@ class _LocationSelectorWidgetState extends State<LocationSelectorWidget> {
             border: Border.all(color: Colors.grey.shade300),
           ),
           child: DropdownButtonFormField<String>(
+            key: ValueKey(value),
             initialValue: value,
             items: items.map((item) {
               return DropdownMenuItem(

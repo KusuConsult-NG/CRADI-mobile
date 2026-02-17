@@ -1,7 +1,9 @@
 import 'dart:io';
 import 'package:climate_app/core/theme/app_colors.dart';
+import 'package:climate_app/features/reporting/widgets/osm_location_picker.dart';
 import 'package:climate_app/features/reporting/providers/reporting_provider.dart';
 import 'package:flutter/material.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
@@ -271,21 +273,38 @@ class _ReportReviewScreenState extends State<ReportReviewScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Container(
-                              height: 120,
-                              width: double.infinity,
-                              decoration: BoxDecoration(
-                                color: Colors.grey.shade200,
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Center(
-                                child: Icon(
-                                  Icons.map,
-                                  color: Colors.grey.shade400,
-                                  size: 40,
+                            if (provider.latitude != null &&
+                                provider.longitude != null)
+                              SizedBox(
+                                height: 120,
+                                width: double.infinity,
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: OSMLocationPicker(
+                                    initialPosition: LatLng(
+                                      provider.latitude!,
+                                      provider.longitude!,
+                                    ),
+                                    isInteractive: false,
+                                  ),
+                                ),
+                              )
+                            else
+                              Container(
+                                height: 120,
+                                width: double.infinity,
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.shade200,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Center(
+                                  child: Icon(
+                                    Icons.location_off,
+                                    color: Colors.grey.shade400,
+                                    size: 40,
+                                  ),
                                 ),
                               ),
-                            ),
                             const SizedBox(height: 12),
                             Text(
                               provider.locationDetails ?? 'Not Provided',

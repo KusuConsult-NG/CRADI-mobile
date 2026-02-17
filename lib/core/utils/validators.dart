@@ -171,6 +171,19 @@ class Validators {
     return null;
   }
 
+  /// Check if email is valid (boolean)
+  static bool isValidEmail(String? value) {
+    if (value == null || value.isEmpty) {
+      return false;
+    }
+
+    final emailRegex = RegExp(
+      r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$',
+    );
+
+    return emailRegex.hasMatch(value);
+  }
+
   /// Enhanced password validation with security best practices
   /// Requirements:
   /// - Minimum 8 characters

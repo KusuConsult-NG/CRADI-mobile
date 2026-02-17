@@ -5,85 +5,129 @@ import 'dart:async';
 import 'dart:developer' as developer;
 import 'package:appwrite/appwrite.dart';
 
+import 'package:climate_app/core/services/offline_storage_service.dart';
+
 class ReportsStatusProvider extends ChangeNotifier {
   final AppwriteService _appwrite = AppwriteService();
-  bool _isLoading = false;
-  bool get isLoading => _isLoading;
+  final OfflineStorageService _offlineStorage = OfflineStorageService();
 
-  Future<void> refreshReports() async {
-    _isLoading = true;
+  // Global loading state for submissions
+  bool _isSubmitting = false;
+  bool get isSubmitting => _isSubmitting;
+
+  // State maps for different tabs/statuses
+  final Map<String, List<VerificationReport>> _reportsMap = {};
+  final Map<String, String?> _cursors = {};
+  final Map<String, bool> _hasMoreMap = {};
+  final Map<String, bool> _loadingMap = {};
+  final Map<String, int> _totalCounts = {};
+
+  // Getters for specific status
+  List<VerificationReport> getReports(ReportStatus? status) =>
+      _reportsMap[_getKey(status)] ?? [];
+  bool hasMore(ReportStatus? status) => _hasMoreMap[_getKey(status)] ?? true;
+  bool isLoading(ReportStatus? status) => _loadingMap[_getKey(status)] ?? false;
+  int getTotal(ReportStatus? status) => _totalCounts[_getKey(status)] ?? 0;
+
+  String _getKey(ReportStatus? status) => status?.name ?? 'all';
+
+  /// Submit a verification request (supports offline)
+  Future<void> submitVerificationRequest({
+    required String hazardType,
+    required String severity,
+    required String description,
+    required String userId,
+    String? locationDetails,
+    double? latitude,
+    double? longitude,
+  }) async {
+    _isSubmitting = true; // Use global submitting state
     notifyListeners();
-    // Realtime will handle the update, but we can call notify anyway
-    await Future.delayed(const Duration(milliseconds: 500));
-    _isLoading = false;
-    notifyListeners();
-  }
 
-  /// Get all reports stream using Realtime
-  Stream<List<VerificationReport>> get reportsStatusStream {
-    final controller = StreamController<List<VerificationReport>>();
-    RealtimeSubscription? subscription;
-
-    void updateReports() async {
-      try {
-        final docs = await _appwrite.listDocuments(
-          collectionId: AppwriteService.reportsCollectionId,
-        );
-
-        final reports = docs.documents.map((doc) {
-          final data = doc.data;
-          final status = _parseStatus(data['status']);
-          return VerificationReport(
-            id: doc.$id,
-            title: _formatTitle(data['hazardType'] ?? 'Unknown Hazard'),
-            type: data['hazardType'] ?? 'Unknown',
-            reporter: 'Community Report',
-            location: data['locationDetails'] ?? 'Unknown Location',
-            time: _formatTimeAgo(data['submittedAt']),
-            status: status,
-            iconName: _getIconName(data['hazardType']),
-            iconColor: _getIconColor(data['severity']),
-            bgIconColor: '${_getIconColor(data['severity'])}_50',
-          );
-        }).toList();
-
-        if (!controller.isClosed) {
-          controller.add(reports);
-        }
-      } on Exception catch (e) {
-        developer.log('Error updating reports stream: $e');
-      }
-    }
-
-    updateReports();
-
-    const channel =
-        'databases.${AppwriteService.databaseId}.collections.${AppwriteService.reportsCollectionId}.documents';
-
-    subscription = _appwrite.subscribe(
-      channels: [channel],
-      callback: (event) {
-        updateReports();
-      },
-    );
-
-    controller.onCancel = () {
-      subscription?.close();
-      controller.close();
+    final data = {
+      'userId': userId,
+      'description': description,
+      'hazardType': hazardType,
+      'severity': severity,
+      'status': 'pending',
+      'submittedAt': DateTime.now().toIso8601String(),
+      'locationDetails': locationDetails ?? 'User Requested Verification',
+      'latitude': latitude ?? 0.0,
+      'longitude': longitude ?? 0.0,
+      'isAlert':
+          severity.toLowerCase() == 'critical' ||
+          severity.toLowerCase() == 'high',
+      'verificationCount': 0,
     };
 
-    return controller.stream;
+    try {
+      // Try online submission first
+      await _appwrite.createDocument(
+        collectionId: AppwriteService.reportsCollectionId,
+        data: data,
+      );
+      developer.log('Verification request submitted online');
+    } on Exception catch (e) {
+      developer.log('Online submission failed, queuing offline: $e');
+      // If failed (likely offline), add to sync queue
+      try {
+        await _offlineStorage.addToSyncQueue({
+          ...data,
+          'type':
+              'verification_request', // Tag for sync worker to know how to handle
+          'collectionId': AppwriteService.reportsCollectionId,
+        });
+        // We rethrow a specific exception so UI can show "Saved to Sync Queue" message
+        throw AppwriteException(
+          'Connection failed. Request saved to offline queue.',
+          0,
+          'offline_queued',
+        );
+      } catch (queueError) {
+        // If even offline storage fails
+        developer.log('Failed to save to offline queue: $queueError');
+        rethrow;
+      }
+    } finally {
+      _isSubmitting = false;
+      notifyListeners();
+    }
   }
 
-  /// Get reports stream by status using Realtime
-  Stream<List<VerificationReport>> getReportsStreamByStatus(
-    ReportStatus status,
-  ) {
-    final controller = StreamController<List<VerificationReport>>();
-    RealtimeSubscription? subscription;
+  Future<void> refreshReports() async {
+    // Refresh all lists
+    await fetchReports(status: null);
+    await fetchReports(status: ReportStatus.pending);
+    await fetchReports(status: ReportStatus.acknowledged);
+    await fetchReports(status: ReportStatus.resolved);
+    await fetchReports(status: ReportStatus.rejected);
+  }
 
-    void updateReports() async {
-      try {
+  /// Fetch reports with pagination
+  Future<void> fetchReports({
+    bool loadMore = false,
+    ReportStatus? status,
+  }) async {
+    final key = _getKey(status);
+
+    if (loadMore) {
+      if ((_hasMoreMap[key] == false) || (_loadingMap[key] == true)) return;
+    } else {
+      _hasMoreMap[key] = true;
+      _cursors[key] = null;
+      _reportsMap[key] = [];
+    }
+
+    _loadingMap[key] = true;
+    notifyListeners();
+
+    try {
+      final List<String> queries = [
+        Query.orderDesc('\$createdAt'),
+        Query.limit(20),
+      ];
+
+      if (status != null) {
         String appwriteStatus;
         switch (status) {
           case ReportStatus.pending:
@@ -99,57 +143,59 @@ class ReportsStatusProvider extends ChangeNotifier {
             appwriteStatus = 'rejected';
             break;
         }
-
-        final docs = await _appwrite.listDocuments(
-          collectionId: AppwriteService.reportsCollectionId,
-          queries: [Query.equal('status', appwriteStatus)],
-        );
-
-        final reports = docs.documents.map((doc) {
-          final data = doc.data;
-          return VerificationReport(
-            id: doc.$id,
-            title: _formatTitle(data['hazardType'] ?? 'Unknown Hazard'),
-            type: data['hazardType'] ?? 'Unknown',
-            reporter: 'Community Report',
-            location: data['locationDetails'] ?? 'Unknown Location',
-            time: _formatTimeAgo(data['submittedAt']),
-            status: status,
-            iconName: _getIconName(data['hazardType']),
-            iconColor: _getIconColor(data['severity']),
-            bgIconColor: '${_getIconColor(data['severity'])}_50',
-          );
-        }).toList();
-
-        if (!controller.isClosed) {
-          controller.add(reports);
-        }
-      } on Exception catch (e) {
-        developer.log('Error updating reports: $e');
+        queries.add(Query.equal('status', appwriteStatus));
       }
+
+      if (loadMore && _cursors[key] != null) {
+        queries.add(Query.cursorAfter(_cursors[key]!));
+      }
+
+      final docs = await _appwrite.listDocuments(
+        collectionId: AppwriteService.reportsCollectionId,
+        queries: queries,
+      );
+
+      _totalCounts[key] = docs.total;
+
+      if (docs.documents.length < 20) {
+        _hasMoreMap[key] = false;
+      }
+
+      final newReports = docs.documents.map((doc) {
+        final data = doc.data;
+        final status = _parseStatus(data['status']);
+        return VerificationReport(
+          id: doc.$id,
+          title: _formatTitle(data['hazardType'] ?? 'Unknown Hazard'),
+          type: data['hazardType'] ?? 'Unknown',
+          reporter: 'Community Report',
+          location: data['locationDetails'] ?? 'Unknown Location',
+          time: _formatTimeAgo(data['submittedAt']),
+          status: status,
+          iconName: _getIconName(data['hazardType']),
+          iconColor: _getIconColor(data['severity']),
+          bgIconColor: '${_getIconColor(data['severity'])}_50',
+        );
+      }).toList();
+
+      if (loadMore) {
+        if (_reportsMap[key] == null) _reportsMap[key] = [];
+        _reportsMap[key]!.addAll(newReports);
+      } else {
+        _reportsMap[key] = newReports;
+      }
+
+      if (docs.documents.isNotEmpty) {
+        _cursors[key] = docs.documents.last.$id;
+      } else {
+        _hasMoreMap[key] = false;
+      }
+    } on Exception catch (e) {
+      developer.log('Error fetching reports: $e');
+    } finally {
+      _loadingMap[key] = false;
+      notifyListeners();
     }
-
-    // Initial fetch
-    updateReports();
-
-    // Subscribe to realtime updates
-    const channel =
-        'databases.${AppwriteService.databaseId}.collections.${AppwriteService.reportsCollectionId}.documents';
-
-    subscription = _appwrite.subscribe(
-      channels: [channel],
-      callback: (event) {
-        // Trigger re-fetch for simplicity and to ensure correct ordering/filtering
-        updateReports();
-      },
-    );
-
-    controller.onCancel = () {
-      subscription?.close();
-      controller.close();
-    };
-
-    return controller.stream;
   }
 
   /// Get all reports (for CSV export)
@@ -192,6 +238,9 @@ class ReportsStatusProvider extends ChangeNotifier {
       );
       developer.log('Report verified: $reportId');
       notifyListeners();
+      // Refresh relevant lists
+      fetchReports(status: ReportStatus.pending);
+      fetchReports(status: ReportStatus.acknowledged);
     } on Exception catch (e) {
       developer.log('Error verifying report: $e');
       rethrow;
@@ -208,6 +257,9 @@ class ReportsStatusProvider extends ChangeNotifier {
       );
       developer.log('Report resolved: $reportId');
       notifyListeners();
+      // Refresh relevant lists
+      fetchReports(status: ReportStatus.acknowledged);
+      fetchReports(status: ReportStatus.resolved);
     } on Exception catch (e) {
       developer.log('Error resolving report: $e');
       rethrow;
@@ -224,6 +276,9 @@ class ReportsStatusProvider extends ChangeNotifier {
       );
       developer.log('Report rejected: $reportId');
       notifyListeners();
+      // Refresh relevant lists
+      fetchReports(status: ReportStatus.pending);
+      fetchReports(status: ReportStatus.rejected);
     } on Exception catch (e) {
       developer.log('Error rejecting report: $e');
       rethrow;
@@ -240,6 +295,8 @@ class ReportsStatusProvider extends ChangeNotifier {
       );
       developer.log('Report moved back to pending: $reportId');
       notifyListeners();
+      // Refresh relevant lists (rough approximation, ideally we know source status)
+      refreshReports();
     } on Exception catch (e) {
       developer.log('Error moving report to pending: $e');
       rethrow;
@@ -369,12 +426,5 @@ class ReportsStatusProvider extends ChangeNotifier {
     } else {
       return '${(difference.inDays / 7).floor()}w ago';
     }
-  }
-
-  /// Legacy method for backward compatibility
-  List<VerificationReport> getReportsByStatus(ReportStatus status) {
-    // This is now async, but keeping for compatibility
-    // UI should use getReportsStreamByStatus instead
-    return [];
   }
 }

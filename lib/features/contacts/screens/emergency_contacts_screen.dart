@@ -182,7 +182,13 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
             size: 20,
             color: AppColors.textPrimary,
           ),
-          onPressed: () => context.pop(),
+          onPressed: () {
+            if (context.canPop()) {
+              context.pop();
+            } else {
+              context.go('/dashboard');
+            }
+          },
         ),
         title: Text(
           'Emergency Contacts',
@@ -344,6 +350,7 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
+        heroTag: 'emergency_contacts_fab',
         onPressed: () => _makePhoneCall('112'),
         backgroundColor: AppColors.errorRed,
         icon: const Icon(Icons.sos, color: Colors.white),

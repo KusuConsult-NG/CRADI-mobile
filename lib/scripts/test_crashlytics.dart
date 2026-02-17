@@ -38,7 +38,7 @@ class _CrashlyticsTestScreenState extends State<CrashlyticsTestScreen> {
     _logTest('Testing non-fatal error...');
     try {
       throw Exception('Test non-fatal error');
-    } catch (error, stackTrace) {
+    } on Object catch (error, stackTrace) {
       await FirebaseCrashlytics.instance.recordError(
         error,
         stackTrace,
@@ -93,7 +93,7 @@ class _CrashlyticsTestScreenState extends State<CrashlyticsTestScreen> {
     try {
       await Future.delayed(const Duration(milliseconds: 100));
       throw StateError('Test async error');
-    } catch (error, stackTrace) {
+    } on Object catch (error, stackTrace) {
       await FirebaseCrashlytics.instance.recordError(
         error,
         stackTrace,

@@ -13,10 +13,12 @@ class OfflineStorageService {
 
   static const String _draftsBoxName = 'draft_reports';
   static const String _syncQueueBoxName = 'sync_queue';
+  static const String _contentCacheBoxName = 'content_cache';
   static const int _maxDrafts = 50;
 
   Box<Map>? _draftsBox;
   Box<Map>? _syncQueueBox;
+  Box<Map>? _contentCacheBox;
 
   /// Initialize Hive boxes for offline storage with encryption
   Future<void> initialize() async {
@@ -32,8 +34,13 @@ class OfflineStorageService {
         _syncQueueBoxName,
         encryptionCipher: cipher,
       );
+      _contentCacheBox = await Hive.openBox<Map>(
+        _contentCacheBoxName,
+        encryptionCipher: cipher,
+      );
+
       developer.log(
-        'Offline storage initialized with AES-256 encryption. Drafts: ${_draftsBox!.length}, Queue: ${_syncQueueBox!.length}',
+        'Offline storage initialized with AES-256 encryption. Drafts: ${_draftsBox!.length}, Queue: ${_syncQueueBox!.length}, Cache: ${_contentCacheBox!.length}',
         name: 'OfflineStorageService',
       );
     } on Exception catch (e) {
@@ -140,6 +147,7 @@ class OfflineStorageService {
     final queueId = DateTime.now().millisecondsSinceEpoch.toString();
     final queueItem = {
       ...report,
+      'createdAt': report['createdAt'] ?? DateTime.now().toIso8601String(),
       'queueId': queueId,
       'addedToQueueAt': DateTime.now().toIso8601String(),
       'retryCount': 0,
@@ -270,7 +278,8 @@ class OfflineStorageService {
   }
 
   /// Check if storage is initialized
-  bool get isInitialized => _draftsBox != null && _syncQueueBox != null;
+  bool get isInitialized =>
+      _draftsBox != null && _syncQueueBox != null && _contentCacheBox != null;
 
   /// Ensure storage is initialized before operations
   void _ensureInitialized() {
@@ -279,6 +288,110 @@ class OfflineStorageService {
         'OfflineStorageService not initialized. Call initialize() first.',
       );
     }
+  }
+
+  /// Cache guides details
+  Future<void> cacheGuides(List<Map<String, dynamic>> guides) async {
+    _ensureInitialized();
+    await _contentCacheBox!.put('guides', {
+      'data': guides,
+      'timestamp': DateTime.now().toIso8601String(),
+    });
+  }
+
+  /// Cache user profile
+  Future<void> cacheUserProfile(Map<String, dynamic> profile) async {
+    _ensureInitialized();
+    await _contentCacheBox!.put('user_profile', {
+      'data': profile,
+      'timestamp': DateTime.now().toIso8601String(),
+    });
+  }
+
+  /// Get cached user profile
+  Map<String, dynamic>? getCachedUserProfile() {
+    _ensureInitialized();
+    final cached = _contentCacheBox!.get('user_profile');
+    if (cached != null) {
+      return Map<String, dynamic>.from(cached['data']);
+    }
+    return null;
+  }
+
+  /// Clear cached user profile
+  Future<void> clearUserProfile() async {
+    _ensureInitialized();
+    await _contentCacheBox!.delete('user_profile');
+    developer.log('Cleared cached user profile', name: 'OfflineStorageService');
+  }
+
+  /// Clear all user-specific data (profile, drafts, queue)
+  /// Call this when logging out to prevent data leaks between users
+  Future<void> clearUserData() async {
+    _ensureInitialized();
+    await clearUserProfile();
+    await clearAllDrafts();
+    await clearSyncQueue();
+    developer.log(
+      'All user data cleared (Profile, Drafts, Queue)',
+      name: 'OfflineStorageService',
+    );
+  }
+
+  /// Get cached guides
+  List<Map<String, dynamic>> getCachedGuides() {
+    _ensureInitialized();
+    final cached = _contentCacheBox!.get('guides');
+    if (cached != null && cached['data'] is List) {
+      return (cached['data'] as List)
+          .map((e) => Map<String, dynamic>.from(e))
+          .toList();
+    }
+    return [];
+  }
+
+  /// Cache alerts
+  Future<void> cacheAlerts(List<Map<String, dynamic>> alerts) async {
+    _ensureInitialized();
+    await _contentCacheBox!.put('alerts', {
+      'data': alerts,
+      'timestamp': DateTime.now().toIso8601String(),
+    });
+  }
+
+  /// Get cached alerts
+  List<Map<String, dynamic>> getCachedAlerts() {
+    _ensureInitialized();
+    final cached = _contentCacheBox!.get('alerts');
+    if (cached != null && cached['data'] is List) {
+      return (cached['data'] as List)
+          .map((e) => Map<String, dynamic>.from(e))
+          .toList();
+    }
+    return [];
+  }
+
+  /// Cache verifications
+  Future<void> cacheVerifications(
+    List<Map<String, dynamic>> verifications,
+  ) async {
+    _ensureInitialized();
+    await _contentCacheBox!.put('verifications', {
+      'data': verifications,
+      'timestamp': DateTime.now().toIso8601String(),
+    });
+  }
+
+  /// Get cached verifications
+  List<Map<String, dynamic>> getCachedVerifications() {
+    _ensureInitialized();
+    final cached = _contentCacheBox!.get('verifications');
+    if (cached != null && cached['data'] is List) {
+      return (cached['data'] as List)
+          .map((e) => Map<String, dynamic>.from(e))
+          .toList();
+    }
+    return [];
   }
 
   /// Get storage statistics
@@ -309,6 +422,7 @@ class OfflineStorageService {
   Future<void> dispose() async {
     await _draftsBox?.close();
     await _syncQueueBox?.close();
+    await _contentCacheBox?.close();
     developer.log('Offline storage disposed', name: 'OfflineStorageService');
   }
 }

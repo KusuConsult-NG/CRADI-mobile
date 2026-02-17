@@ -11,6 +11,7 @@ class CustomTextField extends StatelessWidget {
   final Widget? prefixIcon;
   final Widget? suffixIcon;
   final bool enabled;
+  final bool readOnly;
   final int maxLines;
   final void Function(String)? onChanged;
 
@@ -25,6 +26,7 @@ class CustomTextField extends StatelessWidget {
     this.prefixIcon,
     this.suffixIcon,
     this.enabled = true,
+    this.readOnly = false,
     this.maxLines = 1,
     this.onChanged,
   });
@@ -39,6 +41,7 @@ class CustomTextField extends StatelessWidget {
           style: Theme.of(context).textTheme.bodyMedium?.copyWith(
             fontWeight: FontWeight.w600,
             color: AppColors.textPrimary,
+            fontSize: 16, // Increased from default
           ),
         ),
         const SizedBox(height: 8),
@@ -48,14 +51,16 @@ class CustomTextField extends StatelessWidget {
           keyboardType: keyboardType,
           obscureText: obscureText,
           enabled: enabled,
+          readOnly: readOnly,
           maxLines: maxLines,
           onChanged: onChanged,
-          style: Theme.of(context).textTheme.bodyLarge,
+          style: const TextStyle(fontSize: 18), // Increased from default
           decoration: InputDecoration(
             hintText: hint,
-            hintStyle: Theme.of(
-              context,
-            ).textTheme.bodyMedium?.copyWith(color: AppColors.textSecondary),
+            hintStyle: const TextStyle(
+              color: AppColors.textSecondary,
+              fontSize: 16, // Increased from default
+            ),
             prefixIcon: prefixIcon,
             suffixIcon: suffixIcon,
             filled: true,

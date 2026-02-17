@@ -1,6 +1,7 @@
 import 'package:climate_app/core/theme/app_colors.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:climate_app/core/services/tts_service.dart';
 
 class KnowledgeDetailScreen extends StatelessWidget {
   final Map<String, dynamic> guide;
@@ -62,6 +63,31 @@ class KnowledgeDetailScreen extends StatelessWidget {
               color: AppColors.textPrimary,
             ),
             onPressed: () {},
+          ),
+          IconButton(
+            icon: const Icon(
+              Icons.volume_up_outlined,
+              color: AppColors.textPrimary,
+            ),
+            onPressed: () async {
+              try {
+                final text =
+                    guide['content'] ?? guide['description'] ?? guide['title'];
+                if (text != null && text.isNotEmpty) {
+                  await TTSService().speak(text);
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('No text to speak')),
+                  );
+                }
+              } on Exception catch (e) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(
+                    context,
+                  ).showSnackBar(SnackBar(content: Text('TTS Error: $e')));
+                }
+              }
+            },
           ),
         ],
       ),
@@ -145,20 +171,32 @@ class KnowledgeDetailScreen extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 24),
-            _buildContentSection(
-              'Overview',
-              'This guide provides comprehensive safety protocols and essential information regarding ${guide['title'].toLowerCase()} in Nigeria. It is designed to help monitors and community members respond effectively to changing environmental conditions.',
-            ),
-            const SizedBox(height: 20),
-            _buildContentSection(
-              'Key Steps',
-              '1. Assess the situation and identify immediate risks.\n2. Coordinate with local authorities and emergency services.\n3. Communicate clear instructions to the community.\n4. Document and report findings through the CRADI app.',
-            ),
-            const SizedBox(height: 20),
-            _buildContentSection(
-              'Safety Checklist',
-              '• Ensure personal safety equipment is ready.\n• Maintain communication with the control center.\n• Monitor local weather alerts and news updates.\n• Have emergency contact numbers easily accessible.',
-            ),
+            if (guide['content'] != null &&
+                guide['content'].toString().isNotEmpty)
+              _buildDynamicContent(guide['content'])
+            else
+              Center(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 40),
+                  child: Column(
+                    children: [
+                      Icon(
+                        Icons.menu_book,
+                        size: 48,
+                        color: Colors.grey.shade300,
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'Detailed content coming soon.',
+                        style: GoogleFonts.lexend(
+                          color: AppColors.textSecondary,
+                          fontSize: 16,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             const SizedBox(height: 32),
             const Divider(),
             const SizedBox(height: 24),
@@ -186,28 +224,45 @@ class KnowledgeDetailScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildContentSection(String title, String content) {
+  Widget _buildDynamicContent(String content) {
+    // Simple parser for **bold** and • bullets
+    final sections = content.split('\n\n');
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          title,
-          style: GoogleFonts.lexend(
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-            color: AppColors.textPrimary,
-          ),
-        ),
-        const SizedBox(height: 12),
-        Text(
-          content,
-          style: GoogleFonts.lexend(
-            fontSize: 16,
-            height: 1.6,
-            color: AppColors.textSecondary,
-          ),
-        ),
-      ],
+      children: sections.map((section) {
+        // Filter out "Copy code" artifacts often found in LLM-generated content
+        if (section.trim().toLowerCase() == 'copy code') {
+          return const SizedBox.shrink();
+        }
+
+        if (section.startsWith('**')) {
+          // Header style for bold lines
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 12, top: 8),
+            child: Text(
+              section.replaceAll('**', '').replaceAll(':', ''),
+              style: GoogleFonts.lexend(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: AppColors.textPrimary,
+              ),
+            ),
+          );
+        } else {
+          // Regular text
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Text(
+              section,
+              style: GoogleFonts.lexend(
+                fontSize: 16,
+                height: 1.6,
+                color: AppColors.textSecondary,
+              ),
+            ),
+          );
+        }
+      }).toList(),
     );
   }
 

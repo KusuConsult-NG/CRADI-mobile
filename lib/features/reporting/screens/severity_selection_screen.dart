@@ -109,9 +109,6 @@ class _SeveritySelectionScreenState extends State<SeveritySelectionScreen> {
                   context.read<ReportingProvider>().setSeverity(
                     _getLabel(_currentLevel),
                   );
-                  // For MVP flow, skipping explicit location screen if auto-detect is assumed,
-                  // but sticking to PRD plan, location is next.
-                  // For now, let's just create a placeholder valid flow
                   context.push('/report/location');
                 },
                 text: 'Next: Location',

@@ -26,6 +26,11 @@ const EXPECTED_FUNCTIONS = [
         schedule: '0 0 * * *',
         enabled: true,
     },
+    {
+        id: 'send-email',
+        name: 'Send Email',
+        enabled: true,
+    },
 ];
 
 async function checkCloudFunctions() {

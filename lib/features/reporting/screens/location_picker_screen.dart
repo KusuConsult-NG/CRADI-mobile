@@ -8,8 +8,13 @@ import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 import 'package:climate_app/features/reporting/providers/reporting_provider.dart';
 import 'package:climate_app/core/services/geolocation_service.dart';
+import 'package:climate_app/core/services/permission_service.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:climate_app/shared/widgets/custom_button.dart';
+
+import 'package:climate_app/features/profile/providers/profile_provider.dart';
+
+import 'package:flutter_map/flutter_map.dart';
 
 class LocationPickerScreen extends StatefulWidget {
   const LocationPickerScreen({super.key});
@@ -19,6 +24,7 @@ class LocationPickerScreen extends StatefulWidget {
 }
 
 class _LocationPickerScreenState extends State<LocationPickerScreen> {
+  final MapController _mapController = MapController();
   double _severityValue = 3.0; // Default High
   final GeolocationService _geoService = GeolocationService();
   Position? _currentPosition;
@@ -59,7 +65,40 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
   @override
   void initState() {
     super.initState();
-    _fetchCurrentLocation();
+    // Delay location fetch to ensure context is ready for Dialogs (PermissionService)
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _fetchCurrentLocation();
+      _loadProfileLocation();
+    });
+  }
+
+  void _loadProfileLocation() {
+    try {
+      final profile = context.read<ProfileProvider>();
+      if (profile.state != null && profile.lga != null) {
+        setState(() {
+          _selectedState = profile.state;
+          _selectedLGA = profile.lga;
+        });
+
+        // Also update reporting provider if it's empty
+        final reporting = context.read<ReportingProvider>();
+        if (reporting.lga == null) {
+          reporting.setLGA(profile.lga!);
+          reporting.setWard(
+            'Unknown',
+          ); // Default ward as we don't have it in profile usually, or let user select
+          // Actually ProfileProvider doesn't seem to have ward.
+          // We leave ward null so user must select it?
+          // But let's set state/lga at least.
+          // Wait, ReportingProvider doesn't have setState?
+          // It has setLGA.
+          // It uses MVPLocationsData.getStateForLGA to derive state.
+        }
+      }
+    } on Exception {
+      // ignore
+    }
   }
 
   Future<void> _fetchCurrentLocation() async {
@@ -69,6 +108,19 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
     });
 
     try {
+      // Request permission with rationale first
+      final hasPermission = await PermissionService().requestLocation(context);
+
+      if (!hasPermission) {
+        if (mounted) {
+          setState(() {
+            _isLoadingLocation = false;
+            _locationError = 'Location permission denied';
+          });
+        }
+        return;
+      }
+
       final position = await _geoService.getCurrentPosition();
 
       if (position != null) {
@@ -102,10 +154,12 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
           );
         }
       } else {
-        setState(() {
-          _isLoadingLocation = false;
-          _locationError = 'Unable to get location. Please enable GPS.';
-        });
+        if (mounted) {
+          setState(() {
+            _isLoadingLocation = false;
+            _locationError = 'Unable to get location. Please enable GPS.';
+          });
+        }
       }
     } on Exception catch (e) {
       if (mounted) {
@@ -134,6 +188,104 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
     if (status == 'GPS GOOD') return Colors.orange.shade700;
     if (status == 'ACQUIRING...') return Colors.blue.shade700;
     return Colors.red.shade700;
+  }
+
+  Future<void> _updateMapToSelectedLocation(String locationString) async {
+    setState(() {
+      _isLoadingLocation = true;
+    });
+
+    try {
+      final position = await _geoService.getCoordinatesFromAddress(
+        locationString,
+      );
+      if (position != null) {
+        setState(() {
+          _currentPosition = position;
+          _isLoadingLocation = false;
+        });
+
+        // Update map center
+        _mapController.move(
+          LatLng(position.latitude, position.longitude),
+          15.0,
+        );
+
+        // Update provider
+        if (mounted) {
+          context.read<ReportingProvider>().setLocation(
+            position.latitude,
+            position.longitude,
+          );
+          context.read<ReportingProvider>().setLocationDetails(
+            '${position.latitude},${position.longitude}',
+          );
+        }
+      } else {
+        setState(() {
+          _isLoadingLocation = false;
+          _locationError = 'Could not find location on map';
+        });
+      }
+    } on Exception catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoadingLocation = false;
+          _locationError = 'Map update error: ${e.toString()}';
+        });
+      }
+    }
+  }
+
+  Future<void> _onMapPositionChanged(LatLng point) async {
+    // Determine new position mock
+    final position = Position(
+      latitude: point.latitude,
+      longitude: point.longitude,
+      timestamp: DateTime.now(),
+      accuracy: 0,
+      altitude: 0,
+      heading: 0,
+      speed: 0,
+      speedAccuracy: 0,
+      altitudeAccuracy: 0,
+      headingAccuracy: 0,
+    );
+
+    setState(() {
+      _currentPosition = position;
+    });
+
+    // Update provider coordinates
+    if (mounted) {
+      context.read<ReportingProvider>().setLocation(
+        point.latitude,
+        point.longitude,
+      );
+      context.read<ReportingProvider>().setLocationDetails(
+        '${point.latitude},${point.longitude}',
+      );
+    }
+
+    // Reverse geocode to update UI text (but maybe not dropdowns to avoid loop/conflict)
+    try {
+      final details = await _geoService.getLocationDetails(
+        point.latitude,
+        point.longitude,
+      );
+      if (mounted) {
+        setState(() {
+          _lga = details['lga'] ?? 'Unknown LGA';
+          _ward = details['ward'] ?? 'Unknown Ward';
+        });
+
+        // Optionally update provider LGA/Ward if we want the map to drive the report data
+        context.read<ReportingProvider>().setLGA(_lga);
+        context.read<ReportingProvider>().setWard(_ward);
+      }
+    } on Exception {
+      // ignore
+    }
   }
 
   @override
@@ -418,14 +570,13 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                               : Stack(
                                   children: [
                                     OSMLocationPicker(
+                                      mapController: _mapController,
                                       initialPosition: LatLng(
                                         _currentPosition!.latitude,
                                         _currentPosition!.longitude,
                                       ),
-                                      isInteractive: false,
-                                      onPositionChanged: (point) {
-                                        // Optional: Handle map taps if needed in future
-                                      },
+                                      isInteractive: true,
+                                      onPositionChanged: _onMapPositionChanged,
                                     ),
                                     Positioned(
                                       bottom: 12,
@@ -660,6 +811,12 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                               _selectedLGA = null; // Reset LGA
                               _selectedWard = null; // Reset ward
                             });
+                            // Try to move map to State center if possible (or just wait for LGA)
+                            if (value != null) {
+                              _updateMapToSelectedLocation(
+                                '$value State, Nigeria',
+                              );
+                            }
                           },
                         ),
 
@@ -741,6 +898,12 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                                     context.read<ReportingProvider>().setLGA(
                                       value,
                                     );
+                                    // Move map to LGA
+                                    if (_selectedState != null) {
+                                      _updateMapToSelectedLocation(
+                                        '$value, $_selectedState State, Nigeria',
+                                      );
+                                    }
                                   }
                                 },
                         ),

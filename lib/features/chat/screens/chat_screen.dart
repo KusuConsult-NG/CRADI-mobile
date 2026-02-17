@@ -3,6 +3,7 @@ import 'package:climate_app/core/services/appwrite_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_chat_types/flutter_chat_types.dart' as types;
 import 'package:flutter_chat_ui/flutter_chat_ui.dart';
+import 'package:go_router/go_router.dart';
 
 class ChatScreen extends StatelessWidget {
   const ChatScreen({super.key});
@@ -14,6 +15,16 @@ class ChatScreen extends StatelessWidget {
         title: const Text('Support Chat'),
         backgroundColor: AppColors.primaryRed,
         foregroundColor: Colors.white,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white),
+          onPressed: () {
+            if (context.canPop()) {
+              context.pop();
+            } else {
+              context.go('/dashboard');
+            }
+          },
+        ),
       ),
       body: FutureBuilder<types.User?>(
         future: _getCurrentChatUser(),

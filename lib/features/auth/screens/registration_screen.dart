@@ -4,28 +4,45 @@ import 'package:climate_app/shared/widgets/custom_button.dart';
 import 'package:climate_app/shared/widgets/custom_text_field.dart';
 import 'package:climate_app/core/utils/error_handler.dart';
 import 'package:climate_app/core/utils/validators.dart';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:climate_app/core/design/glass_container.dart';
+import 'package:climate_app/core/widgets/location_selector_widget.dart';
 import 'dart:developer' as developer;
 
 class RegistrationScreen extends StatefulWidget {
-  const RegistrationScreen({super.key});
+  final String? prefilledEmail;
+  final bool isVerified;
+
+  const RegistrationScreen({
+    super.key,
+    this.prefilledEmail,
+    this.isVerified = false,
+  });
 
   @override
   State<RegistrationScreen> createState() => _RegistrationScreenState();
 }
 
 class _RegistrationScreenState extends State<RegistrationScreen> {
+  // Form Controllers
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _addressController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _phoneController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   final TextEditingController _confirmPasswordController =
       TextEditingController();
+
+  // Selection State
+  UserRole? _selectedRole;
+  String? _selectedState;
+  String? _selectedLga;
+  String? _selectedWard;
 
   final _formKey = GlobalKey<FormState>();
   bool _isLoading = false;
@@ -35,6 +52,9 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
   @override
   void initState() {
     super.initState();
+    if (widget.prefilledEmail != null) {
+      _emailController.text = widget.prefilledEmail!;
+    }
   }
 
   @override
@@ -42,6 +62,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
     _nameController.dispose();
     _addressController.dispose();
     _emailController.dispose();
+    _phoneController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
     super.dispose();
@@ -63,6 +84,20 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
       return;
     }
 
+    // Additional validation for Dropdowns
+    if (_selectedRole == null) {
+      _showToast('Please select a role', isError: true);
+      return;
+    }
+    if (_selectedState == null) {
+      _showToast('Please select a state', isError: true);
+      return;
+    }
+    if (_selectedLga == null) {
+      _showToast('Please select an LGA', isError: true);
+      return;
+    }
+
     setState(() => _isLoading = true);
 
     try {
@@ -71,10 +106,11 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
       final name = _nameController.text.trim();
       final address = _addressController.text.trim();
       final email = _emailController.text.trim();
+      final phone = _phoneController.text.trim();
       final password = _passwordController.text;
 
       developer.log(
-        'Registration attempt: email=$email',
+        'Registration attempt: email=$email, role=${_selectedRole?.name}',
         name: 'RegistrationScreen',
       );
 
@@ -82,18 +118,51 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
         email: email,
         password: password,
         name: name,
-        address: address,
+        address: address, // Physical address description
+        role: _selectedRole,
+        state: _selectedState, // Pass selected state
+        lga: _selectedLga, // Pass selected LGA
+        ward: _selectedWard, // Pass selected Ward
+        isVerified: widget.isVerified,
+        phoneNumber: phone,
       );
 
       if (mounted) {
         setState(() => _isLoading = false);
 
         if (success) {
-          _showToast('Account created successfully!');
-          // Small delay to ensure loading overlay is dismissed before navigation
-          await Future.delayed(const Duration(milliseconds: 500));
-          if (mounted) {
+          // If already verified (pre-signup), go straight to dashboard
+          if (widget.isVerified) {
+            _showToast('Account created!');
             context.go('/dashboard');
+            return; // Stop here
+          }
+
+          _showToast('Account created! Verification code sent.');
+
+          // Show dialog to inform user about verification code
+          if (mounted) {
+            showDialog(
+              context: context,
+              barrierDismissible: false,
+              builder: (context) => AlertDialog(
+                title: const Text('Verify Your Account'),
+                content: Text(
+                  'Account created successfully!\n\nAn Access Code has been sent to $email.\n\nPlease use this code to verify your account on the Dashboard.',
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () {
+                      context.pop(); // Close dialog
+                      context.go(
+                        '/verify-access-code',
+                      ); // Go to verification screen
+                    },
+                    child: const Text('Proceed to Verification'),
+                  ),
+                ],
+              ),
+            );
           }
         } else {
           _showToast('Registration failed. Please try again.', isError: true);
@@ -155,7 +224,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                               'Create Account',
                               textAlign: TextAlign.center,
                               style: GoogleFonts.lexend(
-                                fontSize: 18,
+                                fontSize: 20, // Increased from 18
                                 fontWeight: FontWeight.bold,
                                 color: AppColors.textPrimary,
                               ),
@@ -171,7 +240,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                       Text(
                         'Join the Network',
                         style: GoogleFonts.lexend(
-                          fontSize: 30,
+                          fontSize: 34, // Increased from 30
                           fontWeight: FontWeight.bold,
                           color: AppColors.textPrimary,
                           height: 1.1,
@@ -179,9 +248,9 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                       ),
                       const SizedBox(height: 12),
                       Text(
-                        'Fill in your details to register as a monitor.',
+                        'Select your role and location to get started.',
                         style: GoogleFonts.lexend(
-                          fontSize: 16,
+                          fontSize: 18, // Increased from 16
                           color: AppColors.textSecondary,
                           height: 1.5,
                         ),
@@ -193,7 +262,17 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                       GlassCard(
                         padding: const EdgeInsets.all(20),
                         child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
+                            Text(
+                              'Personal Information',
+                              style: GoogleFonts.lexend(
+                                fontSize: 18, // Increased from 16
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.textPrimary,
+                              ),
+                            ),
+                            const SizedBox(height: 16),
                             // Full Name
                             CustomTextField(
                               label: 'Full Name',
@@ -206,20 +285,6 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                             ),
                             const SizedBox(height: 16),
 
-                            // Address
-                            CustomTextField(
-                              label: 'Address',
-                              controller: _addressController,
-                              hint: 'Your full address',
-                              prefixIcon: const Icon(
-                                Icons.location_on_outlined,
-                              ),
-                              validator: (v) =>
-                                  Validators.validateRequired(v, 'Address'),
-                              enabled: !_isLoading,
-                            ),
-                            const SizedBox(height: 16),
-
                             // Email
                             CustomTextField(
                               label: 'Email Address',
@@ -228,9 +293,103 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                               prefixIcon: const Icon(Icons.email_outlined),
                               keyboardType: TextInputType.emailAddress,
                               validator: Validators.validateEmail,
+                              enabled:
+                                  !_isLoading && widget.prefilledEmail == null,
+                            ),
+                            const SizedBox(height: 16),
+
+                            // Phone Number
+                            CustomTextField(
+                              label: 'Phone Number',
+                              controller: _phoneController,
+                              hint: '+234...',
+                              prefixIcon: const Icon(Icons.phone_outlined),
+                              keyboardType: TextInputType.phone,
+                              validator: (v) =>
+                                  Validators.validatePhoneNumber(v),
                               enabled: !_isLoading,
                             ),
+                            const SizedBox(height: 16),
 
+                            // Address
+                            CustomTextField(
+                              label: 'Address Description',
+                              controller: _addressController,
+                              hint: 'e.g., No 5, Main Street',
+                              prefixIcon: const Icon(
+                                Icons.location_on_outlined,
+                              ),
+                              validator: (v) =>
+                                  Validators.validateRequired(v, 'Address'),
+                              enabled: !_isLoading,
+                            ),
+                            const SizedBox(height: 24),
+
+                            Text(
+                              'Role & Location',
+                              style: GoogleFonts.lexend(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.textPrimary,
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+
+                            // Role Dropdown
+                            _buildDropdown<UserRole>(
+                              label: 'Select Function / Role',
+                              value: _selectedRole,
+                              items: UserRole.values
+                                  .where(
+                                    (r) => r != UserRole.media,
+                                  ) // Exclude media if needed, or keep all
+                                  .toList(),
+                              onChanged: (val) =>
+                                  setState(() => _selectedRole = val),
+                              itemLabel: (r) {
+                                switch (r) {
+                                  case UserRole.ewm:
+                                    return 'Early Warning Monitor';
+                                  case UserRole.coordinator:
+                                    return 'Coordinator';
+                                  case UserRole.projectStaff:
+                                    return 'Project Staff';
+                                  case UserRole.earlyResponder:
+                                    return 'Early Responder';
+                                  case UserRole.media:
+                                    return 'Media';
+                                }
+                              },
+                              icon: Icons.work_outline,
+                            ),
+                            const SizedBox(height: 16),
+
+                            // Location Selector
+                            LocationSelectorWidget(
+                              initialState: _selectedState,
+                              initialLGA: _selectedLga,
+                              initialWard: _selectedWard,
+                              required: true,
+                              onLocationChanged: (state, lga, ward) {
+                                setState(() {
+                                  _selectedState = state;
+                                  _selectedLga = lga;
+                                  _selectedWard = ward;
+                                });
+                              },
+                            ),
+
+                            const SizedBox(height: 24),
+
+                            Text(
+                              'Security',
+                              style: GoogleFonts.lexend(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.textPrimary,
+                              ),
+                            ),
+                            const SizedBox(height: 16),
                             // Password
                             CustomTextField(
                               label: 'Password',
@@ -287,21 +446,45 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                                 }
                                 return null;
                               },
-                              enabled: !_isLoading,
+                            ),
+                            const SizedBox(height: 40),
+
+                            // Register Button
+                            CustomButton(
+                              text: 'Create Account',
+                              onPressed: _isLoading ? null : _handleRegister,
+                              isLoading: _isLoading,
                             ),
                           ],
                         ),
                       ),
 
-                      const SizedBox(height: 40),
+                      const SizedBox(height: 24),
 
-                      // Register Button
-                      CustomButton(
-                        text: 'Create Account',
-                        onPressed: _isLoading ? null : _handleRegister,
-                        isLoading: _isLoading,
+                      // Login Link
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            "Already have an account? ",
+                            style: GoogleFonts.lexend(
+                              color: AppColors.textSecondary,
+                              fontSize: 16, // Large size
+                            ),
+                          ),
+                          TextButton(
+                            onPressed: () => context.go('/login'),
+                            child: Text(
+                              'Login',
+                              style: GoogleFonts.lexend(
+                                fontSize: 18, // Large bold size
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.primaryRed,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
-
                       const SizedBox(height: 24),
                     ],
                   ),
@@ -347,5 +530,87 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
     );
   }
 
-  // Removed _buildLabel and _buildTextField as they are replaced by CustomTextField
+  Widget _buildDropdown<T>({
+    required String label,
+    required T? value,
+    required List<T> items,
+    required Function(T?) onChanged,
+    required String Function(T) itemLabel,
+    IconData? icon,
+    bool enabled = true,
+    String? hint,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: GoogleFonts.lexend(
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+            color: AppColors.textPrimary,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+          decoration: BoxDecoration(
+            color: enabled
+                ? Colors.white.withValues(alpha: 0.5)
+                : Colors.grey.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: AppColors.textSecondary.withValues(alpha: 0.2),
+            ),
+          ),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<T>(
+              value: value,
+              isExpanded: true,
+              hint: Text(
+                hint ?? 'Select $label',
+                style: GoogleFonts.lexend(
+                  color: AppColors.textPlaceholder,
+                  fontSize: 14,
+                ),
+              ),
+              icon: Icon(
+                Icons.arrow_drop_down,
+                color: enabled ? AppColors.textSecondary : Colors.grey,
+              ),
+              items: items.map((T item) {
+                return DropdownMenuItem<T>(
+                  value: item,
+                  child: Row(
+                    children: [
+                      if (icon != null) ...[
+                        Icon(icon, size: 18, color: AppColors.textSecondary),
+                        const SizedBox(width: 8),
+                      ],
+                      Expanded(
+                        child: Text(
+                          itemLabel(item),
+                          style: GoogleFonts.lexend(
+                            color: AppColors.textPrimary,
+                            fontSize: 14,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }).toList(),
+              onChanged: enabled ? onChanged : null,
+              dropdownColor: Colors.white,
+              style: GoogleFonts.lexend(
+                color: AppColors.textPrimary,
+                fontSize: 14,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
 }

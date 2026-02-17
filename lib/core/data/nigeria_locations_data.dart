@@ -971,6 +971,8 @@ class NigeriaLocationsData {
   /// Get all state names
   static List<String> get states => locations.map((e) => e.state).toList();
 
+  /// Get only the 3 focal states (Plateau, Benue, Nasarawa)
+
   /// Get LGAs for a specific state
   static List<String> getLGAsForState(String state) {
     try {
@@ -994,4 +996,20 @@ class NigeriaLocationsData {
       return false;
     }
   }
+
+  /// Returns a list of wards for a given state and LGA.
+  /// Currently returns dummy data as placeholder until real ward data is available.
+  static List<String> getWardsForLGA(String state, String lga) {
+    // In a real app, this would query a database or a larger JSON file
+    // specific to the selected LGA.
+    return List.generate(10, (index) => '$lga Ward ${index + 1}');
+  }
+
+  /// Returns a snapshot of focal states for MVP (Benue, Nasarawa, Plateau)
+  static List<String> get focalStates => [
+    'Benue',
+    'Nasarawa',
+    'Plateau',
+    'Federal Capital Territory', // Added for completeness due to proximity
+  ];
 }

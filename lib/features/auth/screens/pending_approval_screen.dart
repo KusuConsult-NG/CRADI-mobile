@@ -1,9 +1,9 @@
 import 'package:climate_app/core/theme/app_colors.dart';
 import 'package:climate_app/features/auth/providers/auth_provider.dart';
-import 'package:climate_app/shared/widgets/custom_button.dart';
-import 'package:climate_app/core/design/glass_container.dart';
+import 'package:climate_app/features/profile/providers/profile_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
 class PendingApprovalScreen extends StatelessWidget {
@@ -12,131 +12,98 @@ class PendingApprovalScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: Colors.white,
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(24.0),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              // Glassmorphic container with pending icon
-              GlassContainer(
-                width: 140,
-                height: 140,
-                borderRadius: 70,
-                child: Container(
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [
-                        AppColors.primaryRed.withValues(alpha: 0.2),
-                        Colors.orange.withValues(alpha: 0.2),
-                      ],
-                    ),
-                  ),
-                  child: const Icon(
-                    Icons.access_time_rounded,
-                    size: 64,
-                    color: Colors.orange,
+              Container(
+                width: 120,
+                height: 120,
+                decoration: BoxDecoration(
+                  color: Colors.orange.shade50,
+                  shape: BoxShape.circle,
+                ),
+                child: Center(
+                  child: Icon(
+                    Icons.hourglass_empty_rounded,
+                    size: 60,
+                    color: Colors.orange.shade400,
                   ),
                 ),
               ),
               const SizedBox(height: 32),
-
               Text(
-                'Pending Approval',
-                style: Theme.of(context).textTheme.displayMedium?.copyWith(
-                  color: AppColors.textPrimary,
+                'Approval Pending',
+                style: GoogleFonts.lexend(
+                  fontSize: 24,
                   fontWeight: FontWeight.bold,
+                  color: AppColors.textPrimary,
                 ),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 16),
-
-              GlassCard(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  children: [
-                    Icon(
-                      Icons.info_outline,
-                      size: 48,
-                      color: AppColors.primaryRed.withValues(alpha: 0.7),
+              Text(
+                'Your account has been created successfully but is waiting for admin approval.\n\nYou will be able to access the full application once an administrator reviews and approves your account.',
+                style: GoogleFonts.lexend(
+                  fontSize: 16,
+                  color: Colors.grey.shade600,
+                  height: 1.5,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 48),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton(
+                  onPressed: () async {
+                    await context.read<ProfileProvider>().clearProfile();
+                    if (context.mounted) {
+                      await context.read<AuthProvider>().logout();
+                    }
+                    if (context.mounted) {
+                      context.go('/login');
+                    }
+                  },
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    side: const BorderSide(color: AppColors.primaryRed),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
                     ),
-                    const SizedBox(height: 16),
-                    Text(
-                      'Your account is pending admin approval',
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        color: AppColors.textPrimary,
-                        fontWeight: FontWeight.w600,
-                      ),
-                      textAlign: TextAlign.center,
+                  ),
+                  child: Text(
+                    'Logout',
+                    style: GoogleFonts.lexend(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.primaryRed,
                     ),
-                    const SizedBox(height: 12),
-                    Text(
-                      'You\'ll be able to access the EWER app once an administrator approves your account. This usually takes 24-48 hours.',
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: AppColors.textSecondary,
-                        height: 1.5,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 24),
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Colors.blue.shade50.withValues(alpha: 0.5),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                          color: Colors.blue.shade200.withValues(alpha: 0.3),
-                        ),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.contact_support,
-                            color: Colors.blue.shade700,
-                            size: 20,
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Text(
-                              'If you need urgent access, please contact your system administrator.',
-                              style: TextStyle(
-                                color: Colors.blue.shade700,
-                                fontSize: 13,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
               ),
-              const SizedBox(height: 32),
-
-              CustomButton(
-                text: 'Logout',
-                onPressed: () async {
-                  final authProvider = context.read<AuthProvider>();
-                  await authProvider.logout();
-                  if (context.mounted) {
-                    context.go('/login');
-                  }
-                },
-                type: ButtonType.secondary,
-                icon: Icons.logout,
-              ),
               const SizedBox(height: 16),
-
               TextButton(
                 onPressed: () {
-                  // Refresh to check approval status
-                  context.go('/login');
+                  // Simply refresh status by checking session again or waiting
+                  // For now, logout is the main action
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                        'Please check back later or contact admin.',
+                      ),
+                    ),
+                  );
                 },
-                child: const Text('Check Approval Status'),
+                child: Text(
+                  'Contact Support',
+                  style: GoogleFonts.lexend(
+                    color: Colors.grey.shade500,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
               ),
             ],
           ),

@@ -98,9 +98,25 @@ class CustomButton extends StatelessWidget {
       return Row(
         mainAxisSize: MainAxisSize.min,
         mainAxisAlignment: MainAxisAlignment.center,
-        children: [Icon(icon, size: 20), const SizedBox(width: 8), Text(text)],
+        children: [
+          Icon(icon, size: 24), // Increased icon size
+          const SizedBox(width: 8),
+          Text(
+            text,
+            style: const TextStyle(
+              fontSize: 18, // Increased font size
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ],
       );
     }
-    return Text(text);
+    return Text(
+      text,
+      style: const TextStyle(
+        fontSize: 18, // Increased font size
+        fontWeight: FontWeight.bold,
+      ),
+    );
   }
 }

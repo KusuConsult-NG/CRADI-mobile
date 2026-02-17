@@ -1,10 +1,6 @@
 import 'dart:ui';
 import 'package:climate_app/core/theme/app_colors.dart';
-import 'package:climate_app/features/auth/providers/auth_provider.dart';
-import 'package:climate_app/core/services/onboarding_service.dart';
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
-import 'package:provider/provider.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -48,38 +44,9 @@ class _SplashScreenState extends State<SplashScreen>
   }
 
   Future<void> _initializeApp() async {
-    // Artificial minimum delay for branding
-    await Future.delayed(const Duration(seconds: 3));
-
-    if (!mounted) return;
-
-    final authProvider = context.read<AuthProvider>();
-    final onboardingService = OnboardingService();
-    final hasCompletedOnboarding = await onboardingService
-        .hasCompletedOnboarding();
-
-    if (!mounted) return;
-
-    // Use addPostFrameCallback to ensure navigation happens after build
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-
-      if (authProvider.isAuthenticated) {
-        if (authProvider.isLocked) {
-          context.go('/login');
-        } else {
-          context.go('/dashboard');
-        }
-      } else {
-        if (hasCompletedOnboarding) {
-          // Returning user (has seen onboarding) → welcome page
-          context.go('/welcome');
-        } else {
-          // New user (first launch) → onboarding then welcome
-          context.go('/onboarding');
-        }
-      }
-    });
+    // Just a minimum delay for branding, but no navigation here.
+    // Navigation is handled by AppRouter listening to AuthProvider.isInitialized
+    await Future.delayed(const Duration(seconds: 2));
   }
 
   @override

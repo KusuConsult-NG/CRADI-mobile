@@ -1,4 +1,8 @@
 import 'package:climate_app/features/alerts/screens/alerts_list_screen.dart';
+import 'package:climate_app/features/auth/screens/landing_screen.dart';
+import 'package:climate_app/features/auth/screens/pre_signup_verification_screen.dart';
+import 'package:climate_app/features/auth/screens/signup_otp_screen.dart';
+
 import 'package:climate_app/features/alerts/screens/alert_detail_screen.dart';
 import 'package:climate_app/features/auth/screens/login_screen.dart';
 import 'package:climate_app/features/chat/screens/chat_screen.dart';
@@ -21,7 +25,7 @@ import 'package:climate_app/features/verification/screens/verification_request_s
 import 'package:climate_app/features/auth/screens/registration_screen.dart';
 import 'package:climate_app/features/auth/screens/pending_approval_screen.dart';
 import 'package:climate_app/features/auth/screens/welcome_screen.dart';
-import 'package:climate_app/features/auth/screens/activate_account_screen.dart';
+import 'package:climate_app/features/auth/screens/forgot_password_screen.dart';
 import 'package:climate_app/features/notifications/screens/notifications_screen.dart';
 import 'package:climate_app/features/offline_mode/screens/offline_home_screen.dart';
 import 'package:climate_app/features/settings/screens/about_app_screen.dart';
@@ -29,6 +33,8 @@ import 'package:climate_app/features/settings/screens/help_support_screen.dart';
 import 'package:climate_app/features/onboarding/screens/onboarding_screen.dart';
 import 'package:climate_app/features/splash/screens/splash_screen.dart';
 import 'package:climate_app/features/auth/providers/auth_provider.dart';
+import 'package:climate_app/features/auth/screens/access_code_verification_screen.dart';
+import 'package:climate_app/core/providers/connectivity_provider.dart';
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
@@ -37,28 +43,70 @@ import 'package:provider/provider.dart';
 /// Create router with authentication guards
 GoRouter createRouter(BuildContext context) {
   final authProvider = Provider.of<AuthProvider>(context, listen: false);
+  final connectivityProvider = Provider.of<ConnectivityProvider>(
+    context,
+    listen: false,
+  );
 
   return GoRouter(
     initialLocation: '/splash',
+    refreshListenable: Listenable.merge([authProvider, connectivityProvider]),
     redirect: (BuildContext context, GoRouterState state) {
+      final isInitialized = authProvider.isInitialized;
       final isAuthenticated = authProvider.isAuthenticated;
       final isLocked = authProvider.isLocked;
+      final isOffline = connectivityProvider.isOffline;
       final currentPath = state.matchedLocation;
+
+      // 0. Wait for initialization
+      if (!isInitialized) {
+        // If not initialized, keep showing splash
+        return '/splash';
+      }
+
+      // 1. Offline check
+      // Allow access to Knowledge Base, Settings, and Contacts while offline
+      if (isOffline &&
+          currentPath != '/offline' &&
+          !currentPath.startsWith('/knowledge-base') &&
+          !currentPath.startsWith('/settings') &&
+          !currentPath.startsWith('/contacts') &&
+          !currentPath.startsWith('/report')) {
+        return '/offline';
+      }
+
+      // If back online and on offline screen, go to dashboard
+      if (!isOffline && currentPath == '/offline') {
+        return '/dashboard';
+      }
 
       // Public routes that don't require authentication
       const publicRoutes = [
         '/splash',
         '/onboarding',
         '/welcome',
-        '/activate',
+        '/landing',
         '/login',
         '/register',
+        '/forgot-password',
         '/pending-approval',
         '/',
       ];
 
       final isPublicRoute = publicRoutes.contains(currentPath);
 
+      // 2. Root/Splash Redirect Logic
+      // Once initialized, move away from splash
+      if (currentPath == '/' || currentPath == '/splash') {
+        if (isAuthenticated) {
+          if (isLocked) return '/login'; // Or stay on lock screen
+          return '/dashboard';
+        }
+        // TODO: check onboarding status if needed
+        return '/landing';
+      }
+
+      // 3. Protected Route Logic
       // If trying to access protected route while not authenticated
       if (!isAuthenticated && !isPublicRoute) {
         return '/login';
@@ -66,15 +114,30 @@ GoRouter createRouter(BuildContext context) {
 
       // If authenticated but app is locked (biometric enabled)
       if (isAuthenticated && isLocked && !isPublicRoute) {
-        // Stay on current screen until unlocked
-        // The MainShellScreen handles the biometric prompt
+        // Force login/unlock screen if not already there
+        // Assuming /login handles the unlock UI or we have a specific /lock screen
+        if (currentPath != '/login') {
+          return '/login';
+        }
         return null;
       }
 
-      // If authenticated and trying to access auth screens, redirect to dashboard
+      // 4. Verification Check
+      // If authenticated but NOT verified, force to verification screen
+      final isVerified = authProvider.isVerified;
+
+      // If NOT verified, and trying to go anywhere other than verification screen (and public routes)
       if (isAuthenticated &&
-          !isLocked &&
-          (currentPath == '/login' || currentPath == '/register')) {
+          !isVerified &&
+          currentPath != '/verify-access-code' &&
+          !isPublicRoute) {
+        return '/verify-access-code';
+      }
+
+      // If IS verified, but trying to go to verification screen, go to dashboard
+      if (isAuthenticated &&
+          isVerified &&
+          currentPath == '/verify-access-code') {
         return '/dashboard';
       }
 
@@ -92,20 +155,49 @@ GoRouter createRouter(BuildContext context) {
       GoRoute(path: '/', redirect: (context, state) => '/splash'),
       GoRoute(
         path: '/register',
-        builder: (context, state) => const RegistrationScreen(),
+        builder: (context, state) {
+          final extra = state.extra as Map<String, dynamic>?;
+          return RegistrationScreen(
+            prefilledEmail: extra?['email'],
+            isVerified: extra?['isVerified'] ?? false,
+          );
+        },
       ),
+
       GoRoute(
         path: '/welcome',
         builder: (context, state) => const WelcomeScreen(),
       ),
       GoRoute(
-        path: '/activate',
-        builder: (context, state) => const ActivateAccountScreen(),
+        path: '/landing',
+        builder: (context, state) => const LandingScreen(),
+      ),
+      GoRoute(
+        path: '/pre-signup',
+        builder: (context, state) => const PreSignupVerificationScreen(),
+      ),
+      GoRoute(
+        path: '/signup-otp',
+        builder: (context, state) {
+          final extra = state.extra as Map<String, dynamic>?;
+          return SignupOtpScreen(
+            email: extra?['email'] ?? '',
+            generatedCode: extra?['code'] ?? '',
+          );
+        },
       ),
       GoRoute(path: '/login', builder: (context, state) => const LoginScreen()),
       GoRoute(
+        path: '/forgot-password',
+        builder: (context, state) => const ForgotPasswordScreen(),
+      ),
+      GoRoute(
         path: '/pending-approval',
         builder: (context, state) => const PendingApprovalScreen(),
+      ),
+      GoRoute(
+        path: '/verify-access-code',
+        builder: (context, state) => const AccessCodeVerificationScreen(),
       ),
 
       // Protected routes with Shell
@@ -190,6 +282,10 @@ GoRouter createRouter(BuildContext context) {
         builder: (context, state) => const SettingsScreen(),
       ),
       GoRoute(
+        path: '/profile',
+        builder: (context, state) => const UserProfileScreen(),
+      ),
+      GoRoute(
         path: '/contacts',
         builder: (context, state) => const EmergencyContactsScreen(),
       ),
@@ -246,9 +342,8 @@ String? _requireRole(BuildContext context, List<UserRole> allowedRoles) {
 /// Legacy global router for backward compatibility
 /// This will be replaced by createRouter() called from main.dart
 final GoRouter appRouter = GoRouter(
-  initialLocation: '/splash',
+  initialLocation: '/',
   routes: [
-    GoRoute(path: '/splash', builder: (context, state) => const SplashScreen()),
     GoRoute(
       path: '/onboarding',
       builder: (context, state) => const OnboardingScreen(),

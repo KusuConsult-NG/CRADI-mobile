@@ -79,7 +79,13 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
             Icons.arrow_back_ios_new,
             color: AppColors.primaryRed,
           ),
-          onPressed: () => context.pop(),
+          onPressed: () {
+            if (context.canPop()) {
+              context.pop();
+            } else {
+              context.go('/dashboard');
+            }
+          },
         ),
         title: Text(
           'Notifications',

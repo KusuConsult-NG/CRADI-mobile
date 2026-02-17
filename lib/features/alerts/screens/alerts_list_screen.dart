@@ -43,6 +43,10 @@ class _AlertsListScreenState extends State<AlertsListScreen> {
         _selectedFilterIndex = _filters.indexOf('Floods');
       }
     }
+    // Initial fetch
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<ReportsStatusProvider>().fetchReports(status: null);
+    });
   }
 
   List<VerificationReport> _filterReports(List<VerificationReport> allReports) {
@@ -87,147 +91,149 @@ class _AlertsListScreenState extends State<AlertsListScreen> {
         ),
       ),
       floatingActionButton: FloatingActionButton(
+        heroTag: 'alerts_list_fab',
         onPressed: () => context.push('/report'),
         backgroundColor: AppColors.successGreen,
         child: const Icon(Icons.add_alert, color: Colors.black, size: 28),
       ),
       body: Consumer<ReportsStatusProvider>(
         builder: (context, provider, _) {
-          return StreamBuilder<List<VerificationReport>>(
-            stream: provider.reportsStatusStream,
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return const Center(child: CircularProgressIndicator());
-              }
+          final allReports = provider.getReports(null);
+          final isLoading = provider.isLoading(null);
+          final hasMore = provider.hasMore(null);
+          final filteredReports = _filterReports(allReports);
 
-              if (snapshot.hasError) {
-                return Center(child: Text('Error: ${snapshot.error}'));
-              }
-
-              final allReports = snapshot.data ?? [];
-              final filteredReports = _filterReports(allReports);
-
-              return RefreshIndicator(
-                onRefresh: () => provider.refreshReports(),
-                child: SingleChildScrollView(
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  padding: const EdgeInsets.only(bottom: 80),
-                  child: Column(
-                    children: [
-                      // Search Bar
-                      Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: Colors.grey.shade200),
-                          ),
-                          child: TextField(
-                            decoration: InputDecoration(
-                              hintText: 'Search location, hazard, or ID...',
-                              hintStyle: GoogleFonts.lexend(
-                                color: Colors.grey.shade400,
-                              ),
-                              prefixIcon: Icon(
-                                Icons.search,
-                                color: Colors.grey.shade400,
-                              ),
-                              border: InputBorder.none,
-                              contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 14,
-                              ),
+          return RefreshIndicator(
+            onRefresh: () => provider.refreshReports(),
+            child: NotificationListener<ScrollNotification>(
+              onNotification: (ScrollNotification scrollInfo) {
+                if (!isLoading &&
+                    hasMore &&
+                    scrollInfo.metrics.pixels >=
+                        scrollInfo.metrics.maxScrollExtent - 200) {
+                  provider.fetchReports(loadMore: true, status: null);
+                }
+                return false;
+              },
+              child: SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.only(bottom: 80),
+                child: Column(
+                  children: [
+                    // Search Bar
+                    Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.grey.shade200),
+                        ),
+                        child: TextField(
+                          decoration: InputDecoration(
+                            hintText: 'Search location, hazard, or ID...',
+                            hintStyle: GoogleFonts.lexend(
+                              color: Colors.grey.shade400,
+                            ),
+                            prefixIcon: Icon(
+                              Icons.search,
+                              color: Colors.grey.shade400,
+                            ),
+                            border: InputBorder.none,
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 14,
                             ),
                           ),
                         ),
                       ),
+                    ),
 
-                      // Meta Text
-                      Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 20,
-                          vertical: 4,
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              'SYNC STATUS',
-                              style: GoogleFonts.lexend(
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.grey.shade500,
-                                letterSpacing: 1.0,
-                              ),
-                            ),
-                            Row(
-                              children: [
-                                Container(
-                                  width: 8,
-                                  height: 8,
-                                  decoration: BoxDecoration(
-                                    color: provider.isLoading
-                                        ? Colors.orange
-                                        : AppColors.successGreen,
-                                    shape: BoxShape.circle,
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  provider.isLoading
-                                      ? 'Synchronizing...'
-                                      : 'Online • Just now',
-                                  style: GoogleFonts.lexend(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.bold,
-                                    color: provider.isLoading
-                                        ? Colors.orange
-                                        : AppColors.successGreen,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
+                    // Meta Text
+                    Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 4,
                       ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'SYNC STATUS',
+                            style: GoogleFonts.lexend(
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.grey.shade500,
+                              letterSpacing: 1.0,
+                            ),
+                          ),
+                          Row(
+                            children: [
+                              Container(
+                                width: 8,
+                                height: 8,
+                                decoration: BoxDecoration(
+                                  color: isLoading
+                                      ? Colors.orange
+                                      : AppColors.successGreen,
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                isLoading
+                                    ? 'Synchronizing...'
+                                    : 'Online • Just now',
+                                style: GoogleFonts.lexend(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                  color: isLoading
+                                      ? Colors.orange
+                                      : AppColors.successGreen,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
 
-                      const SizedBox(height: 12),
+                    const SizedBox(height: 12),
 
-                      // Filters
-                      SizedBox(
-                        height: 36,
-                        child: ListView.separated(
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
-                          scrollDirection: Axis.horizontal,
-                          itemCount: _filters.length,
-                          separatorBuilder: (c, i) => const SizedBox(width: 8),
-                          itemBuilder: (context, index) {
-                            final isSelected = _selectedFilterIndex == index;
-                            return ChoiceChip(
-                              label: Text(_filters[index]),
-                              selected: isSelected,
-                              onSelected: (v) =>
-                                  setState(() => _selectedFilterIndex = index),
-                              labelStyle: GoogleFonts.lexend(
-                                fontWeight: FontWeight.w600,
+                    // Filters
+                    SizedBox(
+                      height: 36,
+                      child: ListView.separated(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        scrollDirection: Axis.horizontal,
+                        itemCount: _filters.length,
+                        separatorBuilder: (c, i) => const SizedBox(width: 8),
+                        itemBuilder: (context, index) {
+                          final isSelected = _selectedFilterIndex == index;
+                          return ChoiceChip(
+                            label: Text(_filters[index]),
+                            selected: isSelected,
+                            onSelected: (v) =>
+                                setState(() => _selectedFilterIndex = index),
+                            labelStyle: GoogleFonts.lexend(
+                              fontWeight: FontWeight.w600,
+                              color: isSelected
+                                  ? Colors.black
+                                  : Colors.grey.shade700,
+                              fontSize: 12,
+                            ),
+                            selectedColor: AppColors.successGreen,
+                            backgroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 8,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(20),
+                              side: BorderSide(
                                 color: isSelected
-                                    ? Colors.black
-                                    : Colors.grey.shade700,
-                                fontSize: 12,
-                              ),
-                              selectedColor: AppColors.successGreen,
-                              backgroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 8,
-                              ),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(20),
-                                side: BorderSide(
-                                  color: isSelected
-                                      ? AppColors.successGreen
-                                      : Colors.grey.shade200,
+                                    ? AppColors.successGreen
+                                    : Colors.grey.shade200,
                                 ),
                               ),
                               showCheckmark: false,
@@ -236,87 +242,94 @@ class _AlertsListScreenState extends State<AlertsListScreen> {
                         ),
                       ),
 
-                      const SizedBox(height: 16),
+                    const SizedBox(height: 16),
 
-                      if (filteredReports.isEmpty)
-                        Center(
-                          child: Padding(
-                            padding: const EdgeInsets.all(48),
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.all(24),
-                                  decoration: BoxDecoration(
-                                    color: Colors.grey.shade100,
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: Icon(
-                                    _selectedFilterIndex == 0
-                                        ? Icons.notifications_off_outlined
-                                        : Icons.filter_list_off,
-                                    size: 64,
-                                    color: Colors.grey.shade400,
-                                  ),
-                                ),
-                                const SizedBox(height: 24),
-                                Text(
-                                  _selectedFilterIndex == 0
-                                      ? 'No Alerts Yet'
-                                      : 'No ${_filters[_selectedFilterIndex]}',
-                                  style: GoogleFonts.lexend(
-                                    fontSize: 20,
-                                    fontWeight: FontWeight.bold,
-                                    color: AppColors.textPrimary,
-                                  ),
-                                ),
-                                const SizedBox(height: 12),
-                                Text(
-                                  _selectedFilterIndex == 0
-                                      ? 'When hazards are reported in your area,\nthey\'ll appear here'
-                                      : 'No ${_filters[_selectedFilterIndex].toLowerCase()} alerts\nfound in this area',
-                                  textAlign: TextAlign.center,
-                                  style: GoogleFonts.lexend(
-                                    fontSize: 14,
-                                    color: AppColors.textSecondary,
-                                    height: 1.5,
-                                  ),
-                                ),
-                                const SizedBox(height: 24),
-                                if (_selectedFilterIndex == 0)
-                                  CustomButton(
-                                    onPressed: () => context.push('/report'),
-                                    text: 'Create New Report',
-                                    icon: Icons.add_alert,
-                                    backgroundColor: AppColors.successGreen,
-                                    foregroundColor: Colors.black,
-                                  ),
-                              ],
-                            ),
-                          ),
-                        )
-                      else
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                    if (filteredReports.isEmpty && !isLoading)
+                      Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(48),
                           child: Column(
-                            children: filteredReports.map((report) {
-                              return Padding(
-                                padding: const EdgeInsets.only(bottom: 12),
-                                child: _buildAlertCardFromReport(
-                                  report,
-                                  provider,
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(24),
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.shade100,
+                                  shape: BoxShape.circle,
                                 ),
-                              );
-                            }).toList(),
+                                child: Icon(
+                                  _selectedFilterIndex == 0
+                                      ? Icons.notifications_off_outlined
+                                      : Icons.filter_list_off,
+                                  size: 64,
+                                  color: Colors.grey.shade400,
+                                ),
+                              ),
+                              const SizedBox(height: 24),
+                              Text(
+                                _selectedFilterIndex == 0
+                                    ? 'No Alerts Yet'
+                                    : 'No ${_filters[_selectedFilterIndex]}',
+                                style: GoogleFonts.lexend(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppColors.textPrimary,
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              Text(
+                                _selectedFilterIndex == 0
+                                    ? 'When hazards are reported in your area,\nthey\'ll appear here'
+                                    : 'No ${_filters[_selectedFilterIndex].toLowerCase()} alerts\nfound in this area',
+                                textAlign: TextAlign.center,
+                                style: GoogleFonts.lexend(
+                                  fontSize: 14,
+                                  color: AppColors.textSecondary,
+                                  height: 1.5,
+                                ),
+                              ),
+                              const SizedBox(height: 24),
+                              if (_selectedFilterIndex == 0)
+                                CustomButton(
+                                  onPressed: () => context.push('/report'),
+                                  text: 'Create New Report',
+                                  icon: Icons.add_alert,
+                                  backgroundColor: AppColors.successGreen,
+                                  foregroundColor: Colors.black,
+                                ),
+                            ],
                           ),
                         ),
-
-                      const SizedBox(height: 24),
+                      )
+                    else ...[
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Column(
+                          children: filteredReports.map((report) {
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 12),
+                              child: _buildAlertCardFromReport(
+                                report,
+                                provider,
+                              ),
+                            );
+                          }).toList(),
+                        ),
+                      ),
+                      if (isLoading)
+                        const Padding(
+                          padding: EdgeInsets.all(16.0),
+                          child: Center(
+                              child: CircularProgressIndicator(),
+                          ),
+                        ),
                     ],
-                  ),
+
+                    const SizedBox(height: 24),
+                  ],
                 ),
-              );
-            },
+              ),
+            ),
           );
         },
       ),

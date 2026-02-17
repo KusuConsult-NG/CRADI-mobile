@@ -23,7 +23,7 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _emailController = TextEditingController();
+  final _identifierController = TextEditingController();
   final _passwordController = TextEditingController();
 
   final _rateLimiter = RateLimiter();
@@ -66,7 +66,7 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   void dispose() {
     _disableScreenSecurity();
-    _emailController.dispose();
+    _identifierController.dispose();
     _passwordController.dispose();
     super.dispose();
   }
@@ -102,12 +102,26 @@ class _LoginScreenState extends State<LoginScreen> {
           return;
         }
 
-        final email = _emailController.text.trim();
+        final identifier = _identifierController.text.trim();
         final password = _passwordController.text;
+
+        // Check if input is email or phone
+        final isEmail = Validators.isValidEmail(identifier);
+
+        if (!isEmail) {
+          // Assume phone number logic here
+          // For now, blocking phone login as per plan until backend supports lookup
+          setState(() {
+            _errorMessage =
+                'Login with Phone Number is coming soon. Please use your Email Address.';
+            _isLoading = false;
+          });
+          return;
+        }
 
         // Direct email/password login
         final success = await authProvider.signInWithEmail(
-          email: email,
+          email: identifier,
           password: password,
         );
 
@@ -228,13 +242,18 @@ class _LoginScreenState extends State<LoginScreen> {
 
                   Text(
                     'Welcome Back',
-                    style: Theme.of(context).textTheme.displayMedium,
+                    style: Theme.of(context).textTheme.displayMedium?.copyWith(
+                      fontSize: 34, // Explicit larger size
+                      fontWeight: FontWeight.bold,
+                    ),
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 8),
                   Text(
                     'Sign in to your account',
-                    style: Theme.of(context).textTheme.bodyMedium,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      fontSize: 18, // Increased from default
+                    ),
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 48),
@@ -310,14 +329,21 @@ class _LoginScreenState extends State<LoginScreen> {
                               ),
                             ),
 
-                          // Email field
+                          // Email/Phone field
                           CustomTextField(
-                            label: 'Email Address',
-                            controller: _emailController,
+                            label: 'Email or Phone Number',
+                            controller: _identifierController,
                             keyboardType: TextInputType.emailAddress,
-                            prefixIcon: const Icon(Icons.email_outlined),
-                            hint: 'name@example.com',
-                            validator: Validators.validateEmail,
+                            prefixIcon: const Icon(
+                              Icons.person_outline,
+                            ), // Generic icon
+                            hint: 'email@example.com or +234...',
+                            validator: (value) {
+                              if (value == null || value.isEmpty) {
+                                return 'Please enter your email or phone number';
+                              }
+                              return null; // We allow both, so no strict email validation here
+                            },
                             enabled: !_isLoading,
                           ),
 
@@ -351,25 +377,14 @@ class _LoginScreenState extends State<LoginScreen> {
                             child: TextButton(
                               onPressed: _isLoading
                                   ? null
-                                  : () {
-                                      showDialog(
-                                        context: context,
-                                        builder: (context) => AlertDialog(
-                                          title: const Text('Forgot Password'),
-                                          content: const Text(
-                                            'Please contact your system administrator to reset your password.',
-                                          ),
-                                          actions: [
-                                            TextButton(
-                                              onPressed: () =>
-                                                  Navigator.pop(context),
-                                              child: const Text('OK'),
-                                            ),
-                                          ],
-                                        ),
-                                      );
-                                    },
-                              child: const Text('Forgot Password?'),
+                                  : () => context.push('/forgot-password'),
+                              child: const Text(
+                                'Forgot Password?',
+                                style: TextStyle(
+                                  fontSize: 16, // Increased
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
                             ),
                           ),
                           const SizedBox(height: 24),
@@ -388,13 +403,22 @@ class _LoginScreenState extends State<LoginScreen> {
                             children: [
                               Text(
                                 "Don't have an account? ",
-                                style: TextStyle(color: Colors.grey.shade600),
+                                style: TextStyle(
+                                  color: Colors.grey.shade600,
+                                  fontSize: 16, // Increased
+                                ),
                               ),
                               TextButton(
                                 onPressed: _isLoading
                                     ? null
                                     : () => context.push('/register'),
-                                child: const Text('Sign Up'),
+                                child: const Text(
+                                  'Sign Up',
+                                  style: TextStyle(
+                                    fontSize: 18, // Increased
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
                               ),
                             ],
                           ),
@@ -562,6 +586,7 @@ class _LoginScreenState extends State<LoginScreen> {
               const SizedBox(height: 24),
               TextButton(
                 onPressed: () {
+                  context.read<ProfileProvider>().clearProfile();
                   authProvider.logout();
                 },
                 child: const Text('Log out and use different account'),

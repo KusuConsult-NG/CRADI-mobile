@@ -7,12 +7,14 @@ class OSMLocationPicker extends StatelessWidget {
   final LatLng initialPosition;
   final Function(LatLng)? onPositionChanged;
   final bool isInteractive;
+  final MapController? mapController;
 
   const OSMLocationPicker({
     super.key,
     required this.initialPosition,
     this.onPositionChanged,
     this.isInteractive = true,
+    this.mapController,
   });
 
   @override

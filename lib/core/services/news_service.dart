@@ -38,11 +38,65 @@ class NewsService {
           };
         }).toList();
       } else {
-        throw Exception('Failed to fetch news: ${response.statusCode}');
+        developer.log(
+          'API Error ${response.statusCode}: ${response.body}',
+          name: 'NewsService',
+        );
+        return _getFallbackNews();
       }
     } on Exception catch (e) {
       developer.log('Error fetching news: $e', name: 'NewsService');
-      return [];
+      return _getFallbackNews();
     }
+  }
+
+  /// Fallback news when API is unavailable or rate limited
+  List<Map<String, dynamic>> _getFallbackNews() {
+    return [
+      {
+        'id': 'fallback-1',
+        'title': 'Flood Safety: What to do before, during, and after',
+        'url':
+            'https://www.redcross.org/get-help/how-to-prepare-for-emergencies/types-of-emergencies/flood.html',
+        'date': DateTime.now().toIso8601String(),
+        'source': 'Safety Guide',
+      },
+      {
+        'id': 'fallback-2',
+        'title': 'NIMET Seasonal Climate Prediction 2024',
+        'url': 'https://nimet.gov.ng/',
+        'date': DateTime.now()
+            .subtract(const Duration(days: 2))
+            .toIso8601String(),
+        'source': 'NIMET',
+      },
+      {
+        'id': 'fallback-3',
+        'title': 'Emergency Contact Directory: Nigeria',
+        'url': 'https://www.redcrossnigeria.org/',
+        'date': DateTime.now()
+            .subtract(const Duration(days: 5))
+            .toIso8601String(),
+        'source': 'Red Cross',
+      },
+      {
+        'id': 'fallback-4',
+        'title': 'Understanding Early Warning Systems',
+        'url': 'https://www.undrr.org/terminology/early-warning-system',
+        'date': DateTime.now()
+            .subtract(const Duration(days: 10))
+            .toIso8601String(),
+        'source': 'UNDRR',
+      },
+      {
+        'id': 'fallback-5',
+        'title': 'How to Report a Disaster Incident',
+        'url': '#',
+        'date': DateTime.now()
+            .subtract(const Duration(days: 1))
+            .toIso8601String(),
+        'source': 'CRADI Help',
+      },
+    ];
   }
 }

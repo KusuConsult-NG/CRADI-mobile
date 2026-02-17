@@ -19,7 +19,7 @@ class _HazardSelectionScreenState extends State<HazardSelectionScreen> {
   final List<Map<String, dynamic>> _hazards = [
     {'name': 'Flooding', 'icon': Icons.flood, 'color': AppColors.hazardFlood},
     {
-      'name': 'Extreme Heat',
+      'name': 'Extreme Temperatures',
       'icon': Icons.thermostat,
       'color': AppColors.hazardTemp,
     },
@@ -49,8 +49,21 @@ class _HazardSelectionScreenState extends State<HazardSelectionScreen> {
       'icon': Icons.coronavirus_rounded,
       'color': Colors.green,
     },
-    {'name': 'Conflict', 'icon': Icons.shield, 'color': AppColors.errorRed},
+    {
+      'name': 'Conflict',
+      'icon': Icons.warning_amber_rounded,
+      'color': AppColors.primaryRed,
+    },
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    // Reset any previous reporting state when starting a new report
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<ReportingProvider>().reset();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -59,7 +72,13 @@ class _HazardSelectionScreenState extends State<HazardSelectionScreen> {
       appBar: AppBar(
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: AppColors.textPrimary),
-          onPressed: () => context.pop(),
+          onPressed: () {
+            if (context.canPop()) {
+              context.pop();
+            } else {
+              context.go('/dashboard');
+            }
+          },
         ),
         title: Text(
           'Select Hazard',

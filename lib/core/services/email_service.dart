@@ -1,7 +1,9 @@
 import 'dart:convert';
 import 'package:climate_app/core/services/appwrite_service.dart';
 import 'package:appwrite/appwrite.dart';
-import 'package:flutter/foundation.dart';
+
+import 'package:flutter/material.dart';
+import 'package:fluttertoast/fluttertoast.dart';
 
 /// Service for sending emails via Resend through Appwrite Cloud Functions
 ///
@@ -15,10 +17,6 @@ class EmailService {
   static final EmailService _instance = EmailService._internal();
   factory EmailService() => _instance;
   EmailService._internal();
-
-  /// Appwrite Cloud Function ID for email sending
-  /// You need to create this function in your Appwrite console
-  static const String _emailFunctionId = 'send-email';
 
   /// Send password reset email with reset link
   ///
@@ -40,11 +38,15 @@ class EmailService {
   /// [code] - 6-digit verification code
   ///
   /// Returns true if email was sent successfully
-  Future<bool> sendVerificationCode(String email, String code) async {
+  Future<bool> sendVerificationCode(
+    String email,
+    String code, {
+    String? name,
+  }) async {
     return await _sendEmail(
       type: 'verification',
       to: email,
-      data: {'code': code},
+      data: {'code': code, 'name': name},
     );
   }
 
@@ -126,11 +128,25 @@ class EmailService {
         return false;
       }
 
+      // Validate function configuration
+      const functionId = 'alert-distribution';
+      debugPrint('Executing Appwrite Function: $functionId');
+
+      if (functionId.isEmpty) {
+        throw Exception('Appwrite Function ID is empty. Check configuration.');
+      }
+
       // Call Appwrite Cloud Function
       final functions = Functions(AppwriteService().appwriteClient);
       final response = await functions.createExecution(
-        functionId: _emailFunctionId,
-        body: jsonEncode({'type': type, 'to': to, 'data': data}),
+        functionId: functionId,
+        body: jsonEncode({
+          'type':
+              'direct-email', // Required to trigger email mode in alert-distribution
+          'template': type, // Maps to 'template' in func
+          'to': to,
+          'data': data,
+        }),
       );
 
       // Parse response
@@ -140,10 +156,30 @@ class EmailService {
       if (success) {
         debugPrint('Email sent successfully: $type to $to');
       } else {
-        debugPrint('Email send failed: ${result['error']}');
+        final errorMsg = result['error'] ?? 'Unknown error';
+        debugPrint('Email send failed: $errorMsg');
+
+        // Show error to user to help debugging (especially for API key issues)
+        Fluttertoast.showToast(
+          msg: 'Email Error: $errorMsg',
+          toastLength: Toast.LENGTH_LONG,
+          gravity: ToastGravity.BOTTOM,
+          backgroundColor: Colors.red,
+          textColor: Colors.white,
+        );
       }
 
       return success;
+    } on AppwriteException catch (e) {
+      debugPrint('Appwrite function error: ${e.message}');
+      Fluttertoast.showToast(
+        msg: 'System Error: ${e.message}',
+        toastLength: Toast.LENGTH_LONG,
+        gravity: ToastGravity.BOTTOM,
+        backgroundColor: Colors.red,
+        textColor: Colors.white,
+      );
+      return false;
     } on Exception catch (e) {
       debugPrint('Email service error: $e');
       return false;
