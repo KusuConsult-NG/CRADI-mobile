@@ -104,7 +104,10 @@ GoRouter createRouter(BuildContext context) {
           if (isLocked) return '/login'; // Or stay on lock screen
           return '/dashboard';
         }
-        // TODO: check onboarding status if needed
+
+        if (!authProvider.hasCompletedOnboarding) {
+          return '/onboarding';
+        }
         return '/landing';
       }
 

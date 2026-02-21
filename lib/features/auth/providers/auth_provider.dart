@@ -3,6 +3,7 @@ import 'package:climate_app/core/utils/error_handler.dart';
 import 'package:appwrite/appwrite.dart';
 import 'package:appwrite/models.dart' as models;
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:climate_app/core/services/appwrite_service.dart';
 import 'package:climate_app/core/services/secure_storage_service.dart';
 import 'package:climate_app/core/services/session_manager.dart';
@@ -45,6 +46,7 @@ class AuthProvider extends ChangeNotifier {
   final FraudDetectionService _fraudService = FraudDetectionService();
 
   bool _isInitialized = false; // Flag to indicate initialization complete
+  bool _hasCompletedOnboarding = false; // Flag to track onboarding status
 
   bool get isAuthenticated => _isAuthenticated;
   UserRole? get userRole => _userRole;
@@ -54,6 +56,8 @@ class AuthProvider extends ChangeNotifier {
   bool? get isApproved => _isApproved; // Getter for approval status
   bool get isVerified => _isVerified; // Getter for verification status
   bool get isInitialized => _isInitialized; // Expose getter
+  bool get hasCompletedOnboarding =>
+      _hasCompletedOnboarding; // Getter for onboarding status
 
   void _initializeSessionManager() {
     _sessionManager.onSessionExpired = () {
@@ -68,6 +72,10 @@ class AuthProvider extends ChangeNotifier {
   /// Checks for existing valid session on app start
   Future<void> _checkExistingSession() async {
     try {
+      final prefs = await SharedPreferences.getInstance();
+      _hasCompletedOnboarding =
+          prefs.getBool('has_completed_onboarding') ?? false;
+
       final user = await _appwrite.getCurrentUser();
       if (user != null) {
         _currentUser = user;
@@ -128,6 +136,13 @@ class AuthProvider extends ChangeNotifier {
       _isInitialized = true;
       notifyListeners();
     }
+  }
+
+  Future<void> completeOnboarding() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('has_completed_onboarding', true);
+    _hasCompletedOnboarding = true;
+    notifyListeners();
   }
 
   /// Public method to force reload of user data

@@ -4,6 +4,8 @@ import 'package:go_router/go_router.dart';
 import '../models/onboarding_page.dart' as model;
 import '../../../core/services/onboarding_service.dart';
 import '../../../core/theme/app_colors.dart';
+import 'package:provider/provider.dart';
+import '../../auth/providers/auth_provider.dart';
 
 class OnboardingScreen extends StatefulWidget {
   const OnboardingScreen({super.key});
@@ -66,7 +68,10 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   Future<void> _completeOnboarding() async {
     await _onboardingService.setOnboardingCompleted();
     if (mounted) {
-      context.go('/landing'); // Go to landing screen
+      await context.read<AuthProvider>().completeOnboarding();
+      if (mounted) {
+        context.go('/landing'); // Go to landing screen
+      }
     }
   }
 
