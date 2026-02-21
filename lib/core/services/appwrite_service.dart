@@ -153,7 +153,10 @@ class AppwriteService {
     required String secret,
   }) async {
     try {
-      return await _account.updateVerification(userId: userId, secret: secret);
+      return await _account.updateEmailVerification(
+        userId: userId,
+        secret: secret,
+      );
     } on AppwriteException catch (e) {
       developer.log('Update verification error: $e', name: 'AppwriteService');
       rethrow;

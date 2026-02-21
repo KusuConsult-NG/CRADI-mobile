@@ -4,6 +4,8 @@ class AppConfig {
   static const String appwriteDatabaseId = '6941e2c2003705bb5a25';
 
   // Storage Buckets
+  // Due to Appwrite free tier limits (max 1 bucket), Profile Photos and Report Images
+  // currently share the same bucket but are logically separated by folder paths.
   static const String storageBucketId = '6941e4e10034186aded8';
 
   // Collections

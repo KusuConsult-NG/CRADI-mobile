@@ -2,6 +2,8 @@
 /// Complete dataset of all 36 states + FCT and their 774 LGAs
 library;
 
+import 'package:climate_app/core/data/mvp_locations_data.dart';
+
 class NigeriaLocation {
   final String state;
   final List<String> lgas;
@@ -998,11 +1000,12 @@ class NigeriaLocationsData {
   }
 
   /// Returns a list of wards for a given state and LGA.
-  /// Currently returns dummy data as placeholder until real ward data is available.
   static List<String> getWardsForLGA(String state, String lga) {
-    // In a real app, this would query a database or a larger JSON file
-    // specific to the selected LGA.
-    return List.generate(10, (index) => '$lga Ward ${index + 1}');
+    if (focalStates.contains(state)) {
+      return MVPLocationsData.getWardsForLGASafe(lga);
+    }
+    // Fallback for non-focal states if any are required later
+    return [];
   }
 
   /// Returns a snapshot of focal states for MVP (Benue, Nasarawa, Plateau)

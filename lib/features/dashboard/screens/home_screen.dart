@@ -18,7 +18,7 @@ import 'package:climate_app/core/providers/connectivity_provider.dart';
 import 'package:climate_app/core/services/peer_verification_service.dart';
 import 'package:climate_app/core/services/notification_service.dart';
 import 'package:climate_app/features/reporting/providers/reporting_provider.dart';
-import 'package:climate_app/l10n/app_localizations.dart';
+// Removed unused import for localizations
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -404,7 +404,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      AppLocalizations.of(context)!.monitoringZone,
+                      'Monitoring Zone',
                       style: GoogleFonts.lexend(
                         fontSize: 10,
                         fontWeight: FontWeight.w600,

@@ -24,8 +24,8 @@ class SmsService {
 
   /// Send SMS to a single recipient
   ///
-  /// [to]: Phone number in international format (e.g., +234XXXXXXXXXX)
-  /// [message]: SMS content (max 160 chars for single SMS, 918 for concatenated)
+  /// [to]: Phone number in international format (e.g., +234XXXXXXXXXX or 234XXXXXXXXXX for Termii)
+  /// [message]: SMS content
   /// [senderId]: Optional sender ID (defaults to config)
   ///
   /// Returns: MessageId if successful, null if failed
@@ -44,22 +44,28 @@ class SmsService {
         return null;
       }
 
-      // Validate phone number
-      if (!_isValidPhoneNumber(to)) {
+      // Convert phone number to Termii expected format (no +)
+      final formattedTo = _formatForTermii(to);
+
+      // Validate phone number loosely because Termii takes numbers without '+' or space
+      if (formattedTo.isEmpty) {
         developer.log('❌ Invalid phone number: $to', name: 'SmsService');
         return null;
       }
 
       // Prepare request
       final body = {
-        'username': SmsConfig.username,
-        'to': to,
-        'message': message,
+        'to': formattedTo,
         'from': senderId ?? SmsConfig.senderId,
+        'sms': message,
+        'type': 'plain',
+        'channel':
+            'generic', // "generic" for promotional, "dnd" for OTPs if registered
+        'api_key': SmsConfig.apiKey,
       };
 
       developer.log(
-        '📤 Sending SMS to $to: ${message.substring(0, message.length > 50 ? 50 : message.length)}...',
+        '📤 Sending SMS to $formattedTo: ${message.substring(0, message.length > 50 ? 50 : message.length)}...',
         name: 'SmsService',
       );
 
@@ -67,35 +73,21 @@ class SmsService {
       final response = await http.post(
         Uri.parse(SmsConfig.smsEndpoint),
         headers: SmsConfig.headers,
-        body: body,
+        body: json.encode(body),
       );
 
       // Handle response
       if (response.statusCode == 200 || response.statusCode == 201) {
         final data = json.decode(response.body) as Map<String, dynamic>;
 
-        // Africa's Talking response format
-        final smsData = data['SMSMessageData'] as Map<String, dynamic>?;
-        final recipients = smsData?['Recipients'] as List<dynamic>?;
-
-        if (recipients != null && recipients.isNotEmpty) {
-          final recipient = recipients[0] as Map<String, dynamic>;
-          final status = recipient['status'] as String?;
-          final messageId = recipient['messageId'] as String?;
-
-          if (status == 'Success' || status == 'Sent') {
-            developer.log(
-              '✅ SMS sent successfully. MessageId: $messageId',
-              name: 'SmsService',
-            );
-            return messageId;
-          } else {
-            developer.log(
-              '❌ SMS failed to send. Status: $status',
-              name: 'SmsService',
-            );
-            return null;
-          }
+        final messageId = data['message_id'] as String?;
+        // Termii ok response usually returns "ok" as code or 200
+        if (messageId != null && messageId.isNotEmpty) {
+          developer.log(
+            '✅ SMS sent successfully. MessageId: $messageId',
+            name: 'SmsService',
+          );
+          return messageId;
         }
       }
 
@@ -132,8 +124,11 @@ class SmsService {
         return {};
       }
 
-      // Filter valid phone numbers
-      final validRecipients = recipients.where(_isValidPhoneNumber).toList();
+      // Filter and format valid phone numbers for Termii
+      final validRecipients = recipients
+          .map((e) => _formatForTermii(e))
+          .where((e) => e.isNotEmpty)
+          .toList();
 
       if (validRecipients.isEmpty) {
         developer.log(
@@ -143,12 +138,14 @@ class SmsService {
         return {};
       }
 
-      // Prepare request (comma-separated phone numbers)
+      // Termii expects multiple numbers as an array of strings in to[] or just an array
       final body = {
-        'username': SmsConfig.username,
-        'to': validRecipients.join(','),
-        'message': message,
+        'to': validRecipients,
         'from': senderId ?? SmsConfig.senderId,
+        'sms': message,
+        'type': 'plain',
+        'channel': 'generic',
+        'api_key': SmsConfig.apiKey,
       };
 
       developer.log(
@@ -158,38 +155,26 @@ class SmsService {
 
       // Send request
       final response = await http.post(
-        Uri.parse(SmsConfig.smsEndpoint),
+        Uri.parse(SmsConfig.bulkSmsEndpoint),
         headers: SmsConfig.headers,
-        body: body,
+        body: json.encode(body),
       );
 
       // Handle response
       if (response.statusCode == 200 || response.statusCode == 201) {
         final data = json.decode(response.body) as Map<String, dynamic>;
-        final smsData = data['SMSMessageData'] as Map<String, dynamic>?;
-        final recipientsData = smsData?['Recipients'] as List<dynamic>?;
 
+        // Termii bulk API typically returns a message_id and an array of unsuccessful contacts if any
         final results = <String, String?>{};
+        final messageId = data['message_id']?.toString() ?? 'bulk_sent';
 
-        if (recipientsData != null) {
-          for (final recipient in recipientsData) {
-            final recipientMap = recipient as Map<String, dynamic>;
-            final number = recipientMap['number'] as String?;
-            final status = recipientMap['status'] as String?;
-            final messageId = recipientMap['messageId'] as String?;
+        developer.log(
+          '✅ Bulk SMS sent successfully. MessageId: $messageId',
+          name: 'SmsService',
+        );
 
-            if (number != null) {
-              results[number] = (status == 'Success' || status == 'Sent')
-                  ? messageId
-                  : null;
-            }
-          }
-
-          final successCount = results.values.where((id) => id != null).length;
-          developer.log(
-            '✅ Bulk SMS sent: $successCount/${validRecipients.length} successful',
-            name: 'SmsService',
-          );
+        for (final number in validRecipients) {
+          results[number] = messageId;
         }
 
         return results;
@@ -286,15 +271,19 @@ Do not share this code.
 
   // ==================== HELPER METHODS ====================
 
-  /// Validate phone number format
-  /// Accepts: +234XXXXXXXXXX, +254XXXXXXXXX, etc.
-  bool _isValidPhoneNumber(String phone) {
-    // Remove whitespace
-    final cleaned = phone.replaceAll(RegExp(r'\s+'), '');
+  /// Format phone number for Termii
+  /// Accepts: +234XXXXXXXXXX, 234XXXXXXXXXX, 080XXXXXXXX, etc.
+  /// Converts to: 234XXXXXXXXXX (No + symbol)
+  String _formatForTermii(String phone) {
+    // Remove whitespace and special characters
+    var cleaned = phone.replaceAll(RegExp(r'[\s\-\(\)\+]'), '');
 
-    // Must start with + and have 10-15 digits
-    final regex = RegExp(r'^\+[1-9]\d{9,14}$');
-    return regex.hasMatch(cleaned);
+    // If starts with 0 for Nigerian numbers, prepend 234
+    if (cleaned.startsWith('0')) {
+      return '234${cleaned.substring(1)}';
+    }
+
+    return cleaned;
   }
 
   /// Format phone number to international format

@@ -56,6 +56,9 @@ class ReportsStatusProvider extends ChangeNotifier {
     required String severity,
     required String description,
     required String userId,
+    required String state,
+    required String lga,
+    required String ward,
     String? locationDetails,
     double? latitude,
     double? longitude,
@@ -63,6 +66,8 @@ class ReportsStatusProvider extends ChangeNotifier {
     _isSubmitting = true; // Use global submitting state
     notifyListeners();
 
+    final String defaultLocation =
+        locationDetails ?? 'User Requested Verification';
     final data = {
       'userId': userId,
       'description': description,
@@ -70,9 +75,16 @@ class ReportsStatusProvider extends ChangeNotifier {
       'severity': severity,
       'status': 'pending',
       'submittedAt': DateTime.now().toIso8601String(),
-      'locationDetails': locationDetails ?? 'User Requested Verification',
+      'createdAt': DateTime.now().toIso8601String(), // Required by schema
+      'locationDetails': defaultLocation,
+      'location': defaultLocation, // Schema compatibility
+      'address': defaultLocation, // Schema compatibility
+      'ward': ward,
+      'lga': lga,
+      'state': state,
       'latitude': latitude ?? 0.0,
       'longitude': longitude ?? 0.0,
+      'imageIds': [],
       'isAlert':
           severity.toLowerCase() == 'critical' ||
           severity.toLowerCase() == 'high',

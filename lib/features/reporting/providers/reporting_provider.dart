@@ -10,6 +10,7 @@ import 'package:uuid/uuid.dart';
 import 'dart:developer' as developer;
 import 'package:appwrite/appwrite.dart';
 import 'package:provider/provider.dart';
+import 'package:climate_app/core/utils/string_extensions.dart';
 
 enum HazardType { flood, drought, temp, wind, erosion, fire, pest }
 
@@ -374,24 +375,33 @@ class ReportingProvider extends ChangeNotifier {
             'locationDetails': draft['locationDetails'],
             'location':
                 draft['locationDetails'], // Added for schema compatibility
-            'address':
-                draft['locationDetails'], // Added for schema compatibility
             'ward':
-                draft['ward'] ??
-                MVPLocationsData.getWardsForLGA(
-                  MVPLocationsData.getLGAForWard(draft['locationDetails']!) ??
-                      'Makurdi',
-                ).firstOrNull ??
-                'Unknown',
+                (draft['ward'] ??
+                        MVPLocationsData.getWardsForLGA(
+                          MVPLocationsData.getLGAForWard(
+                                draft['locationDetails']!,
+                              ) ??
+                              'Makurdi',
+                        ).firstOrNull ??
+                        'Unknown')
+                    .toString()
+                    .normalizeForBackend(),
             'lga':
-                draft['lga'] ??
-                MVPLocationsData.getLGAForWard(draft['locationDetails']!) ??
-                'Makurdi',
+                (draft['lga'] ??
+                        MVPLocationsData.getLGAForWard(
+                          draft['locationDetails']!,
+                        ) ??
+                        'Makurdi')
+                    .toString()
+                    .normalizeForBackend(),
             'state': MVPLocationsData.getStateForLGA(
-              draft['lga'] ??
-                  MVPLocationsData.getLGAForWard(draft['locationDetails']!) ??
-                  'Makurdi',
-            ),
+              (draft['lga'] ??
+                      MVPLocationsData.getLGAForWard(
+                        draft['locationDetails']!,
+                      ) ??
+                      'Makurdi')
+                  .toString(),
+            ).normalizeForBackend(),
             'description': draft['description'],
             'submittedAt': DateTime.now().toIso8601String(),
             'imageIds': imageIds,

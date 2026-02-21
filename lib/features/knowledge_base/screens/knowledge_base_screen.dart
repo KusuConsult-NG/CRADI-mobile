@@ -1,11 +1,14 @@
 import 'dart:developer' as developer;
 import 'package:climate_app/core/providers/connectivity_provider.dart';
 import 'package:climate_app/features/knowledge_base/providers/news_provider.dart';
+import 'package:climate_app/features/knowledge_base/providers/knowledge_provider.dart';
 import 'package:climate_app/core/theme/app_colors.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class KnowledgeBaseScreen extends StatefulWidget {
   const KnowledgeBaseScreen({super.key});
@@ -24,6 +27,7 @@ class _KnowledgeBaseScreenState extends State<KnowledgeBaseScreen> {
     Future.microtask(() {
       if (mounted) {
         context.read<NewsProvider>().fetchNews();
+        context.read<KnowledgeProvider>().fetchGuides(category: 'All');
       }
     });
   }
@@ -211,14 +215,14 @@ class _KnowledgeBaseScreenState extends State<KnowledgeBaseScreen> {
 
             const SizedBox(height: 16),
 
-            // Favorites & Recent
+            // Recent Guides (From Provider)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    'Favorites & Recent',
+                    'Featured Guides',
                     style: GoogleFonts.lexend(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
@@ -226,7 +230,9 @@ class _KnowledgeBaseScreenState extends State<KnowledgeBaseScreen> {
                     ),
                   ),
                   GestureDetector(
-                    onTap: () {},
+                    onTap: () {
+                      context.push('/knowledge-base/guides');
+                    },
                     child: Text(
                       'See All',
                       style: GoogleFonts.lexend(
@@ -242,26 +248,57 @@ class _KnowledgeBaseScreenState extends State<KnowledgeBaseScreen> {
             const SizedBox(height: 12),
             SizedBox(
               height: 160,
-              child: ListView(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                children: [
-                  _buildFavoriteCard(
-                    'Flood Response Checklist',
-                    'CHECKLIST',
-                    AppColors.successGreen,
-                    'https://lh3.googleusercontent.com/aida-public/AB6AXuDvhi8e3ldWkMEkeaYGts6I6-X2jwkbSO3NvYLxwOmi-In3U4Dzoklw6e-vQr895640U3YXRO26NQm_oCRQdOAZvc9c_14EBvifESaiMHfxroaI9Z61S2mtZ4y1js0EskBXooo3URMoWHzZ3cKOQp6YaxaV4T1QDeg4iDEbG6a87H47b2ZdwsoQEd9cnO2WBRNfHVVY0RhZw2P8ZaR1aNI2kb51iYgX-OdiqJmMSYIhwNptLsSyYb3KaJ0OLcRj6f3kBIN5tq12kL7N',
-                    context,
-                  ),
-                  const SizedBox(width: 12),
-                  _buildFavoriteCard(
-                    'Reporting a Wildfire',
-                    'PROTOCOL',
-                    Colors.orange,
-                    'https://lh3.googleusercontent.com/aida-public/AB6AXuDCOi0S_0IaRVAVZycsWjzrHO3tHP5iLg3yt3eNPYhLBG38iJO4ht_wwTQWLOLLBb8D4xVwWGEaL3DC0Ypm1IxadsAwVP-dRS-AUAOXoItsNjp_nySDDbxRyjW3SQT1ZJOHrc9SSGvFwzUhq0DXryIzT-mL5qSwLSOjEpPpxBR23Bb4ApbCFKSI8IMW3BLeJubx8SoXK0M5GU6uA_-03FxsjlFj54A74AvBirK1wLfQO0GnY1vV3E5znwKbpmqrypVCSqICjavIFuKk',
-                    context,
-                  ),
-                ],
+              child: Consumer<KnowledgeProvider>(
+                builder: (context, knowledgeProvider, _) {
+                  if (knowledgeProvider.isLoading) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+
+                  final allGuides = knowledgeProvider.searchGuides(
+                    _searchQuery,
+                  );
+
+                  if (allGuides.isEmpty) {
+                    return Center(
+                      child: Text(
+                        'No guides available',
+                        style: GoogleFonts.lexend(color: Colors.grey),
+                      ),
+                    );
+                  }
+
+                  // Take top 5 for featured
+                  final featuredGuides = allGuides.take(5).toList();
+
+                  return ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    itemCount: featuredGuides.length,
+                    separatorBuilder: (context, index) =>
+                        const SizedBox(width: 12),
+                    itemBuilder: (context, index) {
+                      final guide = featuredGuides[index];
+                      // Determine tag color
+                      Color tagColor = Colors.blue;
+                      final tag =
+                          guide['tag']?.toString().toUpperCase() ?? 'GUIDE';
+                      if (tag == 'IMMEDIATE' || tag == 'HIGH PRIORITY')
+                        tagColor = Colors.red;
+                      else if (tag == 'WATCH' || tag == 'MODERATE')
+                        tagColor = Colors.orange;
+
+                      return _buildFavoriteCard(
+                        guide['title'] ?? 'Guide',
+                        tag,
+                        tagColor,
+                        guide['imageUrl'] ??
+                            'https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?auto=format&fit=crop&q=80&w=800',
+                        context,
+                        guideData: guide,
+                      );
+                    },
+                  );
+                },
               ),
             ),
 
@@ -290,22 +327,6 @@ class _KnowledgeBaseScreenState extends State<KnowledgeBaseScreen> {
               childAspectRatio: 1.5,
               children: [
                 _buildCategoryCard(
-                  'Training Handbook',
-                  'Certification modules',
-                  Icons.menu_book,
-                  Colors.blue,
-                  () {
-                    context.push(
-                      '/knowledge-base/detail',
-                      extra: {
-                        'title': 'Training Handbook',
-                        'category': 'Training',
-                        'lastUpdated': '1 month ago',
-                      },
-                    );
-                  },
-                ),
-                _buildCategoryCard(
                   'Hazard ID Guides',
                   'Identify local threats',
                   Icons.warning,
@@ -315,19 +336,21 @@ class _KnowledgeBaseScreenState extends State<KnowledgeBaseScreen> {
                   },
                 ),
                 _buildCategoryCard(
-                  'Response Protocols',
-                  'Step-by-step actions',
-                  Icons.health_and_safety,
-                  Colors.green,
+                  'Fire Response',
+                  'Wildfire protocols',
+                  Icons.local_fire_department,
+                  Colors.red,
                   () {
-                    context.push(
-                      '/knowledge-base/detail',
-                      extra: {
-                        'title': 'Response Protocols',
-                        'category': 'Protocols',
-                        'lastUpdated': '2 weeks ago',
-                      },
-                    );
+                    context.push('/knowledge-base/guides', extra: 'Fire');
+                  },
+                ),
+                _buildCategoryCard(
+                  'Flood Readiness',
+                  'Water & Storms',
+                  Icons.water_drop,
+                  Colors.blue,
+                  () {
+                    context.push('/knowledge-base/guides', extra: 'Flood');
                   },
                 ),
                 _buildCategoryCard(
@@ -401,10 +424,23 @@ class _KnowledgeBaseScreenState extends State<KnowledgeBaseScreen> {
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 12),
                         child: GestureDetector(
-                          onTap: () {
-                            // Link to web or detail view
-                            // For now, show in detail view if possible or just log
-                            developer.log('Opening news: ${item['url']}');
+                          onTap: () async {
+                            final url = item['url'];
+                            if (url != null) {
+                              try {
+                                final uri = Uri.parse(url);
+                                if (await canLaunchUrl(uri)) {
+                                  await launchUrl(
+                                    uri,
+                                    mode: LaunchMode.externalApplication,
+                                  );
+                                } else {
+                                  developer.log('Could not launch news: $url');
+                                }
+                              } catch (e) {
+                                developer.log('Error launching news: $e');
+                              }
+                            }
                           },
                           child: _buildRecentItem(
                             item['title'],
@@ -429,30 +465,55 @@ class _KnowledgeBaseScreenState extends State<KnowledgeBaseScreen> {
     String tag,
     Color tagColor,
     String imageUrl,
-    BuildContext context,
-  ) {
+    BuildContext context, {
+    Map<String, dynamic>? guideData,
+  }) {
     return GestureDetector(
       onTap: () {
-        context.push(
-          '/knowledge-base/detail',
-          extra: {
-            'title': title,
-            'category': tag,
-            'lastUpdated': 'Recently saved',
-          },
-        );
+        if (guideData != null) {
+          context.push('/knowledge-base/detail', extra: guideData);
+        } else {
+          context.push(
+            '/knowledge-base/detail',
+            extra: {
+              'title': title,
+              'category': tag,
+              'lastUpdated': 'Recently saved',
+            },
+          );
+        }
       },
       child: Container(
         width: 200,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12),
-          image: DecorationImage(
-            image: NetworkImage(imageUrl),
-            fit: BoxFit.cover,
-          ),
-        ),
+        decoration: BoxDecoration(borderRadius: BorderRadius.circular(12)),
         child: Stack(
+          fit: StackFit.expand,
           children: [
+            // Background Image
+            ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: CachedNetworkImage(
+                imageUrl: imageUrl,
+                fit: BoxFit.cover,
+                placeholder: (context, url) => Container(
+                  color: Colors.grey.shade200,
+                  child: const Center(
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                ),
+                errorWidget: (context, url, error) => Container(
+                  color: Colors.grey.shade800,
+                  child: const Center(
+                    child: Icon(
+                      Icons.cloud_off,
+                      color: Colors.white54,
+                      size: 32,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            // Gradient Overlay
             Container(
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(12),

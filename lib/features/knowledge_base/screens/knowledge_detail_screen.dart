@@ -1,7 +1,10 @@
 import 'package:climate_app/core/theme/app_colors.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';
 import 'package:climate_app/core/services/tts_service.dart';
+import 'package:climate_app/features/knowledge_base/providers/knowledge_provider.dart';
+import 'package:go_router/go_router.dart';
 
 class KnowledgeDetailScreen extends StatelessWidget {
   final Map<String, dynamic> guide;
@@ -150,26 +153,23 @@ class KnowledgeDetailScreen extends StatelessWidget {
             ),
             const SizedBox(height: 24),
             // Featured Image Placeholder
-            Container(
-              height: 200,
-              width: double.infinity,
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    categoryColor.withValues(alpha: 0.1),
-                    categoryColor.withValues(alpha: 0.05),
-                  ],
-                ),
+            if (guide['imageUrl'] != null &&
+                guide['imageUrl'].toString().isNotEmpty)
+              ClipRRect(
                 borderRadius: BorderRadius.circular(16),
-              ),
-              child: Icon(
-                categoryIcon,
-                size: 80,
-                color: categoryColor.withValues(alpha: 0.3),
-              ),
-            ),
+                child: AspectRatio(
+                  aspectRatio: 16 / 9,
+                  child: Image.network(
+                    guide['imageUrl'],
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) {
+                      return _buildFallbackImage(categoryIcon, categoryColor);
+                    },
+                  ),
+                ),
+              )
+            else
+              _buildFallbackImage(categoryIcon, categoryColor),
             const SizedBox(height: 24),
             if (guide['content'] != null &&
                 guide['content'].toString().isNotEmpty)
@@ -209,13 +209,50 @@ class KnowledgeDetailScreen extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 12),
-            _buildRelatedItem(
-              'Emergency Evacuation Routes',
-              Icons.directions_run,
-            ),
-            _buildRelatedItem(
-              'First Aid Basics for Incidents',
-              Icons.medical_services_outlined,
+            Consumer<KnowledgeProvider>(
+              builder: (context, knowledgeProvider, child) {
+                // Find guides with the same category/tag
+                final currentCategory =
+                    guide['category'] ?? guide['hazardType'] ?? 'General';
+                final relatedGuides = knowledgeProvider.guides
+                    .where((g) {
+                      final cat = g['category'] ?? g['hazardType'] ?? 'General';
+                      // Ignore exact same guide
+                      if (g['title'] == guide['title']) return false;
+                      return cat.toString().toLowerCase() ==
+                          currentCategory.toString().toLowerCase();
+                    })
+                    .take(3)
+                    .toList();
+
+                if (relatedGuides.isEmpty) {
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    child: Text(
+                      'No related topics found.',
+                      style: GoogleFonts.lexend(
+                        color: AppColors.textSecondary,
+                        fontSize: 14,
+                      ),
+                    ),
+                  );
+                }
+
+                return Column(
+                  children: relatedGuides.map((relatedGuide) {
+                    return _buildRelatedItem(
+                      relatedGuide['title'] ?? 'Guide',
+                      categoryIcon,
+                      onTap: () {
+                        context.push(
+                          '/knowledge-base/detail',
+                          extra: relatedGuide,
+                        );
+                      },
+                    );
+                  }).toList(),
+                );
+              },
             ),
             const SizedBox(height: 40),
           ],
@@ -266,7 +303,23 @@ class KnowledgeDetailScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildRelatedItem(String title, IconData icon) {
+  Widget _buildFallbackImage(IconData icon, Color color) {
+    return Container(
+      height: 200,
+      width: double.infinity,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [color.withValues(alpha: 0.1), color.withValues(alpha: 0.05)],
+        ),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Icon(icon, size: 80, color: color.withValues(alpha: 0.3)),
+    );
+  }
+
+  Widget _buildRelatedItem(String title, IconData icon, {VoidCallback? onTap}) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: ListTile(
@@ -292,7 +345,7 @@ class KnowledgeDetailScreen extends StatelessWidget {
           size: 12,
           color: Colors.grey,
         ),
-        onTap: () {},
+        onTap: onTap,
       ),
     );
   }

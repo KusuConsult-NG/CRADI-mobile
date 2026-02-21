@@ -6,7 +6,9 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
 class HazardGuidesScreen extends StatefulWidget {
-  const HazardGuidesScreen({super.key});
+  final String? initialCategory;
+
+  const HazardGuidesScreen({super.key, this.initialCategory});
 
   @override
   State<HazardGuidesScreen> createState() => _HazardGuidesScreenState();
@@ -28,6 +30,15 @@ class _HazardGuidesScreenState extends State<HazardGuidesScreen> {
   @override
   void initState() {
     super.initState();
+    if (widget.initialCategory != null) {
+      final index = _filters.indexWhere(
+        (f) => f.toLowerCase() == widget.initialCategory!.toLowerCase(),
+      );
+      if (index != -1) {
+        _selectedFilterIndex = index;
+      }
+    }
+
     Future.microtask(() {
       if (!mounted) return;
       context.read<KnowledgeProvider>().fetchGuides(

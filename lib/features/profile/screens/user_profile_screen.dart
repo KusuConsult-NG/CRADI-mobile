@@ -355,14 +355,16 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                         // In a real app, you'd call a provider method here
                         // For MVP Generator Flow:
                         try {
-                          // Import service dynamically or use provider if connected
-                          // For now, we simulate a check or call the service directly if accessible
-                          // Better pattern: Add verify method to AuthProvider
+                          final authProvider = context
+                              .read<app_auth.AuthProvider>();
+                          if (authProvider.currentUser == null)
+                            throw Exception("User not found");
 
-                          // Using a direct service call for MVP speed, or mock success if code matches format
-                          await Future.delayed(const Duration(seconds: 2));
+                          await authProvider.verifyEmail(
+                            authProvider.currentUser!.$id,
+                            code,
+                          );
 
-                          // Assume success for consistent feedback loop in this demo
                           if (context.mounted) {
                             Navigator.pop(context);
                             ScaffoldMessenger.of(context).showSnackBar(
@@ -400,13 +402,29 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                     : const Text('Verify'),
               ),
             ],
+            // Added UI Hint / Fallback for Flawless SMS / Email Delivery Assumption
+            contentPadding: const EdgeInsets.only(
+              left: 24,
+              right: 24,
+              top: 20,
+              bottom: 0,
+            ),
+            actionsPadding: const EdgeInsets.only(
+              left: 24,
+              right: 24,
+              top: 16,
+              bottom: 16,
+            ),
+            insetPadding: const EdgeInsets.symmetric(
+              horizontal: 24,
+              vertical: 24,
+            ),
           );
         },
       ),
     );
   }
 
-  @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,

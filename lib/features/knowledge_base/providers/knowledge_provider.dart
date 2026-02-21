@@ -70,7 +70,18 @@ class KnowledgeProvider extends ChangeNotifier {
         } else {
           // Fallback if empty (or maybe we want to mix them?)
           // For now, if Appwrite is empty, show curated.
-          _guides = await _fallbackService.fetchGuides(hazardType: category);
+          final fallbackData = await _fallbackService.fetchGuides(
+            hazardType: category,
+          );
+          _guides = fallbackData.map((doc) {
+            return {
+              ...doc,
+              'imageUrl':
+                  doc['imageUrl'] ??
+                  _getImageForType(doc['hazardType'] ?? doc['category']),
+              'isOffline': true,
+            };
+          }).toList();
         }
       } on Exception catch (e) {
         developer.log(
@@ -87,7 +98,18 @@ class KnowledgeProvider extends ChangeNotifier {
           );
         } else {
           // 3. Fallback to hardcoded content if cache empty
-          _guides = await _fallbackService.fetchGuides(hazardType: category);
+          final fallbackData = await _fallbackService.fetchGuides(
+            hazardType: category,
+          );
+          _guides = fallbackData.map((doc) {
+            return {
+              ...doc,
+              'imageUrl':
+                  doc['imageUrl'] ??
+                  _getImageForType(doc['hazardType'] ?? doc['category']),
+              'isOffline': true,
+            };
+          }).toList();
         }
       }
 

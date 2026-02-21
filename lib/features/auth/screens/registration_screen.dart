@@ -48,6 +48,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
   bool _isLoading = false;
   bool _isPasswordVisible = false;
   bool _isConfirmPasswordVisible = false;
+  bool _isPhoneAuth = false;
 
   @override
   void initState() {
@@ -102,8 +103,60 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
 
       final name = _nameController.text.trim();
       final address = _addressController.text.trim();
-      final email = _emailController.text.trim();
       final phone = _phoneController.text.trim();
+
+      if (_isPhoneAuth) {
+        // Custom Phone Auth Flow
+        setState(() => _isLoading = true);
+        try {
+          final success = await authProvider.sendOtpForPhone(phone);
+          if (mounted) {
+            setState(() => _isLoading = false);
+            if (success) {
+              final registrationData = {
+                'name': name,
+                'address': address,
+                'role': UserRole.user,
+                'state': _selectedState,
+                'lga': _selectedLga,
+                'ward': _selectedWard,
+              };
+
+              showDialog(
+                context: context,
+                barrierDismissible: false,
+                builder: (context) => AlertDialog(
+                  title: const Text('Verify Your Phone Number'),
+                  content: Text(
+                    'A 6-digit verification code has been sent to $phone.\n\nPlease enter the code to activate your account.',
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () {
+                        context.pop(); // Close dialog
+                        context.go(
+                          '/verify-otp?phone=${Uri.encodeComponent(phone)}',
+                          extra: registrationData,
+                        );
+                      },
+                      child: const Text('Enter Code'),
+                    ),
+                  ],
+                ),
+              );
+            }
+          }
+        } on Exception catch (e) {
+          if (mounted) {
+            setState(() => _isLoading = false);
+            _showToast('Failed to send SMS: $e', isError: true);
+          }
+        }
+        return;
+      }
+
+      // Traditional Email Auth Flow
+      final email = _emailController.text.trim();
       final password = _passwordController.text;
 
       developer.log(
@@ -260,6 +313,80 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
+                              'Registration Method',
+                              style: GoogleFonts.lexend(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.textPrimary,
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            // Toggle for Email vs Phone Auth
+                            Container(
+                              height: 48,
+                              decoration: BoxDecoration(
+                                color: Colors.grey.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: GestureDetector(
+                                      onTap: () =>
+                                          setState(() => _isPhoneAuth = false),
+                                      child: Container(
+                                        decoration: BoxDecoration(
+                                          color: !_isPhoneAuth
+                                              ? AppColors.primaryRed
+                                              : Colors.transparent,
+                                          borderRadius: BorderRadius.circular(
+                                            12,
+                                          ),
+                                        ),
+                                        alignment: Alignment.center,
+                                        child: Text(
+                                          'Email',
+                                          style: GoogleFonts.lexend(
+                                            color: !_isPhoneAuth
+                                                ? Colors.white
+                                                : AppColors.textSecondary,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  Expanded(
+                                    child: GestureDetector(
+                                      onTap: () =>
+                                          setState(() => _isPhoneAuth = true),
+                                      child: Container(
+                                        decoration: BoxDecoration(
+                                          color: _isPhoneAuth
+                                              ? AppColors.primaryRed
+                                              : Colors.transparent,
+                                          borderRadius: BorderRadius.circular(
+                                            12,
+                                          ),
+                                        ),
+                                        alignment: Alignment.center,
+                                        child: Text(
+                                          'Phone Number',
+                                          style: GoogleFonts.lexend(
+                                            color: _isPhoneAuth
+                                                ? Colors.white
+                                                : AppColors.textSecondary,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 24),
+                            Text(
                               'Personal Information',
                               style: GoogleFonts.lexend(
                                 fontSize: 18, // Increased from 16
@@ -280,18 +407,21 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                             ),
                             const SizedBox(height: 16),
 
-                            // Email
-                            CustomTextField(
-                              label: 'Email Address',
-                              controller: _emailController,
-                              hint: 'name@example.com',
-                              prefixIcon: const Icon(Icons.email_outlined),
-                              keyboardType: TextInputType.emailAddress,
-                              validator: Validators.validateEmail,
-                              enabled:
-                                  !_isLoading && widget.prefilledEmail == null,
-                            ),
-                            const SizedBox(height: 16),
+                            // Email (conditional)
+                            if (!_isPhoneAuth) ...[
+                              CustomTextField(
+                                label: 'Email Address',
+                                controller: _emailController,
+                                hint: 'name@example.com',
+                                prefixIcon: const Icon(Icons.email_outlined),
+                                keyboardType: TextInputType.emailAddress,
+                                validator: Validators.validateEmail,
+                                enabled:
+                                    !_isLoading &&
+                                    widget.prefilledEmail == null,
+                              ),
+                              const SizedBox(height: 16),
+                            ],
 
                             // Phone Number
                             CustomTextField(
@@ -347,77 +477,83 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
 
                             const SizedBox(height: 24),
 
-                            Text(
-                              'Security',
-                              style: GoogleFonts.lexend(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                                color: AppColors.textPrimary,
-                              ),
-                            ),
-                            const SizedBox(height: 16),
-                            // Password
-                            CustomTextField(
-                              label: 'Password',
-                              controller: _passwordController,
-                              hint: 'Create a password',
-                              obscureText: !_isPasswordVisible,
-                              prefixIcon: const Icon(Icons.lock_outline),
-                              suffixIcon: IconButton(
-                                icon: Icon(
-                                  _isPasswordVisible
-                                      ? Icons.visibility
-                                      : Icons.visibility_off,
-                                  color: AppColors.textSecondary,
+                            if (!_isPhoneAuth) ...[
+                              Text(
+                                'Security',
+                                style: GoogleFonts.lexend(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppColors.textPrimary,
                                 ),
-                                onPressed: () {
-                                  setState(() {
-                                    _isPasswordVisible = !_isPasswordVisible;
-                                  });
-                                },
                               ),
-                              validator: (value) =>
-                                  Validators.validatePassword(value),
-                              enabled: !_isLoading,
-                            ),
-                            const SizedBox(height: 16),
+                              const SizedBox(height: 16),
+                              // Password
+                              CustomTextField(
+                                label: 'Password',
+                                controller: _passwordController,
+                                hint: 'Create a password',
+                                obscureText: !_isPasswordVisible,
+                                prefixIcon: const Icon(Icons.lock_outline),
+                                suffixIcon: IconButton(
+                                  icon: Icon(
+                                    _isPasswordVisible
+                                        ? Icons.visibility
+                                        : Icons.visibility_off,
+                                    color: AppColors.textSecondary,
+                                  ),
+                                  onPressed: () {
+                                    setState(() {
+                                      _isPasswordVisible = !_isPasswordVisible;
+                                    });
+                                  },
+                                ),
+                                validator: (value) =>
+                                    Validators.validatePassword(value),
+                                enabled: !_isLoading,
+                              ),
+                              const SizedBox(height: 16),
 
-                            // Confirm Password
-                            CustomTextField(
-                              label: 'Confirm Password',
-                              controller: _confirmPasswordController,
-                              hint: 'Re-enter your password',
-                              obscureText: !_isConfirmPasswordVisible,
-                              prefixIcon: const Icon(Icons.lock_outline),
-                              suffixIcon: IconButton(
-                                icon: Icon(
-                                  _isConfirmPasswordVisible
-                                      ? Icons.visibility
-                                      : Icons.visibility_off,
-                                  color: AppColors.textSecondary,
+                              // Confirm Password
+                              CustomTextField(
+                                label: 'Confirm Password',
+                                controller: _confirmPasswordController,
+                                hint: 'Re-enter your password',
+                                obscureText: !_isConfirmPasswordVisible,
+                                prefixIcon: const Icon(Icons.lock_outline),
+                                suffixIcon: IconButton(
+                                  icon: Icon(
+                                    _isConfirmPasswordVisible
+                                        ? Icons.visibility
+                                        : Icons.visibility_off,
+                                    color: AppColors.textSecondary,
+                                  ),
+                                  onPressed: () {
+                                    setState(() {
+                                      _isConfirmPasswordVisible =
+                                          !_isConfirmPasswordVisible;
+                                    });
+                                  },
                                 ),
-                                onPressed: () {
-                                  setState(() {
-                                    _isConfirmPasswordVisible =
-                                        !_isConfirmPasswordVisible;
-                                  });
+                                validator: (value) {
+                                  if (value == null || value.isEmpty) {
+                                    return 'Please confirm your password';
+                                  }
+                                  if (value != _passwordController.text) {
+                                    return 'Passwords do not match';
+                                  }
+                                  return null;
                                 },
                               ),
-                              validator: (value) {
-                                if (value == null || value.isEmpty) {
-                                  return 'Please confirm your password';
-                                }
-                                if (value != _passwordController.text) {
-                                  return 'Passwords do not match';
-                                }
-                                return null;
-                              },
-                            ),
-                            const SizedBox(height: 40),
+                              const SizedBox(height: 40),
+                            ] else ...[
+                              const SizedBox(height: 24),
+                            ],
 
                             // Register Button
                             CustomButton(
-                              text: 'Create Account',
+                              text: _isPhoneAuth
+                                  ? 'Send OTP & Register'
+                                  : 'Create Account',
                               onPressed: _isLoading ? null : _handleRegister,
                               isLoading: _isLoading,
                             ),

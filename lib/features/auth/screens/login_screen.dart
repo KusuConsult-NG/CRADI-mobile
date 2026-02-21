@@ -109,13 +109,17 @@ class _LoginScreenState extends State<LoginScreen> {
         final isEmail = Validators.isValidEmail(identifier);
 
         if (!isEmail) {
-          // Assume phone number logic here
-          // For now, blocking phone login as per plan until backend supports lookup
-          setState(() {
-            _errorMessage =
-                'Login with Phone Number is coming soon. Please use your Email Address.';
-            _isLoading = false;
-          });
+          // Send OTP and route to verification
+          final success = await authProvider.sendOtpForPhone(identifier);
+
+          if (!mounted) return;
+          setState(() => _isLoading = false);
+
+          if (success) {
+            context.push(
+              '/verify-otp?phone=${Uri.encodeComponent(identifier)}',
+            );
+          }
           return;
         }
 
@@ -359,8 +363,15 @@ class _LoginScreenState extends State<LoginScreen> {
                                 });
                               },
                             ),
-                            validator: (value) =>
-                                Validators.validateRequired(value, 'Password'),
+                            validator: (value) {
+                              final ident = _identifierController.text.trim();
+                              if (Validators.isValidEmail(ident)) {
+                                if (value == null || value.isEmpty) {
+                                  return 'Password is required for email login';
+                                }
+                              }
+                              return null;
+                            },
                             enabled: !_isLoading,
                           ),
                           const SizedBox(height: 16),

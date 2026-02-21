@@ -43,8 +43,8 @@ class ConnectivityProvider extends ChangeNotifier {
         'Error checking connectivity: $e',
         name: 'ConnectivityProvider',
       );
-      // Assume online if we can't check
-      _isOnline = true;
+      // Assume offline if we can't check
+      _isOnline = false;
       _initialCheckDone = true;
       notifyListeners();
     }
@@ -94,7 +94,9 @@ class ConnectivityProvider extends ChangeNotifier {
         'Error checking connectivity: $e',
         name: 'ConnectivityProvider',
       );
-      return _isOnline; // Return cached status
+      _isOnline = false;
+      notifyListeners();
+      return _isOnline; // Accurately return offline status
     }
   }
 

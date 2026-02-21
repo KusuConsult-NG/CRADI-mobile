@@ -150,7 +150,7 @@ class OfflineStorageService {
             if (await file.exists()) {
               await file.delete();
             }
-          } catch (e) {
+          } on Exception catch (e) {
             developer.log(
               'Failed to clean up persistent image: $e',
               name: 'OfflineStorageService',
@@ -299,7 +299,7 @@ class OfflineStorageService {
       if (await offlineImagesDir.exists()) {
         await offlineImagesDir.delete(recursive: true);
       }
-    } catch (e) {
+    } on Exception catch (e) {
       developer.log(
         'Failed to flush offline media directory: $e',
         name: 'OfflineStorageService',
@@ -360,7 +360,7 @@ class OfflineStorageService {
           persistentPaths.add(newPath);
         }
       }
-    } catch (e) {
+    } on Exception catch (e) {
       developer.log(
         'Failed to persist images for offline draft: $e',
         name: 'OfflineStorageService',

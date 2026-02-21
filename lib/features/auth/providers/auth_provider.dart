@@ -13,6 +13,10 @@ import 'package:climate_app/core/services/device_fingerprint_service.dart';
 import 'package:climate_app/core/services/fraud_detection_service.dart';
 
 import 'package:flutter/material.dart';
+import 'dart:math';
+import 'dart:convert';
+import 'package:crypto/crypto.dart';
+import 'package:climate_app/core/services/sms_service.dart';
 
 enum UserRole { user, ewm, ewv, ewr, admin, techSupport }
 
@@ -159,6 +163,15 @@ class AuthProvider extends ChangeNotifier {
       final authenticated = await _biometricService.authenticateForLogin();
 
       if (authenticated) {
+        // Validate against backend explicitly to prevent immortal tokens
+        final isValid = await _isServerSessionValid();
+        if (!isValid) {
+          _isLoading = false;
+          _isLocked = false;
+          notifyListeners();
+          return false;
+        }
+
         _isLocked = false;
         _isAuthenticated = true;
 
@@ -501,6 +514,169 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
+  /// Send an OTP to a phone number
+  Future<bool> sendOtpForPhone(String phone) async {
+    try {
+      _isLoading = true;
+      notifyListeners();
+
+      // Check rate limit
+      final rateLimitResult = await _rateLimiter.checkLoginAttempt();
+      if (!rateLimitResult.allowed) {
+        throw AuthException(rateLimitResult.userMessage);
+      }
+
+      // Generate 6-digit OTP
+      final rnd = Random.secure();
+      String otp = (rnd.nextInt(900000) + 100000)
+          .toString(); // 100000 to 999999
+
+      if (!SmsService().isReady) {
+        developer.log(
+          'SMS Service is not configured or ready. Cannot send OTP.',
+          name: 'AuthProvider',
+        );
+        throw AuthException(
+          'SMS service is currently unavailable. Please try again later.',
+        );
+      }
+
+      // Hash it
+      final bytes = utf8.encode(otp);
+      final hash = sha256.convert(bytes).toString();
+
+      // Store temporarily (10 mins expiry)
+      final expiry = DateTime.now().add(const Duration(minutes: 10));
+      await _storage.saveOtpData(hash: hash, expiry: expiry, phone: phone);
+
+      // Send via SmsService
+      String? msgId = await SmsService().sendOtp(to: phone, otp: otp);
+
+      if (msgId == null) {
+        throw AuthException(
+          'Failed to send SMS. Please check your network or try again.',
+        );
+      }
+
+      _isLoading = false;
+      notifyListeners();
+      return true;
+    } on AuthException {
+      rethrow;
+    } on Exception catch (e) {
+      _isLoading = false;
+      notifyListeners();
+      developer.log('Send OTP Error: $e', name: 'AuthProvider');
+      throw AuthException('An error occurred while sending OTP: $e');
+    }
+  }
+
+  /// Verify OTP and login (or register if not exists)
+  Future<bool> verifyOtpAndLogin(
+    String otp, {
+    Map<String, dynamic>? registrationData,
+  }) async {
+    try {
+      _isLoading = true;
+      notifyListeners();
+
+      final otpData = await _storage.getOtpData();
+      final storedHash = otpData['hash'];
+      final storedExpiryStr = otpData['expiry'];
+      final storedPhone = otpData['phone'];
+
+      if (storedHash == null ||
+          storedExpiryStr == null ||
+          storedPhone == null) {
+        throw AuthException('OTP session expired. Please request a new code.');
+      }
+
+      final expiry = DateTime.parse(storedExpiryStr);
+      if (DateTime.now().isAfter(expiry)) {
+        await _storage.clearOtpData();
+        throw AuthException('OTP has expired. Please request a new code.');
+      }
+
+      // Verify hash
+      final bytes = utf8.encode(otp);
+      final hash = sha256.convert(bytes).toString();
+
+      if (hash != storedHash) {
+        throw AuthException('Invalid OTP. Please try again.');
+      }
+
+      // OTP is valid.
+      // Scenario A: User is already logged in (they just registered). We just verify their account.
+      if (_currentUser != null) {
+        try {
+          await _appwrite.updateDocument(
+            collectionId: AppwriteService.usersCollectionId,
+            documentId: _currentUser!.$id,
+            data: {'isVerified': true},
+          );
+          _isVerified = true;
+          await _storage.clearOtpData();
+          _isLoading = false;
+          notifyListeners();
+          return true;
+        } on Exception catch (_) {
+          throw AuthException(
+            'Failed to update verification status in database.',
+          );
+        }
+      }
+
+      // Scenario B: User is NOT logged in. We authenticate with Appwrite via mapped email
+      final cleanPhone = storedPhone.replaceAll(RegExp(r'[^0-9]'), '');
+      if (cleanPhone.isEmpty) {
+        throw AuthException('Invalid phone format stored.');
+      }
+
+      final mappedEmail = '$cleanPhone@cradi.local';
+      final mappedPassword = 'cradi_$cleanPhone!0';
+
+      // Check if user exists by trying to login directly
+      try {
+        await signInWithEmail(email: mappedEmail, password: mappedPassword);
+      } on AuthException catch (e) {
+        if (e.userMessage.contains('Invalid email or password') ||
+            e.userMessage.contains('Login failed')) {
+          // User doesn't exist, register them
+          await signUpWithEmail(
+            email: mappedEmail,
+            password: mappedPassword,
+            name: registrationData?['name'] ?? 'User ($storedPhone)',
+            phoneNumber: storedPhone,
+            isVerified: true,
+            address: registrationData?['address'] ?? 'No Address Provided',
+            role: registrationData?['role'] ?? UserRole.user,
+            state: registrationData?['state'],
+            lga: registrationData?['lga'],
+            ward: registrationData?['ward'],
+          );
+        } else {
+          rethrow;
+        }
+      }
+
+      // Login successful, clean up
+      await _storage.clearOtpData();
+
+      _isLoading = false;
+      notifyListeners();
+      return true;
+    } on AuthException {
+      _isLoading = false;
+      notifyListeners();
+      rethrow;
+    } on Exception catch (e) {
+      _isLoading = false;
+      notifyListeners();
+      developer.log('Verify OTP Error: $e', name: 'AuthProvider');
+      throw AuthException('An error occurred during verification.');
+    }
+  }
+
   // verifyAccount was removed. Authentication uses verification links now.
 
   /// Resend verification link to user's email
@@ -555,7 +731,7 @@ class AuthProvider extends ChangeNotifier {
           documentId: userId,
           data: {'isVerified': true},
         );
-      } catch (docError) {
+      } on Exception catch (docError) {
         developer.log(
           'Warning: Failed to update user document to verified state: $docError',
           name: 'AuthProvider',
@@ -689,6 +865,12 @@ class AuthProvider extends ChangeNotifier {
       final authenticated = await _biometricService.authenticateForLogin();
 
       if (authenticated) {
+        // Validate against backend explicitly to prevent immortal tokens
+        final isValid = await _isServerSessionValid();
+        if (!isValid) {
+          return false; // Will prompt for password since token is explicitly dead
+        }
+
         final authToken = await _storage.getAuthToken();
 
         if (authToken != null) {
@@ -794,23 +976,40 @@ class AuthProvider extends ChangeNotifier {
   /// This method proactively validates the Appwrite session and extends
   /// the client-side timeout if valid. Returns true if session is valid.
   Future<bool> validateSession() async {
+    return await _isServerSessionValid();
+  }
+
+  /// Explicitly check server session to prevent immortal biometric tokens
+  /// If it receives a 401/403, logs out the user.
+  /// If there's a network error, assumes valid to allow offline usage.
+  Future<bool> _isServerSessionValid() async {
     try {
-      final user = await _appwrite.getCurrentUser();
-      if (user != null) {
-        // Session is valid - extend client timeout
-        await _sessionManager.extendSession();
-        developer.log('Session validated and extended', name: 'AuthProvider');
-        return true;
-      }
+      // Use raw client to properly catch the AppwriteException,
+      // since AppwriteService.getCurrentUser() catches and returns null
+      final account = Account(_appwrite.appwriteClient);
+      await account.get();
+
+      // Session is valid - extend client timeout
+      await _sessionManager.extendSession();
+      developer.log('Session validated and extended', name: 'AuthProvider');
+      return true;
     } on AppwriteException catch (e) {
       if (e.code == 401 || e.code == 403) {
-        developer.log('Session expired on server', name: 'AuthProvider');
+        developer.log(
+          'Session explicitly expired on server',
+          name: 'AuthProvider',
+        );
         await logout();
+        return false;
       }
+      // Network error or other - assume valid to allow offline access
+      developer.log('Session network warning: $e', name: 'AuthProvider');
+      return true;
     } on Exception catch (e) {
-      developer.log('Session validation error: $e', name: 'AuthProvider');
+      // Network error - assume valid to allow offline access
+      developer.log('Session network error: $e', name: 'AuthProvider');
+      return true;
     }
-    return false;
   }
 
   /// Get remaining session time

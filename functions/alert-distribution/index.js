@@ -168,15 +168,20 @@ module.exports = async ({ req, res, log, error }) => {
 
         log(`Processing validated report: ${payload.$id} (${payload.hazardType})`);
 
-        // List Documents (Authorities)
+        // List all Authorities and filter in memory to bypass strict string matching
         const authResponse = await appwriteCall('GET', `/databases/${DATABASE_ID}/collections/${AUTHORITIES_COLLECTION_ID}/documents`, null, {
             'queries': [
-                `equal("state", ["${payload.state}"])`,
-                `equal("lga", ["${payload.lga}"])`
+                `limit(2000)` // Pull globally, filter precisely
             ]
         });
 
-        const authorities = authResponse.documents;
+        const normalize = (s) => (s || '').toString().toLowerCase().replace(/[^a-z0-9]/g, '');
+        const targetState = normalize(payload.state);
+        const targetLga = normalize(payload.lga);
+
+        const authorities = authResponse.documents.filter(a => {
+            return normalize(a.state) === targetState && normalize(a.lga) === targetLga;
+        });
         const authorityEmails = authorities.map(a => a.email).filter(Boolean);
 
         log(`Found ${authorities.length} authorities, ${authorityEmails.length} with emails`);

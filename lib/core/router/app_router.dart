@@ -34,6 +34,7 @@ import 'package:climate_app/features/onboarding/screens/onboarding_screen.dart';
 import 'package:climate_app/features/splash/screens/splash_screen.dart';
 import 'package:climate_app/features/auth/providers/auth_provider.dart';
 import 'package:climate_app/features/auth/screens/access_code_verification_screen.dart';
+import 'package:climate_app/features/auth/screens/otp_verification_screen.dart';
 import 'package:climate_app/core/providers/connectivity_provider.dart';
 
 import 'package:flutter/material.dart';
@@ -92,6 +93,7 @@ GoRouter createRouter(BuildContext context) {
         '/reset-password',
         '/pending-approval',
         '/verify-email',
+        '/verify-otp',
         '/',
       ];
 
@@ -207,6 +209,17 @@ GoRouter createRouter(BuildContext context) {
           return EmailVerificationScreen(userId: userId, secret: secret);
         },
       ),
+      GoRoute(
+        path: '/verify-otp',
+        builder: (context, state) {
+          final phone = state.uri.queryParameters['phone'] ?? '';
+          final extra = state.extra as Map<String, dynamic>?;
+          return OtpVerificationScreen(
+            phoneNumber: phone,
+            registrationData: extra,
+          );
+        },
+      ),
 
       // Protected routes with Shell
       ShellRoute(
@@ -246,6 +259,13 @@ GoRouter createRouter(BuildContext context) {
             path: '/knowledge-base',
             builder: (context, state) => const KnowledgeBaseScreen(),
             routes: [
+              GoRoute(
+                path: 'guides',
+                builder: (context, state) {
+                  final category = state.extra as String?;
+                  return HazardGuidesScreen(initialCategory: category);
+                },
+              ),
               GoRoute(
                 path: 'detail',
                 builder: (context, state) {
@@ -298,10 +318,6 @@ GoRouter createRouter(BuildContext context) {
       GoRoute(
         path: '/contacts',
         builder: (context, state) => const EmergencyContactsScreen(),
-      ),
-      GoRoute(
-        path: '/knowledge-base/guides',
-        builder: (context, state) => const HazardGuidesScreen(),
       ),
       GoRoute(
         path: '/verification/request',
@@ -373,6 +389,17 @@ final GoRouter appRouter = GoRouter(
     GoRoute(
       path: '/pending-approval',
       builder: (context, state) => const PendingApprovalScreen(),
+    ),
+    GoRoute(
+      path: '/verify-otp',
+      builder: (context, state) {
+        final phone = state.uri.queryParameters['phone'] ?? '';
+        final extra = state.extra as Map<String, dynamic>?;
+        return OtpVerificationScreen(
+          phoneNumber: phone,
+          registrationData: extra,
+        );
+      },
     ),
     ShellRoute(
       builder: (context, state, child) => MainShellScreen(child: child),

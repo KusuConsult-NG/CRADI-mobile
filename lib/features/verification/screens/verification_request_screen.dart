@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:climate_app/features/verification/providers/reports_status_provider.dart';
+import 'package:climate_app/core/widgets/location_selector_widget.dart';
 
 /// Verification request screen - submit verification request
 /// This is a simplified stub implementation using Appwrite
@@ -20,6 +21,9 @@ class _VerificationRequestScreenState extends State<VerificationRequestScreen> {
   final _descriptionController = TextEditingController();
   String _selectedHazard = 'Flooding';
   String _selectedSeverity = 'medium';
+  String? _selectedState;
+  String? _selectedLGA;
+  String? _selectedWard;
 
   final List<String> _hazards = [
     'Flooding',
@@ -51,6 +55,17 @@ class _VerificationRequestScreenState extends State<VerificationRequestScreen> {
     // Dismiss keyboard
     FocusScope.of(context).unfocus();
 
+    if (_selectedState == null ||
+        _selectedLGA == null ||
+        _selectedWard == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please select State, LGA, and Ward')),
+        );
+      }
+      return;
+    }
+
     try {
       final appwrite = AppwriteService();
       final user = await appwrite.getCurrentUser();
@@ -72,8 +87,10 @@ class _VerificationRequestScreenState extends State<VerificationRequestScreen> {
               hazardType: _selectedHazard,
               severity: _selectedSeverity,
               description: _descriptionController.text,
-              locationDetails:
-                  'Verification Request', // Could be enhanced with real location
+              state: _selectedState!,
+              lga: _selectedLGA!,
+              ward: _selectedWard!,
+              locationDetails: 'Verification Request',
             )
             .then((_) {
               if (mounted) {
@@ -179,6 +196,19 @@ class _VerificationRequestScreenState extends State<VerificationRequestScreen> {
               maxLines: 5,
               validator: (value) =>
                   Validators.validateDescription(value, maxLength: 500),
+            ),
+            const SizedBox(height: 16),
+            LocationSelectorWidget(
+              initialState: _selectedState,
+              initialLGA: _selectedLGA,
+              initialWard: _selectedWard,
+              onLocationChanged: (state, lga, ward) {
+                setState(() {
+                  _selectedState = state;
+                  _selectedLGA = lga;
+                  _selectedWard = ward;
+                });
+              },
             ),
             const SizedBox(height: 24),
             Consumer<ReportsStatusProvider>(

@@ -50,7 +50,7 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
           _isVerified = true;
         });
       }
-    } catch (e) {
+    } on Exception catch (e) {
       developer.log('Verification Error: $e', name: 'EmailVerificationScreen');
       if (mounted) {
         setState(() {

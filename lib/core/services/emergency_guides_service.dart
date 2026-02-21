@@ -28,111 +28,114 @@ class EmergencyGuidesService {
     return [
       // FLOOD GUIDES
       {
-        'title': 'Flood Response Checklist',
-        'content': '''**Before a Flood:**
-• Know your flood risk - Check FEMA flood maps for your area
-• Sign up for community warning systems and local alerts
-• Prepare an emergency kit with water, food, flashlight, battery radio, and first-aid supplies
-• Move valuable items and important documents to higher levels
-• Consider flood insurance (standard policies don't cover flood damage)
-• Clear drains and gutters
-• Install a sump pump with battery backup
-• Create a family evacuation plan
+        'title': 'River Benue Flooding Protocols',
+        'content': '''**Early Warning Indicators:**
+• Heavy rainfall reports from upstream regions (Cameroon/Lagdo Dam releases).
+• Unusual rise in River Benue and local tributaries.
+• Flash-flood alerts via CRADI app or local authorities.
+
+**Before a Flood:**
+• Move valuables, livestock, and essential documents to higher ground or designated secure community centers.
+• Prepare an emergency Go-Bag with 3 days of water, non-perishable food, and a battery/solar radio.
+• Identify the nearest high-ground community evacuation route (avoiding known washout zones).
+• Secure your crops if possible and clear local drainage channels.
 
 **During a Flood:**
-• Evacuate immediately if instructed by authorities
-• NEVER walk, swim or drive through floodwaters (6 inches can knock you down, 12 inches can sweep away a vehicle)
-• If trapped in a building, go to the highest floor (avoid closed attics)
-• Listen for emergency broadcasts
-• Stay away from downed power lines
+• Evacuate IMMEDIATELY to higher ground when ordered by SEMA or the State Emergency Response Team.
+• NEVER walk, swim, or drive through floodwaters (6 inches of moving water can sweep a person away).
+• Listen exclusively to official local broadcasts (Radio Benue, Joy FM) or CRADI alerts.
+• Stay entirely clear of downed power lines and transformers.
 
-**After a Flood:**
-• Return home only when authorities say it's safe
-• Avoid floodwaters - they may be contaminated or electrically charged
-• Document damage with photos for insurance
-• Clean and disinfect everything that got wet
-• Check for structural damage before re-entering buildings''',
+**Emergency Contacts:**
+• National Emergency Toll-Free: 112
+• Benue SEMA Headquarters: 0803 000 0000 (Replace with live local SEMA line)
+• NEMA North Central Office: Jos, Plateau State''',
         'category': 'Flood',
-        'tags': ['safety', 'emergency', 'preparedness'],
-        'source': 'FEMA/Ready.gov',
-        'sourceUrl': 'https://www.ready.gov/floods',
+        'tags': ['safety', 'river benue', 'lagdo dam', 'evacuation'],
+        'source': 'Benue SEMA / NEMA',
+        'sourceUrl': 'https://nema.gov.ng',
         'createdAt': now,
         'updatedAt': now,
       },
 
-      // WILDFIRE GUIDES
+      // EROSION & GULLY GUIDES
       {
-        'title': 'Wildfire Reporting & Response Protocol',
-        'content': '''**How to Report a Wildfire:**
-• Call emergency services immediately (local emergency number)
-• Provide exact location (coordinates if possible)
-• Describe smoke color, flame height, and direction of spread
-• Note any threatened structures or populated areas
-• Stay on the line for questions
+        'title': 'Gully Erosion Mitigation (Nasarawa/Plateau Context)',
+        'content': '''**Recognizing Erosion Threats:**
+• Sudden cracks appearing in community roads or near building foundations.
+• Rapid widening of existing gullies after heavy seasonal rains.
+• Exposed tree roots or leaning utility poles along embankments.
 
-**Before Wildfire Season:**
-• Create defensible space around your home (30 feet minimum)
-• Clear leaves, debris, and flammable materials
-• Use fire-resistant building materials
-• Assemble emergency supply kit
-• Plan evacuation routes with family
-• Back up important documents digitally
+**Preventative Measures (Dry Season):**
+• Plant deep-rooted native grasses (like Vetiver grass) and bamboo along vulnerable slopes to bind the soil.
+• Construct community sandbag barriers or stone-pitching at the head of advancing gullies.
+• Do NOT dump refuse in erosion channels or natural waterways; this blocks flow and destroys banks.
+• Practice terraced farming on hillsides (especially in Plateau State) to reduce water runoff speed.
 
-**During a Wildfire:**
-• Evacuate immediately if ordered
-• Monitor local news and emergency alerts
-• Wear N95 mask to protect from smoke
-• Close all windows and doors
-• Turn on lights to increase visibility in heavy smoke
-• Remember the "Five Ps": People & Pets, Prescriptions, Papers, Personal needs, Priceless items
+**Emergency Response (Heavy Rains):**
+• Keep children and livestock completely away from gully edges (banks can collapse without warning).
+• If a building is threatened, evacuate immediately and notify local authorities via the CRADI app.
+• Do not attempt to cross flooded gullies during rainstorms.
 
-**After a Wildfire:**
-• Wait for official all-clear before returning
-• Watch for hot ash, charred trees, and smoldering debris
-• Wet down debris to minimize dust
-• Wear protective gear during cleanup (gloves, long sleeves, N95 respirator)''',
-        'category': 'Fire',
-        'tags': ['wildfire', 'fire safety', 'emergency'],
-        'source': 'FEMA/CAL FIRE',
-        'sourceUrl': 'https://www.ready.gov/wildfires',
+**Where to Report:**
+• Report expanding gullies immediately via CRADI to alert NEWMAP (Nigeria Erosion and Watershed Management Project) and local works ministries.''',
+        'category': 'Erosion',
+        'tags': ['gully', 'landslide', 'newmap', 'conservation'],
+        'source': 'NEMA / NEWMAP',
+        'sourceUrl': 'https://nema.gov.ng',
         'createdAt': now,
         'updatedAt': now,
       },
 
-      // DROUGHT GUIDES
+      // EXTREME HEAT GUIDES
       {
-        'title': 'Drought Preparedness & Response',
-        'content': '''**Before a Drought:**
-• Conserve water - fix leaks, install low-flow fixtures
-• Store water in safe containers
-• Mulch gardens to retain moisture
-• Plant drought-resistant crops and native plants
-• Create a water conservation plan
+        'title': 'Extreme Heat Survival (Makurdi/Lafia Corridors)',
+        'content': '''**Understanding the Threat:**
+• Extended dry seasons with temperatures routinely exceeding 38°C (100°F).
+• High risk of heatstroke for outdoor workers, farmers, and the elderly.
 
-**During a Drought:**
-• Limit water use for essential needs only
-• Reuse water when possible (greywater for plants)
-• Avoid outdoor watering during peak heat
-• Monitor local water restrictions
-• Protect livestock with adequate water supply
-• Watch for signs of water stress in crops
+**Safety Protocols:**
+• **Hydration:** Drink plenty of clean water constantly, even if you do not feel thirsty. Avoid excessive sugary or alcoholic drinks.
+• **Shelter:** Seek shade during peak sun hours (11:00 AM to 4:00 PM). Ensure good cross-ventilation in homes.
+• **Clothing:** Wear loose-fitting, light-colored cotton clothing to reflect heat.
+• **Farming Adjustments:** Shift heavy labor to early morning (before 10 AM) or late afternoon.
 
-**Health & Safety:**
-• Stay hydrated - drink plenty of water
-• Protect skin from sun exposure
-• Watch for heat-related illnesses
-• Ensure sanitation with limited water
-• Monitor air quality (drought increases dust)
+**Recognizing Heatstroke:**
+• Symptoms: High body temperature, hot/dry/red skin, rapid pulse, dizziness, nausea, or confusion.
+• **Action:** This is a medical emergency. Move the person to shade immediately, actively cool them with wet cloths, and transport to the nearest Primary Healthcare Center (PHC).
 
-**Long-term Planning:**
-• Diversify water sources (wells, rainwater harvesting  )
-• Improve soil health to retain moisture
-• Plan crop rotation for drought resilience
-• Participate in community water conservation programs''',
-        'category': 'Drought',
-        'tags': ['drought', 'water conservation', 'farming'],
-        'source': 'FEMA/CDC',
-        'sourceUrl': 'https://www.ready.gov/drought',
+**Livestock Care:**
+• Provide natural shade structures or planting trees for livestock.
+• Ensure constant access to clean, cool drinking water for all animals to prevent mass dehydration.''',
+        'category': 'Extreme Heat',
+        'tags': ['heatwave', 'hydration', 'farming', 'health'],
+        'source': 'Federal Ministry of Health / NiMet',
+        'sourceUrl': 'https://health.gov.ng',
+        'createdAt': now,
+        'updatedAt': now,
+      },
+
+      // WILDFIRE / BUSH FIRE GUIDES
+      {
+        'title': 'Bush Fire / Wildfire Response',
+        'content': '''**Prevention & Preparedness:**
+• Avoid indiscriminate bush burning (slash-and-burn agriculture) during the peak dry season or Harmattan.
+• Create firebreaks (cleared pathways of at least 10 meters) around farms and vulnerable settlements.
+• Do not discard cigarette butts or glass bottles in dry grass.
+
+**During a Bush Fire:**
+• Evacuate upwind of the fire immediately. Do not attempt to outrun a fast-moving fire uphill.
+• Use the CRADI app to alert the community and deploy the local emergency response volunteer network.
+• If trapped, find a cleared area or water body, lie flat, and cover your mouth with a wet cloth to filter smoke.
+
+**Post-Fire Recovery:**
+• Do not return until local authorities declare the area totally clear of smoldering hazards.
+• Watch for "hot spots" that can flare up with wind.
+• Protect respiratory health from lingering smoke by wearing masks (N95 or heavy cloth).''',
+        'category': 'Wildfires',
+        'tags': ['harmattan', 'bush burning', 'smoke'],
+        'source': 'Federal Fire Service',
+        'sourceUrl': 'https://fire.gov.ng',
         'createdAt': now,
         'updatedAt': now,
       },
