@@ -1,5 +1,6 @@
 import 'package:climate_app/features/alerts/screens/alerts_list_screen.dart';
 import 'package:climate_app/features/auth/screens/landing_screen.dart';
+import 'package:climate_app/features/auth/screens/email_verification_screen.dart';
 
 import 'package:climate_app/features/alerts/screens/alert_detail_screen.dart';
 import 'package:climate_app/features/auth/screens/login_screen.dart';
@@ -90,6 +91,7 @@ GoRouter createRouter(BuildContext context) {
         '/forgot-password',
         '/reset-password',
         '/pending-approval',
+        '/verify-email',
         '/',
       ];
 
@@ -126,10 +128,10 @@ GoRouter createRouter(BuildContext context) {
       // If authenticated but NOT verified, force to verification screen
       final isVerified = authProvider.isVerified;
 
-      // If NOT verified, and trying to go anywhere other than verification screen (and public routes)
       if (isAuthenticated &&
           !isVerified &&
           currentPath != '/verify-access-code' &&
+          currentPath != '/verify-email' &&
           !isPublicRoute) {
         return '/verify-access-code';
       }
@@ -193,6 +195,14 @@ GoRouter createRouter(BuildContext context) {
       GoRoute(
         path: '/verify-access-code',
         builder: (context, state) => const AccessCodeVerificationScreen(),
+      ),
+      GoRoute(
+        path: '/verify-email',
+        builder: (context, state) {
+          final userId = state.uri.queryParameters['userId'] ?? '';
+          final secret = state.uri.queryParameters['secret'] ?? '';
+          return EmailVerificationScreen(userId: userId, secret: secret);
+        },
       ),
 
       // Protected routes with Shell

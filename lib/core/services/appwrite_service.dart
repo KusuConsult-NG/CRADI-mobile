@@ -147,6 +147,19 @@ class AppwriteService {
     }
   }
 
+  /// Verify email using the secret from the link
+  Future<models.Token> updateVerification({
+    required String userId,
+    required String secret,
+  }) async {
+    try {
+      return await _account.updateVerification(userId: userId, secret: secret);
+    } on AppwriteException catch (e) {
+      developer.log('Update verification error: $e', name: 'AppwriteService');
+      rethrow;
+    }
+  }
+
   /// Get current user
   Future<models.User?> getCurrentUser() async {
     try {

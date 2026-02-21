@@ -521,6 +521,45 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
+  /// Verify email from the magic link
+  Future<void> verifyEmail(String userId, String secret) async {
+    try {
+      _isLoading = true;
+      notifyListeners();
+
+      // Submit verification token to Appwrite Account API
+      await _appwrite.updateVerification(userId: userId, secret: secret);
+
+      // Successfully verified. Update local state
+      _isVerified = true;
+
+      // Update the user document explicitly to sync verification status
+      try {
+        await _appwrite.updateDocument(
+          collectionId: AppwriteService.usersCollectionId,
+          documentId: userId,
+          data: {'isVerified': true},
+        );
+      } catch (docError) {
+        developer.log(
+          'Warning: Failed to update user document to verified state: $docError',
+          name: 'AuthProvider',
+        );
+        // Non-critical, token was verified.
+      }
+
+      _isLoading = false;
+      notifyListeners();
+    } on Exception catch (e) {
+      _isLoading = false;
+      notifyListeners();
+      developer.log('Email verification failed: $e', name: 'AuthProvider');
+      throw AuthException(
+        'Verification failed. The link may have expired or is invalid.',
+      );
+    }
+  }
+
   /// Send password reset email
   Future<void> sendPasswordResetEmail(String email) async {
     try {
