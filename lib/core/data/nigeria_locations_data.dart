@@ -1006,10 +1006,5 @@ class NigeriaLocationsData {
   }
 
   /// Returns a snapshot of focal states for MVP (Benue, Nasarawa, Plateau)
-  static List<String> get focalStates => [
-    'Benue',
-    'Nasarawa',
-    'Plateau',
-    'Federal Capital Territory', // Added for completeness due to proximity
-  ];
+  static List<String> get focalStates => ['Benue', 'Nasarawa', 'Plateau'];
 }

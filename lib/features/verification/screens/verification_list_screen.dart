@@ -1,7 +1,9 @@
 import 'package:climate_app/core/services/appwrite_service.dart';
 import 'package:appwrite/appwrite.dart';
 import 'package:climate_app/features/verification/screens/verification_detail_screen.dart';
+import 'package:climate_app/features/auth/providers/auth_provider.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 /// Verification list screen - shows reports for verification
 /// This is a simplified stub implementation using Appwrite
@@ -10,10 +12,13 @@ class VerificationListScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Get current user ID to exclude their own reports from verification
+    final currentUserId = context.read<AuthProvider>().currentUser?.$id;
+
     return Scaffold(
       appBar: AppBar(title: const Text('Verify Reports')),
       body: FutureBuilder(
-        future: _loadReports(),
+        future: _loadReports(currentUserId),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
@@ -66,12 +71,18 @@ class VerificationListScreen extends StatelessWidget {
     );
   }
 
-  Future<List<Map<String, dynamic>>> _loadReports() async {
+  Future<List<Map<String, dynamic>>> _loadReports(String? excludeUserId) async {
     try {
       final appwrite = AppwriteService();
+
+      final queries = [Query.equal('status', 'pending')];
+      if (excludeUserId != null) {
+        queries.add(Query.notEqual('userId', excludeUserId));
+      }
+
       final docs = await appwrite.listDocuments(
         collectionId: AppwriteService.reportsCollectionId,
-        queries: [Query.equal('status', 'pending')],
+        queries: queries,
       );
       return docs.documents.map((doc) {
         final data = doc.data;

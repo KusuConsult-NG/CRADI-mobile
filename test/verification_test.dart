@@ -17,6 +17,7 @@ import 'package:climate_app/features/verification/screens/verification_request_s
 import 'package:climate_app/features/contacts/providers/emergency_contacts_provider.dart';
 import 'package:climate_app/features/contacts/models/emergency_contact_model.dart';
 import 'package:climate_app/core/providers/language_provider.dart';
+import 'package:climate_app/features/verification/providers/reports_status_provider.dart';
 
 class MockEmergencyContactsProvider extends ChangeNotifier
     implements EmergencyContactsProvider {
@@ -73,6 +74,7 @@ Widget makeTestableWidget({required Widget child}) {
       ChangeNotifierProvider(create: (_) => ReportingProvider()),
       ChangeNotifierProvider(create: (_) => ConnectivityProvider()),
       ChangeNotifierProvider(create: (_) => ProfileProvider()),
+      ChangeNotifierProvider(create: (_) => ReportsStatusProvider()),
       ChangeNotifierProvider<LanguageProvider>(
         create: (_) => MockLanguageProvider(),
       ),

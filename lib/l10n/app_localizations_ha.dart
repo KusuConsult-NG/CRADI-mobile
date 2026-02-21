@@ -238,6 +238,9 @@ class AppLocalizationsHa extends AppLocalizations {
   String get useCurrentLocation => 'Yi Amfani da Wurin Yanzu';
 
   @override
+  String get useMyLocationInfo => 'Yi Amfani da Bayanan Wurina';
+
+  @override
   String get searchPlaces => 'Nemo wurare...';
 
   @override

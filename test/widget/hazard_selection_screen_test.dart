@@ -2,13 +2,19 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:climate_app/features/reporting/screens/hazard_selection_screen.dart';
 
+import 'package:provider/provider.dart';
+import 'package:climate_app/features/reporting/providers/reporting_provider.dart';
+
 /// Widget tests for Hazard Selection Screen
 ///
 /// Tests hazard type selection, UI rendering, and navigation
 void main() {
   group('HazardSelectionScreen Widget Tests', () {
     Widget createHazardSelectionScreen() {
-      return const MaterialApp(home: HazardSelectionScreen());
+      return ChangeNotifierProvider(
+        create: (_) => ReportingProvider(),
+        child: const MaterialApp(home: HazardSelectionScreen()),
+      );
     }
 
     testWidgets('should display app bar with title', (
@@ -34,7 +40,7 @@ void main() {
 
       // Should have first few hazard types visible
       expect(find.text('Flooding'), findsOneWidget);
-      expect(find.text('Extreme Heat'), findsOneWidget);
+      expect(find.text('Extreme Temperatures'), findsOneWidget);
       expect(find.text('Drought'), findsOneWidget);
       expect(find.text('Windstorms'), findsOneWidget);
 
@@ -90,7 +96,7 @@ void main() {
       await tester.pump();
 
       // Select different hazard (one that's visible)
-      await tester.tap(find.text('Extreme Heat'));
+      await tester.tap(find.text('Extreme Temperatures'));
       await tester.pump();
 
       // Still only one checkmark (for the newly selected item)

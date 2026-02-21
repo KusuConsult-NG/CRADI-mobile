@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import 'package:climate_app/features/auth/providers/auth_provider.dart';
 
 class ReportsStatusScreen extends StatefulWidget {
   const ReportsStatusScreen({super.key});
@@ -21,9 +22,11 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
   void initState() {
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
-    // Initial fetch for all tabs
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<ReportsStatusProvider>().refreshReports();
+      final currentUserId = context.read<AuthProvider>().currentUser?.$id;
+      context.read<ReportsStatusProvider>().refreshReports(
+        excludeUserId: currentUserId,
+      );
     });
   }
 
@@ -113,9 +116,10 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
     ReportsStatusProvider provider,
     ReportStatus status,
   ) {
-    final reports = provider.getReports(status);
-    final isLoading = provider.isLoading(status);
-    final hasMore = provider.hasMore(status);
+    final currentUserId = context.read<AuthProvider>().currentUser?.$id;
+    final reports = provider.getReports(status, excludeUserId: currentUserId);
+    final isLoading = provider.isLoading(status, excludeUserId: currentUserId);
+    final hasMore = provider.hasMore(status, excludeUserId: currentUserId);
 
     if (reports.isEmpty && isLoading) {
       return const Center(child: CircularProgressIndicator());
@@ -136,7 +140,16 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
               ),
             ),
             ElevatedButton(
-              onPressed: () => provider.fetchReports(status: status),
+              onPressed: () {
+                final currentUserId = context
+                    .read<AuthProvider>()
+                    .currentUser
+                    ?.$id;
+                provider.fetchReports(
+                  status: status,
+                  excludeUserId: currentUserId,
+                );
+              },
               child: const Text("Refresh"),
             ),
           ],
@@ -146,14 +159,23 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
 
     return RefreshIndicator(
       onRefresh: () async {
-        await provider.fetchReports(status: status);
+        final currentUserId = context.read<AuthProvider>().currentUser?.$id;
+        await provider.fetchReports(
+          status: status,
+          excludeUserId: currentUserId,
+        );
       },
       child: NotificationListener<ScrollNotification>(
         onNotification: (ScrollNotification scrollInfo) {
           if (!isLoading &&
               hasMore &&
               scrollInfo.metrics.pixels == scrollInfo.metrics.maxScrollExtent) {
-            provider.fetchReports(loadMore: true, status: status);
+            final currentUserId = context.read<AuthProvider>().currentUser?.$id;
+            provider.fetchReports(
+              loadMore: true,
+              status: status,
+              excludeUserId: currentUserId,
+            );
           }
           return false;
         },

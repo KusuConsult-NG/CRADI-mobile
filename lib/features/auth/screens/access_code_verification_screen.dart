@@ -3,7 +3,6 @@ import 'dart:developer' as developer;
 import 'package:climate_app/features/auth/providers/auth_provider.dart';
 import 'package:climate_app/features/profile/providers/profile_provider.dart';
 import 'package:climate_app/shared/widgets/custom_button.dart';
-import 'package:climate_app/shared/widgets/custom_text_field.dart';
 import 'package:climate_app/core/utils/error_handler.dart';
 import 'package:flutter/material.dart';
 
@@ -22,53 +21,39 @@ class AccessCodeVerificationScreen extends StatefulWidget {
 
 class _AccessCodeVerificationScreenState
     extends State<AccessCodeVerificationScreen> {
-  final TextEditingController _codeController = TextEditingController();
   bool _isLoading = false;
 
   @override
   void dispose() {
-    _codeController.dispose();
     super.dispose();
   }
 
   Future<void> _handleVerify() async {
-    final code = _codeController.text.trim();
-    developer.log(
-      'Verify button pressed. Code: "$code"',
-      name: 'AccessCodeVerificationScreen',
-    );
-
-    if (code.isEmpty) {
-      Fluttertoast.showToast(
-        msg: 'Please enter your access code',
-        backgroundColor: Colors.red,
-      );
-      return;
-    }
-
     setState(() => _isLoading = true);
 
     try {
-      // Simulate verification call (replace with actual provider call when available)
-      // await context.read<AuthProvider>().verifyAccount(code);
+      await context.read<AuthProvider>().reloadUserData();
 
-      // For now, consistent with UserProfileScreen, we simulate verification
-      // In a real implementation, add verifyAccount(code) to AuthProvider
+      if (!mounted) return;
 
-      // Update: AuthProvider DOES have verifyAccount now (Task 1162)
-      await context.read<AuthProvider>().verifyAccount(code);
+      final isVerified = context.read<AuthProvider>().isVerified;
 
-      if (mounted) {
+      if (isVerified) {
         Fluttertoast.showToast(
           msg: 'Account verified successfully!',
           backgroundColor: Colors.green,
         );
-        // Router will handle redirect to dashboard based on isVerified state
+        context.go('/dashboard');
+      } else {
+        Fluttertoast.showToast(
+          msg: 'Not verified yet. Please click the link in your email.',
+          backgroundColor: Colors.orange,
+        );
       }
     } on Exception catch (e) {
       if (mounted) {
         Fluttertoast.showToast(
-          msg: 'Verification failed: ${e.toString()}',
+          msg: 'Verification check failed: ${e.toString()}',
           backgroundColor: Colors.red,
         );
       }
@@ -86,17 +71,17 @@ class _AccessCodeVerificationScreenState
 
     setState(() => _resending = true);
     try {
-      await context.read<AuthProvider>().resendAccessCode();
+      await context.read<AuthProvider>().resendVerificationLink();
       if (mounted) {
         Fluttertoast.showToast(
-          msg: 'Access code resent successfully!',
+          msg: 'Verification link resent successfully!',
           backgroundColor: Colors.green,
         );
       }
     } on Exception catch (e) {
       if (mounted) {
         Fluttertoast.showToast(
-          msg: 'Failed to resend code: ${e.toString()}',
+          msg: 'Failed to resend link: ${e.toString()}',
           backgroundColor: Colors.red,
         );
       }
@@ -142,13 +127,13 @@ class _AccessCodeVerificationScreenState
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               const Icon(
-                Icons.verified_user_outlined,
+                Icons.mark_email_unread_outlined,
                 size: 80,
                 color: AppColors.primaryRed,
               ),
               const SizedBox(height: 32),
               Text(
-                'Verify Your Account',
+                'Verify Your Email',
                 style: GoogleFonts.lexend(
                   fontSize: 24,
                   fontWeight: FontWeight.bold,
@@ -158,7 +143,7 @@ class _AccessCodeVerificationScreenState
               ),
               const SizedBox(height: 16),
               Text(
-                'We have sent an access code to ${email ?? "your email"}.\nPlease enter it below to continue.',
+                'We have sent a verification link to ${email ?? "your email"}.\nPlease click the link to activate your account.',
                 style: GoogleFonts.lexend(
                   fontSize: 16,
                   color: AppColors.textSecondary,
@@ -167,16 +152,8 @@ class _AccessCodeVerificationScreenState
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 40),
-              CustomTextField(
-                controller: _codeController,
-                label: 'Access Code',
-                hint: 'e.g., ABC-123',
-                prefixIcon: const Icon(Icons.vpn_key_outlined),
-                enabled: !_isLoading,
-              ),
-              const SizedBox(height: 24),
               CustomButton(
-                text: 'Verify Account',
+                text: 'I have verified my account',
                 onPressed: _handleVerify, // Force enabled for debug
                 isLoading: _isLoading,
               ),

@@ -15,6 +15,7 @@ import 'package:climate_app/shared/widgets/custom_button.dart';
 import 'package:climate_app/features/profile/providers/profile_provider.dart';
 
 import 'package:flutter_map/flutter_map.dart';
+import 'package:climate_app/l10n/app_localizations.dart';
 
 class LocationPickerScreen extends StatefulWidget {
   const LocationPickerScreen({super.key});
@@ -85,15 +86,12 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
         final reporting = context.read<ReportingProvider>();
         if (reporting.lga == null) {
           reporting.setLGA(profile.lga!);
-          reporting.setWard(
-            'Unknown',
-          ); // Default ward as we don't have it in profile usually, or let user select
-          // Actually ProfileProvider doesn't seem to have ward.
-          // We leave ward null so user must select it?
-          // But let's set state/lga at least.
-          // Wait, ReportingProvider doesn't have setState?
-          // It has setLGA.
-          // It uses MVPLocationsData.getStateForLGA to derive state.
+          // Set ward if it is available in profile (even if it normally isn't yet, keeping it safe)
+          if (profile.ward != null) {
+            reporting.setWard(profile.ward!);
+          } else {
+            reporting.setWard('Unknown');
+          }
         }
       }
     } on Exception {
@@ -795,6 +793,13 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                             ),
                           ),
                           items: MVPLocationsData.getAllStates()
+                              .where(
+                                (state) =>
+                                    state ==
+                                        context.read<ProfileProvider>().state ||
+                                    context.read<ProfileProvider>().state ==
+                                        null,
+                              )
                               .map(
                                 (state) => DropdownMenuItem(
                                   value: state,
@@ -1036,14 +1041,130 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                     ),
                   ),
 
-                  const SizedBox(height: 16),
+                  // Use GPS Auto-fill
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    child: Center(
+                      child: OutlinedButton.icon(
+                        icon: const Icon(Icons.my_location, size: 16),
+                        label: Text(
+                          AppLocalizations.of(context)!.useMyLocationInfo,
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppColors.primaryRed,
+                          side: const BorderSide(color: AppColors.primaryRed),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        onPressed: () {
+                          // Try to match _lga from GPS to the state's LGAs
+                          if (_selectedState != null &&
+                              _lga != 'Loading...' &&
+                              _lga != 'Unknown LGA') {
+                            final lgas = MVPLocationsData.getLGAsForState(
+                              _selectedState!,
+                            );
+
+                            // Check if GPS LGA exists in our MVP list for the selected state
+                            String matchedLGA = '';
+                            for (var l in lgas) {
+                              if (l.toLowerCase() == _lga.toLowerCase() ||
+                                  _lga.toLowerCase().contains(
+                                    l.toLowerCase(),
+                                  )) {
+                                matchedLGA = l;
+                                break;
+                              }
+                            }
+
+                            if (matchedLGA.isNotEmpty) {
+                              setState(() {
+                                _selectedLGA = matchedLGA;
+                              });
+                              context.read<ReportingProvider>().setLGA(
+                                matchedLGA,
+                              );
+
+                              // Try to match ward if LGA found
+                              final wards = MVPLocationsData.getWardsForLGA(
+                                matchedLGA,
+                              );
+                              String matchedWard = '';
+                              if (_ward != 'Loading...' &&
+                                  _ward != 'Unknown Ward') {
+                                for (var w in wards) {
+                                  if (w.toLowerCase() == _ward.toLowerCase() ||
+                                      _ward.toLowerCase().contains(
+                                        w.toLowerCase(),
+                                      )) {
+                                    matchedWard = w;
+                                    break;
+                                  }
+                                }
+                              }
+
+                              if (matchedWard.isNotEmpty) {
+                                setState(() {
+                                  _selectedWard = matchedWard;
+                                });
+                                context.read<ReportingProvider>().setWard(
+                                  matchedWard,
+                                );
+                              } else {
+                                // Fallback to first ward if GPS ward isn't exact
+                                if (wards.isNotEmpty) {
+                                  setState(() {
+                                    _selectedWard = wards.first;
+                                  });
+                                  context.read<ReportingProvider>().setWard(
+                                    wards.first,
+                                  );
+                                }
+                              }
+
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Auto-filled from GPS'),
+                                ),
+                              );
+                            } else {
+                              // LGA not found in state
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    'GPS Location ($_lga) not found in $_selectedState',
+                                  ),
+                                ),
+                              );
+                            }
+                          } else {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                  'GPS Location unavailable or State not selected',
+                                ),
+                              ),
+                            );
+                          }
+                        },
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 8),
+
                   Center(
                     child: GestureDetector(
                       onTap: () {
                         showDialog(
                           context: context,
                           builder: (context) {
-                            final controller = TextEditingController();
+                            final controller = TextEditingController(
+                              text: _currentPosition != null
+                                  ? '${_currentPosition!.latitude}, ${_currentPosition!.longitude}' // Auto-fill with GPS
+                                  : '',
+                            );
                             return AlertDialog(
                               title: const Text('Enter Location Manually'),
                               content: TextField(
@@ -1071,6 +1192,14 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                                       context
                                           .read<ReportingProvider>()
                                           .setSeverity(severityLabel);
+
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
+                                        const SnackBar(
+                                          content: Text('Manual location set'),
+                                        ),
+                                      );
                                     }
                                     Navigator.pop(context);
                                   },

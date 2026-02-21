@@ -1,0 +1,1059 @@
+00:00 +0: loading /Users/mac/CRADI Mobile/test/unit/profile_provider_test.dart                                                                                                                         00:01 +0: loading /Users/mac/CRADI Mobile/test/unit/profile_provider_test.dart                                                                                                                         00:02 +0: loading /Users/mac/CRADI Mobile/test/unit/profile_provider_test.dart                                                                                                                         00:02 +0: loading /Users/mac/CRADI Mobile/test/unit/reporting_provider_test.dart                                                                                                                       00:02 +0: /Users/mac/CRADI Mobile/test/unit/reporting_provider_test.dart: Reporting Provider - State Management Only should update hazard type without instantiation                                   00:02 +1: /Users/mac/CRADI Mobile/test/unit/profile_provider_test.dart: (setUpAll)                                                                                                                     00:02 +2: /Users/mac/CRADI Mobile/test/unit/profile_provider_test.dart: (setUpAll)                                                                                                                     00:02 +2: /Users/mac/CRADI Mobile/test/unit/profile_provider_test.dart: ProfileProvider should have initial structure                                                                                  00:02 +3: /Users/mac/CRADI Mobile/test/unit/profile_provider_test.dart: ProfileProvider should have initial structure                                                                                  00:02 +3: /Users/mac/CRADI Mobile/test/unit/profile_provider_test.dart: (tearDownAll)                                                                                                                  00:02 +3: loading /Users/mac/CRADI Mobile/test/unit/auth_provider_test.dart                                                                                                                            00:02 +3: /Users/mac/CRADI Mobile/test/unit/auth_provider_test.dart: (setUpAll)                                                                                                                        00:03 +3: /Users/mac/CRADI Mobile/test/unit/auth_provider_test.dart: (setUpAll)                                                                                                                        00:03 +3: /Users/mac/CRADI Mobile/test/unit/auth_provider_test.dart: AuthProvider should have basic structure                                                                                          00:03 +4: /Users/mac/CRADI Mobile/test/unit/auth_provider_test.dart: AuthProvider should have basic structure                                                                                          00:03 +4: /Users/mac/CRADI Mobile/test/unit/auth_provider_test.dart: (tearDownAll)                                                                                                                     00:03 +4: loading /Users/mac/CRADI Mobile/test/verification_test.dart                                                                                                                                  00:03 +4: /Users/mac/CRADI Mobile/test/verification_test.dart: (setUpAll)                                                                                                                              00:03 +4: /Users/mac/CRADI Mobile/test/verification_test.dart: Render RegistrationScreen                                                                                                               00:04 +4: /Users/mac/CRADI Mobile/test/verification_test.dart: Render RegistrationScreen                                                                                                               00:04 +5: /Users/mac/CRADI Mobile/test/verification_test.dart: Render RegistrationScreen                                                                                                               00:05 +5 -1: /Users/mac/CRADI Mobile/test/verification_test.dart: Render RegistrationScreen                                                                                                            00:05 +5 -1: /Users/mac/CRADI Mobile/test/location_data_test.dart: Location Data Verification NigeriaLocationsData.focalStates should only contain Benue, Nasarawa, Plateau [E]                        
+  Expected: <3>
+    Actual: <4>
+  
+  package:matcher                                     expect
+  package:flutter_test/src/widget_tester.dart 473:18  expect
+  test/location_data_test.dart 11:9                   main.<fn>.<fn>
+  
+
+To run this test again: /usr/local/share/flutter/bin/cache/dart-sdk/bin/dart test /Users/mac/CRADI Mobile/test/location_data_test.dart -p vm --plain-name 'Location Data Verification NigeriaLocationsData.focalStates should only contain Benue, Nasarawa, Plateau'
+00:05 +6 -1: /Users/mac/CRADI Mobile/test/verification_test.dart: Render RegistrationScreen                                                                                                            00:05 +7 -1: /Users/mac/CRADI Mobile/test/verification_test.dart: Render RegistrationScreen                                                                                                            00:05 +8 -1: /Users/mac/CRADI Mobile/test/verification_test.dart: Render RegistrationScreen                                                                                                            00:05 +9 -1: /Users/mac/CRADI Mobile/test/verification_test.dart: Render RegistrationScreen                                                                                                            00:05 +10 -1: /Users/mac/CRADI Mobile/test/verification_test.dart: Render RegistrationScreen                                                                                                           00:06 +10 -1: /Users/mac/CRADI Mobile/test/verification_test.dart: Render RegistrationScreen                                                                                                           00:06 +10 -1: /Users/mac/CRADI Mobile/test/widget/location_selector_test.dart: LocationSelectorWidget shows only focal states                                                                          
+
+Warning: A call to tap() with finder "Found 1 widget with text "Select State": [
+  Text("Select State", dependencies: [DefaultSelectionStyle, DefaultTextStyle, MediaQuery]),
+]" derived an Offset (Offset(113.9, 53.0)) that would not hit test on the specified widget.
+Maybe the widget is actually off-screen, or another widget is obscuring it, or the widget cannot receive pointer events.
+The finder corresponds to this RenderBox: RenderParagraph#b46dd relayoutBoundary=up8
+The hit test result at that offset is: HitTestResult(RenderParagraph#e0827@Offset(96.9, 11.8), RenderAnimatedOpacity#a473d@Offset(96.9, 11.8), _RenderDecoration#68ec8@Offset(112.9, 24.0), RenderPointerListener#9a18b@Offset(112.9, 24.0), RenderSemanticsGestureHandler#21db0@Offset(112.9, 24.0), RenderMouseRegion#ea2e3@Offset(112.9, 24.0), RenderSemanticsAnnotations#0182a@Offset(112.9, 24.0), RenderSemanticsAnnotations#185c8@Offset(112.9, 24.0), RenderSemanticsAnnotations#805aa@Offset(112.9, 24.0), RenderSemanticsAnnotations#450c6@Offset(112.9, 24.0), RenderPadding#d2184@Offset(113.9, 25.0), RenderDecoratedBox#45b9d@Offset(113.9, 25.0), RenderFlex#a7a56@Offset(113.9, 53.0), RenderFlex#45638@Offset(113.9, 53.0), RenderCustomMultiChildLayoutBox#3df4b@Offset(113.9, 53.0), _RenderInkFeatures#cd70e@Offset(113.9, 53.0), RenderPhysicalModel#536e4@Offset(113.9, 53.0), RenderSemanticsAnnotations#0c5f7@Offset(113.9, 53.0), RenderRepaintBoundary#d8907@Offset(113.9, 53.0), RenderIgnorePointer#a8b41@Offset(113.9, 53.0), RenderAnimatedOpacity#22b7b@Offset(113.9, 53.0), RenderAnimatedOpacity#49559@Offset(113.9, 53.0), _RenderColoredBox#09fa2@Offset(113.9, 53.0), RenderAnimatedOpacity#89814@Offset(113.9, 53.0), RenderIgnorePointer#4ee2f@Offset(113.9, 53.0), RenderAnimatedOpacity#1b013@Offset(113.9, 53.0), RenderRepaintBoundary#3d9e3@Offset(113.9, 53.0), RenderSemanticsAnnotations#2bfa1@Offset(113.9, 53.0), RenderOffstage#c85a1@Offset(113.9, 53.0), RenderSemanticsAnnotations#b6fa3@Offset(113.9, 53.0), _RenderTheater#f9e9f@Offset(113.9, 53.0), RenderAbsorbPointer#aeeeb@Offset(113.9, 53.0), RenderPointerListener#d2476@Offset(113.9, 53.0), RenderSemanticsAnnotations#c2310@Offset(113.9, 53.0), RenderCustomPaint#df158@Offset(113.9, 53.0), RenderSemanticsAnnotations#1ef87@Offset(113.9, 53.0), RenderSemanticsAnnotations#9c21e@Offset(113.9, 53.0), RenderTapRegionSurface#400ec@Offset(113.9, 53.0), RenderSemanticsAnnotations#b030c@Offset(113.9, 53.0), RenderSemanticsAnnotations#c5a65@Offset(113.9, 53.0), RenderSemanticsAnnotations#e2dab@Offset(113.9, 53.0), HitTestEntry<HitTestTarget>#43ccb(_ReusableRenderView#86ac2), HitTestEntry<HitTestTarget>#2f7c6(<AutomatedTestWidgetsFlutterBinding>))
+#0      WidgetController._getElementPoint (package:flutter_test/src/controller.dart:2081:25)
+#1      WidgetController.getCenter (package:flutter_test/src/controller.dart:1865:12)
+#2      WidgetController.tap (package:flutter_test/src/controller.dart:1045:7)
+#3      main.<anonymous closure> (file:///Users/mac/CRADI%20Mobile/test/widget/location_selector_test.dart:24:18)
+<asynchronous suspension>
+#4      testWidgets.<anonymous closure>.<anonymous closure> (package:flutter_test/src/widget_tester.dart:192:15)
+<asynchronous suspension>
+#5      TestWidgetsFlutterBinding._runTestBody (package:flutter_test/src/binding.dart:1059:5)
+<asynchronous suspension>
+#6      StackZoneSpecification._registerCallback.<anonymous closure> (package:stack_trace/src/stack_zone_specification.dart:114:42)
+<asynchronous suspension>
+To silence this warning, pass "warnIfMissed: false" to "tap()".
+To make this warning fatal, set WidgetController.hitTestWarningShouldBeFatal to true.
+
+00:06 +10 -1: /Users/mac/CRADI Mobile/test/widget/hazard_selection_screen_test.dart: HazardSelectionScreen Widget Tests should display app bar with title                                              
+══╡ EXCEPTION CAUGHT BY SCHEDULER LIBRARY ╞═════════════════════════════════════════════════════════
+The following ProviderNotFoundException was thrown during a scheduler callback:
+Error: Could not find the correct Provider<ReportingProvider> above this HazardSelectionScreen
+Widget
+
+This happens because you used a `BuildContext` that does not include the provider
+of your choice. There are a few common scenarios:
+
+- You added a new provider in your `main.dart` and performed a hot-reload.
+  To fix, perform a hot-restart.
+
+- The provider you are trying to read is in a different route.
+
+  Providers are "scoped". So if you insert of provider inside a route, then
+  other routes will not be able to access that provider.
+
+- You used a `BuildContext` that is an ancestor of the provider you are trying to read.
+
+  Make sure that HazardSelectionScreen is under your MultiProvider/Provider<ReportingProvider>.
+  This usually happens when you are creating a provider and trying to read it immediately.
+
+  For example, instead of:
+
+  ```
+  Widget build(BuildContext context) {
+    return Provider<Example>(
+      create: (_) => Example(),
+      // Will throw a ProviderNotFoundError, because `context` is associated
+      // to the widget that is the parent of `Provider<Example>`
+      child: Text(context.watch<Example>().toString()),
+    );
+  }
+  ```
+
+  consider using `builder` like so:
+
+  ```
+  Widget build(BuildContext context) {
+    return Provider<Example>(
+      create: (_) => Example(),
+      // we use `builder` to obtain a new `BuildContext` that has access to the provider
+      builder: (context, child) {
+        // No longer throws
+        return Text(context.watch<Example>().toString());
+      }
+    );
+  }
+  ```
+
+If none of these solutions work, consider asking for help on StackOverflow:
+https://stackoverflow.com/questions/tagged/flutter
+
+When the exception was thrown, this was the stack:
+#0      Provider._inheritedElementOf (package:provider/src/provider.dart:377:7)
+#1      Provider.of (package:provider/src/provider.dart:327:30)
+#2      ReadContext.read (package:provider/src/provider.dart:683:21)
+#3      _HazardSelectionScreenState.initState.<anonymous closure> (package:climate_app/features/reporting/screens/hazard_selection_screen.dart:64:15)
+#4      SchedulerBinding._invokeFrameCallback (package:flutter/src/scheduler/binding.dart:1434:15)
+#5      SchedulerBinding.handleDrawFrame (package:flutter/src/scheduler/binding.dart:1361:11)
+#6      AutomatedTestWidgetsFlutterBinding.pump.<anonymous closure> (package:flutter_test/src/binding.dart:1335:9)
+#9      TestAsyncUtils.guard (package:flutter_test/src/test_async_utils.dart:74:41)
+#10     AutomatedTestWidgetsFlutterBinding.pump (package:flutter_test/src/binding.dart:1324:27)
+#11     WidgetTester.pumpWidget.<anonymous closure> (package:flutter_test/src/widget_tester.dart:598:22)
+#14     TestAsyncUtils.guard (package:flutter_test/src/test_async_utils.dart:74:41)
+#15     WidgetTester.pumpWidget (package:flutter_test/src/widget_tester.dart:595:27)
+#16     main.<anonymous closure>.<anonymous closure> (file:///Users/mac/CRADI%20Mobile/test/widget/hazard_selection_screen_test.dart:17:20)
+#17     testWidgets.<anonymous closure>.<anonymous closure> (package:flutter_test/src/widget_tester.dart:192:29)
+<asynchronous suspension>
+#18     TestWidgetsFlutterBinding._runTestBody (package:flutter_test/src/binding.dart:1059:5)
+<asynchronous suspension>
+<asynchronous suspension>
+(elided 5 frames from dart:async and package:stack_trace)
+════════════════════════════════════════════════════════════════════════════════════════════════════
+00:06 +10 -2: /Users/mac/CRADI Mobile/test/widget/hazard_selection_screen_test.dart: HazardSelectionScreen Widget Tests should display app bar with title [E]                                          
+  Test failed. See exception logs above.
+  The test description was: should display app bar with title
+  
+
+To run this test again: /usr/local/share/flutter/bin/cache/dart-sdk/bin/dart test /Users/mac/CRADI Mobile/test/widget/hazard_selection_screen_test.dart -p vm --plain-name 'HazardSelectionScreen Widget Tests should display app bar with title'
+00:07 +11 -2: /Users/mac/CRADI Mobile/test/widget/location_selector_test.dart: LocationSelectorWidget shows only focal states                                                                          00:07 +11 -2: /Users/mac/CRADI Mobile/test/widget/hazard_selection_screen_test.dart: HazardSelectionScreen Widget Tests should display instruction text                                                
+══╡ EXCEPTION CAUGHT BY SCHEDULER LIBRARY ╞═════════════════════════════════════════════════════════
+The following ProviderNotFoundException was thrown during a scheduler callback:
+Error: Could not find the correct Provider<ReportingProvider> above this HazardSelectionScreen
+Widget
+
+This happens because you used a `BuildContext` that does not include the provider
+of your choice. There are a few common scenarios:
+
+- You added a new provider in your `main.dart` and performed a hot-reload.
+  To fix, perform a hot-restart.
+
+- The provider you are trying to read is in a different route.
+
+  Providers are "scoped". So if you insert of provider inside a route, then
+  other routes will not be able to access that provider.
+
+- You used a `BuildContext` that is an ancestor of the provider you are trying to read.
+
+  Make sure that HazardSelectionScreen is under your MultiProvider/Provider<ReportingProvider>.
+  This usually happens when you are creating a provider and trying to read it immediately.
+
+  For example, instead of:
+
+  ```
+  Widget build(BuildContext context) {
+    return Provider<Example>(
+      create: (_) => Example(),
+      // Will throw a ProviderNotFoundError, because `context` is associated
+      // to the widget that is the parent of `Provider<Example>`
+      child: Text(context.watch<Example>().toString()),
+    );
+  }
+  ```
+
+  consider using `builder` like so:
+
+  ```
+  Widget build(BuildContext context) {
+    return Provider<Example>(
+      create: (_) => Example(),
+      // we use `builder` to obtain a new `BuildContext` that has access to the provider
+      builder: (context, child) {
+        // No longer throws
+        return Text(context.watch<Example>().toString());
+      }
+    );
+  }
+  ```
+
+If none of these solutions work, consider asking for help on StackOverflow:
+https://stackoverflow.com/questions/tagged/flutter
+
+When the exception was thrown, this was the stack:
+#0      Provider._inheritedElementOf (package:provider/src/provider.dart:377:7)
+#1      Provider.of (package:provider/src/provider.dart:327:30)
+#2      ReadContext.read (package:provider/src/provider.dart:683:21)
+#3      _HazardSelectionScreenState.initState.<anonymous closure> (package:climate_app/features/reporting/screens/hazard_selection_screen.dart:64:15)
+#4      SchedulerBinding._invokeFrameCallback (package:flutter/src/scheduler/binding.dart:1434:15)
+#5      SchedulerBinding.handleDrawFrame (package:flutter/src/scheduler/binding.dart:1361:11)
+#6      AutomatedTestWidgetsFlutterBinding.pump.<anonymous closure> (package:flutter_test/src/binding.dart:1335:9)
+#9      TestAsyncUtils.guard (package:flutter_test/src/test_async_utils.dart:74:41)
+#10     AutomatedTestWidgetsFlutterBinding.pump (package:flutter_test/src/binding.dart:1324:27)
+#11     WidgetTester.pumpWidget.<anonymous closure> (package:flutter_test/src/widget_tester.dart:598:22)
+#14     TestAsyncUtils.guard (package:flutter_test/src/test_async_utils.dart:74:41)
+#15     WidgetTester.pumpWidget (package:flutter_test/src/widget_tester.dart:595:27)
+#16     main.<anonymous closure>.<anonymous closure> (file:///Users/mac/CRADI%20Mobile/test/widget/hazard_selection_screen_test.dart:24:20)
+#17     testWidgets.<anonymous closure>.<anonymous closure> (package:flutter_test/src/widget_tester.dart:192:29)
+<asynchronous suspension>
+#18     TestWidgetsFlutterBinding._runTestBody (package:flutter_test/src/binding.dart:1059:5)
+<asynchronous suspension>
+<asynchronous suspension>
+(elided 5 frames from dart:async and package:stack_trace)
+════════════════════════════════════════════════════════════════════════════════════════════════════
+00:07 +11 -3: /Users/mac/CRADI Mobile/test/widget/hazard_selection_screen_test.dart: HazardSelectionScreen Widget Tests should display instruction text [E]                                            
+  Test failed. See exception logs above.
+  The test description was: should display instruction text
+  
+
+To run this test again: /usr/local/share/flutter/bin/cache/dart-sdk/bin/dart test /Users/mac/CRADI Mobile/test/widget/hazard_selection_screen_test.dart -p vm --plain-name 'HazardSelectionScreen Widget Tests should display instruction text'
+00:07 +12 -3: /Users/mac/CRADI Mobile/test/widget/location_selector_test.dart: LocationSelectorWidget shows only focal states                                                                          00:07 +13 -3: /Users/mac/CRADI Mobile/test/widget/hazard_selection_screen_test.dart: HazardSelectionScreen Widget Tests should display hazard cards                                                    00:07 +13 -3: /Users/mac/CRADI Mobile/test/widget/hazard_selection_screen_test.dart: HazardSelectionScreen Widget Tests should display hazard cards                                                    
+══╡ EXCEPTION CAUGHT BY SCHEDULER LIBRARY ╞═════════════════════════════════════════════════════════
+The following ProviderNotFoundException was thrown during a scheduler callback:
+Error: Could not find the correct Provider<ReportingProvider> above this HazardSelectionScreen
+Widget
+
+This happens because you used a `BuildContext` that does not include the provider
+of your choice. There are a few common scenarios:
+
+- You added a new provider in your `main.dart` and performed a hot-reload.
+  To fix, perform a hot-restart.
+
+- The provider you are trying to read is in a different route.
+
+  Providers are "scoped". So if you insert of provider inside a route, then
+  other routes will not be able to access that provider.
+
+- You used a `BuildContext` that is an ancestor of the provider you are trying to read.
+
+  Make sure that HazardSelectionScreen is under your MultiProvider/Provider<ReportingProvider>.
+  This usually happens when you are creating a provider and trying to read it immediately.
+
+  For example, instead of:
+
+  ```
+  Widget build(BuildContext context) {
+    return Provider<Example>(
+      create: (_) => Example(),
+      // Will throw a ProviderNotFoundError, because `context` is associated
+      // to the widget that is the parent of `Provider<Example>`
+      child: Text(context.watch<Example>().toString()),
+    );
+  }
+  ```
+
+  consider using `builder` like so:
+
+  ```
+  Widget build(BuildContext context) {
+    return Provider<Example>(
+      create: (_) => Example(),
+      // we use `builder` to obtain a new `BuildContext` that has access to the provider
+      builder: (context, child) {
+        // No longer throws
+        return Text(context.watch<Example>().toString());
+      }
+    );
+  }
+  ```
+
+If none of these solutions work, consider asking for help on StackOverflow:
+https://stackoverflow.com/questions/tagged/flutter
+
+When the exception was thrown, this was the stack:
+#0      Provider._inheritedElementOf (package:provider/src/provider.dart:377:7)
+#1      Provider.of (package:provider/src/provider.dart:327:30)
+#2      ReadContext.read (package:provider/src/provider.dart:683:21)
+#3      _HazardSelectionScreenState.initState.<anonymous closure> (package:climate_app/features/reporting/screens/hazard_selection_screen.dart:64:15)
+#4      SchedulerBinding._invokeFrameCallback (package:flutter/src/scheduler/binding.dart:1434:15)
+#5      SchedulerBinding.handleDrawFrame (package:flutter/src/scheduler/binding.dart:1361:11)
+#6      AutomatedTestWidgetsFlutterBinding.pump.<anonymous closure> (package:flutter_test/src/binding.dart:1335:9)
+#9      TestAsyncUtils.guard (package:flutter_test/src/test_async_utils.dart:74:41)
+#10     AutomatedTestWidgetsFlutterBinding.pump (package:flutter_test/src/binding.dart:1324:27)
+#11     WidgetTester.pumpWidget.<anonymous closure> (package:flutter_test/src/widget_tester.dart:598:22)
+#14     TestAsyncUtils.guard (package:flutter_test/src/test_async_utils.dart:74:41)
+#15     WidgetTester.pumpWidget (package:flutter_test/src/widget_tester.dart:595:27)
+#16     main.<anonymous closure>.<anonymous closure> (file:///Users/mac/CRADI%20Mobile/test/widget/hazard_selection_screen_test.dart:33:20)
+#17     testWidgets.<anonymous closure>.<anonymous closure> (package:flutter_test/src/widget_tester.dart:192:29)
+<asynchronous suspension>
+#18     TestWidgetsFlutterBinding._runTestBody (package:flutter_test/src/binding.dart:1059:5)
+<asynchronous suspension>
+<asynchronous suspension>
+(elided 5 frames from dart:async and package:stack_trace)
+════════════════════════════════════════════════════════════════════════════════════════════════════
+══╡ EXCEPTION CAUGHT BY FLUTTER TEST FRAMEWORK ╞════════════════════════════════════════════════════
+The following TestFailure was thrown running a test:
+Expected: exactly one matching candidate
+  Actual: _TextWidgetFinder:<Found 0 widgets with text "Extreme Heat": []>
+   Which: means none were found but one was expected
+
+When the exception was thrown, this was the stack:
+#4      main.<anonymous closure>.<anonymous closure> (file:///Users/mac/CRADI%20Mobile/test/widget/hazard_selection_screen_test.dart:37:7)
+<asynchronous suspension>
+#5      testWidgets.<anonymous closure>.<anonymous closure> (package:flutter_test/src/widget_tester.dart:192:15)
+<asynchronous suspension>
+#6      TestWidgetsFlutterBinding._runTestBody (package:flutter_test/src/binding.dart:1059:5)
+<asynchronous suspension>
+<asynchronous suspension>
+(elided one frame from package:stack_trace)
+
+This was caught by the test expectation on the following line:
+  file:///Users/mac/CRADI%20Mobile/test/widget/hazard_selection_screen_test.dart line 37
+The test description was:
+  should display hazard cards
+════════════════════════════════════════════════════════════════════════════════════════════════════
+══╡ EXCEPTION CAUGHT BY FLUTTER TEST FRAMEWORK ╞════════════════════════════════════════════════════
+The following message was thrown:
+Multiple exceptions (2) were detected during the running of the current test, and at least one was
+unexpected.
+════════════════════════════════════════════════════════════════════════════════════════════════════
+00:07 +13 -4: /Users/mac/CRADI Mobile/test/widget/hazard_selection_screen_test.dart: HazardSelectionScreen Widget Tests should display hazard cards [E]                                                
+  Test failed. See exception logs above.
+  The test description was: should display hazard cards
+  
+
+To run this test again: /usr/local/share/flutter/bin/cache/dart-sdk/bin/dart test /Users/mac/CRADI Mobile/test/widget/hazard_selection_screen_test.dart -p vm --plain-name 'HazardSelectionScreen Widget Tests should display hazard cards'
+00:07 +13 -4: /Users/mac/CRADI Mobile/test/widget/location_selector_test.dart: LGA dropdown enables after state selection                                                                              
+
+Warning: A call to tap() with finder "Found 1 widget with text "Select State": [
+  Text("Select State", dependencies: [DefaultSelectionStyle, DefaultTextStyle, MediaQuery]),
+]" derived an Offset (Offset(113.9, 53.0)) that would not hit test on the specified widget.
+Maybe the widget is actually off-screen, or another widget is obscuring it, or the widget cannot receive pointer events.
+The finder corresponds to this RenderBox: RenderParagraph#3c97f relayoutBoundary=up8
+The hit test result at that offset is: HitTestResult(RenderParagraph#482c0@Offset(96.9, 11.8), RenderAnimatedOpacity#a38e1@Offset(96.9, 11.8), _RenderDecoration#1a10c@Offset(112.9, 24.0), RenderPointerListener#5eaf3@Offset(112.9, 24.0), RenderSemanticsGestureHandler#f7428@Offset(112.9, 24.0), RenderMouseRegion#2f85b@Offset(112.9, 24.0), RenderSemanticsAnnotations#20994@Offset(112.9, 24.0), RenderSemanticsAnnotations#c983f@Offset(112.9, 24.0), RenderSemanticsAnnotations#e532b@Offset(112.9, 24.0), RenderSemanticsAnnotations#1b0ce@Offset(112.9, 24.0), RenderPadding#3a204@Offset(113.9, 25.0), RenderDecoratedBox#55b77@Offset(113.9, 25.0), RenderFlex#781ad@Offset(113.9, 53.0), RenderFlex#38913@Offset(113.9, 53.0), RenderCustomMultiChildLayoutBox#dc027@Offset(113.9, 53.0), _RenderInkFeatures#77b5d@Offset(113.9, 53.0), RenderPhysicalModel#3a5f5@Offset(113.9, 53.0), RenderSemanticsAnnotations#6eb57@Offset(113.9, 53.0), RenderRepaintBoundary#3c319@Offset(113.9, 53.0), RenderIgnorePointer#e0ce3@Offset(113.9, 53.0), RenderAnimatedOpacity#ad00d@Offset(113.9, 53.0), RenderAnimatedOpacity#47f3d@Offset(113.9, 53.0), _RenderColoredBox#cda54@Offset(113.9, 53.0), RenderAnimatedOpacity#0ba87@Offset(113.9, 53.0), RenderIgnorePointer#44935@Offset(113.9, 53.0), RenderAnimatedOpacity#14ac0@Offset(113.9, 53.0), RenderRepaintBoundary#eb39b@Offset(113.9, 53.0), RenderSemanticsAnnotations#d3f47@Offset(113.9, 53.0), RenderOffstage#f1f28@Offset(113.9, 53.0), RenderSemanticsAnnotations#81457@Offset(113.9, 53.0), _RenderTheater#9cf38@Offset(113.9, 53.0), RenderAbsorbPointer#d3b0b@Offset(113.9, 53.0), RenderPointerListener#9709b@Offset(113.9, 53.0), RenderSemanticsAnnotations#9cfcd@Offset(113.9, 53.0), RenderCustomPaint#ff6e3@Offset(113.9, 53.0), RenderSemanticsAnnotations#8be3b@Offset(113.9, 53.0), RenderSemanticsAnnotations#d1ea4@Offset(113.9, 53.0), RenderTapRegionSurface#4f3fb@Offset(113.9, 53.0), RenderSemanticsAnnotations#63685@Offset(113.9, 53.0), RenderSemanticsAnnotations#7dd53@Offset(113.9, 53.0), RenderSemanticsAnnotations#6a065@Offset(113.9, 53.0), HitTestEntry<HitTestTarget>#b98ce(_ReusableRenderView#86ac2), HitTestEntry<HitTestTarget>#cd90f(<AutomatedTestWidgetsFlutterBinding>))
+#0      WidgetController._getElementPoint (package:flutter_test/src/controller.dart:2081:25)
+#1      WidgetController.getCenter (package:flutter_test/src/controller.dart:1865:12)
+#2      WidgetController.tap (package:flutter_test/src/controller.dart:1045:7)
+#3      main.<anonymous closure> (file:///Users/mac/CRADI%20Mobile/test/widget/location_selector_test.dart:54:18)
+<asynchronous suspension>
+#4      testWidgets.<anonymous closure>.<anonymous closure> (package:flutter_test/src/widget_tester.dart:192:15)
+<asynchronous suspension>
+#5      TestWidgetsFlutterBinding._runTestBody (package:flutter_test/src/binding.dart:1059:5)
+<asynchronous suspension>
+#6      StackZoneSpecification._registerCallback.<anonymous closure> (package:stack_trace/src/stack_zone_specification.dart:114:42)
+<asynchronous suspension>
+To silence this warning, pass "warnIfMissed: false" to "tap()".
+To make this warning fatal, set WidgetController.hitTestWarningShouldBeFatal to true.
+
+00:07 +13 -4: /Users/mac/CRADI Mobile/test/verification_test.dart: Render VerificationRequestScreen                                                                                                    
+══╡ EXCEPTION CAUGHT BY WIDGETS LIBRARY ╞═══════════════════════════════════════════════════════════
+The following ProviderNotFoundException was thrown building Consumer<ReportsStatusProvider>(dirty):
+Error: Could not find the correct Provider<ReportsStatusProvider> above this
+Consumer<ReportsStatusProvider> Widget
+
+This happens because you used a `BuildContext` that does not include the provider
+of your choice. There are a few common scenarios:
+
+- You added a new provider in your `main.dart` and performed a hot-reload.
+  To fix, perform a hot-restart.
+
+- The provider you are trying to read is in a different route.
+
+  Providers are "scoped". So if you insert of provider inside a route, then
+  other routes will not be able to access that provider.
+
+- You used a `BuildContext` that is an ancestor of the provider you are trying to read.
+
+  Make sure that Consumer<ReportsStatusProvider> is under your
+MultiProvider/Provider<ReportsStatusProvider>.
+  This usually happens when you are creating a provider and trying to read it immediately.
+
+  For example, instead of:
+
+  ```
+  Widget build(BuildContext context) {
+    return Provider<Example>(
+      create: (_) => Example(),
+      // Will throw a ProviderNotFoundError, because `context` is associated
+      // to the widget that is the parent of `Provider<Example>`
+      child: Text(context.watch<Example>().toString()),
+    );
+  }
+  ```
+
+  consider using `builder` like so:
+
+  ```
+  Widget build(BuildContext context) {
+    return Provider<Example>(
+      create: (_) => Example(),
+      // we use `builder` to obtain a new `BuildContext` that has access to the provider
+      builder: (context, child) {
+        // No longer throws
+        return Text(context.watch<Example>().toString());
+      }
+    );
+  }
+  ```
+
+If none of these solutions work, consider asking for help on StackOverflow:
+https://stackoverflow.com/questions/tagged/flutter
+
+The relevant error-causing widget was:
+  Consumer<ReportsStatusProvider>
+  Consumer:file:///Users/mac/CRADI%20Mobile/lib/features/verification/screens/verification_request_screen.dart:184:13
+
+When the exception was thrown, this was the stack:
+#0      Provider._inheritedElementOf (package:provider/src/provider.dart:377:7)
+#1      Provider.of (package:provider/src/provider.dart:327:30)
+#2      Consumer.buildWithChild (package:provider/src/consumer.dart:181:16)
+#3      SingleChildStatelessWidget.build (package:nested/nested.dart:259:41)
+#4      StatelessElement.build (package:flutter/src/widgets/framework.dart:5892:49)
+#5      SingleChildStatelessElement.build (package:nested/nested.dart:279:18)
+#6      ComponentElement.performRebuild (package:flutter/src/widgets/framework.dart:5820:15)
+#7      Element.rebuild (package:flutter/src/widgets/framework.dart:5532:7)
+#8      ComponentElement._firstBuild (package:flutter/src/widgets/framework.dart:5802:5)
+#9      ComponentElement.mount (package:flutter/src/widgets/framework.dart:5796:5)
+#10     SingleChildWidgetElementMixin.mount (package:nested/nested.dart:222:11)
+...     Normal element mounting (41 frames)
+#51     Element.inflateWidget (package:flutter/src/widgets/framework.dart:4590:20)
+#52     Element.updateChild (package:flutter/src/widgets/framework.dart:4059:18)
+#53     SliverMultiBoxAdaptorElement.updateChild (package:flutter/src/widgets/sliver.dart:1068:37)
+#54     SliverMultiBoxAdaptorElement.createChild.<anonymous closure> (package:flutter/src/widgets/sliver.dart:1052:20)
+#55     BuildOwner.buildScope (package:flutter/src/widgets/framework.dart:3101:19)
+#56     SliverMultiBoxAdaptorElement.createChild (package:flutter/src/widgets/sliver.dart:1042:12)
+#57     RenderSliverMultiBoxAdaptor._createOrObtainChild.<anonymous closure> (package:flutter/src/rendering/sliver_multi_box_adaptor.dart:372:23)
+#58     RenderObject.invokeLayoutCallback.<anonymous closure> (package:flutter/src/rendering/object.dart:2894:17)
+#59     PipelineOwner._enableMutationsToDirtySubtrees (package:flutter/src/rendering/object.dart:1219:15)
+#60     RenderObject.invokeLayoutCallback (package:flutter/src/rendering/object.dart:2893:14)
+#61     RenderSliverMultiBoxAdaptor._createOrObtainChild (package:flutter/src/rendering/sliver_multi_box_adaptor.dart:360:5)
+#62     RenderSliverMultiBoxAdaptor.insertAndLayoutChild (package:flutter/src/rendering/sliver_multi_box_adaptor.dart:523:5)
+#63     RenderSliverList.performLayout.advance (package:flutter/src/rendering/sliver_list.dart:242:19)
+#64     RenderSliverList.performLayout (package:flutter/src/rendering/sliver_list.dart:283:12)
+#65     RenderObject.layout (package:flutter/src/rendering/object.dart:2775:7)
+#66     RenderSliverEdgeInsetsPadding.performLayout (package:flutter/src/rendering/sliver_padding.dart:133:12)
+#67     RenderSliverPadding.performLayout (package:flutter/src/rendering/sliver_padding.dart:371:11)
+#68     RenderObject.layout (package:flutter/src/rendering/object.dart:2775:7)
+#69     RenderViewportBase.layoutChildSequence (package:flutter/src/rendering/viewport.dart:673:13)
+#70     RenderViewport._attemptLayout (package:flutter/src/rendering/viewport.dart:1684:12)
+#71     RenderViewport.performLayout (package:flutter/src/rendering/viewport.dart:1575:20)
+#72     RenderObject.layout (package:flutter/src/rendering/object.dart:2775:7)
+#73     RenderProxyBoxMixin.performLayout (package:flutter/src/rendering/proxy_box.dart:115:18)
+#74     RenderObject.layout (package:flutter/src/rendering/object.dart:2775:7)
+#75     RenderProxyBoxMixin.performLayout (package:flutter/src/rendering/proxy_box.dart:115:18)
+#76     RenderObject.layout (package:flutter/src/rendering/object.dart:2775:7)
+#77     RenderProxyBoxMixin.performLayout (package:flutter/src/rendering/proxy_box.dart:115:18)
+#78     RenderObject.layout (package:flutter/src/rendering/object.dart:2775:7)
+#79     RenderProxyBoxMixin.performLayout (package:flutter/src/rendering/proxy_box.dart:115:18)
+#80     RenderObject.layout (package:flutter/src/rendering/object.dart:2775:7)
+#81     RenderProxyBoxMixin.performLayout (package:flutter/src/rendering/proxy_box.dart:115:18)
+#82     RenderObject.layout (package:flutter/src/rendering/object.dart:2775:7)
+#83     RenderProxyBoxMixin.performLayout (package:flutter/src/rendering/proxy_box.dart:115:18)
+#84     RenderObject.layout (package:flutter/src/rendering/object.dart:2775:7)
+#85     RenderProxyBoxMixin.performLayout (package:flutter/src/rendering/proxy_box.dart:115:18)
+#86     RenderObject.layout (package:flutter/src/rendering/object.dart:2775:7)
+#87     RenderProxyBoxMixin.performLayout (package:flutter/src/rendering/proxy_box.dart:115:18)
+#88     _RenderCustomClip.performLayout (package:flutter/src/rendering/proxy_box.dart:1481:11)
+#89     RenderObject.layout (package:flutter/src/rendering/object.dart:2775:7)
+#90     RenderProxyBoxMixin.performLayout (package:flutter/src/rendering/proxy_box.dart:115:18)
+#91     RenderObject.layout (package:flutter/src/rendering/object.dart:2775:7)
+#92     MultiChildLayoutDelegate.layoutChild (package:flutter/src/rendering/custom_layout.dart:180:12)
+#93     _ScaffoldLayout.performLayout (package:flutter/src/material/scaffold.dart:1112:7)
+#94     MultiChildLayoutDelegate._callPerformLayout (package:flutter/src/rendering/custom_layout.dart:249:7)
+#95     RenderCustomMultiChildLayoutBox.performLayout (package:flutter/src/rendering/custom_layout.dart:420:14)
+#96     RenderObject.layout (package:flutter/src/rendering/object.dart:2775:7)
+#97     RenderProxyBoxMixin.performLayout (package:flutter/src/rendering/proxy_box.dart:115:18)
+#98     RenderObject.layout (package:flutter/src/rendering/object.dart:2775:7)
+#99     RenderProxyBoxMixin.performLayout (package:flutter/src/rendering/proxy_box.dart:115:18)
+#100    _RenderCustomClip.performLayout (package:flutter/src/rendering/proxy_box.dart:1481:11)
+#101    RenderObject.layout (package:flutter/src/rendering/object.dart:2775:7)
+#102    RenderProxyBoxMixin.performLayout (package:flutter/src/rendering/proxy_box.dart:115:18)
+#103    RenderObject.layout (package:flutter/src/rendering/object.dart:2775:7)
+#104    RenderProxyBoxMixin.performLayout (package:flutter/src/rendering/proxy_box.dart:115:18)
+#105    RenderObject.layout (package:flutter/src/rendering/object.dart:2775:7)
+#106    RenderProxyBoxMixin.performLayout (package:flutter/src/rendering/proxy_box.dart:115:18)
+#107    RenderObject.layout (package:flutter/src/rendering/object.dart:2775:7)
+#108    RenderProxyBoxMixin.performLayout (package:flutter/src/rendering/proxy_box.dart:115:18)
+#109    RenderObject.layout (package:flutter/src/rendering/object.dart:2775:7)
+#110    RenderProxyBoxMixin.performLayout (package:flutter/src/rendering/proxy_box.dart:115:18)
+#111    RenderObject.layout (package:flutter/src/rendering/object.dart:2775:7)
+#112    RenderProxyBoxMixin.performLayout (package:flutter/src/rendering/proxy_box.dart:115:18)
+#113    RenderObject.layout (package:flutter/src/rendering/object.dart:2775:7)
+#114    RenderProxyBoxMixin.performLayout (package:flutter/src/rendering/proxy_box.dart:115:18)
+#115    RenderObject.layout (package:flutter/src/rendering/object.dart:2775:7)
+#116    RenderProxyBoxMixin.performLayout (package:flutter/src/rendering/proxy_box.dart:115:18)
+#117    RenderObject.layout (package:flutter/src/rendering/object.dart:2775:7)
+#118    RenderProxyBoxMixin.performLayout (package:flutter/src/rendering/proxy_box.dart:115:18)
+#119    RenderObject.layout (package:flutter/src/rendering/object.dart:2775:7)
+#120    RenderProxyBoxMixin.performLayout (package:flutter/src/rendering/proxy_box.dart:115:18)
+#121    RenderObject.layout (package:flutter/src/rendering/object.dart:2775:7)
+#122    RenderProxyBoxMixin.performLayout (package:flutter/src/rendering/proxy_box.dart:115:18)
+#123    RenderObject.layout (package:flutter/src/rendering/object.dart:2775:7)
+#124    RenderProxyBoxMixin.performLayout (package:flutter/src/rendering/proxy_box.dart:115:18)
+#125    RenderObject.layout (package:flutter/src/rendering/object.dart:2775:7)
+#126    RenderProxyBoxMixin.performLayout (package:flutter/src/rendering/proxy_box.dart:115:18)
+#127    RenderObject.layout (package:flutter/src/rendering/object.dart:2775:7)
+#128    RenderProxyBoxMixin.performLayout (package:flutter/src/rendering/proxy_box.dart:115:18)
+#129    RenderObject.layout (package:flutter/src/rendering/object.dart:2775:7)
+#130    RenderProxyBoxMixin.performLayout (package:flutter/src/rendering/proxy_box.dart:115:18)
+#131    RenderObject.layout (package:flutter/src/rendering/object.dart:2775:7)
+#132    RenderProxyBoxMixin.performLayout (package:flutter/src/rendering/proxy_box.dart:115:18)
+#133    RenderOffstage.performLayout (package:flutter/src/rendering/proxy_box.dart:3848:13)
+#134    RenderObject.layout (package:flutter/src/rendering/object.dart:2775:7)
+#135    RenderProxyBoxMixin.performLayout (package:flutter/src/rendering/proxy_box.dart:115:18)
+#136    RenderObject.layout (package:flutter/src/rendering/object.dart:2775:7)
+#137    _RenderTheaterMixin.layoutChild (package:flutter/src/widgets/overlay.dart:1084:13)
+#138    _RenderTheater.performLayout (package:flutter/src/widgets/overlay.dart:1429:9)
+#139    RenderObject.layout (package:flutter/src/rendering/object.dart:2775:7)
+#140    RenderProxyBoxMixin.performLayout (package:flutter/src/rendering/proxy_box.dart:115:18)
+#141    RenderObject.layout (package:flutter/src/rendering/object.dart:2775:7)
+#142    RenderProxyBoxMixin.performLayout (package:flutter/src/rendering/proxy_box.dart:115:18)
+#143    RenderObject.layout (package:flutter/src/rendering/object.dart:2775:7)
+#144    RenderProxyBoxMixin.performLayout (package:flutter/src/rendering/proxy_box.dart:115:18)
+#145    RenderObject.layout (package:flutter/src/rendering/object.dart:2775:7)
+#146    RenderProxyBoxMixin.performLayout (package:flutter/src/rendering/proxy_box.dart:115:18)
+#147    RenderCustomPaint.performLayout (package:flutter/src/rendering/custom_paint.dart:574:11)
+#148    RenderObject.layout (package:flutter/src/rendering/object.dart:2775:7)
+#149    RenderProxyBoxMixin.performLayout (package:flutter/src/rendering/proxy_box.dart:115:18)
+#150    RenderObject.layout (package:flutter/src/rendering/object.dart:2775:7)
+#151    RenderProxyBoxMixin.performLayout (package:flutter/src/rendering/proxy_box.dart:115:18)
+#152    RenderObject.layout (package:flutter/src/rendering/object.dart:2775:7)
+#153    RenderProxyBoxMixin.performLayout (package:flutter/src/rendering/proxy_box.dart:115:18)
+#154    RenderObject.layout (package:flutter/src/rendering/object.dart:2775:7)
+#155    RenderProxyBoxMixin.performLayout (package:flutter/src/rendering/proxy_box.dart:115:18)
+#156    RenderObject.layout (package:flutter/src/rendering/object.dart:2775:7)
+#157    RenderProxyBoxMixin.performLayout (package:flutter/src/rendering/proxy_box.dart:115:18)
+#158    RenderObject.layout (package:flutter/src/rendering/object.dart:2775:7)
+#159    RenderProxyBoxMixin.performLayout (package:flutter/src/rendering/proxy_box.dart:115:18)
+#160    RenderObject.layout (package:flutter/src/rendering/object.dart:2775:7)
+#161    RenderView.performLayout (package:flutter/src/rendering/view.dart:294:12)
+#162    RenderObject._layoutWithoutResize (package:flutter/src/rendering/object.dart:2623:7)
+#163    PipelineOwner.flushLayout (package:flutter/src/rendering/object.dart:1170:18)
+#164    PipelineOwner.flushLayout (package:flutter/src/rendering/object.dart:1183:15)
+#165    AutomatedTestWidgetsFlutterBinding.drawFrame (package:flutter_test/src/binding.dart:1508:27)
+#166    RendererBinding._handlePersistentFrameCallback (package:flutter/src/rendering/binding.dart:495:5)
+#167    SchedulerBinding._invokeFrameCallback (package:flutter/src/scheduler/binding.dart:1434:15)
+#168    SchedulerBinding.handleDrawFrame (package:flutter/src/scheduler/binding.dart:1347:9)
+#169    AutomatedTestWidgetsFlutterBinding.pump.<anonymous closure> (package:flutter_test/src/binding.dart:1335:9)
+#172    TestAsyncUtils.guard (package:flutter_test/src/test_async_utils.dart:74:41)
+#173    AutomatedTestWidgetsFlutterBinding.pump (package:flutter_test/src/binding.dart:1324:27)
+#174    WidgetTester.pumpWidget.<anonymous closure> (package:flutter_test/src/widget_tester.dart:598:22)
+#177    TestAsyncUtils.guard (package:flutter_test/src/test_async_utils.dart:74:41)
+#178    WidgetTester.pumpWidget (package:flutter_test/src/widget_tester.dart:595:27)
+#179    main.<anonymous closure> (file:///Users/mac/CRADI%20Mobile/test/verification_test.dart:110:18)
+#180    testWidgets.<anonymous closure>.<anonymous closure> (package:flutter_test/src/widget_tester.dart:192:29)
+<asynchronous suspension>
+#181    TestWidgetsFlutterBinding._runTestBody (package:flutter_test/src/binding.dart:1059:5)
+<asynchronous suspension>
+<asynchronous suspension>
+(elided 5 frames from dart:async and package:stack_trace)
+
+════════════════════════════════════════════════════════════════════════════════════════════════════
+00:07 +13 -5: /Users/mac/CRADI Mobile/test/verification_test.dart: Render VerificationRequestScreen [E]                                                                                                
+  Test failed. See exception logs above.
+  The test description was: Render VerificationRequestScreen
+  
+
+To run this test again: /usr/local/share/flutter/bin/cache/dart-sdk/bin/dart test /Users/mac/CRADI Mobile/test/verification_test.dart -p vm --plain-name 'Render VerificationRequestScreen'
+00:07 +13 -5: /Users/mac/CRADI Mobile/test/widget/location_selector_test.dart: LGA dropdown enables after state selection                                                                              00:08 +13 -5: /Users/mac/CRADI Mobile/test/widget/location_selector_test.dart: LGA dropdown enables after state selection                                                                              00:08 +13 -5: /Users/mac/CRADI Mobile/test/widget/location_selector_test.dart: LGA dropdown enables after state selection                                                                              
+
+Warning: A call to tap() with finder "Found 1 widget with text "Select LGA": [
+  Text("Select LGA", dependencies: [DefaultSelectionStyle, DefaultTextStyle, MediaQuery]),
+]" derived an Offset (Offset(97.8, 147.0)) that would not hit test on the specified widget.
+Maybe the widget is actually off-screen, or another widget is obscuring it, or the widget cannot receive pointer events.
+The finder corresponds to this RenderBox: RenderParagraph#66899 relayoutBoundary=up8
+The hit test result at that offset is: HitTestResult(RenderParagraph#e0668@Offset(80.8, 11.8), RenderAnimatedOpacity#55250@Offset(80.8, 11.8), _RenderDecoration#6ca74@Offset(96.8, 24.0), RenderPointerListener#988cc@Offset(96.8, 24.0), RenderSemanticsGestureHandler#55550@Offset(96.8, 24.0), RenderMouseRegion#4ee30@Offset(96.8, 24.0), RenderSemanticsAnnotations#865d6@Offset(96.8, 24.0), RenderSemanticsAnnotations#5aa23@Offset(96.8, 24.0), RenderSemanticsAnnotations#caa8d@Offset(96.8, 24.0), RenderSemanticsAnnotations#9ec4a@Offset(96.8, 24.0), RenderPadding#143fd@Offset(97.8, 25.0), RenderDecoratedBox#fc51c@Offset(97.8, 25.0), RenderFlex#8a835@Offset(97.8, 53.0), RenderFlex#38913@Offset(97.8, 147.0), RenderCustomMultiChildLayoutBox#dc027@Offset(97.8, 147.0), _RenderInkFeatures#77b5d@Offset(97.8, 147.0), RenderPhysicalModel#3a5f5@Offset(97.8, 147.0), RenderSemanticsAnnotations#6eb57@Offset(97.8, 147.0), RenderRepaintBoundary#3c319@Offset(97.8, 147.0), RenderIgnorePointer#e0ce3@Offset(97.8, 147.0), RenderAnimatedOpacity#ad00d@Offset(97.8, 147.0), RenderAnimatedOpacity#47f3d@Offset(97.8, 147.0), _RenderColoredBox#cda54@Offset(97.8, 147.0), RenderAnimatedOpacity#0ba87@Offset(97.8, 147.0), RenderIgnorePointer#44935@Offset(97.8, 147.0), RenderAnimatedOpacity#14ac0@Offset(97.8, 147.0), RenderRepaintBoundary#eb39b@Offset(97.8, 147.0), RenderSemanticsAnnotations#d3f47@Offset(97.8, 147.0), RenderOffstage#f1f28@Offset(97.8, 147.0), RenderSemanticsAnnotations#81457@Offset(97.8, 147.0), _RenderTheater#9cf38@Offset(97.8, 147.0), RenderAbsorbPointer#d3b0b@Offset(97.8, 147.0), RenderPointerListener#9709b@Offset(97.8, 147.0), RenderSemanticsAnnotations#9cfcd@Offset(97.8, 147.0), RenderCustomPaint#ff6e3@Offset(97.8, 147.0), RenderSemanticsAnnotations#8be3b@Offset(97.8, 147.0), RenderSemanticsAnnotations#d1ea4@Offset(97.8, 147.0), RenderTapRegionSurface#4f3fb@Offset(97.8, 147.0), RenderSemanticsAnnotations#63685@Offset(97.8, 147.0), RenderSemanticsAnnotations#7dd53@Offset(97.8, 147.0), RenderSemanticsAnnotations#6a065@Offset(97.8, 147.0), HitTestEntry<HitTestTarget>#f81f4(_ReusableRenderView#86ac2), HitTestEntry<HitTestTarget>#e98d8(<AutomatedTestWidgetsFlutterBinding>))
+#0      WidgetController._getElementPoint (package:flutter_test/src/controller.dart:2081:25)
+#1      WidgetController.getCenter (package:flutter_test/src/controller.dart:1865:12)
+#2      WidgetController.tap (package:flutter_test/src/controller.dart:1045:7)
+#3      main.<anonymous closure> (file:///Users/mac/CRADI%20Mobile/test/widget/location_selector_test.dart:64:18)
+<asynchronous suspension>
+#4      testWidgets.<anonymous closure>.<anonymous closure> (package:flutter_test/src/widget_tester.dart:192:15)
+<asynchronous suspension>
+#5      TestWidgetsFlutterBinding._runTestBody (package:flutter_test/src/binding.dart:1059:5)
+<asynchronous suspension>
+#6      StackZoneSpecification._registerCallback.<anonymous closure> (package:stack_trace/src/stack_zone_specification.dart:114:42)
+<asynchronous suspension>
+To silence this warning, pass "warnIfMissed: false" to "tap()".
+To make this warning fatal, set WidgetController.hitTestWarningShouldBeFatal to true.
+
+00:08 +13 -5: /Users/mac/CRADI Mobile/test/widget/hazard_selection_screen_test.dart: HazardSelectionScreen Widget Tests continue button should be disabled initially                                   
+══╡ EXCEPTION CAUGHT BY SCHEDULER LIBRARY ╞═════════════════════════════════════════════════════════
+The following ProviderNotFoundException was thrown during a scheduler callback:
+Error: Could not find the correct Provider<ReportingProvider> above this HazardSelectionScreen
+Widget
+
+This happens because you used a `BuildContext` that does not include the provider
+of your choice. There are a few common scenarios:
+
+- You added a new provider in your `main.dart` and performed a hot-reload.
+  To fix, perform a hot-restart.
+
+- The provider you are trying to read is in a different route.
+
+  Providers are "scoped". So if you insert of provider inside a route, then
+  other routes will not be able to access that provider.
+
+- You used a `BuildContext` that is an ancestor of the provider you are trying to read.
+
+  Make sure that HazardSelectionScreen is under your MultiProvider/Provider<ReportingProvider>.
+  This usually happens when you are creating a provider and trying to read it immediately.
+
+  For example, instead of:
+
+  ```
+  Widget build(BuildContext context) {
+    return Provider<Example>(
+      create: (_) => Example(),
+      // Will throw a ProviderNotFoundError, because `context` is associated
+      // to the widget that is the parent of `Provider<Example>`
+      child: Text(context.watch<Example>().toString()),
+    );
+  }
+  ```
+
+  consider using `builder` like so:
+
+  ```
+  Widget build(BuildContext context) {
+    return Provider<Example>(
+      create: (_) => Example(),
+      // we use `builder` to obtain a new `BuildContext` that has access to the provider
+      builder: (context, child) {
+        // No longer throws
+        return Text(context.watch<Example>().toString());
+      }
+    );
+  }
+  ```
+
+If none of these solutions work, consider asking for help on StackOverflow:
+https://stackoverflow.com/questions/tagged/flutter
+
+When the exception was thrown, this was the stack:
+#0      Provider._inheritedElementOf (package:provider/src/provider.dart:377:7)
+#1      Provider.of (package:provider/src/provider.dart:327:30)
+#2      ReadContext.read (package:provider/src/provider.dart:683:21)
+#3      _HazardSelectionScreenState.initState.<anonymous closure> (package:climate_app/features/reporting/screens/hazard_selection_screen.dart:64:15)
+#4      SchedulerBinding._invokeFrameCallback (package:flutter/src/scheduler/binding.dart:1434:15)
+#5      SchedulerBinding.handleDrawFrame (package:flutter/src/scheduler/binding.dart:1361:11)
+#6      AutomatedTestWidgetsFlutterBinding.pump.<anonymous closure> (package:flutter_test/src/binding.dart:1335:9)
+#9      TestAsyncUtils.guard (package:flutter_test/src/test_async_utils.dart:74:41)
+#10     AutomatedTestWidgetsFlutterBinding.pump (package:flutter_test/src/binding.dart:1324:27)
+#11     WidgetTester.pumpWidget.<anonymous closure> (package:flutter_test/src/widget_tester.dart:598:22)
+#14     TestAsyncUtils.guard (package:flutter_test/src/test_async_utils.dart:74:41)
+#15     WidgetTester.pumpWidget (package:flutter_test/src/widget_tester.dart:595:27)
+#16     main.<anonymous closure>.<anonymous closure> (file:///Users/mac/CRADI%20Mobile/test/widget/hazard_selection_screen_test.dart:48:20)
+#17     testWidgets.<anonymous closure>.<anonymous closure> (package:flutter_test/src/widget_tester.dart:192:29)
+<asynchronous suspension>
+#18     TestWidgetsFlutterBinding._runTestBody (package:flutter_test/src/binding.dart:1059:5)
+<asynchronous suspension>
+<asynchronous suspension>
+(elided 5 frames from dart:async and package:stack_trace)
+════════════════════════════════════════════════════════════════════════════════════════════════════
+00:08 +13 -6: /Users/mac/CRADI Mobile/test/widget/hazard_selection_screen_test.dart: HazardSelectionScreen Widget Tests continue button should be disabled initially [E]                               
+  Test failed. See exception logs above.
+  The test description was: continue button should be disabled initially
+  
+
+To run this test again: /usr/local/share/flutter/bin/cache/dart-sdk/bin/dart test /Users/mac/CRADI Mobile/test/widget/hazard_selection_screen_test.dart -p vm --plain-name 'HazardSelectionScreen Widget Tests continue button should be disabled initially'
+00:08 +14 -6: /Users/mac/CRADI Mobile/test/widget/hazard_selection_screen_test.dart: HazardSelectionScreen Widget Tests should select hazard when tapped                                               00:08 +14 -6: /Users/mac/CRADI Mobile/test/widget/hazard_selection_screen_test.dart: HazardSelectionScreen Widget Tests should select hazard when tapped                                               
+══╡ EXCEPTION CAUGHT BY SCHEDULER LIBRARY ╞═════════════════════════════════════════════════════════
+The following ProviderNotFoundException was thrown during a scheduler callback:
+Error: Could not find the correct Provider<ReportingProvider> above this HazardSelectionScreen
+Widget
+
+This happens because you used a `BuildContext` that does not include the provider
+of your choice. There are a few common scenarios:
+
+- You added a new provider in your `main.dart` and performed a hot-reload.
+  To fix, perform a hot-restart.
+
+- The provider you are trying to read is in a different route.
+
+  Providers are "scoped". So if you insert of provider inside a route, then
+  other routes will not be able to access that provider.
+
+- You used a `BuildContext` that is an ancestor of the provider you are trying to read.
+
+  Make sure that HazardSelectionScreen is under your MultiProvider/Provider<ReportingProvider>.
+  This usually happens when you are creating a provider and trying to read it immediately.
+
+  For example, instead of:
+
+  ```
+  Widget build(BuildContext context) {
+    return Provider<Example>(
+      create: (_) => Example(),
+      // Will throw a ProviderNotFoundError, because `context` is associated
+      // to the widget that is the parent of `Provider<Example>`
+      child: Text(context.watch<Example>().toString()),
+    );
+  }
+  ```
+
+  consider using `builder` like so:
+
+  ```
+  Widget build(BuildContext context) {
+    return Provider<Example>(
+      create: (_) => Example(),
+      // we use `builder` to obtain a new `BuildContext` that has access to the provider
+      builder: (context, child) {
+        // No longer throws
+        return Text(context.watch<Example>().toString());
+      }
+    );
+  }
+  ```
+
+If none of these solutions work, consider asking for help on StackOverflow:
+https://stackoverflow.com/questions/tagged/flutter
+
+When the exception was thrown, this was the stack:
+#0      Provider._inheritedElementOf (package:provider/src/provider.dart:377:7)
+#1      Provider.of (package:provider/src/provider.dart:327:30)
+#2      ReadContext.read (package:provider/src/provider.dart:683:21)
+#3      _HazardSelectionScreenState.initState.<anonymous closure> (package:climate_app/features/reporting/screens/hazard_selection_screen.dart:64:15)
+#4      SchedulerBinding._invokeFrameCallback (package:flutter/src/scheduler/binding.dart:1434:15)
+#5      SchedulerBinding.handleDrawFrame (package:flutter/src/scheduler/binding.dart:1361:11)
+#6      AutomatedTestWidgetsFlutterBinding.pump.<anonymous closure> (package:flutter_test/src/binding.dart:1335:9)
+#9      TestAsyncUtils.guard (package:flutter_test/src/test_async_utils.dart:74:41)
+#10     AutomatedTestWidgetsFlutterBinding.pump (package:flutter_test/src/binding.dart:1324:27)
+#11     WidgetTester.pumpWidget.<anonymous closure> (package:flutter_test/src/widget_tester.dart:598:22)
+#14     TestAsyncUtils.guard (package:flutter_test/src/test_async_utils.dart:74:41)
+#15     WidgetTester.pumpWidget (package:flutter_test/src/widget_tester.dart:595:27)
+#16     main.<anonymous closure>.<anonymous closure> (file:///Users/mac/CRADI%20Mobile/test/widget/hazard_selection_screen_test.dart:60:20)
+#17     testWidgets.<anonymous closure>.<anonymous closure> (package:flutter_test/src/widget_tester.dart:192:29)
+<asynchronous suspension>
+#18     TestWidgetsFlutterBinding._runTestBody (package:flutter_test/src/binding.dart:1059:5)
+<asynchronous suspension>
+<asynchronous suspension>
+(elided 5 frames from dart:async and package:stack_trace)
+════════════════════════════════════════════════════════════════════════════════════════════════════
+00:08 +14 -7: /Users/mac/CRADI Mobile/test/widget/hazard_selection_screen_test.dart: HazardSelectionScreen Widget Tests should select hazard when tapped [E]                                           
+  Test failed. See exception logs above.
+  The test description was: should select hazard when tapped
+  
+
+To run this test again: /usr/local/share/flutter/bin/cache/dart-sdk/bin/dart test /Users/mac/CRADI Mobile/test/widget/hazard_selection_screen_test.dart -p vm --plain-name 'HazardSelectionScreen Widget Tests should select hazard when tapped'
+00:08 +14 -7: /Users/mac/CRADI Mobile/test/widget/hazard_selection_screen_test.dart: HazardSelectionScreen Widget Tests should show selection checkmark on selected hazard                             00:08 +14 -7: /Users/mac/CRADI Mobile/test/widget/hazard_selection_screen_test.dart: HazardSelectionScreen Widget Tests should show selection checkmark on selected hazard                             
+══╡ EXCEPTION CAUGHT BY SCHEDULER LIBRARY ╞═════════════════════════════════════════════════════════
+The following ProviderNotFoundException was thrown during a scheduler callback:
+Error: Could not find the correct Provider<ReportingProvider> above this HazardSelectionScreen
+Widget
+
+This happens because you used a `BuildContext` that does not include the provider
+of your choice. There are a few common scenarios:
+
+- You added a new provider in your `main.dart` and performed a hot-reload.
+  To fix, perform a hot-restart.
+
+- The provider you are trying to read is in a different route.
+
+  Providers are "scoped". So if you insert of provider inside a route, then
+  other routes will not be able to access that provider.
+
+- You used a `BuildContext` that is an ancestor of the provider you are trying to read.
+
+  Make sure that HazardSelectionScreen is under your MultiProvider/Provider<ReportingProvider>.
+  This usually happens when you are creating a provider and trying to read it immediately.
+
+  For example, instead of:
+
+  ```
+  Widget build(BuildContext context) {
+    return Provider<Example>(
+      create: (_) => Example(),
+      // Will throw a ProviderNotFoundError, because `context` is associated
+      // to the widget that is the parent of `Provider<Example>`
+      child: Text(context.watch<Example>().toString()),
+    );
+  }
+  ```
+
+  consider using `builder` like so:
+
+  ```
+  Widget build(BuildContext context) {
+    return Provider<Example>(
+      create: (_) => Example(),
+      // we use `builder` to obtain a new `BuildContext` that has access to the provider
+      builder: (context, child) {
+        // No longer throws
+        return Text(context.watch<Example>().toString());
+      }
+    );
+  }
+  ```
+
+If none of these solutions work, consider asking for help on StackOverflow:
+https://stackoverflow.com/questions/tagged/flutter
+
+When the exception was thrown, this was the stack:
+#0      Provider._inheritedElementOf (package:provider/src/provider.dart:377:7)
+#1      Provider.of (package:provider/src/provider.dart:327:30)
+#2      ReadContext.read (package:provider/src/provider.dart:683:21)
+#3      _HazardSelectionScreenState.initState.<anonymous closure> (package:climate_app/features/reporting/screens/hazard_selection_screen.dart:64:15)
+#4      SchedulerBinding._invokeFrameCallback (package:flutter/src/scheduler/binding.dart:1434:15)
+#5      SchedulerBinding.handleDrawFrame (package:flutter/src/scheduler/binding.dart:1361:11)
+#6      AutomatedTestWidgetsFlutterBinding.pump.<anonymous closure> (package:flutter_test/src/binding.dart:1335:9)
+#9      TestAsyncUtils.guard (package:flutter_test/src/test_async_utils.dart:74:41)
+#10     AutomatedTestWidgetsFlutterBinding.pump (package:flutter_test/src/binding.dart:1324:27)
+#11     WidgetTester.pumpWidget.<anonymous closure> (package:flutter_test/src/widget_tester.dart:598:22)
+#14     TestAsyncUtils.guard (package:flutter_test/src/test_async_utils.dart:74:41)
+#15     WidgetTester.pumpWidget (package:flutter_test/src/widget_tester.dart:595:27)
+#16     main.<anonymous closure>.<anonymous closure> (file:///Users/mac/CRADI%20Mobile/test/widget/hazard_selection_screen_test.dart:75:20)
+#17     testWidgets.<anonymous closure>.<anonymous closure> (package:flutter_test/src/widget_tester.dart:192:29)
+<asynchronous suspension>
+#18     TestWidgetsFlutterBinding._runTestBody (package:flutter_test/src/binding.dart:1059:5)
+<asynchronous suspension>
+<asynchronous suspension>
+(elided 5 frames from dart:async and package:stack_trace)
+════════════════════════════════════════════════════════════════════════════════════════════════════
+00:08 +14 -8: /Users/mac/CRADI Mobile/test/widget/hazard_selection_screen_test.dart: HazardSelectionScreen Widget Tests should show selection checkmark on selected hazard [E]                         
+  Test failed. See exception logs above.
+  The test description was: should show selection checkmark on selected hazard
+  
+
+To run this test again: /usr/local/share/flutter/bin/cache/dart-sdk/bin/dart test /Users/mac/CRADI Mobile/test/widget/hazard_selection_screen_test.dart -p vm --plain-name 'HazardSelectionScreen Widget Tests should show selection checkmark on selected hazard'
+00:08 +14 -8: /Users/mac/CRADI Mobile/test/widget/hazard_selection_screen_test.dart: HazardSelectionScreen Widget Tests should allow changing selection                                                00:08 +14 -8: /Users/mac/CRADI Mobile/test/widget/hazard_selection_screen_test.dart: HazardSelectionScreen Widget Tests should allow changing selection                                                
+══╡ EXCEPTION CAUGHT BY SCHEDULER LIBRARY ╞═════════════════════════════════════════════════════════
+The following ProviderNotFoundException was thrown during a scheduler callback:
+Error: Could not find the correct Provider<ReportingProvider> above this HazardSelectionScreen
+Widget
+
+This happens because you used a `BuildContext` that does not include the provider
+of your choice. There are a few common scenarios:
+
+- You added a new provider in your `main.dart` and performed a hot-reload.
+  To fix, perform a hot-restart.
+
+- The provider you are trying to read is in a different route.
+
+  Providers are "scoped". So if you insert of provider inside a route, then
+  other routes will not be able to access that provider.
+
+- You used a `BuildContext` that is an ancestor of the provider you are trying to read.
+
+  Make sure that HazardSelectionScreen is under your MultiProvider/Provider<ReportingProvider>.
+  This usually happens when you are creating a provider and trying to read it immediately.
+
+  For example, instead of:
+
+  ```
+  Widget build(BuildContext context) {
+    return Provider<Example>(
+      create: (_) => Example(),
+      // Will throw a ProviderNotFoundError, because `context` is associated
+      // to the widget that is the parent of `Provider<Example>`
+      child: Text(context.watch<Example>().toString()),
+    );
+  }
+  ```
+
+  consider using `builder` like so:
+
+  ```
+  Widget build(BuildContext context) {
+    return Provider<Example>(
+      create: (_) => Example(),
+      // we use `builder` to obtain a new `BuildContext` that has access to the provider
+      builder: (context, child) {
+        // No longer throws
+        return Text(context.watch<Example>().toString());
+      }
+    );
+  }
+  ```
+
+If none of these solutions work, consider asking for help on StackOverflow:
+https://stackoverflow.com/questions/tagged/flutter
+
+When the exception was thrown, this was the stack:
+#0      Provider._inheritedElementOf (package:provider/src/provider.dart:377:7)
+#1      Provider.of (package:provider/src/provider.dart:327:30)
+#2      ReadContext.read (package:provider/src/provider.dart:683:21)
+#3      _HazardSelectionScreenState.initState.<anonymous closure> (package:climate_app/features/reporting/screens/hazard_selection_screen.dart:64:15)
+#4      SchedulerBinding._invokeFrameCallback (package:flutter/src/scheduler/binding.dart:1434:15)
+#5      SchedulerBinding.handleDrawFrame (package:flutter/src/scheduler/binding.dart:1361:11)
+#6      AutomatedTestWidgetsFlutterBinding.pump.<anonymous closure> (package:flutter_test/src/binding.dart:1335:9)
+#9      TestAsyncUtils.guard (package:flutter_test/src/test_async_utils.dart:74:41)
+#10     AutomatedTestWidgetsFlutterBinding.pump (package:flutter_test/src/binding.dart:1324:27)
+#11     WidgetTester.pumpWidget.<anonymous closure> (package:flutter_test/src/widget_tester.dart:598:22)
+#14     TestAsyncUtils.guard (package:flutter_test/src/test_async_utils.dart:74:41)
+#15     WidgetTester.pumpWidget (package:flutter_test/src/widget_tester.dart:595:27)
+#16     main.<anonymous closure>.<anonymous closure> (file:///Users/mac/CRADI%20Mobile/test/widget/hazard_selection_screen_test.dart:86:20)
+#17     testWidgets.<anonymous closure>.<anonymous closure> (package:flutter_test/src/widget_tester.dart:192:29)
+<asynchronous suspension>
+#18     TestWidgetsFlutterBinding._runTestBody (package:flutter_test/src/binding.dart:1059:5)
+<asynchronous suspension>
+<asynchronous suspension>
+(elided 5 frames from dart:async and package:stack_trace)
+════════════════════════════════════════════════════════════════════════════════════════════════════
+══╡ EXCEPTION CAUGHT BY FLUTTER TEST FRAMEWORK ╞════════════════════════════════════════════════════
+The following assertion was thrown running a test:
+The finder "Found 0 widgets with text "Extreme Heat": []" (used in a call to "tap()") could not find
+any matching widgets.
+
+When the exception was thrown, this was the stack:
+#0      WidgetController._getElementPoint (package:flutter_test/src/controller.dart:2013:7)
+#1      WidgetController.getCenter (package:flutter_test/src/controller.dart:1865:12)
+#2      WidgetController.tap (package:flutter_test/src/controller.dart:1045:7)
+#3      main.<anonymous closure>.<anonymous closure> (file:///Users/mac/CRADI%20Mobile/test/widget/hazard_selection_screen_test.dart:93:20)
+<asynchronous suspension>
+#4      testWidgets.<anonymous closure>.<anonymous closure> (package:flutter_test/src/widget_tester.dart:192:15)
+<asynchronous suspension>
+#5      TestWidgetsFlutterBinding._runTestBody (package:flutter_test/src/binding.dart:1059:5)
+<asynchronous suspension>
+<asynchronous suspension>
+(elided one frame from package:stack_trace)
+
+The test description was:
+  should allow changing selection
+════════════════════════════════════════════════════════════════════════════════════════════════════
+══╡ EXCEPTION CAUGHT BY FLUTTER TEST FRAMEWORK ╞════════════════════════════════════════════════════
+The following message was thrown:
+Multiple exceptions (2) were detected during the running of the current test, and at least one was
+unexpected.
+════════════════════════════════════════════════════════════════════════════════════════════════════
+00:08 +14 -9: /Users/mac/CRADI Mobile/test/widget/hazard_selection_screen_test.dart: HazardSelectionScreen Widget Tests should allow changing selection [E]                                            
+  Test failed. See exception logs above.
+  The test description was: should allow changing selection
+  
+
+To run this test again: /usr/local/share/flutter/bin/cache/dart-sdk/bin/dart test /Users/mac/CRADI Mobile/test/widget/hazard_selection_screen_test.dart -p vm --plain-name 'HazardSelectionScreen Widget Tests should allow changing selection'
+00:08 +14 -9: /Users/mac/CRADI Mobile/test/widget/hazard_selection_screen_test.dart: HazardSelectionScreen Widget Tests should display hazard icons                                                    00:09 +14 -9: /Users/mac/CRADI Mobile/test/widget/hazard_selection_screen_test.dart: HazardSelectionScreen Widget Tests should display hazard icons                                                    00:09 +14 -9: /Users/mac/CRADI Mobile/test/widget/hazard_selection_screen_test.dart: HazardSelectionScreen Widget Tests should display hazard icons                                                    
+══╡ EXCEPTION CAUGHT BY SCHEDULER LIBRARY ╞═════════════════════════════════════════════════════════
+The following ProviderNotFoundException was thrown during a scheduler callback:
+Error: Could not find the correct Provider<ReportingProvider> above this HazardSelectionScreen
+Widget
+
+This happens because you used a `BuildContext` that does not include the provider
+of your choice. There are a few common scenarios:
+
+- You added a new provider in your `main.dart` and performed a hot-reload.
+  To fix, perform a hot-restart.
+
+- The provider you are trying to read is in a different route.
+
+  Providers are "scoped". So if you insert of provider inside a route, then
+  other routes will not be able to access that provider.
+
+- You used a `BuildContext` that is an ancestor of the provider you are trying to read.
+
+  Make sure that HazardSelectionScreen is under your MultiProvider/Provider<ReportingProvider>.
+  This usually happens when you are creating a provider and trying to read it immediately.
+
+  For example, instead of:
+
+  ```
+  Widget build(BuildContext context) {
+    return Provider<Example>(
+      create: (_) => Example(),
+      // Will throw a ProviderNotFoundError, because `context` is associated
+      // to the widget that is the parent of `Provider<Example>`
+      child: Text(context.watch<Example>().toString()),
+    );
+  }
+  ```
+
+  consider using `builder` like so:
+
+  ```
+  Widget build(BuildContext context) {
+    return Provider<Example>(
+      create: (_) => Example(),
+      // we use `builder` to obtain a new `BuildContext` that has access to the provider
+      builder: (context, child) {
+        // No longer throws
+        return Text(context.watch<Example>().toString());
+      }
+    );
+  }
+  ```
+
+If none of these solutions work, consider asking for help on StackOverflow:
+https://stackoverflow.com/questions/tagged/flutter
+
+When the exception was thrown, this was the stack:
+#0      Provider._inheritedElementOf (package:provider/src/provider.dart:377:7)
+#1      Provider.of (package:provider/src/provider.dart:327:30)
+#2      ReadContext.read (package:provider/src/provider.dart:683:21)
+#3      _HazardSelectionScreenState.initState.<anonymous closure> (package:climate_app/features/reporting/screens/hazard_selection_screen.dart:64:15)
+#4      SchedulerBinding._invokeFrameCallback (package:flutter/src/scheduler/binding.dart:1434:15)
+#5      SchedulerBinding.handleDrawFrame (package:flutter/src/scheduler/binding.dart:1361:11)
+#6      AutomatedTestWidgetsFlutterBinding.pump.<anonymous closure> (package:flutter_test/src/binding.dart:1335:9)
+#9      TestAsyncUtils.guard (package:flutter_test/src/test_async_utils.dart:74:41)
+#10     AutomatedTestWidgetsFlutterBinding.pump (package:flutter_test/src/binding.dart:1324:27)
+#11     WidgetTester.pumpWidget.<anonymous closure> (package:flutter_test/src/widget_tester.dart:598:22)
+#14     TestAsyncUtils.guard (package:flutter_test/src/test_async_utils.dart:74:41)
+#15     WidgetTester.pumpWidget (package:flutter_test/src/widget_tester.dart:595:27)
+#16     main.<anonymous closure>.<anonymous closure> (file:///Users/mac/CRADI%20Mobile/test/widget/hazard_selection_screen_test.dart:101:20)
+#17     testWidgets.<anonymous closure>.<anonymous closure> (package:flutter_test/src/widget_tester.dart:192:29)
+<asynchronous suspension>
+#18     TestWidgetsFlutterBinding._runTestBody (package:flutter_test/src/binding.dart:1059:5)
+<asynchronous suspension>
+<asynchronous suspension>
+(elided 5 frames from dart:async and package:stack_trace)
+════════════════════════════════════════════════════════════════════════════════════════════════════
+00:09 +14 -10: /Users/mac/CRADI Mobile/test/widget/hazard_selection_screen_test.dart: HazardSelectionScreen Widget Tests should display hazard icons [E]                                               
+  Test failed. See exception logs above.
+  The test description was: should display hazard icons
+  
+
+To run this test again: /usr/local/share/flutter/bin/cache/dart-sdk/bin/dart test /Users/mac/CRADI Mobile/test/widget/hazard_selection_screen_test.dart -p vm --plain-name 'HazardSelectionScreen Widget Tests should display hazard icons'
+00:09 +14 -10: /Users/mac/CRADI Mobile/test/widget/hazard_selection_screen_test.dart: HazardSelectionScreen Widget Tests should render in grid layout                                                  00:09 +14 -10: /Users/mac/CRADI Mobile/test/widget/hazard_selection_screen_test.dart: HazardSelectionScreen Widget Tests should render in grid layout                                                  
+══╡ EXCEPTION CAUGHT BY SCHEDULER LIBRARY ╞═════════════════════════════════════════════════════════
+The following ProviderNotFoundException was thrown during a scheduler callback:
+Error: Could not find the correct Provider<ReportingProvider> above this HazardSelectionScreen
+Widget
+
+This happens because you used a `BuildContext` that does not include the provider
+of your choice. There are a few common scenarios:
+
+- You added a new provider in your `main.dart` and performed a hot-reload.
+  To fix, perform a hot-restart.
+
+- The provider you are trying to read is in a different route.
+
+  Providers are "scoped". So if you insert of provider inside a route, then
+  other routes will not be able to access that provider.
+
+- You used a `BuildContext` that is an ancestor of the provider you are trying to read.
+
+  Make sure that HazardSelectionScreen is under your MultiProvider/Provider<ReportingProvider>.
+  This usually happens when you are creating a provider and trying to read it immediately.
+
+  For example, instead of:
+
+  ```
+  Widget build(BuildContext context) {
+    return Provider<Example>(
+      create: (_) => Example(),
+      // Will throw a ProviderNotFoundError, because `context` is associated
+      // to the widget that is the parent of `Provider<Example>`
+      child: Text(context.watch<Example>().toString()),
+    );
+  }
+  ```
+
+  consider using `builder` like so:
+
+  ```
+  Widget build(BuildContext context) {
+    return Provider<Example>(
+      create: (_) => Example(),
+      // we use `builder` to obtain a new `BuildContext` that has access to the provider
+      builder: (context, child) {
+        // No longer throws
+        return Text(context.watch<Example>().toString());
+      }
+    );
+  }
+  ```
+
+If none of these solutions work, consider asking for help on StackOverflow:
+https://stackoverflow.com/questions/tagged/flutter
+
+When the exception was thrown, this was the stack:
+#0      Provider._inheritedElementOf (package:provider/src/provider.dart:377:7)
+#1      Provider.of (package:provider/src/provider.dart:327:30)
+#2      ReadContext.read (package:provider/src/provider.dart:683:21)
+#3      _HazardSelectionScreenState.initState.<anonymous closure> (package:climate_app/features/reporting/screens/hazard_selection_screen.dart:64:15)
+#4      SchedulerBinding._invokeFrameCallback (package:flutter/src/scheduler/binding.dart:1434:15)
+#5      SchedulerBinding.handleDrawFrame (package:flutter/src/scheduler/binding.dart:1361:11)
+#6      AutomatedTestWidgetsFlutterBinding.pump.<anonymous closure> (package:flutter_test/src/binding.dart:1335:9)
+#9      TestAsyncUtils.guard (package:flutter_test/src/test_async_utils.dart:74:41)
+#10     AutomatedTestWidgetsFlutterBinding.pump (package:flutter_test/src/binding.dart:1324:27)
+#11     WidgetTester.pumpWidget.<anonymous closure> (package:flutter_test/src/widget_tester.dart:598:22)
+#14     TestAsyncUtils.guard (package:flutter_test/src/test_async_utils.dart:74:41)
+#15     WidgetTester.pumpWidget (package:flutter_test/src/widget_tester.dart:595:27)
+#16     main.<anonymous closure>.<anonymous closure> (file:///Users/mac/CRADI%20Mobile/test/widget/hazard_selection_screen_test.dart:112:20)
+#17     testWidgets.<anonymous closure>.<anonymous closure> (package:flutter_test/src/widget_tester.dart:192:29)
+<asynchronous suspension>
+#18     TestWidgetsFlutterBinding._runTestBody (package:flutter_test/src/binding.dart:1059:5)
+<asynchronous suspension>
+<asynchronous suspension>
+(elided 5 frames from dart:async and package:stack_trace)
+════════════════════════════════════════════════════════════════════════════════════════════════════
+00:09 +14 -11: /Users/mac/CRADI Mobile/test/widget/hazard_selection_screen_test.dart: HazardSelectionScreen Widget Tests should render in grid layout [E]                                              
+  Test failed. See exception logs above.
+  The test description was: should render in grid layout
+  
+
+To run this test again: /usr/local/share/flutter/bin/cache/dart-sdk/bin/dart test /Users/mac/CRADI Mobile/test/widget/hazard_selection_screen_test.dart -p vm --plain-name 'HazardSelectionScreen Widget Tests should render in grid layout'
+00:09 +14 -11: Some tests failed.                                                                                                                                                                      

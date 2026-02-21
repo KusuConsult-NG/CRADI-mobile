@@ -1,7 +1,5 @@
 import 'package:climate_app/features/alerts/screens/alerts_list_screen.dart';
 import 'package:climate_app/features/auth/screens/landing_screen.dart';
-import 'package:climate_app/features/auth/screens/pre_signup_verification_screen.dart';
-import 'package:climate_app/features/auth/screens/signup_otp_screen.dart';
 
 import 'package:climate_app/features/alerts/screens/alert_detail_screen.dart';
 import 'package:climate_app/features/auth/screens/login_screen.dart';
@@ -26,6 +24,7 @@ import 'package:climate_app/features/auth/screens/registration_screen.dart';
 import 'package:climate_app/features/auth/screens/pending_approval_screen.dart';
 import 'package:climate_app/features/auth/screens/welcome_screen.dart';
 import 'package:climate_app/features/auth/screens/forgot_password_screen.dart';
+import 'package:climate_app/features/auth/screens/reset_password_screen.dart';
 import 'package:climate_app/features/notifications/screens/notifications_screen.dart';
 import 'package:climate_app/features/offline_mode/screens/offline_home_screen.dart';
 import 'package:climate_app/features/settings/screens/about_app_screen.dart';
@@ -89,6 +88,7 @@ GoRouter createRouter(BuildContext context) {
         '/login',
         '/register',
         '/forgot-password',
+        '/reset-password',
         '/pending-approval',
         '/',
       ];
@@ -172,24 +172,19 @@ GoRouter createRouter(BuildContext context) {
         path: '/landing',
         builder: (context, state) => const LandingScreen(),
       ),
-      GoRoute(
-        path: '/pre-signup',
-        builder: (context, state) => const PreSignupVerificationScreen(),
-      ),
-      GoRoute(
-        path: '/signup-otp',
-        builder: (context, state) {
-          final extra = state.extra as Map<String, dynamic>?;
-          return SignupOtpScreen(
-            email: extra?['email'] ?? '',
-            generatedCode: extra?['code'] ?? '',
-          );
-        },
-      ),
+
       GoRoute(path: '/login', builder: (context, state) => const LoginScreen()),
       GoRoute(
         path: '/forgot-password',
         builder: (context, state) => const ForgotPasswordScreen(),
+      ),
+      GoRoute(
+        path: '/reset-password',
+        builder: (context, state) {
+          final userId = state.uri.queryParameters['userId'] ?? '';
+          final secret = state.uri.queryParameters['secret'] ?? '';
+          return ResetPasswordScreen(userId: userId, secret: secret);
+        },
       ),
       GoRoute(
         path: '/pending-approval',
@@ -211,8 +206,10 @@ GoRouter createRouter(BuildContext context) {
           GoRoute(
             path: '/verification',
             redirect: (context, state) => _requireRole(context, [
-              UserRole.coordinator,
-              UserRole.projectStaff,
+              UserRole.ewv,
+              UserRole.ewr,
+              UserRole.admin,
+              UserRole.techSupport,
             ]),
             builder: (context, state) => const VerificationListScreen(),
           ),
@@ -296,8 +293,10 @@ GoRouter createRouter(BuildContext context) {
       GoRoute(
         path: '/verification/request',
         redirect: (context, state) => _requireRole(context, [
-          UserRole.coordinator,
-          UserRole.projectStaff,
+          UserRole.ewv,
+          UserRole.ewr,
+          UserRole.admin,
+          UserRole.techSupport,
         ]),
         builder: (context, state) => const VerificationRequestScreen(),
       ),

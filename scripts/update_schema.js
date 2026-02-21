@@ -2,8 +2,16 @@ const { Client, Databases } = require('node-appwrite');
 
 // Configuration
 const ENDPOINT = 'https://fra.cloud.appwrite.io/v1';
+const API_KEY = process.env.APPWRITE_API_KEY || '';
+
+if (!API_KEY) {
+    console.error('❌ Error: APPWRITE_API_KEY environment variable is required');
+    console.log('\nUsage:');
+    console.log('  APPWRITE_API_KEY=your_key node scripts/update_schema.js');
+    process.exit(1);
+}
+
 const PROJECT_ID = '6941cdb400050e7249d5';
-const API_KEY = 'standard_363605f23a8f9643259352ca7f67a50813d5e7691a01d3648d86b39bc83162502ac8abe13aead2ead4c10a3f4abac303cc5dd7e69774862fb46a24811c0c8c96297ef862eedf43573b919c3d84a3c20539d63a6ea88db39cf56ebcfa16c1e35c492dc289adba74074ad878d6761272d43f9fcf0062b0393466942ba26be005f2';
 const DATABASE_ID = '6941e2c2003705bb5a25';
 const USERS_COLLECTION_ID = 'users';
 
@@ -22,10 +30,10 @@ async function updateSchema() {
         // 1. Get current collection to see existing attributes
         console.log('📋 Fetching current collection schema...');
         const collection = await databases.getCollection(DATABASE_ID, USERS_COLLECTION_ID);
-        console.log(`✅ Found collection: ${collection.name}`);
+        console.log(`✅ Found collection: ${collection.name} `);
 
         const existingAttributes = collection.attributes.map(attr => attr.key);
-        console.log(`   Existing attributes: ${existingAttributes.join(', ')}\n`);
+        console.log(`   Existing attributes: ${existingAttributes.join(', ')} \n`);
 
         // 2. Define required attributes
         const requiredAttributes = [
@@ -59,7 +67,7 @@ async function updateSchema() {
                 continue;
             }
 
-            console.log(`➕ Adding attribute '${attr.key}' (${attr.type})...`);
+            console.log(`➕ Adding attribute '${attr.key}'(${attr.type})...`);
 
             try {
                 if (attr.type === 'boolean') {
@@ -87,7 +95,7 @@ async function updateSchema() {
 
             } catch (error) {
                 if (error.code === 409) {
-                    console.log(`   ⚠️  Attribute '${attr.key}' already exists (race condition)`);
+                    console.log(`   ⚠️  Attribute '${attr.key}' already exists(race condition)`);
                 } else {
                     throw error;
                 }
@@ -99,7 +107,7 @@ async function updateSchema() {
 
         const updatedCollection = await databases.getCollection(DATABASE_ID, USERS_COLLECTION_ID);
         updatedCollection.attributes.forEach(attr => {
-            console.log(`   - ${attr.key} (${attr.type})${attr.required ? ' [required]' : ''}`);
+            console.log(`   - ${attr.key} (${attr.type})${attr.required ? ' [required]' : ''} `);
         });
 
     } catch (error) {

@@ -88,6 +88,13 @@ class PeerVerificationService {
         name: 'PeerVerificationService',
       );
 
+      // Update the verification count on the report directly so UI can reflect it
+      await _appwrite.updateDocument(
+        collectionId: AppwriteService.reportsCollectionId,
+        documentId: reportId,
+        data: {'verificationCount': verifications.documents.length},
+      );
+
       // If minimum confirmations met, validate the report
       if (confirmations >= minimumConfirmations) {
         await _validateReport(reportId, isAutoValidated: true);

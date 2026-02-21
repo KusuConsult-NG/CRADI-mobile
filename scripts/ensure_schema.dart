@@ -61,7 +61,12 @@ Future<void> _ensureReportsAttributes(Databases databases) async {
     _Attribute('isAlert', 'boolean', 0, false),
     _Attribute('submittedAt', 'string', 64, true),
     _Attribute('imageIds', 'string', 64, false, array: true),
-    _Attribute('createdAt', 'string', 64, false), // Added for safety
+    _Attribute('createdAt', 'string', 64, true),
+    _Attribute('userId', 'string', 64, true),
+    _Attribute('latitude', 'double', 0, true),
+    _Attribute('longitude', 'double', 0, true),
+    _Attribute('locationDetails', 'string', 255, false),
+    _Attribute('description', 'string', 5000, false),
   ];
 
   await _checkAndCreateAttributes(databases, reportsCollectionId, attributes);
@@ -81,14 +86,19 @@ Future<void> _ensureUsersAttributes(Databases databases) async {
     _Attribute('phone', 'string', 20, false),
     _Attribute('lastLoginAt', 'string', 80, false), // Increased size
     _Attribute('profileImageId', 'string', 64, false),
-    _Attribute('createdAt', 'string', 64, false),
+    _Attribute('createdAt', 'string', 64, true),
     _Attribute('bio', 'string', 500, false),
     _Attribute('fcmToken', 'string', 255, false),
-    _Attribute('role', 'string', 64, false),
+    _Attribute('role', 'string', 64, true),
     _Attribute('accessCode', 'string', 64, false),
     _Attribute('isVerified', 'boolean', 0, false),
     _Attribute('biometricsEnabled', 'boolean', 0, false),
     _Attribute('monitoringZone', 'string', 128, false),
+    _Attribute('name', 'string', 128, true),
+    _Attribute('email', 'string', 128, true),
+    _Attribute('state', 'string', 64, false),
+    _Attribute('lga', 'string', 128, false),
+    _Attribute('ward', 'string', 128, false),
   ];
 
   await _checkAndCreateAttributes(databases, usersCollectionId, attributes);
@@ -104,7 +114,7 @@ Future<void> _ensureMessagesAttributes(Databases databases) async {
     _Attribute('type', 'string', 32, true),
     _Attribute('sentAt', 'string', 64, true),
     _Attribute('read', 'boolean', 0, false),
-    _Attribute('createdAt', 'string', 64, false), // Added for safety
+    _Attribute('createdAt', 'string', 64, true),
   ];
   await _checkAndCreateAttributes(databases, 'messages', attributes);
 }
@@ -116,7 +126,7 @@ Future<void> _ensureContactsAttributes(Databases databases) async {
     _Attribute('name', 'string', 128, true),
     _Attribute('phone', 'string', 20, true),
     _Attribute('relationship', 'string', 64, true),
-    _Attribute('createdAt', 'string', 64, false),
+    _Attribute('createdAt', 'string', 64, true),
   ];
   await _checkAndCreateAttributes(databases, 'emergency_contacts', attributes);
 }
@@ -126,10 +136,10 @@ Future<void> _ensureDevicesAttributes(Databases databases) async {
   final attributes = [
     _Attribute('userId', 'string', 64, true),
     _Attribute('deviceFingerprint', 'string', 128, true),
-    _Attribute('deviceName', 'string', 128, true),
+    _Attribute('deviceName', 'string', 128, false),
     _Attribute('trusted', 'boolean', 0, false),
     _Attribute('lastUsed', 'string', 64, false),
-    _Attribute('createdAt', 'string', 64, false),
+    _Attribute('createdAt', 'string', 64, true),
   ];
   await _checkAndCreateAttributes(databases, 'trusted_devices', attributes);
 }
@@ -150,8 +160,8 @@ Future<void> _ensureLoginHistoryAttributes(Databases databases) async {
 Future<void> _ensureAlertsAttributes(Databases databases) async {
   print('\nChecking Alerts Collection (alerts)...');
   final attributes = [
-    _Attribute('title', 'string', 255, true),
-    _Attribute('body', 'string', 5000, true),
+    _Attribute('title', 'string', 255, false),
+    _Attribute('body', 'string', 5000, false),
     _Attribute('type', 'string', 64, false),
     _Attribute('severity', 'string', 32, false),
     _Attribute('location', 'string', 255, false),
@@ -204,6 +214,58 @@ Future<void> _checkAndCreateAttributes(
             : (existing as dynamic).type;
 
         print('  - [OK] ${attr.key} (Type: $type, Required: $isRequired)');
+
+        // Force update to ensure required property matches schema script intent
+        if (isRequired != attr.required) {
+          final setRequired = attr.required;
+          print('    -> Updating ${attr.key} to required: $setRequired...');
+          try {
+            if (type == 'string') {
+              await db.updateStringAttribute(
+                databaseId: databaseId,
+                collectionId: collId,
+                key: attr.key,
+                xrequired: setRequired,
+                xdefault: setRequired ? null : '',
+              );
+            } else if (type == 'boolean') {
+              await db.updateBooleanAttribute(
+                databaseId: databaseId,
+                collectionId: collId,
+                key: attr.key,
+                xrequired: setRequired,
+                xdefault: setRequired ? null : false,
+              );
+            } else if (type == 'double') {
+              await db.updateFloatAttribute(
+                databaseId: databaseId,
+                collectionId: collId,
+                key: attr.key,
+                xrequired: setRequired,
+                xdefault: setRequired ? null : 0.0,
+              );
+            } else if (type == 'integer') {
+              await db.updateIntegerAttribute(
+                databaseId: databaseId,
+                collectionId: collId,
+                key: attr.key,
+                xrequired: setRequired,
+                xdefault: setRequired ? null : 0,
+              );
+            } else if (type == 'datetime') {
+              await db.updateDatetimeAttribute(
+                databaseId: databaseId,
+                collectionId: collId,
+                key: attr.key,
+                xrequired: setRequired,
+                xdefault: setRequired ? null : '1970-01-01T00:00:00.000+00:00',
+              );
+            }
+            print('    -> Updated successfully!');
+          } on Exception catch (e) {
+            print('    -> Failed to update: $e');
+          }
+        }
         continue;
       }
 
@@ -220,6 +282,14 @@ Future<void> _checkAndCreateAttributes(
           );
         } else if (attr.type == 'boolean') {
           await db.createBooleanAttribute(
+            databaseId: databaseId,
+            collectionId: collId,
+            key: attr.key,
+            xrequired: attr.required,
+            array: attr.array,
+          );
+        } else if (attr.type == 'double') {
+          await db.createFloatAttribute(
             databaseId: databaseId,
             collectionId: collId,
             key: attr.key,

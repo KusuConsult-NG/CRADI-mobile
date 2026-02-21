@@ -39,7 +39,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
       TextEditingController();
 
   // Selection State
-  UserRole? _selectedRole;
+
   String? _selectedState;
   String? _selectedLga;
   String? _selectedWard;
@@ -85,10 +85,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
     }
 
     // Additional validation for Dropdowns
-    if (_selectedRole == null) {
-      _showToast('Please select a role', isError: true);
-      return;
-    }
+
     if (_selectedState == null) {
       _showToast('Please select a state', isError: true);
       return;
@@ -110,7 +107,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
       final password = _passwordController.text;
 
       developer.log(
-        'Registration attempt: email=$email, role=${_selectedRole?.name}',
+        'Registration attempt: email=$email',
         name: 'RegistrationScreen',
       );
 
@@ -119,7 +116,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
         password: password,
         name: name,
         address: address, // Physical address description
-        role: _selectedRole,
+        role: UserRole.user,
         state: _selectedState, // Pass selected state
         lga: _selectedLga, // Pass selected LGA
         ward: _selectedWard, // Pass selected Ward
@@ -138,9 +135,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
             return; // Stop here
           }
 
-          _showToast('Account created! Verification code sent.');
-
-          // Show dialog to inform user about verification code
+          // Show dialog to inform user about verification link
           if (mounted) {
             showDialog(
               context: context,
@@ -148,7 +143,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
               builder: (context) => AlertDialog(
                 title: const Text('Verify Your Account'),
                 content: Text(
-                  'Account created successfully!\n\nAn Access Code has been sent to $email.\n\nPlease use this code to verify your account on the Dashboard.',
+                  'Account created successfully!\n\nA verification link has been sent to $email.\n\nPlease check your email and click the link to activate your account.',
                 ),
                 actions: [
                   TextButton(
@@ -335,35 +330,6 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                             ),
                             const SizedBox(height: 16),
 
-                            // Role Dropdown
-                            _buildDropdown<UserRole>(
-                              label: 'Select Function / Role',
-                              value: _selectedRole,
-                              items: UserRole.values
-                                  .where(
-                                    (r) => r != UserRole.media,
-                                  ) // Exclude media if needed, or keep all
-                                  .toList(),
-                              onChanged: (val) =>
-                                  setState(() => _selectedRole = val),
-                              itemLabel: (r) {
-                                switch (r) {
-                                  case UserRole.ewm:
-                                    return 'Early Warning Monitor';
-                                  case UserRole.coordinator:
-                                    return 'Coordinator';
-                                  case UserRole.projectStaff:
-                                    return 'Project Staff';
-                                  case UserRole.earlyResponder:
-                                    return 'Early Responder';
-                                  case UserRole.media:
-                                    return 'Media';
-                                }
-                              },
-                              icon: Icons.work_outline,
-                            ),
-                            const SizedBox(height: 16),
-
                             // Location Selector
                             LocationSelectorWidget(
                               initialState: _selectedState,
@@ -527,90 +493,6 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
             ),
         ],
       ),
-    );
-  }
-
-  Widget _buildDropdown<T>({
-    required String label,
-    required T? value,
-    required List<T> items,
-    required Function(T?) onChanged,
-    required String Function(T) itemLabel,
-    IconData? icon,
-    bool enabled = true,
-    String? hint,
-  }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: GoogleFonts.lexend(
-            fontSize: 14,
-            fontWeight: FontWeight.w500,
-            color: AppColors.textPrimary,
-          ),
-        ),
-        const SizedBox(height: 8),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-          decoration: BoxDecoration(
-            color: enabled
-                ? Colors.white.withValues(alpha: 0.5)
-                : Colors.grey.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: AppColors.textSecondary.withValues(alpha: 0.2),
-            ),
-          ),
-          child: DropdownButtonHideUnderline(
-            child: DropdownButton<T>(
-              value: value,
-              isExpanded: true,
-              hint: Text(
-                hint ?? 'Select $label',
-                style: GoogleFonts.lexend(
-                  color: AppColors.textPlaceholder,
-                  fontSize: 14,
-                ),
-              ),
-              icon: Icon(
-                Icons.arrow_drop_down,
-                color: enabled ? AppColors.textSecondary : Colors.grey,
-              ),
-              items: items.map((T item) {
-                return DropdownMenuItem<T>(
-                  value: item,
-                  child: Row(
-                    children: [
-                      if (icon != null) ...[
-                        Icon(icon, size: 18, color: AppColors.textSecondary),
-                        const SizedBox(width: 8),
-                      ],
-                      Expanded(
-                        child: Text(
-                          itemLabel(item),
-                          style: GoogleFonts.lexend(
-                            color: AppColors.textPrimary,
-                            fontSize: 14,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              }).toList(),
-              onChanged: enabled ? onChanged : null,
-              dropdownColor: Colors.white,
-              style: GoogleFonts.lexend(
-                color: AppColors.textPrimary,
-                fontSize: 14,
-              ),
-            ),
-          ),
-        ),
-      ],
     );
   }
 }

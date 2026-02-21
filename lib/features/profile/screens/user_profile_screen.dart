@@ -17,6 +17,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:climate_app/shared/widgets/custom_button.dart';
 import 'package:climate_app/shared/widgets/custom_text_field.dart';
+import 'package:climate_app/l10n/app_localizations.dart';
 // TEMPORARILY DISABLED - Compatibility issue
 // import 'package:flutter_windowmanager/flutter_windowmanager.dart';
 
@@ -332,7 +333,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
             actions: [
               TextButton(
                 onPressed: isVerifying ? null : () => Navigator.pop(context),
-                child: const Text('Cancel'),
+                child: Text(AppLocalizations.of(context)!.cancel),
               ),
               ElevatedButton(
                 style: ElevatedButton.styleFrom(
@@ -489,20 +490,23 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                       if (authProvider.userRole != null) {
                         // Simple formatted string from enum
                         switch (authProvider.userRole!) {
+                          case app_auth.UserRole.user:
+                            roleText = 'User';
+                            break;
                           case app_auth.UserRole.ewm:
                             roleText = 'Early Warning Monitor';
                             break;
-                          case app_auth.UserRole.coordinator:
-                            roleText = 'Coordinator';
+                          case app_auth.UserRole.ewv:
+                            roleText = 'Early Warning Validator';
                             break;
-                          case app_auth.UserRole.projectStaff:
-                            roleText = 'Project Staff';
+                          case app_auth.UserRole.ewr:
+                            roleText = 'Early Warning Responder';
                             break;
-                          case app_auth.UserRole.earlyResponder:
-                            roleText = 'Early Responder';
+                          case app_auth.UserRole.admin:
+                            roleText = 'Administrator';
                             break;
-                          case app_auth.UserRole.media:
-                            roleText = 'Media & Press';
+                          case app_auth.UserRole.techSupport:
+                            roleText = 'Tech Support';
                             break;
                         }
                       }
@@ -682,9 +686,18 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                         padding: const EdgeInsets.symmetric(horizontal: 16),
                         child: Row(
                           children: [
-                            _buildStatCard('$totalReports', 'Reports'),
+                            GestureDetector(
+                              onTap: () => context.push('/reports-status'),
+                              child: _buildStatCard('$totalReports', 'Reports'),
+                            ),
                             const SizedBox(width: 12),
-                            _buildStatCard('$verifiedCount', 'Verified'),
+                            GestureDetector(
+                              onTap: () => context.push('/reports-status'),
+                              child: _buildStatCard(
+                                '$verifiedCount',
+                                'Verified',
+                              ),
+                            ),
                             const SizedBox(width: 12),
                             _buildDaysActiveCard(profile),
                           ],
@@ -861,7 +874,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                           actions: [
                             TextButton(
                               onPressed: () => Navigator.pop(c),
-                              child: const Text('Close'),
+                              child: Text(AppLocalizations.of(context)!.close),
                             ),
                           ],
                         ),
@@ -897,7 +910,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                           actions: [
                             TextButton(
                               onPressed: () => Navigator.pop(c),
-                              child: const Text('Cancel'),
+                              child: Text(AppLocalizations.of(context)!.cancel),
                             ),
                             CustomButton(
                               onPressed: () {

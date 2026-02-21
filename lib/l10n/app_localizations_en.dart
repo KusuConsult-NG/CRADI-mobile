@@ -239,6 +239,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get useCurrentLocation => 'Use Current Location';
 
   @override
+  String get useMyLocationInfo => 'Use My Location Info';
+
+  @override
   String get searchPlaces => 'Search for places...';
 
   @override

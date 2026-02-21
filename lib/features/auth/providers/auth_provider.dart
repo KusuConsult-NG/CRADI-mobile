@@ -11,12 +11,9 @@ import 'package:climate_app/core/services/biometric_service.dart';
 import 'package:climate_app/core/services/device_fingerprint_service.dart';
 import 'package:climate_app/core/services/fraud_detection_service.dart';
 
-import 'package:climate_app/features/auth/services/access_code_service.dart';
-import 'package:climate_app/core/services/email_service.dart';
-
 import 'package:flutter/material.dart';
 
-enum UserRole { ewm, coordinator, projectStaff, earlyResponder, media }
+enum UserRole { user, ewm, ewv, ewr, admin, techSupport }
 
 /// Provider for managing user authentication state and operations
 ///
@@ -178,7 +175,7 @@ class AuthProvider extends ChangeNotifier {
     required String password,
     String? name,
     String? address,
-    required UserRole? role, // Added role parameter
+    UserRole? role, // Default to UserRole.user if not provided
     String? state, // Added state
     String? lga, // Added lga
     String? ward, // Added ward
@@ -220,43 +217,14 @@ class AuthProvider extends ChangeNotifier {
       developer.log('Session created', name: 'AuthProvider');
 
       // 3. Use provided role
-      final userRole = role ?? UserRole.ewm;
+      final userRole = role ?? UserRole.user;
 
-      // 4. Generate Access Code
-      developer.log('Generating Access Code...', name: 'AuthProvider');
-      final accessCode = await AccessCodeService().generateCodeForUser(
-        userId: user.$id,
-        role: userRole,
+      // 4. Generate Access Code (Deprecated, replaced by Verification Link)
+      developer.log(
+        'Skipping OTP Access Code generation - using links',
+        name: 'AuthProvider',
       );
-
-      developer.log('ACCESS CODE GENERATED: $accessCode', name: 'AuthProvider');
-
-      // DEV MODE HELPER: Show code in Toast since email might not work in dev
-      /*if (kDebugMode) {
-        Fluttertoast.showToast(
-          msg: 'DEV MODE: Access Code is $accessCode',
-          toastLength: Toast.LENGTH_LONG,
-          gravity: ToastGravity.TOP,
-          backgroundColor: Colors.blue,
-          textColor: Colors.white,
-        );
-        print('--------------------------------------------------');
-        print('DEV MODE ACCESS CODE: $accessCode');
-        print('--------------------------------------------------');
-      }*/
-
-      // 4.5 Send Email
-      try {
-        await EmailService().sendVerificationCode(
-          email,
-          accessCode,
-          name: name,
-        );
-        developer.log('Email sent to $email', name: 'AuthProvider');
-      } on Exception catch (e) {
-        developer.log('Failed to send email: $e', name: 'AuthProvider');
-        // Don't fail registration if email fails, user can resend later
-      }
+      const accessCode = '';
 
       // 5. Create user document in database
       developer.log('Creating user document...', name: 'AuthProvider');
@@ -270,7 +238,7 @@ class AuthProvider extends ChangeNotifier {
         lga: lga,
         ward: ward,
         isVerified: isVerified ?? false, // User is verified if pre-check passed
-        accessCode: accessCode, // Store for reference/resend
+        accessCode: accessCode, // Deprecated, using links now
         phoneNumber: phoneNumber,
       );
       developer.log('User document created', name: 'AuthProvider');
@@ -284,6 +252,12 @@ class AuthProvider extends ChangeNotifier {
           isVerified: isVerified ?? false,
         );
         developer.log('User session started', name: 'AuthProvider');
+
+        // 7. Send Verification Link if not pre-verified
+        if (isVerified != true) {
+          await _appwrite.createVerification();
+          developer.log('Verification link sent to user', name: 'AuthProvider');
+        }
       } on Exception catch (e) {
         developer.log(
           'Session setup warning: $e (non-critical)',
@@ -397,7 +371,7 @@ class AuthProvider extends ChangeNotifier {
             userId: user.$id,
             email: user.email,
             name: user.name,
-            role: UserRole.ewm, // Default role for recovered users
+            role: UserRole.user, // Default role for recovered users
           );
           // Fetch again
           userDoc = await _appwrite.getDocument(
@@ -426,7 +400,7 @@ class AuthProvider extends ChangeNotifier {
 
       // 6. Get user role
       final roleStr = userDoc.data['role'] as String?;
-      final role = _parseUserRole(roleStr) ?? UserRole.ewm;
+      final role = _parseUserRole(roleStr) ?? UserRole.user;
       _userRole = role;
 
       // 6.5. Get approval and verification status
@@ -512,82 +486,12 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
-  /// Verify account with access code
-  Future<bool> verifyAccount(String code) async {
+  // verifyAccount was removed. Authentication uses verification links now.
+
+  /// Resend verification link to user's email
+  Future<void> resendVerificationLink() async {
     try {
       // Robustness: Recover user if null
-      if (_currentUser == null) {
-        developer.log(
-          'User null in verify, attempting recovery...',
-          name: 'AuthProvider',
-        );
-        final user = await _appwrite.getCurrentUser();
-        if (user != null) {
-          _currentUser = user;
-        } else {
-          throw AuthException('User not logged in');
-        }
-      }
-
-      _isLoading = true;
-      notifyListeners();
-
-      // 1. Verify code
-      final result = await AccessCodeService().verifyCode(
-        code,
-        _currentUser!.$id,
-      );
-
-      if (result['isValid'] == true) {
-        final newRole = result['role'] as UserRole?;
-
-        // Use existing role if null (shouldn't happen if DB is correct)
-        final roleToUse = newRole ?? _userRole ?? UserRole.ewm;
-
-        // 2. Update user document
-        await _appwrite.updateDocument(
-          collectionId: AppwriteService.usersCollectionId,
-          documentId: _currentUser!.$id,
-          data: {
-            'isVerified': true,
-            'role': _roleToString(roleToUse),
-            'accessCode': code, // Record used code
-          },
-        );
-
-        // 3. Consume code (No-op in new service but good practice to call)
-        await AccessCodeService().consumeCode(code);
-
-        // 4. Update local state
-        _isVerified = true;
-        _userRole = roleToUse;
-
-        // 5. Update secure storage and session
-        await _storage.saveUserRole(roleToUse.name);
-        await _sessionManager.startSession(
-          authToken: _currentUser!.$id,
-          userRole: roleToUse.name,
-        );
-
-        _isLoading = false;
-        notifyListeners();
-        return true;
-      } else {
-        throw AuthException('Invalid access code');
-      }
-    } on Exception catch (e) {
-      _isLoading = false;
-      notifyListeners();
-      developer.log('Verification Error: $e', name: 'AuthProvider');
-      ErrorHandler.logError(e, context: 'AuthProvider.verifyAccount');
-      throw AuthException(e.toString().replaceAll('Exception:', '').trim());
-    }
-  }
-
-  /// Resend access code to user's email
-  Future<void> resendAccessCode() async {
-    try {
-      // Robustness: Recover user if null (e.g. after hot restart)
       if (_currentUser == null) {
         developer.log(
           'User null in resend, attempting recovery...',
@@ -604,54 +508,9 @@ class AuthProvider extends ChangeNotifier {
       _isLoading = true;
       notifyListeners();
 
-      // 1. Get current user doc to see if code exists
-      final userDoc = await _appwrite.getDocument(
-        collectionId: AppwriteService.usersCollectionId,
-        documentId: _currentUser!.$id,
-      );
-
-      String? code = userDoc.data['accessCode'] as String?;
-      final roleStr = userDoc.data['role'] as String?;
-      final role = _parseUserRole(roleStr) ?? UserRole.ewm;
-
-      // 2. Always generate new code for security and to fix "stuck" codes
-      code = await AccessCodeService().generateCodeForUser(
-        userId: _currentUser!.$id,
-        role: role,
-      );
-
-      // Save new code
-      await _appwrite.updateDocument(
-        collectionId: AppwriteService.usersCollectionId,
-        documentId: _currentUser!.$id,
-        data: {'accessCode': code},
-      );
-
-      // DEV MODE HELPER
-      /*if (kDebugMode) {
-        Fluttertoast.showToast(
-          msg: 'DEV MODE: Access Code is $code',
-          toastLength: Toast.LENGTH_LONG,
-          gravity: ToastGravity.TOP,
-          backgroundColor: Colors.blue,
-          textColor: Colors.white,
-        );
-        print('--------------------------------------------------');
-        print('DEV MODE ACCESS CODE: $code');
-        print('--------------------------------------------------');
-      }*/
-
-      // 3. Send email
-      await EmailService().sendVerificationCode(
-        _currentUser!.email,
-        code,
-        name: _currentUser!.name,
-      );
-      developer.log(
-        'Resent access code to ${_currentUser!.email}',
-        name: 'AuthProvider',
-      );
-
+      // Send Verification Link using native Appwrite
+      developer.log('Resending verification link...', name: 'AuthProvider');
+      await _appwrite.createVerification();
       _isLoading = false;
       notifyListeners();
     } on Exception catch (e) {
@@ -678,6 +537,35 @@ class AuthProvider extends ChangeNotifier {
       developer.log('Password reset error: $e', name: 'AuthProvider');
       ErrorHandler.logError(e, context: 'AuthProvider.sendPasswordResetEmail');
       throw AuthException('Failed to send reset email. Please try again.');
+    }
+  }
+
+  /// Execute password reset using secret from email link
+  Future<void> resetPassword({
+    required String userId,
+    required String secret,
+    required String password,
+  }) async {
+    try {
+      _isLoading = true;
+      notifyListeners();
+
+      await _appwrite.resetPassword(
+        userId: userId,
+        secret: secret,
+        password: password,
+      );
+
+      _isLoading = false;
+      notifyListeners();
+    } on Exception catch (e) {
+      _isLoading = false;
+      notifyListeners();
+      developer.log('Execute reset password error: $e', name: 'AuthProvider');
+      ErrorHandler.logError(e, context: 'AuthProvider.resetPassword');
+      throw AuthException(
+        'Failed to reset password. Link might be invalid or expired.',
+      );
     }
   }
 

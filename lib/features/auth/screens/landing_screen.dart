@@ -117,9 +117,7 @@ class LandingScreen extends StatelessWidget {
 
                         CustomButton(
                           text: 'Sign Up',
-                          onPressed: () => context.push(
-                            '/pre-signup',
-                          ), // Will update to verification later
+                          onPressed: () => context.push('/register'),
                           icon: Icons.person_add_outlined,
                         ),
 

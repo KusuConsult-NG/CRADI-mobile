@@ -106,10 +106,9 @@ class AppwriteService {
   /// Send password recovery email
   Future<models.Token> createRecovery({required String email}) async {
     try {
-      // url to redirect user to after resetting password
-      // For mobile, this should be a deep link handled by the app
-      // e.g. 'climate-app://reset-password'
-      const url = 'https://cloud.appwrite.io/v1/account/recovery';
+      // URL to redirect user to after resetting password.
+      // Handled by the mobile app via uni_links.
+      const url = 'https://cradi.org/reset-password';
       return await _account.createRecovery(email: email, url: url);
     } catch (e) {
       developer.log('Create recovery error: $e', name: 'AppwriteService');
@@ -117,12 +116,30 @@ class AppwriteService {
     }
   }
 
+  /// Execute password reset using secret from email link
+  Future<models.Token> resetPassword({
+    required String userId,
+    required String secret,
+    required String password,
+  }) async {
+    try {
+      return await _account.updateRecovery(
+        userId: userId,
+        secret: secret,
+        password: password,
+      );
+    } catch (e) {
+      developer.log('Reset password error: $e', name: 'AppwriteService');
+      rethrow;
+    }
+  }
+
   /// Send email verification
   Future<models.Token> createVerification() async {
     try {
-      // url to redirect user to after verifying email
-      // For mobile, this should be a deep link handled by the app
-      const url = 'https://cloud.appwrite.io/v1/account/verification';
+      // URL to redirect user to after verifying email.
+      // Handled by the mobile app via uni_links.
+      const url = 'https://cradi.org/verify-email';
       return await _account.createEmailVerification(url: url);
     } catch (e) {
       developer.log('Create verification error: $e', name: 'AppwriteService');

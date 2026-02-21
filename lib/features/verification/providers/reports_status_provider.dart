@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:climate_app/core/services/appwrite_service.dart';
+import 'package:climate_app/core/services/peer_verification_service.dart';
 import 'package:climate_app/features/verification/models/verification_report_model.dart';
 import 'dart:async';
 import 'dart:developer' as developer;
@@ -23,13 +24,31 @@ class ReportsStatusProvider extends ChangeNotifier {
   final Map<String, int> _totalCounts = {};
 
   // Getters for specific status
-  List<VerificationReport> getReports(ReportStatus? status) =>
-      _reportsMap[_getKey(status)] ?? [];
-  bool hasMore(ReportStatus? status) => _hasMoreMap[_getKey(status)] ?? true;
-  bool isLoading(ReportStatus? status) => _loadingMap[_getKey(status)] ?? false;
-  int getTotal(ReportStatus? status) => _totalCounts[_getKey(status)] ?? 0;
+  List<VerificationReport> getReports(
+    ReportStatus? status, {
+    String? userId,
+    String? excludeUserId,
+  }) =>
+      _reportsMap[_getKey(status, userId, excludeUserId: excludeUserId)] ?? [];
+  bool hasMore(ReportStatus? status, {String? userId, String? excludeUserId}) =>
+      _hasMoreMap[_getKey(status, userId, excludeUserId: excludeUserId)] ??
+      true;
+  bool isLoading(
+    ReportStatus? status, {
+    String? userId,
+    String? excludeUserId,
+  }) =>
+      _loadingMap[_getKey(status, userId, excludeUserId: excludeUserId)] ??
+      false;
+  int getTotal(ReportStatus? status, {String? userId, String? excludeUserId}) =>
+      _totalCounts[_getKey(status, userId, excludeUserId: excludeUserId)] ?? 0;
 
-  String _getKey(ReportStatus? status) => status?.name ?? 'all';
+  String _getKey(
+    ReportStatus? status,
+    String? userId, {
+    String? excludeUserId,
+  }) =>
+      '${status?.name ?? 'all'}_${userId ?? 'all'}_excl_${excludeUserId ?? 'none'}';
 
   /// Submit a verification request (supports offline)
   Future<void> submitVerificationRequest({
@@ -94,21 +113,35 @@ class ReportsStatusProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> refreshReports() async {
+  Future<void> refreshReports({String? excludeUserId}) async {
     // Refresh all lists
-    await fetchReports(status: null);
-    await fetchReports(status: ReportStatus.pending);
-    await fetchReports(status: ReportStatus.acknowledged);
-    await fetchReports(status: ReportStatus.resolved);
-    await fetchReports(status: ReportStatus.rejected);
+    await fetchReports(status: null, excludeUserId: excludeUserId);
+    await fetchReports(
+      status: ReportStatus.pending,
+      excludeUserId: excludeUserId,
+    );
+    await fetchReports(
+      status: ReportStatus.acknowledged,
+      excludeUserId: excludeUserId,
+    );
+    await fetchReports(
+      status: ReportStatus.resolved,
+      excludeUserId: excludeUserId,
+    );
+    await fetchReports(
+      status: ReportStatus.rejected,
+      excludeUserId: excludeUserId,
+    );
   }
 
   /// Fetch reports with pagination
   Future<void> fetchReports({
     bool loadMore = false,
     ReportStatus? status,
+    String? userId,
+    String? excludeUserId,
   }) async {
-    final key = _getKey(status);
+    final key = _getKey(status, userId, excludeUserId: excludeUserId);
 
     if (loadMore) {
       if ((_hasMoreMap[key] == false) || (_loadingMap[key] == true)) return;
@@ -144,6 +177,14 @@ class ReportsStatusProvider extends ChangeNotifier {
             break;
         }
         queries.add(Query.equal('status', appwriteStatus));
+      }
+
+      if (userId != null) {
+        queries.add(Query.equal('userId', userId));
+      }
+
+      if (excludeUserId != null) {
+        queries.add(Query.notEqual('userId', excludeUserId));
       }
 
       if (loadMore && _cursors[key] != null) {
@@ -229,13 +270,23 @@ class ReportsStatusProvider extends ChangeNotifier {
   }
 
   /// Verify a report (move to acknowledged)
-  Future<void> verifyReport(String reportId) async {
+  Future<void> verifyReport(String reportId, {String? userId}) async {
     try {
+      // Create verification record via PeerVerificationService
+      await PeerVerificationService().submitVerification(
+        reportId: reportId,
+        userId: userId ?? 'system_admin',
+        isConfirmed: true,
+      );
+
+      // Status update is handled inside `submitVerification` based on `minimumConfirmations`
+      // But if we want to forcibly acknowledge it here as an admin action:
       await _appwrite.updateDocument(
         collectionId: AppwriteService.reportsCollectionId,
         documentId: reportId,
         data: {'status': 'acknowledged'},
       );
+
       developer.log('Report verified: $reportId');
       notifyListeners();
       // Refresh relevant lists
@@ -267,13 +318,22 @@ class ReportsStatusProvider extends ChangeNotifier {
   }
 
   /// Reject a report
-  Future<void> rejectReport(String reportId) async {
+  Future<void> rejectReport(String reportId, {String? userId}) async {
     try {
+      // Create verification record via PeerVerificationService
+      await PeerVerificationService().submitVerification(
+        reportId: reportId,
+        userId: userId ?? 'system_admin',
+        isConfirmed: false,
+      );
+
+      // Force status update to rejected
       await _appwrite.updateDocument(
         collectionId: AppwriteService.reportsCollectionId,
         documentId: reportId,
         data: {'status': 'rejected'},
       );
+
       developer.log('Report rejected: $reportId');
       notifyListeners();
       // Refresh relevant lists

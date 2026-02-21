@@ -142,6 +142,7 @@
   "locationPicker": "Location Picker",
   "selectLocation": "Select your current location or search for a place",
   "useCurrentLocation": "Use Current Location",
+  "useMyLocationInfo": "Use My Location Info",
   "searchPlaces": "Search for places...",
   "confirmLocation": "Confirm Location",
 

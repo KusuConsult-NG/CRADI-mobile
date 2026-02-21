@@ -134,15 +134,9 @@ class _LoginScreenState extends State<LoginScreen> {
           if (!mounted) return;
           await context.read<ProfileProvider>().loadProfile();
 
-          // Check approval status
+          // Route directly to dashboard since approval is removed
           if (!mounted) return;
-          if (authProvider.isApproved == false) {
-            // User not approved - show pending screen
-            context.go('/pending-approval');
-          } else {
-            // User approved - navigate to dashboard
-            context.go('/dashboard');
-          }
+          context.go('/dashboard');
         } else {
           setState(() {
             _errorMessage = 'Login failed. Please check your credentials.';

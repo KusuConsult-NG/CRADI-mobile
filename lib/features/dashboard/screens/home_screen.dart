@@ -13,10 +13,12 @@ import 'package:climate_app/core/utils/error_handler.dart';
 import 'package:climate_app/features/knowledge_base/providers/news_provider.dart';
 import 'package:climate_app/features/verification/models/verification_report_model.dart';
 import 'package:climate_app/features/verification/providers/reports_status_provider.dart';
+import 'package:climate_app/features/auth/providers/auth_provider.dart'; // ADDED
 import 'package:climate_app/core/providers/connectivity_provider.dart';
 import 'package:climate_app/core/services/peer_verification_service.dart';
 import 'package:climate_app/core/services/notification_service.dart';
 import 'package:climate_app/features/reporting/providers/reporting_provider.dart';
+import 'package:climate_app/l10n/app_localizations.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -402,7 +404,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'MONITORING ZONE',
+                      AppLocalizations.of(context)!.monitoringZone,
                       style: GoogleFonts.lexend(
                         fontSize: 10,
                         fontWeight: FontWeight.w600,
@@ -645,16 +647,16 @@ class _HomeScreenState extends State<HomeScreen> {
         'No reports to verify',
       );
     } else if (_selectedFilterIndex == 1) {
-      // My Reports - For now showing pending as placeholder or need new provider method
-      // Assuming My Reports should filter by user ID, which getReports doesn't do yet.
-      // We will show empty for now or pending. Let's show pending for demo.
+      // My Reports
+      final userId = context.read<AuthProvider>().currentUser?.$id;
       return _buildListFeed(
-        statusProvider.getReports(ReportStatus.pending),
-        statusProvider.isLoading(ReportStatus.pending),
+        statusProvider.getReports(null, userId: userId),
+        statusProvider.isLoading(null, userId: userId),
         'You haven\'t submitted any reports yet',
       );
     } else {
       // Recent (All)
+      // Only fetch pending + active + resolved for general feed
       return _buildListFeed(
         statusProvider.getReports(null),
         statusProvider.isLoading(null),
@@ -760,24 +762,64 @@ class _HomeScreenState extends State<HomeScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    report.title,
-                    style: GoogleFonts.lexend(
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.textPrimary,
-                    ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          report.title,
+                          style: GoogleFonts.lexend(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.textPrimary,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      // Status Badge
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: _getStatusColor(
+                            report.status,
+                          ).withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: _getStatusColor(
+                              report.status,
+                            ).withValues(alpha: 0.3),
+                          ),
+                        ),
+                        child: Text(
+                          report.status.displayName,
+                          style: GoogleFonts.lexend(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                            color: _getStatusColor(report.status),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
+                  const SizedBox(height: 4),
                   Text(
                     '${report.location} • ${report.time}',
                     style: GoogleFonts.lexend(
                       fontSize: 12,
                       color: AppColors.textSecondary,
                     ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ],
               ),
             ),
+            const SizedBox(width: 8),
             const Icon(
               Icons.chevron_right,
               size: 20,
@@ -787,6 +829,19 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       ),
     );
+  }
+
+  Color _getStatusColor(ReportStatus status) {
+    switch (status) {
+      case ReportStatus.pending:
+        return Colors.orange;
+      case ReportStatus.acknowledged:
+        return AppColors.successGreen;
+      case ReportStatus.resolved:
+        return Colors.blue;
+      case ReportStatus.rejected:
+        return Colors.red;
+    }
   }
 
   Color _getIconColor(String colorName) {

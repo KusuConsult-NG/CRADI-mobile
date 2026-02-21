@@ -1,4 +1,5 @@
 import 'package:climate_app/core/theme/app_colors.dart';
+import 'package:climate_app/core/providers/language_provider.dart';
 import 'package:climate_app/features/reporting/providers/reporting_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
@@ -56,12 +57,26 @@ class _ReportDetailsScreenState extends State<ReportDetailsScreen> {
       // Get available locales
       if (_speechAvailable) {
         final locales = await _speech.locales();
-        // Try to find English locale
-        final enLocale = locales.firstWhere(
-          (locale) => locale.localeId.startsWith('en'),
-          orElse: () => locales.first,
+        // Get current app locale
+        if (!mounted) return;
+        final selectedLanguage = context
+            .read<LanguageProvider>()
+            .selectedLanguage;
+
+        String appLocaleCode = 'en';
+        if (selectedLanguage == 'Hausa') appLocaleCode = 'ha';
+        if (selectedLanguage == 'Yoruba') appLocaleCode = 'yo';
+        if (selectedLanguage == 'Igbo') appLocaleCode = 'ig';
+
+        // Try to find matching locale
+        final matchingLocale = locales.firstWhere(
+          (locale) => locale.localeId.startsWith(appLocaleCode),
+          orElse: () => locales.firstWhere(
+            (locale) => locale.localeId.startsWith('en'),
+            orElse: () => locales.first,
+          ),
         );
-        setState(() => _currentLocale = enLocale.localeId);
+        setState(() => _currentLocale = matchingLocale.localeId);
       }
     } on Exception {
       setState(() => _speechAvailable = false);
