@@ -1,6 +1,9 @@
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:climate_app/core/services/hive_encryption_service.dart';
 import 'dart:developer' as developer;
+import 'dart:io';
+import 'package:path_provider/path_provider.dart';
+import 'package:path/path.dart' as path;
 
 /// Service for storing draft reports offline using Hive
 /// Allows users to create reports without internet and sync later
@@ -85,7 +88,7 @@ class OfflineStorageService {
       'description': description ?? '',
       'reportDateTime':
           reportDateTime?.toIso8601String() ?? DateTime.now().toIso8601String(),
-      'imagePaths': imagePaths ?? [],
+      'imagePaths': await _persistImages(imagePaths),
       'createdAt': DateTime.now().toIso8601String(),
       'status': 'draft',
     };
@@ -135,6 +138,27 @@ class OfflineStorageService {
   /// Delete a draft
   Future<void> deleteDraft(String draftId) async {
     _ensureInitialized();
+    final draft = _draftsBox!.get(draftId);
+
+    // Delete associated persistent images
+    if (draft != null && draft['imagePaths'] != null) {
+      final paths = (draft['imagePaths'] as List).cast<String>();
+      for (final imagePath in paths) {
+        if (imagePath.contains('offline_images')) {
+          try {
+            final file = File(imagePath);
+            if (await file.exists()) {
+              await file.delete();
+            }
+          } catch (e) {
+            developer.log(
+              'Failed to clean up persistent image: $e',
+              name: 'OfflineStorageService',
+            );
+          }
+        }
+      }
+    }
 
     await _draftsBox!.delete(draftId);
     developer.log('Draft deleted: $draftId', name: 'OfflineStorageService');
@@ -264,9 +288,28 @@ class OfflineStorageService {
   /// Clear all drafts (use with caution!)
   Future<void> clearAllDrafts() async {
     _ensureInitialized();
-
     await _draftsBox!.clear();
-    developer.log('All drafts cleared', name: 'OfflineStorageService');
+
+    // Clean up entire offline_images persistence directory
+    try {
+      final appDir = await getApplicationDocumentsDirectory();
+      final offlineImagesDir = Directory(
+        path.join(appDir.path, 'offline_images'),
+      );
+      if (await offlineImagesDir.exists()) {
+        await offlineImagesDir.delete(recursive: true);
+      }
+    } catch (e) {
+      developer.log(
+        'Failed to flush offline media directory: $e',
+        name: 'OfflineStorageService',
+      );
+    }
+
+    developer.log(
+      'All drafts and offline images cleared',
+      name: 'OfflineStorageService',
+    );
   }
 
   /// Clear entire sync queue (use with caution!)
@@ -288,6 +331,43 @@ class OfflineStorageService {
         'OfflineStorageService not initialized. Call initialize() first.',
       );
     }
+  }
+
+  /// Helper to move volatile cache images to persistent application storage
+  Future<List<String>> _persistImages(List<String>? volatilePaths) async {
+    if (volatilePaths == null || volatilePaths.isEmpty) return [];
+
+    final persistentPaths = <String>[];
+    try {
+      final appDir = await getApplicationDocumentsDirectory();
+      final persistentDir = Directory(path.join(appDir.path, 'offline_images'));
+
+      if (!await persistentDir.exists()) {
+        await persistentDir.create(recursive: true);
+      }
+
+      for (int i = 0; i < volatilePaths.length; i++) {
+        final originalPath = volatilePaths[i];
+        final originalFile = File(originalPath);
+
+        if (await originalFile.exists()) {
+          final extension = path.extension(originalPath);
+          final timestamp = DateTime.now().millisecondsSinceEpoch;
+          final newFileName = 'draft_img_${timestamp}_$i$extension';
+          final newPath = path.join(persistentDir.path, newFileName);
+
+          await originalFile.copy(newPath);
+          persistentPaths.add(newPath);
+        }
+      }
+    } catch (e) {
+      developer.log(
+        'Failed to persist images for offline draft: $e',
+        name: 'OfflineStorageService',
+      );
+    }
+
+    return persistentPaths.isNotEmpty ? persistentPaths : volatilePaths;
   }
 
   /// Cache guides details
