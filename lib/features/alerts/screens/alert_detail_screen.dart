@@ -1,6 +1,7 @@
 import 'package:climate_app/core/theme/app_colors.dart';
 import 'package:climate_app/core/services/peer_verification_service.dart';
-import 'package:climate_app/core/services/appwrite_service.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:go_router/go_router.dart';
@@ -31,8 +32,7 @@ class _AlertDetailScreenState extends State<AlertDetailScreen> {
     setState(() => _isSubmitting = true);
 
     try {
-      final appwrite = AppwriteService();
-      final currentUser = await appwrite.getCurrentUser();
+      final currentUser = FirebaseAuth.instance.currentUser;
 
       if (currentUser == null) {
         if (mounted) {
@@ -61,7 +61,7 @@ class _AlertDetailScreenState extends State<AlertDetailScreen> {
 
       final result = await PeerVerificationService().submitVerification(
         reportId: reportId,
-        userId: currentUser.$id,
+        userId: currentUser.uid,
         isConfirmed: isConfirmed,
         comment: _commentController.text.trim().isEmpty
             ? null

@@ -45,18 +45,24 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
     });
 
     try {
-      // Execute password recovery
-      await context.read<AuthProvider>().resetPassword(
-            userId: widget.userId,
-            secret: widget.secret,
-            password: _passwordController.text,
-          );
-
-      if (mounted) {
-        setState(() {
-          _isSuccess = true;
-          _isLoading = false;
-        });
+      // Firebase password resets are handled via a secure link sent by Firebase.
+      // Once the user clicks the link and resets their password on Firebase's page,
+      // they can sign in with the new password.
+      // This fallback form re-sends the reset email if the user arrives without a valid link.
+      final authProvider = context.read<AuthProvider>();
+      final user = authProvider.currentUser;
+      if (user?.email != null) {
+        await authProvider.sendPasswordResetEmail(user!.email!);
+        if (mounted) {
+          setState(() {
+            _isSuccess = true;
+            _isLoading = false;
+          });
+        }
+      } else {
+        throw Exception(
+          'No email associated with this session. Please use Forgot Password from the login screen.',
+        );
       }
     } on Exception catch (e) {
       if (mounted) {

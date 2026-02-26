@@ -38,6 +38,26 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
+
+            <!-- Android App Links — verified HTTPS deep links (replaces Firebase Dynamic Links)
+                 Host assetlinks.json at: https://cradi.ng/.well-known/assetlinks.json
+                 See: https://developer.android.com/training/app-links/verify-android-applinks -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data
+                    android:scheme="https"
+                    android:host="cradi.ng"/>
+            </intent-filter>
+
+            <!-- Custom URI scheme for sharing (cradi://report/xyz, cradi://alert/xyz) -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="cradi"/>
+            </intent-filter>
         </activity>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->

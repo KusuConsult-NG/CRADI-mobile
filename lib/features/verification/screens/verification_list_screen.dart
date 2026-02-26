@@ -1,19 +1,19 @@
-import 'package:climate_app/core/services/appwrite_service.dart';
-import 'package:appwrite/appwrite.dart';
+import 'package:climate_app/core/services/firebase_service.dart';
+import 'package:climate_app/core/constants/app_config.dart';
 import 'package:climate_app/features/verification/screens/verification_detail_screen.dart';
 import 'package:climate_app/features/auth/providers/auth_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-/// Verification list screen - shows reports for verification
-/// This is a simplified stub implementation using Appwrite
+/// Verification list screen - shows reports pending community verification.
+/// Uses Firestore queries — no more Appwrite dependency.
 class VerificationListScreen extends StatelessWidget {
   const VerificationListScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
     // Get current user ID to exclude their own reports from verification
-    final currentUserId = context.read<AuthProvider>().currentUser?.$id;
+    final currentUserId = context.read<AuthProvider>().currentUser?.uid;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Verify Reports')),
@@ -73,22 +73,21 @@ class VerificationListScreen extends StatelessWidget {
 
   Future<List<Map<String, dynamic>>> _loadReports(String? excludeUserId) async {
     try {
-      final appwrite = AppwriteService();
+      final firebase = FirebaseService();
 
-      final queries = [Query.equal('status', 'pending')];
+      final queries = <QueryFilter>[FQuery.equal('status', 'pending')];
       if (excludeUserId != null) {
-        queries.add(Query.notEqual('userId', excludeUserId));
+        queries.add(FQuery.notEqual('userId', excludeUserId));
       }
 
-      final docs = await appwrite.listDocuments(
-        collectionId: AppwriteService.reportsCollectionId,
+      final docs = await firebase.listDocuments(
+        collectionId: AppConfig.reportsCollection,
         queries: queries,
+        limitCount:
+            50, // Limit is critical — prevents full-collection scan at scale
       );
-      return docs.documents.map((doc) {
-        final data = doc.data;
-        // Ensure ID is passed
-        data['\$id'] = doc.$id;
-        // Map fields if needed (e.g. title/hazardType fallback)
+
+      return docs.map((data) {
         data['hazardType'] =
             data['hazardType'] ?? data['title'] ?? 'Unknown Hazard';
         return data;

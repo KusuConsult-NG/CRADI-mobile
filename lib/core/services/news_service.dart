@@ -21,7 +21,7 @@ class NewsService {
       final uri = Uri.parse(_baseUrl).replace(queryParameters: queryParams);
       developer.log('Fetching news from: $uri', name: 'NewsService');
 
-      final response = await http.get(uri);
+      final response = await http.get(uri).timeout(const Duration(seconds: 15));
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);

@@ -16,6 +16,23 @@
 	<string>EWER</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
+	<!-- Custom URL scheme: cradi://report/xyz, cradi://alert/xyz
+         For Universal Links (https://cradi.ng/...) add Associated Domains entitlement
+         in Xcode: applinks:cradi.ng — and host apple-app-site-association at that domain -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>ng.cradi.app</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>cradi</string>
+			</array>
+		</dict>
+	</array>
+
 	<key>CFBundleShortVersionString</key>
 	<string>$(FLUTTER_BUILD_NAME)</string>
 	<key>CFBundleSignature</key>

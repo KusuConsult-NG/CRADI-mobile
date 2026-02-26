@@ -37,7 +37,7 @@ class _VerificationDetailScreenState extends State<VerificationDetailScreen> {
       // In a real app, we'd get the current user ID globally
       // For MVP, we'll assume a user ID or fetch it
       final userId =
-          context.read<AuthProvider>().currentUser?.$id ?? 'unknown_user';
+          context.read<AuthProvider>().currentUser?.uid ?? 'unknown_user';
 
       final result = await PeerVerificationService().submitVerification(
         reportId: widget.report['\$id'] ?? widget.report['id'] ?? 'unknown',

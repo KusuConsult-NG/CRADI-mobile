@@ -1,0 +1,23 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": ["REPLACE_WITH_APPLE_TEAM_ID.ng.cradi.ewer"],
+        "components": [
+          {
+            "/": "/report/*",
+            "comment": "Matches any URL with path starting /report/"
+          },
+          {
+            "/": "/alert/*",
+            "comment": "Matches any URL with path starting /alert/"
+          },
+          {
+            "/": "/verify/*",
+            "comment": "Matches any URL with path starting /verify/"
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,14 +1,17 @@
-import 'package:climate_app/core/config/app_config.dart';
+// ignore_for_file: unused_import, unused_field
+// LEGACY FILE — no longer imported by any app code.
+// Kept as a compile reference during Appwrite SDK removal from pubspec.
+
 import 'package:appwrite/appwrite.dart';
 import 'package:appwrite/models.dart' as models;
 import 'dart:async';
 import 'dart:developer' as developer;
 import 'package:climate_app/core/services/rate_limiter.dart';
 
-/// Global Appwrite client instance
+/// Global Appwrite client instance (legacy — not used by any Firebase-era code)
 final Client client = Client()
-    .setProject(AppConfig.appwriteProjectId)
-    .setEndpoint(AppConfig.appwriteEndpoint);
+    .setProject('6941cdb400050e7249d5')
+    .setEndpoint('https://fra.cloud.appwrite.io/v1');
 
 /// Comprehensive Appwrite service for managing backend operations
 class AppwriteService {
@@ -33,22 +36,21 @@ class AppwriteService {
   Timer? _sessionRefreshTimer;
   bool _isRefreshing = false;
 
-  // Database and Collection IDs
-  static const String databaseId = AppConfig.appwriteDatabaseId;
-  static const String usersCollectionId = AppConfig.usersCollection;
-  static const String reportsCollectionId = AppConfig.reportsCollection;
-  static const String chatsCollectionId = AppConfig.chatsCollection;
-  static const String messagesCollectionId = AppConfig.messagesCollection;
-  static const String contactsCollectionId = AppConfig.contactsCollection;
-  static const String trustedDevicesCollectionId = AppConfig.devicesCollection;
-  static const String loginHistoryCollectionId =
-      AppConfig.loginHistoryCollection;
-  static const String knowledgeCollectionId = AppConfig.knowledgeBaseCollection;
-  static const String alertsCollectionId = AppConfig.alertsCollection;
+  // Database and Collection IDs (legacy constants — inlined after AppConfig cleanup)
+  static const String databaseId = '6941e2c2003705bb5a25';
+  static const String usersCollectionId = 'users';
+  static const String reportsCollectionId = 'reports';
+  static const String chatsCollectionId = 'chats';
+  static const String messagesCollectionId = 'messages';
+  static const String contactsCollectionId = 'emergency_contacts';
+  static const String trustedDevicesCollectionId = 'trusted_devices';
+  static const String loginHistoryCollectionId = 'login_history';
+  static const String knowledgeCollectionId = 'knowledge_base';
+  static const String alertsCollectionId = 'alerts';
 
-  // Storage Bucket IDs
-  static const String profileImagesBucketId = AppConfig.storageBucketId;
-  static const String reportImagesBucketId = AppConfig.storageBucketId;
+  // Storage Bucket IDs (legacy)
+  static const String profileImagesBucketId = '6941e4e10034186aded8';
+  static const String reportImagesBucketId = '6941e4e10034186aded8';
 
   /// Get the global client instance
   Client get appwriteClient => client;

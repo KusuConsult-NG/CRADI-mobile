@@ -50,10 +50,14 @@ class _AccessCodeVerificationScreenState
           backgroundColor: Colors.orange,
         );
       }
+    } on AuthException catch (e) {
+      if (mounted) {
+        Fluttertoast.showToast(msg: e.userMessage, backgroundColor: Colors.red);
+      }
     } on Exception catch (e) {
       if (mounted) {
         Fluttertoast.showToast(
-          msg: 'Verification check failed: ${e.toString()}',
+          msg: ErrorHandler.getUserMessage(e),
           backgroundColor: Colors.red,
         );
       }
@@ -78,10 +82,14 @@ class _AccessCodeVerificationScreenState
           backgroundColor: Colors.green,
         );
       }
+    } on AuthException catch (e) {
+      if (mounted) {
+        Fluttertoast.showToast(msg: e.userMessage, backgroundColor: Colors.red);
+      }
     } on Exception catch (e) {
       if (mounted) {
         Fluttertoast.showToast(
-          msg: 'Failed to resend link: ${e.toString()}',
+          msg: ErrorHandler.getUserMessage(e),
           backgroundColor: Colors.red,
         );
       }
@@ -175,50 +183,7 @@ class _AccessCodeVerificationScreenState
                       ),
               ),
               const SizedBox(height: 8),
-              TextButton(
-                onPressed: () async {
-                  setState(() => _isLoading = true);
-                  await context.read<AuthProvider>().reloadUserData();
-                  if (context.mounted) {
-                    setState(() => _isLoading = false);
-                  }
 
-                  if (context.mounted) {
-                    final auth = context.read<AuthProvider>();
-                    showDialog(
-                      context: context,
-                      builder: (c) => AlertDialog(
-                        title: const Text('Debug Status'),
-                        content: Text(
-                          'Auth Verified: ${auth.currentUser?.emailVerification}\n'
-                          'DB Verified: ${auth.isVerified}\n'
-                          'Role: ${auth.userRole}\n'
-                          'UID: ${auth.currentUser?.$id}',
-                        ),
-                        actions: [
-                          TextButton(
-                            onPressed: () => Navigator.pop(c),
-                            child: const Text('OK'),
-                          ),
-                          if (auth.isVerified)
-                            TextButton(
-                              onPressed: () => context.go('/dashboard'),
-                              child: const Text('Force Dashboard'),
-                            ),
-                        ],
-                      ),
-                    );
-                  }
-                },
-                child: Text(
-                  'Refresh Status (Debug)',
-                  style: GoogleFonts.lexend(
-                    color: Colors.blue,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 8),
               TextButton(
                 onPressed: _handleLogout, // Force enabled for debug
                 child: Text(

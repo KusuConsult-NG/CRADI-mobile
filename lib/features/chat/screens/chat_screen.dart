@@ -1,9 +1,12 @@
 import 'package:climate_app/core/theme/app_colors.dart';
-import 'package:climate_app/core/services/appwrite_service.dart';
+import 'package:climate_app/core/services/firebase_service.dart';
+import 'package:climate_app/core/constants/app_config.dart';
+import 'package:firebase_auth/firebase_auth.dart' as fb_auth;
 import 'package:flutter/material.dart';
-import 'package:flutter_chat_types/flutter_chat_types.dart' as types;
+import 'package:flutter_chat_core/flutter_chat_core.dart';
 import 'package:flutter_chat_ui/flutter_chat_ui.dart';
 import 'package:go_router/go_router.dart';
+import 'package:uuid/uuid.dart';
 
 class ChatScreen extends StatelessWidget {
   const ChatScreen({super.key});
@@ -26,105 +29,115 @@ class ChatScreen extends StatelessWidget {
           },
         ),
       ),
-      body: FutureBuilder<types.User?>(
-        future: _getCurrentChatUser(),
-        builder: (context, snapshot) {
-          if (!snapshot.hasData) {
-            return const Center(child: CircularProgressIndicator());
-          }
-
-          final chatUser = snapshot.data;
-          if (chatUser == null) {
+      body: Builder(
+        builder: (context) {
+          final fbUser = fb_auth.FirebaseAuth.instance.currentUser;
+          if (fbUser == null) {
             return const Center(child: Text('Please login to chat'));
           }
-
-          return _ChatView(user: chatUser);
+          return _ChatView(fbUser: fbUser);
         },
       ),
     );
   }
-
-  Future<types.User?> _getCurrentChatUser() async {
-    final appwrite = AppwriteService();
-    final user = await appwrite.getCurrentUser();
-
-    if (user == null) return null;
-
-    return types.User(id: user.$id, firstName: user.name);
-  }
 }
 
 class _ChatView extends StatefulWidget {
-  final types.User user;
-
-  const _ChatView({required this.user});
+  final fb_auth.User fbUser;
+  const _ChatView({required this.fbUser});
 
   @override
   State<_ChatView> createState() => _ChatViewState();
 }
 
 class _ChatViewState extends State<_ChatView> {
-  final AppwriteService _appwrite = AppwriteService();
-  final List<types.Message> _messages = [];
+  final FirebaseService _firebase = FirebaseService();
+  late final InMemoryChatController _chatController;
   bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
+    _chatController = InMemoryChatController();
     _loadMessages();
+  }
+
+  @override
+  void dispose() {
+    _chatController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadMessages() async {
     try {
-      final docs = await _appwrite.listDocuments(
-        collectionId: AppwriteService.messagesCollectionId,
-        queries: ['chatId=general'],
+      final docs = await _firebase.listDocuments(
+        collectionId: AppConfig.messagesCollection,
+        queries: [
+          FQuery.equal('chatId', 'general'),
+          FQuery.orderAsc('sentAt'),
+          FQuery.limit(50),
+        ],
       );
 
-      final messages = docs.documents.map((doc) {
-        final data = doc.data;
-        return types.TextMessage(
-          author: types.User(id: data['senderId'] ?? 'unknown'),
-          createdAt: DateTime.parse(
-            data['sentAt'] ?? DateTime.now().toIso8601String(),
-          ).millisecondsSinceEpoch,
-          id: doc.$id,
-          text: data['message'] ?? '',
+      for (final data in docs) {
+        final msg = Message.text(
+          id: data['\$id'] as String? ?? const Uuid().v4(),
+          authorId: data['senderId'] as String? ?? 'unknown',
+          text: data['message'] as String? ?? '',
+          createdAt: data['sentAt'] != null
+              ? DateTime.tryParse(data['sentAt'] as String)
+              : null,
         );
-      }).toList();
-
-      setState(() {
-        _messages.clear();
-        _messages.addAll(messages);
-        _isLoading = false;
-      });
-    } on Exception {
-      setState(() => _isLoading = false);
+        await _chatController.insertMessage(msg, animated: false);
+      }
+    } on Exception catch (e) {
+      debugPrint('Chat load error: $e');
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  Future<void> _handleSendPressed(types.PartialText message) async {
+  Future<User?> _resolveUser(UserID id) async {
+    if (id == widget.fbUser.uid) {
+      return User(id: id, name: widget.fbUser.displayName ?? 'Me');
+    }
+    return User(id: id);
+  }
+
+  void _handleMessageSend(String text) async {
+    if (text.trim().isEmpty) return;
+    final user = widget.fbUser;
+    final msgId = const Uuid().v4();
+
+    // Optimistic insert
+    final message = Message.text(
+      id: msgId,
+      authorId: user.uid,
+      text: text.trim(),
+      createdAt: DateTime.now(),
+    );
+    await _chatController.insertMessage(message);
+
     try {
-      await _appwrite.createDocument(
-        collectionId: AppwriteService.messagesCollectionId,
+      await _firebase.createDocument(
+        collectionId: AppConfig.messagesCollection,
         data: {
           'chatId': 'general',
-          'senderId': widget.user.id,
-          'senderName': widget.user.firstName ?? 'User',
-          'message': message.text,
+          'senderId': user.uid,
+          'senderName': user.displayName ?? 'User',
+          'message': text.trim(),
           'type': 'text',
           'sentAt': DateTime.now().toIso8601String(),
           'read': false,
         },
       );
-
-      // Reload messages
-      await _loadMessages();
     } on Exception catch (e) {
+      debugPrint('Failed to send message: $e');
+      await _chatController.removeMessage(message);
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('Failed to send message: $e')));
+        ).showSnackBar(SnackBar(content: Text('Failed to send: $e')));
       }
     }
   }
@@ -136,44 +149,11 @@ class _ChatViewState extends State<_ChatView> {
     }
 
     return Chat(
-      messages: _messages,
-      onSendPressed: _handleSendPressed,
-      user: widget.user,
-      theme: DefaultChatTheme(
-        primaryColor: AppColors.primaryRed,
-        backgroundColor: AppColors.background,
-        inputBackgroundColor: Colors.white,
-        inputTextColor: Colors.black,
-        inputBorderRadius: const BorderRadius.all(Radius.circular(16)),
-        inputPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
-        inputMargin: const EdgeInsets.all(20),
-        inputTextStyle: const TextStyle(
-          fontSize: 17,
-          color: Colors.black,
-          height: 1.5,
-          fontWeight: FontWeight.w400,
-        ),
-        // Make input box larger with premium styling
-        inputContainerDecoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.grey.shade300, width: 1.5),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.08),
-              blurRadius: 12,
-              offset: const Offset(0, 4),
-            ),
-            BoxShadow(
-              color: AppColors.primaryRed.withValues(alpha: 0.05),
-              blurRadius: 20,
-              offset: const Offset(0, 8),
-            ),
-          ],
-        ),
-      ),
-      // Make text input box larger
-      textMessageOptions: const TextMessageOptions(isTextSelectable: true),
+      currentUserId: widget.fbUser.uid,
+      chatController: _chatController,
+      resolveUser: _resolveUser,
+      onMessageSend: _handleMessageSend,
+      theme: ChatTheme.fromThemeData(Theme.of(context)),
     );
   }
 }

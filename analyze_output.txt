@@ -1,0 +1,11 @@
+Analyzing CRADI Mobile...                                       
+
+  error • A value of type 'String?' can't be assigned to a variable of type 'String' • lib/features/auth/screens/registration_screen.dart:57:31 • invalid_assignment
+   info • Statements in an if should be enclosed in a block • lib/features/knowledge_base/screens/knowledge_base_screen.dart:286:25 • curly_braces_in_flow_control_structures
+   info • Statements in an if should be enclosed in a block • lib/features/knowledge_base/screens/knowledge_base_screen.dart:288:25 • curly_braces_in_flow_control_structures
+   info • Catch clause should use 'on' to specify the type of exception being caught • lib/features/knowledge_base/screens/knowledge_base_screen.dart:440:33 • avoid_catches_without_on_clauses
+  error • The property 'length' can't be unconditionally accessed because the receiver can be 'null' • lib/features/offline_mode/screens/offline_home_screen.dart:115:41 • unchecked_use_of_nullable_value
+  error • The method '[]' can't be unconditionally invoked because the receiver can be 'null' • lib/features/offline_mode/screens/offline_home_screen.dart:117:45 • unchecked_use_of_nullable_value
+   info • Statements in an if should be enclosed in a block • lib/features/profile/screens/user_profile_screen.dart:361:29 • curly_braces_in_flow_control_structures
+   info • The member 'build' overrides an inherited member but isn't annotated with '@override' • lib/features/profile/screens/user_profile_screen.dart:428:10 • annotate_overrides
+

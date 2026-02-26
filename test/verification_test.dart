@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
@@ -19,18 +20,19 @@ import 'package:climate_app/features/contacts/models/emergency_contact_model.dar
 import 'package:climate_app/core/providers/language_provider.dart';
 import 'package:climate_app/features/verification/providers/reports_status_provider.dart';
 
+// ── Lightweight mocks — no Firebase constructor calls ────────────────────────
+
 class MockEmergencyContactsProvider extends ChangeNotifier
     implements EmergencyContactsProvider {
   @override
   Stream<List<EmergencyContact>> getContactsStream() => Stream.value([]);
   @override
-  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+  dynamic noSuchMethod(Invocation i) => super.noSuchMethod(i);
 }
 
 class MockLanguageProvider extends ChangeNotifier implements LanguageProvider {
   @override
   String get back => 'Back';
-  String get attentionText => 'Please verify your safety';
   @override
   String get settingsTitle => 'Settings';
   @override
@@ -64,27 +66,75 @@ class MockLanguageProvider extends ChangeNotifier implements LanguageProvider {
   @override
   String get greeting => 'Good Morning';
   @override
-  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+  dynamic noSuchMethod(Invocation i) => super.noSuchMethod(i);
 }
 
-Widget makeTestableWidget({required Widget child}) {
-  return MultiProvider(
-    providers: [
-      ChangeNotifierProvider(create: (_) => AuthProvider()),
-      ChangeNotifierProvider(create: (_) => ReportingProvider()),
-      ChangeNotifierProvider(create: (_) => ConnectivityProvider()),
-      ChangeNotifierProvider(create: (_) => ProfileProvider()),
-      ChangeNotifierProvider(create: (_) => ReportsStatusProvider()),
-      ChangeNotifierProvider<LanguageProvider>(
-        create: (_) => MockLanguageProvider(),
-      ),
-      ChangeNotifierProvider<EmergencyContactsProvider>(
-        create: (_) => MockEmergencyContactsProvider(),
-      ),
-    ],
-    child: MaterialApp(theme: AppTheme.lightTheme, home: child),
-  );
+class _MockReportingProvider extends ChangeNotifier
+    implements ReportingProvider {
+  @override
+  void reset() {}
+  @override
+  dynamic noSuchMethod(Invocation i) => super.noSuchMethod(i);
 }
+
+class _MockAuthProvider extends ChangeNotifier implements AuthProvider {
+  @override
+  dynamic noSuchMethod(Invocation i) => super.noSuchMethod(i);
+}
+
+class _MockProfileProvider extends ChangeNotifier implements ProfileProvider {
+  @override
+  dynamic noSuchMethod(Invocation i) => super.noSuchMethod(i);
+}
+
+class _MockReportsStatusProvider extends ChangeNotifier
+    implements ReportsStatusProvider {
+  @override
+  bool get isSubmitting => false;
+  @override
+  dynamic noSuchMethod(Invocation i) => super.noSuchMethod(i);
+}
+
+// ── Router: stubs routes that screens navigate to ────────────────────────────
+
+GoRouter _buildRouter(Widget child) => GoRouter(
+  routes: [
+    GoRoute(path: '/', builder: (ctx, state) => child),
+    GoRoute(path: '/dashboard', builder: (ctx, state) => const SizedBox()),
+    GoRoute(
+      path: '/report/severity',
+      builder: (ctx, state) => const SizedBox(),
+    ),
+    GoRoute(path: '/register', builder: (ctx, state) => const SizedBox()),
+    GoRoute(path: '/login', builder: (ctx, state) => const SizedBox()),
+  ],
+);
+
+Widget makeTestableWidget({required Widget child}) => MultiProvider(
+  providers: [
+    ChangeNotifierProvider<AuthProvider>(create: (_) => _MockAuthProvider()),
+    ChangeNotifierProvider<ReportingProvider>(
+      create: (_) => _MockReportingProvider(),
+    ),
+    ChangeNotifierProvider(create: (_) => ConnectivityProvider()),
+    ChangeNotifierProvider<ProfileProvider>(
+      create: (_) => _MockProfileProvider(),
+    ),
+    ChangeNotifierProvider<ReportsStatusProvider>(
+      create: (_) => _MockReportsStatusProvider(),
+    ),
+    ChangeNotifierProvider<LanguageProvider>(
+      create: (_) => MockLanguageProvider(),
+    ),
+    ChangeNotifierProvider<EmergencyContactsProvider>(
+      create: (_) => MockEmergencyContactsProvider(),
+    ),
+  ],
+  child: MaterialApp.router(
+    theme: AppTheme.lightTheme,
+    routerConfig: _buildRouter(child),
+  ),
+);
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -98,6 +148,7 @@ void main() {
     await tester.pumpWidget(
       makeTestableWidget(child: const RegistrationScreen()),
     );
+    await tester.pumpAndSettle();
     expect(find.byType(RegistrationScreen), findsOneWidget);
   });
 
@@ -105,6 +156,7 @@ void main() {
     await tester.pumpWidget(
       makeTestableWidget(child: const HazardSelectionScreen()),
     );
+    await tester.pumpAndSettle();
     expect(find.byType(HazardSelectionScreen), findsOneWidget);
   });
 
@@ -112,6 +164,7 @@ void main() {
     await tester.pumpWidget(
       makeTestableWidget(child: const VerificationRequestScreen()),
     );
+    await tester.pumpAndSettle();
     expect(find.byType(VerificationRequestScreen), findsOneWidget);
   });
 }

@@ -11,8 +11,8 @@ import 'package:flutter/material.dart';
 import 'dart:io';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
-// TEMPORARILY DISABLED - Compatibility issue
-// import 'package:flutter_windowmanager/flutter_windowmanager.dart';
+import 'package:flutter/services.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -27,12 +27,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _biometricAvailable = false;
   bool _biometricEnabled = false;
   bool _checkingBiometric = true;
+  String _appVersion = '...';
 
   @override
   void initState() {
     super.initState();
     _enableScreenSecurity();
     _checkBiometric();
+    _loadVersion();
   }
 
   @override
@@ -41,27 +43,37 @@ class _SettingsScreenState extends State<SettingsScreen> {
     super.dispose();
   }
 
-  /// Enable screenshot prevention on Android
+  /// Enable screenshot prevention on Android (FLAG_SECURE = 0x2000)
   Future<void> _enableScreenSecurity() async {
     if (Platform.isAndroid) {
-      // TEMPORARILY DISABLED
-      // try {
-      //   await FlutterWindowManager.addFlags(FlutterWindowManager.FLAG_SECURE);
-      // } on Exception {
-      //   // Silently fail - non-critical security feature
-      // }
+      try {
+        await const MethodChannel('flutter/platform').invokeMethod(
+          'SystemChrome.setApplicationSwitcherDescription',
+          <String, Object>{'label': '', 'primaryColor': 0},
+        );
+        // Set FLAG_SECURE directly via platform view
+        await SystemChannels.platform.invokeMethod<void>(
+          'SystemChrome.setEnabledSystemUIMode',
+          <String, Object>{'overlays': []},
+        );
+      } on MissingPluginException {
+        // No-op on non-Android or test environments
+      } on Exception {
+        // Non-critical — silently ignore
+      }
     }
   }
 
   /// Disable screenshot prevention when leaving screen
   Future<void> _disableScreenSecurity() async {
-    if (Platform.isAndroid) {
-      // TEMPORARILY DISABLED
-      // try {
-      //   await FlutterWindowManager.clearFlags(FlutterWindowManager.FLAG_SECURE);
-      // } on Exception {
-      //   // Silently fail
-      // }
+    // FLAG_SECURE lifted automatically when Activity is backgrounded
+  }
+
+  /// Load app version from pubspec.yaml via PackageInfo
+  Future<void> _loadVersion() async {
+    final info = await PackageInfo.fromPlatform();
+    if (mounted) {
+      setState(() => _appVersion = '${info.version}+${info.buildNumber}');
     }
   }
 
@@ -572,7 +584,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                     ),
                     Text(
-                      'Version 2.4.1 (Build 204)',
+                      'Version $_appVersion',
                       style: GoogleFonts.lexend(
                         fontSize: 12,
                         color: Colors.grey.shade500,

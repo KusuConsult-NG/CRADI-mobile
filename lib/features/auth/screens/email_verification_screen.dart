@@ -35,20 +35,33 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
 
   Future<void> _verifyEmail() async {
     try {
-      if (widget.userId.isEmpty || widget.secret.isEmpty) {
-        throw Exception('Invalid verification link.');
-      }
+      // In Firebase, verification is done by the user entering OTP.
+      // This screen handles deep-links from legacy Appwrite verification emails.
+      // For new users, we just mark the Firebase user as verified via Firestore.
+      final authProvider = context.read<AuthProvider>();
 
-      await context.read<AuthProvider>().verifyEmail(
-        widget.userId,
-        widget.secret,
-      );
+      if (authProvider.currentUser != null) {
+        // Try to reload to pick up email verification state
+        await authProvider.reloadUserData();
 
-      if (mounted) {
-        setState(() {
-          _isProcessing = false;
-          _isVerified = true;
-        });
+        if (mounted) {
+          setState(() {
+            _isProcessing = false;
+            _isVerified = authProvider.isVerified;
+            if (!authProvider.isVerified) {
+              _errorMessage =
+                  'Email not yet verified. Please enter the OTP sent to your email.';
+            }
+          });
+        }
+      } else {
+        if (mounted) {
+          setState(() {
+            _isProcessing = false;
+            _isVerified = false;
+            _errorMessage = 'Session expired. Please log in again.';
+          });
+        }
       }
     } on Exception catch (e) {
       developer.log('Verification Error: $e', name: 'EmailVerificationScreen');

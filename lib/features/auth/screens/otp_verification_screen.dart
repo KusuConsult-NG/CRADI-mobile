@@ -83,7 +83,13 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
     setState(() => _isResending = true);
     try {
       final authProvider = context.read<AuthProvider>();
-      final success = await authProvider.sendOtpForPhone(widget.phoneNumber);
+
+      bool success = false;
+      if (widget.phoneNumber.contains('@')) {
+        success = await authProvider.sendOtpForEmail(widget.phoneNumber);
+      } else {
+        success = await authProvider.sendOtpForPhone(widget.phoneNumber);
+      }
 
       if (mounted) {
         setState(() => _isResending = false);
@@ -127,7 +133,9 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                 ),
                 const SizedBox(height: 32),
                 Text(
-                  'Verify Phone Number',
+                  widget.phoneNumber.contains('@')
+                      ? 'Verify Email'
+                      : 'Verify Phone Number',
                   style: GoogleFonts.lexend(
                     fontSize: 28,
                     fontWeight: FontWeight.bold,

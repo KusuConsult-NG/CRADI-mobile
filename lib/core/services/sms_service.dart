@@ -33,6 +33,7 @@ class SmsService {
     required String to,
     required String message,
     String? senderId,
+    bool isDnd = false,
   }) async {
     try {
       // Validate configuration
@@ -59,8 +60,7 @@ class SmsService {
         'from': senderId ?? SmsConfig.senderId,
         'sms': message,
         'type': 'plain',
-        'channel':
-            'generic', // "generic" for promotional, "dnd" for OTPs if registered
+        'channel': isDnd ? 'dnd' : 'generic', // "dnd" for OTPs if registered
         'api_key': SmsConfig.apiKey,
       };
 
@@ -70,11 +70,13 @@ class SmsService {
       );
 
       // Send request
-      final response = await http.post(
-        Uri.parse(SmsConfig.smsEndpoint),
-        headers: SmsConfig.headers,
-        body: json.encode(body),
-      );
+      final response = await http
+          .post(
+            Uri.parse(SmsConfig.smsEndpoint),
+            headers: SmsConfig.headers,
+            body: json.encode(body),
+          )
+          .timeout(const Duration(seconds: 15));
 
       // Handle response
       if (response.statusCode == 200 || response.statusCode == 201) {
@@ -154,11 +156,13 @@ class SmsService {
       );
 
       // Send request
-      final response = await http.post(
-        Uri.parse(SmsConfig.bulkSmsEndpoint),
-        headers: SmsConfig.headers,
-        body: json.encode(body),
-      );
+      final response = await http
+          .post(
+            Uri.parse(SmsConfig.bulkSmsEndpoint),
+            headers: SmsConfig.headers,
+            body: json.encode(body),
+          )
+          .timeout(const Duration(seconds: 15));
 
       // Handle response
       if (response.statusCode == 200 || response.statusCode == 201) {
@@ -266,7 +270,7 @@ Valid for 10 minutes.
 Do not share this code.
 ''';
 
-    return await sendSms(to: to, message: message, senderId: 'EWER-OTP');
+    return await sendSms(to: to, message: message, isDnd: true);
   }
 
   // ==================== HELPER METHODS ====================

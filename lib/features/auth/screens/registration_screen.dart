@@ -4,6 +4,7 @@ import 'package:climate_app/shared/widgets/custom_button.dart';
 import 'package:climate_app/shared/widgets/custom_text_field.dart';
 import 'package:climate_app/core/utils/error_handler.dart';
 import 'package:climate_app/core/utils/validators.dart';
+import 'package:climate_app/core/utils/input_sanitizer.dart';
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
@@ -101,9 +102,11 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
     try {
       final authProvider = context.read<AuthProvider>();
 
-      final name = _nameController.text.trim();
-      final address = _addressController.text.trim();
-      final phone = _phoneController.text.trim();
+      final name = InputSanitizer.sanitize(_nameController.text.trim());
+      final address = InputSanitizer.sanitize(_addressController.text.trim());
+      final phone = InputSanitizer.sanitizePhoneNumber(
+        _phoneController.text.trim(),
+      );
 
       if (_isPhoneAuth) {
         // Custom Phone Auth Flow
@@ -146,17 +149,22 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
               );
             }
           }
+        } on AuthException catch (e) {
+          if (mounted) {
+            setState(() => _isLoading = false);
+            _showToast(e.userMessage, isError: true);
+          }
         } on Exception catch (e) {
           if (mounted) {
             setState(() => _isLoading = false);
-            _showToast('Failed to send SMS: $e', isError: true);
+            _showToast(ErrorHandler.getUserMessage(e), isError: true);
           }
         }
         return;
       }
 
       // Traditional Email Auth Flow
-      final email = _emailController.text.trim();
+      final email = InputSanitizer.sanitize(_emailController.text.trim());
       final password = _passwordController.text;
 
       developer.log(
@@ -188,25 +196,35 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
             return; // Stop here
           }
 
-          // Show dialog to inform user about verification link
+          // Navigate to OTP Screen (Since the OTP has been triggered internally inside signUpWithEmail)
+          final registrationData = {
+            'name': name,
+            'address': address,
+            'role': UserRole.user,
+            'state': _selectedState,
+            'lga': _selectedLga,
+            'ward': _selectedWard,
+          };
+
           if (mounted) {
             showDialog(
               context: context,
               barrierDismissible: false,
               builder: (context) => AlertDialog(
-                title: const Text('Verify Your Account'),
+                title: const Text('Verify Your Email Address'),
                 content: Text(
-                  'Account created successfully!\n\nA verification link has been sent to $email.\n\nPlease check your email and click the link to activate your account.',
+                  'Account created successfully!\n\nA 6-digit verification code has been sent to $email.\n\nPlease enter the code to activate your account.',
                 ),
                 actions: [
                   TextButton(
                     onPressed: () {
                       context.pop(); // Close dialog
                       context.go(
-                        '/verify-access-code',
+                        '/verify-otp?phone=${Uri.encodeComponent(email)}',
+                        extra: registrationData,
                       ); // Go to verification screen
                     },
-                    child: const Text('Proceed to Verification'),
+                    child: const Text('Enter Code'),
                   ),
                 ],
               ),

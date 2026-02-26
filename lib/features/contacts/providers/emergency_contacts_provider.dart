@@ -1,25 +1,28 @@
 import 'package:flutter/material.dart';
-import 'package:climate_app/core/services/appwrite_service.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:climate_app/core/services/firebase_service.dart';
 import 'package:climate_app/features/contacts/models/emergency_contact_model.dart';
-import 'package:appwrite/appwrite.dart';
+import 'package:climate_app/core/constants/app_config.dart';
 import 'dart:developer' as developer;
 
 class EmergencyContactsProvider extends ChangeNotifier {
-  final AppwriteService _appwrite = AppwriteService();
+  final FirebaseService _firebase = FirebaseService();
 
-  /// Get all emergency contacts
   Future<List<EmergencyContact>> getContacts() async {
     try {
-      final user = await _appwrite.getCurrentUser();
+      final user = FirebaseAuth.instance.currentUser;
       if (user == null) return [];
 
-      final docs = await _appwrite.listDocuments(
-        collectionId: AppwriteService.contactsCollectionId,
-        queries: [Query.orderAsc('name')],
+      final docs = await _firebase.listDocuments(
+        collectionId: AppConfig.contactsCollection,
+        queries: [FQuery.orderAsc('name')],
       );
 
-      return docs.documents
-          .map((doc) => EmergencyContact.fromAppwrite(doc.data, doc.$id))
+      return docs
+          .map(
+            (data) =>
+                EmergencyContact.fromFirestore(data, data['\$id'] as String),
+          )
           .toList();
     } on Exception catch (e) {
       developer.log('Error getting contacts: $e');
@@ -27,18 +30,16 @@ class EmergencyContactsProvider extends ChangeNotifier {
     }
   }
 
-  /// Add new contact
   Future<void> addContact(EmergencyContact contact) async {
     try {
-      final user = await _appwrite.getCurrentUser();
+      final user = FirebaseAuth.instance.currentUser;
       if (user == null) throw Exception('User not logged in');
 
-      final data = contact.toAppwrite();
-      data['userId'] = user.$id;
-      data['createdAt'] = DateTime.now().toIso8601String();
+      final data = contact.toFirestore();
+      data['userId'] = user.uid;
 
-      await _appwrite.createDocument(
-        collectionId: AppwriteService.contactsCollectionId,
+      await _firebase.createDocument(
+        collectionId: AppConfig.contactsCollection,
         data: data,
       );
       developer.log('Contact added: ${contact.name}');
@@ -49,13 +50,12 @@ class EmergencyContactsProvider extends ChangeNotifier {
     }
   }
 
-  /// Update existing contact
   Future<void> updateContact(String id, EmergencyContact contact) async {
     try {
-      await _appwrite.updateDocument(
-        collectionId: AppwriteService.contactsCollectionId,
+      await _firebase.updateDocument(
+        collectionId: AppConfig.contactsCollection,
         documentId: id,
-        data: contact.toAppwrite(),
+        data: contact.toFirestore(),
       );
       developer.log('Contact updated: $id');
       notifyListeners();
@@ -65,11 +65,10 @@ class EmergencyContactsProvider extends ChangeNotifier {
     }
   }
 
-  /// Delete contact
   Future<void> deleteContact(String id) async {
     try {
-      await _appwrite.deleteDocument(
-        collectionId: AppwriteService.contactsCollectionId,
+      await _firebase.deleteDocument(
+        collectionId: AppConfig.contactsCollection,
         documentId: id,
       );
       developer.log('Contact deleted: $id');
@@ -80,17 +79,15 @@ class EmergencyContactsProvider extends ChangeNotifier {
     }
   }
 
-  /// Search contacts
   Future<List<EmergencyContact>> searchContacts(String query) async {
     try {
       final contacts = await getContacts();
       final lowercaseQuery = query.toLowerCase();
-
       return contacts
           .where(
-            (contact) =>
-                contact.name.toLowerCase().contains(lowercaseQuery) ||
-                contact.phone.toLowerCase().contains(lowercaseQuery),
+            (c) =>
+                c.name.toLowerCase().contains(lowercaseQuery) ||
+                c.phone.toLowerCase().contains(lowercaseQuery),
           )
           .toList();
     } on Exception catch (e) {
@@ -99,20 +96,43 @@ class EmergencyContactsProvider extends ChangeNotifier {
     }
   }
 
-  /// Get all emergency contacts stream (polling-based since Appwrite doesn't have native streams)
-  Stream<List<EmergencyContact>> getContactsStream() async* {
-    while (true) {
-      yield await getContacts();
-      await Future.delayed(const Duration(seconds: 5));
-    }
+  /// Real-time stream via Firestore snapshots (replaces polling loop).
+  Stream<List<EmergencyContact>> getContactsStream() {
+    return _firebase
+        .subscribeToCollection(
+          collectionId: AppConfig.contactsCollection,
+          queries: [FQuery.orderAsc('name')],
+        )
+        .map(
+          (docs) => docs
+              .map(
+                (data) => EmergencyContact.fromFirestore(
+                  data,
+                  data['\$id'] as String,
+                ),
+              )
+              .toList(),
+        );
   }
 
-  /// Get contacts by category stream
-  Stream<List<EmergencyContact>> getContactsByCategory(String category) async* {
-    while (true) {
-      final all = await getContacts();
-      yield all.where((c) => c.category == category).toList();
-      await Future.delayed(const Duration(seconds: 5));
-    }
+  Stream<List<EmergencyContact>> getContactsByCategory(String category) {
+    return _firebase
+        .subscribeToCollection(
+          collectionId: AppConfig.contactsCollection,
+          queries: [
+            FQuery.equal('category', category),
+            FQuery.orderAsc('name'),
+          ],
+        )
+        .map(
+          (docs) => docs
+              .map(
+                (data) => EmergencyContact.fromFirestore(
+                  data,
+                  data['\$id'] as String,
+                ),
+              )
+              .toList(),
+        );
   }
 }

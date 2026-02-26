@@ -282,10 +282,11 @@ class _KnowledgeBaseScreenState extends State<KnowledgeBaseScreen> {
                       Color tagColor = Colors.blue;
                       final tag =
                           guide['tag']?.toString().toUpperCase() ?? 'GUIDE';
-                      if (tag == 'IMMEDIATE' || tag == 'HIGH PRIORITY')
+                      if (tag == 'IMMEDIATE' || tag == 'HIGH PRIORITY') {
                         tagColor = Colors.red;
-                      else if (tag == 'WATCH' || tag == 'MODERATE')
+                      } else if (tag == 'WATCH' || tag == 'MODERATE') {
                         tagColor = Colors.orange;
+                      }
 
                       return _buildFavoriteCard(
                         guide['title'] ?? 'Guide',
@@ -437,7 +438,7 @@ class _KnowledgeBaseScreenState extends State<KnowledgeBaseScreen> {
                                 } else {
                                   developer.log('Could not launch news: $url');
                                 }
-                              } catch (e) {
+                              } on Exception catch (e) {
                                 developer.log('Error launching news: $e');
                               }
                             }

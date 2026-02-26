@@ -23,6 +23,7 @@ import 'package:hive_flutter/hive_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:climate_app/l10n/app_localizations.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
@@ -61,6 +62,16 @@ Future<void> main() async {
     };
 
     debugPrint('✅ Firebase Crashlytics initialized');
+
+    // Initialize Firebase App Check — prevents unauthorized API calls
+    // In debug/emulator: uses debug provider (prints debug token to console)
+    // In release: uses Play Integrity (Android) or Device Check (iOS)
+    await FirebaseAppCheck.instance.activate(
+      providerAndroid: const AndroidPlayIntegrityProvider(),
+      // For local testing replace with: const AndroidDebugProvider()
+      providerApple: const AppleDeviceCheckProvider(),
+    );
+    debugPrint('✅ Firebase App Check activated');
   } on Exception catch (e) {
     // Firebase not configured yet - app will work without crash reporting
     debugPrint('Firebase initialization failed: $e');

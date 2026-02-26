@@ -357,13 +357,11 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                         try {
                           final authProvider = context
                               .read<app_auth.AuthProvider>();
-                          if (authProvider.currentUser == null)
+                          if (authProvider.currentUser == null) {
                             throw Exception("User not found");
+                          }
 
-                          await authProvider.verifyEmail(
-                            authProvider.currentUser!.$id,
-                            code,
-                          );
+                          await authProvider.verifyOtpAndLogin(code);
 
                           if (context.mounted) {
                             Navigator.pop(context);
@@ -425,6 +423,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     );
   }
 
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,

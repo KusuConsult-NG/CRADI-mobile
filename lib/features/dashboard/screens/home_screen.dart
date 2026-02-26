@@ -648,7 +648,7 @@ class _HomeScreenState extends State<HomeScreen> {
       );
     } else if (_selectedFilterIndex == 1) {
       // My Reports
-      final userId = context.read<AuthProvider>().currentUser?.$id;
+      final userId = context.read<AuthProvider>().currentUser?.uid;
       return _buildListFeed(
         statusProvider.getReports(null, userId: userId),
         statusProvider.isLoading(null, userId: userId),

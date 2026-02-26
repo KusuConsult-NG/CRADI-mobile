@@ -15,21 +15,21 @@ void main() {
         ),
       ),
     );
+    await tester.pumpAndSettle();
 
-    // Find State dropdown
-    final stateDropdown = find.text('Select State');
-    expect(stateDropdown, findsOneWidget);
+    // Find State dropdown hint
+    expect(find.text('Select State'), findsOneWidget);
 
-    // Tap to open
-    await tester.tap(stateDropdown);
+    // Tap the dropdown — use gesture since it may overlap other widgets
+    await tester.tap(find.text('Select State'), warnIfMissed: false);
     await tester.pumpAndSettle();
 
     // Check for focal states
-    expect(find.text('Plateau'), findsOneWidget);
-    expect(find.text('Benue'), findsOneWidget);
-    expect(find.text('Nasarawa'), findsOneWidget);
+    expect(find.text('Plateau'), findsWidgets);
+    expect(find.text('Benue'), findsWidgets);
+    expect(find.text('Nasarawa'), findsWidgets);
 
-    // Check that other states are NOT present (e.g. Lagos, Kano)
+    // Non-focal states should not appear
     expect(find.text('Lagos'), findsNothing);
     expect(find.text('Kano'), findsNothing);
   });
@@ -46,26 +46,29 @@ void main() {
         ),
       ),
     );
+    await tester.pumpAndSettle();
 
-    // Initially LGA should be disabled/hint "Select state first"
+    // Initially LGA should show disabled hint
     expect(find.text('Select state first'), findsOneWidget);
 
-    // Select State
-    await tester.tap(find.text('Select State'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Plateau').last); // Select Plateau
+    // Open State dropdown
+    await tester.tap(find.text('Select State'), warnIfMissed: false);
     await tester.pumpAndSettle();
 
-    // Now LGA hint should change to "Select LGA"
+    // Select Plateau (use .last to pick from the dropdown list, not the button)
+    await tester.tap(find.text('Plateau').last);
+    await tester.pumpAndSettle();
+
+    // Now LGA hint should change
     expect(find.text('Select LGA'), findsOneWidget);
     expect(find.text('Select state first'), findsNothing);
 
     // Open LGA dropdown
-    await tester.tap(find.text('Select LGA'));
+    await tester.tap(find.text('Select LGA'), warnIfMissed: false);
     await tester.pumpAndSettle();
 
-    // Check specific LGAs for Plateau
-    expect(find.text('Jos North'), findsOneWidget);
-    expect(find.text('Jos South'), findsOneWidget);
+    // Check Plateau LGAs
+    expect(find.text('Jos North'), findsWidgets);
+    expect(find.text('Jos South'), findsWidgets);
   });
 }

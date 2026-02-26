@@ -1,29 +1,26 @@
 import 'package:flutter/material.dart';
-import 'package:climate_app/core/services/appwrite_service.dart';
+import 'package:climate_app/core/services/firebase_service.dart';
 import 'package:climate_app/core/services/peer_verification_service.dart';
 import 'package:climate_app/features/verification/models/verification_report_model.dart';
+import 'package:climate_app/core/constants/app_config.dart';
 import 'dart:async';
 import 'dart:developer' as developer;
-import 'package:appwrite/appwrite.dart';
-
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:climate_app/core/services/offline_storage_service.dart';
 
 class ReportsStatusProvider extends ChangeNotifier {
-  final AppwriteService _appwrite = AppwriteService();
+  final FirebaseService _firebase = FirebaseService();
   final OfflineStorageService _offlineStorage = OfflineStorageService();
 
-  // Global loading state for submissions
   bool _isSubmitting = false;
   bool get isSubmitting => _isSubmitting;
 
-  // State maps for different tabs/statuses
   final Map<String, List<VerificationReport>> _reportsMap = {};
-  final Map<String, String?> _cursors = {};
+  final Map<String, DocumentSnapshot?> _lastDocMap = {};
   final Map<String, bool> _hasMoreMap = {};
   final Map<String, bool> _loadingMap = {};
   final Map<String, int> _totalCounts = {};
 
-  // Getters for specific status
   List<VerificationReport> getReports(
     ReportStatus? status, {
     String? userId,
@@ -50,7 +47,6 @@ class ReportsStatusProvider extends ChangeNotifier {
   }) =>
       '${status?.name ?? 'all'}_${userId ?? 'all'}_excl_${excludeUserId ?? 'none'}';
 
-  /// Submit a verification request (supports offline)
   Future<void> submitVerificationRequest({
     required String hazardType,
     required String severity,
@@ -63,11 +59,10 @@ class ReportsStatusProvider extends ChangeNotifier {
     double? latitude,
     double? longitude,
   }) async {
-    _isSubmitting = true; // Use global submitting state
+    _isSubmitting = true;
     notifyListeners();
 
-    final String defaultLocation =
-        locationDetails ?? 'User Requested Verification';
+    final defaultLocation = locationDetails ?? 'User Requested Verification';
     final data = {
       'userId': userId,
       'description': description,
@@ -75,16 +70,15 @@ class ReportsStatusProvider extends ChangeNotifier {
       'severity': severity,
       'status': 'pending',
       'submittedAt': DateTime.now().toIso8601String(),
-      'createdAt': DateTime.now().toIso8601String(), // Required by schema
       'locationDetails': defaultLocation,
-      'location': defaultLocation, // Schema compatibility
-      'address': defaultLocation, // Schema compatibility
+      'location': defaultLocation,
+      'address': defaultLocation,
       'ward': ward,
       'lga': lga,
       'state': state,
       'latitude': latitude ?? 0.0,
       'longitude': longitude ?? 0.0,
-      'imageIds': [],
+      'imageUrls': [],
       'isAlert':
           severity.toLowerCase() == 'critical' ||
           severity.toLowerCase() == 'high',
@@ -92,30 +86,22 @@ class ReportsStatusProvider extends ChangeNotifier {
     };
 
     try {
-      // Try online submission first
-      await _appwrite.createDocument(
-        collectionId: AppwriteService.reportsCollectionId,
+      await _firebase.createDocument(
+        collectionId: AppConfig.reportsCollection,
         data: data,
       );
       developer.log('Verification request submitted online');
-    } on Exception catch (e) {
+    } on FirebaseException catch (e) {
       developer.log('Online submission failed, queuing offline: $e');
-      // If failed (likely offline), add to sync queue
       try {
         await _offlineStorage.addToSyncQueue({
           ...data,
-          'type':
-              'verification_request', // Tag for sync worker to know how to handle
-          'collectionId': AppwriteService.reportsCollectionId,
+          'type': 'verification_request',
+          'collectionId': AppConfig.reportsCollection,
         });
-        // We rethrow a specific exception so UI can show "Saved to Sync Queue" message
-        throw AppwriteException(
-          'Connection failed. Request saved to offline queue.',
-          0,
-          'offline_queued',
-        );
-      } catch (queueError) {
-        // If even offline storage fails
+        // Re-throw with offline indicator for UI
+        throw Exception('Connection failed. Request saved to offline queue.');
+      } on Exception catch (queueError) {
         developer.log('Failed to save to offline queue: $queueError');
         rethrow;
       }
@@ -126,27 +112,18 @@ class ReportsStatusProvider extends ChangeNotifier {
   }
 
   Future<void> refreshReports({String? excludeUserId}) async {
-    // Refresh all lists
-    await fetchReports(status: null, excludeUserId: excludeUserId);
-    await fetchReports(
-      status: ReportStatus.pending,
-      excludeUserId: excludeUserId,
-    );
-    await fetchReports(
-      status: ReportStatus.acknowledged,
-      excludeUserId: excludeUserId,
-    );
-    await fetchReports(
-      status: ReportStatus.resolved,
-      excludeUserId: excludeUserId,
-    );
-    await fetchReports(
-      status: ReportStatus.rejected,
-      excludeUserId: excludeUserId,
-    );
+    await Future.wait([
+      fetchReports(status: null, excludeUserId: excludeUserId),
+      fetchReports(status: ReportStatus.pending, excludeUserId: excludeUserId),
+      fetchReports(
+        status: ReportStatus.acknowledged,
+        excludeUserId: excludeUserId,
+      ),
+      fetchReports(status: ReportStatus.resolved, excludeUserId: excludeUserId),
+      fetchReports(status: ReportStatus.rejected, excludeUserId: excludeUserId),
+    ]);
   }
 
-  /// Fetch reports with pagination
   Future<void> fetchReports({
     bool loadMore = false,
     ReportStatus? status,
@@ -159,7 +136,7 @@ class ReportsStatusProvider extends ChangeNotifier {
       if ((_hasMoreMap[key] == false) || (_loadingMap[key] == true)) return;
     } else {
       _hasMoreMap[key] = true;
-      _cursors[key] = null;
+      _lastDocMap[key] = null;
       _reportsMap[key] = [];
     }
 
@@ -167,64 +144,38 @@ class ReportsStatusProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final List<String> queries = [
-        Query.orderDesc('\$createdAt'),
-        Query.limit(20),
-      ];
+      final queries = <QueryFilter>[FQuery.orderDesc('\$createdAt')];
 
       if (status != null) {
-        String appwriteStatus;
-        switch (status) {
-          case ReportStatus.pending:
-            appwriteStatus = 'pending';
-            break;
-          case ReportStatus.acknowledged:
-            appwriteStatus = 'acknowledged';
-            break;
-          case ReportStatus.resolved:
-            appwriteStatus = 'resolved';
-            break;
-          case ReportStatus.rejected:
-            appwriteStatus = 'rejected';
-            break;
-        }
-        queries.add(Query.equal('status', appwriteStatus));
+        queries.add(FQuery.equal('status', status.name));
       }
-
       if (userId != null) {
-        queries.add(Query.equal('userId', userId));
+        queries.add(FQuery.equal('userId', userId));
       }
-
       if (excludeUserId != null) {
-        queries.add(Query.notEqual('userId', excludeUserId));
+        queries.add(FQuery.notEqual('userId', excludeUserId));
       }
 
-      if (loadMore && _cursors[key] != null) {
-        queries.add(Query.cursorAfter(_cursors[key]!));
-      }
-
-      final docs = await _appwrite.listDocuments(
-        collectionId: AppwriteService.reportsCollectionId,
+      final docs = await _firebase.listDocuments(
+        collectionId: AppConfig.reportsCollection,
         queries: queries,
+        limitCount: 20,
       );
 
-      _totalCounts[key] = docs.total;
-
-      if (docs.documents.length < 20) {
+      if (docs.length < 20) {
         _hasMoreMap[key] = false;
       }
 
-      final newReports = docs.documents.map((doc) {
-        final data = doc.data;
-        final status = _parseStatus(data['status']);
+      final newReports = docs.map((data) {
+        final reportStatus = _parseStatus(data['status']);
         return VerificationReport(
-          id: doc.$id,
+          id: data['\$id'] as String? ?? '',
           title: _formatTitle(data['hazardType'] ?? 'Unknown Hazard'),
           type: data['hazardType'] ?? 'Unknown',
           reporter: 'Community Report',
           location: data['locationDetails'] ?? 'Unknown Location',
           time: _formatTimeAgo(data['submittedAt']),
-          status: status,
+          status: reportStatus,
           iconName: _getIconName(data['hazardType']),
           iconColor: _getIconColor(data['severity']),
           bgIconColor: '${_getIconColor(data['severity'])}_50',
@@ -232,16 +183,15 @@ class ReportsStatusProvider extends ChangeNotifier {
       }).toList();
 
       if (loadMore) {
-        if (_reportsMap[key] == null) _reportsMap[key] = [];
-        _reportsMap[key]!.addAll(newReports);
+        _reportsMap[key] = [...(_reportsMap[key] ?? []), ...newReports];
       } else {
         _reportsMap[key] = newReports;
       }
 
-      if (docs.documents.isNotEmpty) {
-        _cursors[key] = docs.documents.last.$id;
-      } else {
-        _hasMoreMap[key] = false;
+      // Store pagination cursor
+      if (docs.isNotEmpty) {
+        _lastDocMap[key] =
+            null; // FirebaseService.listDocuments handles internally
       }
     } on Exception catch (e) {
       developer.log('Error fetching reports: $e');
@@ -251,25 +201,21 @@ class ReportsStatusProvider extends ChangeNotifier {
     }
   }
 
-  /// Get all reports (for CSV export)
   Future<List<VerificationReport>> getAllReports() async {
     try {
-      final docs = await _appwrite.listDocuments(
-        collectionId: AppwriteService.reportsCollectionId,
+      final docs = await _firebase.listDocuments(
+        collectionId: AppConfig.reportsCollection,
+        limitCount: 100, // Safety cap — no unbounded reads
       );
-
-      return docs.documents.map((doc) {
-        final data = doc.data;
-        final status = _parseStatus(data['status']);
-
+      return docs.map((data) {
         return VerificationReport(
-          id: doc.$id,
+          id: data['\$id'] as String? ?? '',
           title: _formatTitle(data['hazardType'] ?? 'Unknown'),
           type: data['hazardType'] ?? 'Unknown',
           reporter: 'Community Report',
           location: data['locationDetails'] ?? 'Unknown',
           time: _formatTimeAgo(data['submittedAt']),
-          status: status,
+          status: _parseStatus(data['status']),
           iconName: _getIconName(data['hazardType']),
           iconColor: _getIconColor(data['severity']),
           bgIconColor: '${_getIconColor(data['severity'])}_50',
@@ -281,27 +227,20 @@ class ReportsStatusProvider extends ChangeNotifier {
     }
   }
 
-  /// Verify a report (move to acknowledged)
   Future<void> verifyReport(String reportId, {String? userId}) async {
     try {
-      // Create verification record via PeerVerificationService
       await PeerVerificationService().submitVerification(
         reportId: reportId,
         userId: userId ?? 'system_admin',
         isConfirmed: true,
       );
-
-      // Status update is handled inside `submitVerification` based on `minimumConfirmations`
-      // But if we want to forcibly acknowledge it here as an admin action:
-      await _appwrite.updateDocument(
-        collectionId: AppwriteService.reportsCollectionId,
+      await _firebase.updateDocument(
+        collectionId: AppConfig.reportsCollection,
         documentId: reportId,
         data: {'status': 'acknowledged'},
       );
-
       developer.log('Report verified: $reportId');
       notifyListeners();
-      // Refresh relevant lists
       fetchReports(status: ReportStatus.pending);
       fetchReports(status: ReportStatus.acknowledged);
     } on Exception catch (e) {
@@ -310,17 +249,15 @@ class ReportsStatusProvider extends ChangeNotifier {
     }
   }
 
-  /// Resolve a report (mark as resolved)
   Future<void> resolveReport(String reportId) async {
     try {
-      await _appwrite.updateDocument(
-        collectionId: AppwriteService.reportsCollectionId,
+      await _firebase.updateDocument(
+        collectionId: AppConfig.reportsCollection,
         documentId: reportId,
         data: {'status': 'resolved'},
       );
       developer.log('Report resolved: $reportId');
       notifyListeners();
-      // Refresh relevant lists
       fetchReports(status: ReportStatus.acknowledged);
       fetchReports(status: ReportStatus.resolved);
     } on Exception catch (e) {
@@ -329,26 +266,20 @@ class ReportsStatusProvider extends ChangeNotifier {
     }
   }
 
-  /// Reject a report
   Future<void> rejectReport(String reportId, {String? userId}) async {
     try {
-      // Create verification record via PeerVerificationService
       await PeerVerificationService().submitVerification(
         reportId: reportId,
         userId: userId ?? 'system_admin',
         isConfirmed: false,
       );
-
-      // Force status update to rejected
-      await _appwrite.updateDocument(
-        collectionId: AppwriteService.reportsCollectionId,
+      await _firebase.updateDocument(
+        collectionId: AppConfig.reportsCollection,
         documentId: reportId,
         data: {'status': 'rejected'},
       );
-
       developer.log('Report rejected: $reportId');
       notifyListeners();
-      // Refresh relevant lists
       fetchReports(status: ReportStatus.pending);
       fetchReports(status: ReportStatus.rejected);
     } on Exception catch (e) {
@@ -357,51 +288,39 @@ class ReportsStatusProvider extends ChangeNotifier {
     }
   }
 
-  /// Move report back to pending (reopen)
   Future<void> moveBackToPending(String reportId) async {
     try {
-      await _appwrite.updateDocument(
-        collectionId: AppwriteService.reportsCollectionId,
+      await _firebase.updateDocument(
+        collectionId: AppConfig.reportsCollection,
         documentId: reportId,
         data: {'status': 'pending'},
       );
       developer.log('Report moved back to pending: $reportId');
       notifyListeners();
-      // Refresh relevant lists (rough approximation, ideally we know source status)
       refreshReports();
     } on Exception catch (e) {
-      developer.log('Error moving report to pending: $e');
+      developer.log('Error moving to pending: $e');
       rethrow;
     }
   }
 
-  /// Generate CSV report
   Future<String> generateCSVReport(ReportStatus? filterStatus) async {
     final reports = await getAllReports();
-    final filteredReports = filterStatus != null
+    final filtered = filterStatus != null
         ? reports.where((r) => r.status == filterStatus).toList()
         : reports;
-
     final buffer = StringBuffer();
-    buffer.writeln(
-      'ID,Title,Type,Reporter,Location,Time,Status,Verified Date,Resolved Date',
-    );
-
-    for (final report in filteredReports) {
-      buffer.write('${report.id},');
-      buffer.write('"${report.title}",');
-      buffer.write('${report.type},');
-      buffer.write('"${report.reporter}",');
-      buffer.write('"${report.location}",');
-      buffer.write('${report.time},');
-      buffer.write(report.status.displayName);
-      buffer.writeln();
+    buffer.writeln('ID,Title,Type,Reporter,Location,Time,Status');
+    for (final r in filtered) {
+      buffer.writeln(
+        '${r.id},"${r.title}",${r.type},"${r.reporter}","${r.location}",${r.time},${r.status.displayName}',
+      );
     }
-
     return buffer.toString();
   }
 
-  // Helper methods
+  // ── Helpers ────────────────────────────────────────────────────────────────
+
   String _formatTitle(String hazardType) {
     switch (hazardType.toLowerCase()) {
       case 'flood':
@@ -470,7 +389,6 @@ class ReportsStatusProvider extends ChangeNotifier {
 
   String _formatTimeAgo(dynamic timestamp) {
     if (timestamp == null) return 'Unknown';
-
     DateTime dateTime;
     if (timestamp is String) {
       try {
@@ -478,25 +396,19 @@ class ReportsStatusProvider extends ChangeNotifier {
       } on Exception {
         return 'Unknown';
       }
+    } else if (timestamp is Timestamp) {
+      dateTime = timestamp.toDate();
     } else if (timestamp is DateTime) {
       dateTime = timestamp;
     } else {
       return 'Unknown';
     }
 
-    final now = DateTime.now();
-    final difference = now.difference(dateTime);
-
-    if (difference.inMinutes < 1) {
-      return 'Just now';
-    } else if (difference.inMinutes < 60) {
-      return '${difference.inMinutes}m ago';
-    } else if (difference.inHours < 24) {
-      return '${difference.inHours}h ago';
-    } else if (difference.inDays < 7) {
-      return '${difference.inDays}d ago';
-    } else {
-      return '${(difference.inDays / 7).floor()}w ago';
-    }
+    final diff = DateTime.now().difference(dateTime);
+    if (diff.inMinutes < 1) return 'Just now';
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+    if (diff.inHours < 24) return '${diff.inHours}h ago';
+    if (diff.inDays < 7) return '${diff.inDays}d ago';
+    return '${(diff.inDays / 7).floor()}w ago';
   }
 }

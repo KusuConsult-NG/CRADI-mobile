@@ -1,26 +1,26 @@
 import 'package:climate_app/core/services/secure_storage_service.dart';
-import 'package:climate_app/core/services/appwrite_service.dart';
+import 'package:climate_app/core/services/firebase_service.dart';
 import 'package:climate_app/core/services/offline_storage_service.dart';
+import 'package:climate_app/core/constants/app_config.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'dart:io';
-import 'dart:async';
 import 'dart:developer' as developer;
-import 'package:appwrite/appwrite.dart';
 
-/// Provider for managing user profile data with Appwrite
+/// Provider for managing user profile data with Firebase + Firestore
 class ProfileProvider extends ChangeNotifier {
   ProfileProvider({
-    AppwriteService? appwriteService,
+    FirebaseService? firebaseService,
     Connectivity? connectivity,
-  }) : _appwrite = appwriteService ?? AppwriteService(),
+  }) : _firebase = firebaseService ?? FirebaseService(),
        _connectivity = connectivity ?? Connectivity() {
     loadProfile();
   }
 
   final SecureStorageService _storage = SecureStorageService();
-  final AppwriteService _appwrite;
+  final FirebaseService _firebase;
   final OfflineStorageService _offlineStorage = OfflineStorageService();
   Map<String, dynamic>? _userProfile;
   final Connectivity _connectivity;
@@ -52,52 +52,18 @@ class ProfileProvider extends ChangeNotifier {
   bool get biometricsEnabled => _biometricsEnabled;
   bool get isLoading => _isLoading;
 
-  /// Get current user's reports stream using Realtime
+  /// Get current user's reports as a real-time Firestore stream.
   Stream<List<Map<String, dynamic>>> getUserReportsStream() {
-    final controller = StreamController<List<Map<String, dynamic>>>();
-    RealtimeSubscription? subscription;
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return const Stream.empty();
 
-    void updateReports() async {
-      try {
-        final user = await _appwrite.getCurrentUser();
-        if (user == null) {
-          if (!controller.isClosed) controller.add([]);
-          return;
-        }
-
-        final reports = await _appwrite.listDocuments(
-          collectionId: AppwriteService.reportsCollectionId,
-          queries: [Query.equal('userId', user.$id)],
-        );
-
-        if (!controller.isClosed) {
-          controller.add(reports.documents.map((doc) => doc.data).toList());
-        }
-      } on Exception catch (e) {
-        developer.log('Error updating user reports: $e');
-      }
-    }
-
-    // Initial fetch
-    updateReports();
-
-    // Subscribe to realtime updates
-    const channel =
-        'databases.${AppwriteService.databaseId}.collections.${AppwriteService.reportsCollectionId}.documents';
-
-    subscription = _appwrite.subscribe(
-      channels: [channel],
-      callback: (event) {
-        updateReports();
-      },
+    return _firebase.subscribeToCollection(
+      collectionId: AppConfig.reportsCollection,
+      queries: [
+        FQuery.equal('userId', user.uid),
+        FQuery.orderDesc('\$createdAt'),
+      ],
     );
-
-    controller.onCancel = () {
-      subscription?.close();
-      controller.close();
-    };
-
-    return controller.stream;
   }
 
   Future<void> loadProfile() async {
@@ -105,62 +71,52 @@ class ProfileProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final user = await _appwrite.getCurrentUser();
+      final user = FirebaseAuth.instance.currentUser;
 
       if (user != null) {
-        _registrationDate = DateTime.tryParse(user.registration);
-        _email = user.email; // Source of truth
+        _email = user.email ?? '';
+        _name = user.displayName ?? 'User';
+        _registrationDate = user.metadata.creationTime;
 
-        // Load from Appwrite Database FIRST (Source of Truth)
+        // Load from Firestore (source of truth)
         try {
-          final doc = await _appwrite.getDocument(
-            collectionId: AppwriteService.usersCollectionId,
-            documentId: user.$id,
+          final doc = await _firebase.getDocument(
+            collectionId: AppConfig.usersCollection,
+            documentId: user.uid,
           );
 
-          if (doc.data.isNotEmpty) {
-            final data = doc.data;
-            _userProfile = data;
-
-            // Cache the fresh profile
+          if (doc.isNotEmpty) {
+            _userProfile = doc;
             await _offlineStorage.cacheUserProfile(_userProfile!);
 
-            // Update local state from Appwrite
-            _name = data['name'] ?? 'User';
-            _email = data['email'] ?? user.email;
-            _phone = data['phone'] ?? user.phone ?? '';
-            _state = data['state'];
-            _lga = data['lga'];
-            _ward = data['ward'];
+            _name = doc['name'] ?? _name;
+            _email = doc['email'] ?? _email;
+            _phone = doc['phone'] ?? '';
+            _state = doc['state'];
+            _lga = doc['lga'];
+            _ward = doc['ward'];
+            _registrationCode = doc['registrationCode'];
+            _biometricsEnabled = doc['biometricsEnabled'] ?? false;
 
-            // Only overwrite monitoring zone if remote value is not null/empty
-            final remoteZone = data['monitoringZone'] as String?;
+            final remoteZone = doc['monitoringZone'] as String?;
             if (remoteZone != null && remoteZone.isNotEmpty) {
               _monitoringZone = remoteZone;
               await _storage.write('monitoring_zone', remoteZone);
             } else {
-              // Try to load from local storage if remote is empty
               _monitoringZone = await _storage.read('monitoring_zone');
             }
 
-            _registrationCode = data['registrationCode'];
-            _biometricsEnabled = data['biometricsEnabled'] ?? false;
-
-            if (data['profileImageId'] != null) {
-              _profileImagePath = data['profileImageId'];
+            if (doc['profileImageUrl'] != null) {
+              _profileImagePath = doc['profileImageUrl'] as String;
             }
 
-            // Secure cache to local storage
+            // Cache to secure storage
             await _storage.write('profile_name', _name);
             await _storage.write('profile_email', _email);
             await _storage.write('profile_phone', _phone);
-
             if (_state != null) await _storage.write('profile_state', _state!);
             if (_lga != null) await _storage.write('profile_lga', _lga!);
             if (_ward != null) await _storage.write('profile_ward', _ward!);
-            if (_monitoringZone != null) {
-              await _storage.write('monitoring_zone', _monitoringZone!);
-            }
             if (_profileImagePath != null) {
               await _storage.write('profile_image', _profileImagePath!);
             }
@@ -169,37 +125,30 @@ class ProfileProvider extends ChangeNotifier {
               _biometricsEnabled.toString(),
             );
 
-            developer.log('Profile loaded from Appwrite: ${user.$id}');
+            developer.log('Profile loaded from Firestore: ${user.uid}');
           }
-        } on AppwriteException catch (e) {
-          developer.log('Appwrite error, sliding to local fallback: $e');
-          // Fallback to offline cache
+        } on Exception catch (e) {
+          developer.log('Firestore error, using local fallback: $e');
           final cached = _offlineStorage.getCachedUserProfile();
           if (cached != null) {
             _userProfile = cached;
-            developer.log(
-              'Loaded profile from offline cache',
-              name: 'ProfileProvider',
-            );
           }
         }
-      }
 
-      // Fallback: ONLY load from local storage if it belongs to the current user
-      final cachedEmail = await _storage.read('profile_email');
-      if (user != null && cachedEmail == user.email) {
-        _name = await _storage.read('profile_name') ?? 'User';
-        _phone = await _storage.read('profile_phone') ?? '';
-        _profileImagePath = await _storage.read('profile_image');
-        _state = await _storage.read('profile_state');
-        _lga = await _storage.read('profile_lga');
-        _ward = await _storage.read('profile_ward');
-        _monitoringZone = await _storage.read('monitoring_zone');
-        final bioEnabled = await _storage.read('biometric_enabled');
-        _biometricsEnabled = bioEnabled == 'true';
-        developer.log('Profile loaded from local storage for current user');
-      } else if (user == null) {
-        // No session, ensure state is clear
+        // Fallback to secure storage if email matches
+        final cachedEmail = await _storage.read('profile_email');
+        if (cachedEmail == user.email) {
+          _name = await _storage.read('profile_name') ?? _name;
+          _phone = await _storage.read('profile_phone') ?? _phone;
+          _profileImagePath = await _storage.read('profile_image');
+          _state ??= await _storage.read('profile_state');
+          _lga ??= await _storage.read('profile_lga');
+          _ward ??= await _storage.read('profile_ward');
+          _monitoringZone ??= await _storage.read('monitoring_zone');
+          final bioEnabled = await _storage.read('biometric_enabled');
+          _biometricsEnabled = bioEnabled == 'true';
+        }
+      } else {
         clearProfile();
       }
     } on Exception catch (e) {
@@ -219,25 +168,21 @@ class ProfileProvider extends ChangeNotifier {
     _state = null;
     _lga = null;
     _ward = null;
-    _monitoringZone = null; // Let user select their actual zone
+    _monitoringZone = null;
     _registrationCode = null;
     _registrationDate = null;
     _biometricsEnabled = false;
-    _userProfile = null; // Clear local memory cache
-
-    // Clear offline storage cache (including drafts and sync queue)
+    _userProfile = null;
     await _offlineStorage.clearUserData();
-
     notifyListeners();
   }
 
-  /// Helper to sync changes to Appwrite Database
-  Future<void> _syncToAppwrite(Map<String, dynamic> data) async {
+  /// Sync changes to Firestore
+  Future<void> _syncToFirestore(Map<String, dynamic> data) async {
     try {
-      final user = await _appwrite.getCurrentUser();
+      final user = FirebaseAuth.instance.currentUser;
       if (user == null) return;
 
-      // Check connectivity
       final connectivityResults = await _connectivity.checkConnectivity();
       final hasConnection = connectivityResults.any(
         (result) => result != ConnectivityResult.none,
@@ -248,25 +193,18 @@ class ProfileProvider extends ChangeNotifier {
         return;
       }
 
-      // Online: sync directly to Appwrite
-      await _appwrite.updateDocument(
-        collectionId: AppwriteService.usersCollectionId,
-        documentId: user.$id,
+      await _firebase.updateDocument(
+        collectionId: AppConfig.usersCollection,
+        documentId: user.uid,
         data: data,
       );
 
-      developer.log('Profile synced to Appwrite', name: 'ProfileProvider');
-    } on AppwriteException catch (e) {
-      developer.log(
-        'Appwrite error syncing profile: ${e.message}',
-        name: 'ProfileProvider',
-      );
+      developer.log('Profile synced to Firestore', name: 'ProfileProvider');
     } on Exception catch (e) {
-      developer.log('Error syncing to Appwrite: $e', name: 'ProfileProvider');
+      developer.log('Error syncing to Firestore: $e', name: 'ProfileProvider');
     }
   }
 
-  /// Helper to update local state and cache
   Future<void> _updateLocalState(Map<String, dynamic> updates) async {
     _userProfile ??= {};
     _userProfile!.addAll(updates);
@@ -278,7 +216,7 @@ class ProfileProvider extends ChangeNotifier {
     await _storage.write('profile_name', name);
     await _updateLocalState({'name': name});
     notifyListeners();
-    await _syncToAppwrite({'name': name});
+    await _syncToFirestore({'name': name});
   }
 
   Future<void> updateEmail(String email) async {
@@ -286,7 +224,7 @@ class ProfileProvider extends ChangeNotifier {
     await _storage.write('profile_email', email);
     await _updateLocalState({'email': email});
     notifyListeners();
-    await _syncToAppwrite({'email': email});
+    await _syncToFirestore({'email': email});
   }
 
   Future<void> updatePhone(String phone) async {
@@ -294,70 +232,54 @@ class ProfileProvider extends ChangeNotifier {
     await _storage.write('profile_phone', phone);
     await _updateLocalState({'phone': phone});
     notifyListeners();
-    await _syncToAppwrite({'phone': phone});
+    await _syncToFirestore({'phone': phone});
   }
 
   Future<void> updateProfileImage(String imagePath) async {
     _profileImagePath = imagePath;
     await _storage.write('profile_image', imagePath);
-    await _updateLocalState({'profileImageId': imagePath});
+    await _updateLocalState({'profileImageUrl': imagePath});
     notifyListeners();
-    await _syncToAppwrite({'profileImageId': imagePath});
+    await _syncToFirestore({'profileImageUrl': imagePath});
   }
 
-  /// Upload profile image to Appwrite Storage and update Database
+  /// Upload profile image to Firebase Storage and update Firestore
   Future<void> uploadProfileImage(XFile imageFile) async {
     try {
       _isLoading = true;
       notifyListeners();
 
-      final user = await _appwrite.getCurrentUser();
+      final user = FirebaseAuth.instance.currentUser;
       if (user == null) {
         throw Exception('User must be logged in to upload profile image');
       }
 
       final file = File(imageFile.path);
-      final fileBytes = await file.readAsBytes();
-
-      // Upload to Appwrite Storage
-      final timestamp = DateTime.now().millisecondsSinceEpoch;
       final ext = imageFile.path.split('.').last.toLowerCase();
       final validExt = (ext == 'png' || ext == 'jpg' || ext == 'jpeg')
           ? ext
           : 'jpg';
-
-      final fileName = 'profile_${user.$id}_$timestamp.$validExt';
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final storagePath = 'profile_images/${user.uid}_$timestamp.$validExt';
 
       developer.log(
-        'Starting upload to Appwrite Storage: $fileName',
+        'Uploading profile image to Firebase Storage: $storagePath',
         name: 'ProfileProvider',
       );
 
-      final uploadedFile = await _appwrite.uploadFile(
-        bucketId: AppwriteService.profileImagesBucketId,
-        filePath: file.path,
-        fileBytes: fileBytes,
+      final fileUrl = await _firebase.uploadFileFromPath(
+        storagePath: storagePath,
+        file: file,
+        contentType: 'image/$validExt',
       );
 
-      // Get file view URL
-      final fileUrl = _appwrite.getFileView(
-        bucketId: AppwriteService.profileImagesBucketId,
-        fileId: uploadedFile.$id,
-      );
-
-      // Update local state and storage
       _profileImagePath = fileUrl;
       await _storage.write('profile_image', fileUrl);
-      await _updateLocalState({'profileImageId': fileUrl});
+      await _updateLocalState({'profileImageUrl': fileUrl});
+      await _syncToFirestore({'profileImageUrl': fileUrl});
 
-      // Sync to Appwrite Database
-      await _syncToAppwrite({'profileImageId': fileUrl});
-
-      developer.log('Profile image uploaded successfully: $fileUrl');
-    } on AppwriteException catch (e) {
-      developer.log('Appwrite Storage Error: ${e.message}', error: e);
-      throw Exception('Upload failed: ${e.message}');
-    } catch (e) {
+      developer.log('Profile image uploaded: $fileUrl');
+    } on Exception catch (e) {
       developer.log('Error uploading profile image: $e');
       rethrow;
     } finally {
@@ -370,18 +292,12 @@ class ProfileProvider extends ChangeNotifier {
     _state = state;
     _lga = lga;
     _ward = ward;
-    if (state != null) {
-      await _storage.write('profile_state', state);
-    }
-    if (lga != null) {
-      await _storage.write('profile_lga', lga);
-    }
-    if (ward != null) {
-      await _storage.write('profile_ward', ward);
-    }
+    if (state != null) await _storage.write('profile_state', state);
+    if (lga != null) await _storage.write('profile_lga', lga);
+    if (ward != null) await _storage.write('profile_ward', ward);
     await _updateLocalState({'state': state, 'lga': lga, 'ward': ward});
     notifyListeners();
-    await _syncToAppwrite({'state': state, 'lga': lga, 'ward': ward});
+    await _syncToFirestore({'state': state, 'lga': lga, 'ward': ward});
   }
 
   Future<void> updateMonitoringZone(String zone) async {
@@ -389,7 +305,7 @@ class ProfileProvider extends ChangeNotifier {
     await _storage.write('monitoring_zone', zone);
     await _updateLocalState({'monitoringZone': zone});
     notifyListeners();
-    await _syncToAppwrite({'monitoringZone': zone});
+    await _syncToFirestore({'monitoringZone': zone});
   }
 
   Future<void> setBiometricsEnabled(bool enabled) async {
@@ -397,11 +313,11 @@ class ProfileProvider extends ChangeNotifier {
     await _storage.write('biometric_enabled', enabled.toString());
     await _updateLocalState({'biometricsEnabled': enabled});
     notifyListeners();
-    await _syncToAppwrite({'biometricsEnabled': enabled});
+    await _syncToFirestore({'biometricsEnabled': enabled});
   }
 
   Future<void> updateFCMToken(String token) async {
     await _updateLocalState({'fcmToken': token});
-    await _syncToAppwrite({'fcmToken': token});
+    await _syncToFirestore({'fcmToken': token});
   }
 }

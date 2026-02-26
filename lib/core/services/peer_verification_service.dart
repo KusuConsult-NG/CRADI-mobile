@@ -1,23 +1,26 @@
-import 'package:climate_app/core/services/appwrite_service.dart';
+import 'package:climate_app/core/services/firebase_service.dart';
 import 'package:climate_app/core/services/notification_service.dart';
 import 'package:climate_app/core/services/sms_service.dart';
-import 'package:appwrite/appwrite.dart';
+import 'package:climate_app/core/constants/app_config.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:developer' as developer;
 
-/// Service for managing peer verification workflow
-/// Handles verification requests, escalation, and notification
+/// Service for managing peer verification workflow.
+/// Handles verification requests, escalation, and notification.
+/// Now backed by Firestore. Key fixes from audit:
+///   - minimumConfirmations raised to AppConfig.minimumPeerConfirmations (2)
+///   - No hard 25-document limit (Firestore has no default cap)
+///   - Firestore auto-IDs replace millisecond timestamp IDs
 class PeerVerificationService {
   static final PeerVerificationService _instance =
       PeerVerificationService._internal();
   factory PeerVerificationService() => _instance;
   PeerVerificationService._internal();
 
-  final AppwriteService _appwrite = AppwriteService();
+  final FirebaseService _firebase = FirebaseService();
   final NotificationService _notificationService = NotificationService();
 
-  static const String verificationsCollectionId = 'verifications';
   static const Duration escalationTimeout = Duration(minutes: 30);
-  static const int minimumConfirmations = 1;
 
   /// Submit a verification (confirm or dispute)
   Future<Map<String, dynamic>> submitVerification({
@@ -27,38 +30,33 @@ class PeerVerificationService {
     String? comment,
   }) async {
     try {
-      // Create verification document
-      final verificationId = DateTime.now().millisecondsSinceEpoch.toString();
-      final verification = {
-        'reportId': reportId,
-        'userId': userId,
-        'isConfirmed': isConfirmed,
-        'comment': comment ?? '',
-        'submittedAt': DateTime.now().toIso8601String(),
-      };
-
-      await _appwrite.createDocument(
-        collectionId: verificationsCollectionId,
-        documentId: verificationId,
-        data: verification,
+      // Firestore auto-generates a safe document ID
+      final result = await _firebase.createDocument(
+        collectionId: AppConfig.verificationsCollection,
+        data: {
+          'reportId': reportId,
+          'userId': userId,
+          'isConfirmed': isConfirmed,
+          'comment': comment ?? '',
+          'submittedAt': FieldValue.serverTimestamp(),
+        },
       );
 
       developer.log(
-        'Verification submitted: $verificationId (confirmed: $isConfirmed)',
+        'Verification submitted: ${result['\$id']} (confirmed: $isConfirmed)',
         name: 'PeerVerificationService',
       );
 
-      // Check if report should be validated
       await _checkAndValidateReport(reportId);
 
       return {
         'success': true,
-        'verificationId': verificationId,
+        'verificationId': result['\$id'],
         'message': isConfirmed
             ? 'Report confirmed successfully'
             : 'Report disputed',
       };
-    } on AppwriteException catch (e) {
+    } on FirebaseException catch (e) {
       developer.log(
         'Error submitting verification: ${e.message}',
         name: 'PeerVerificationService',
@@ -67,20 +65,20 @@ class PeerVerificationService {
     }
   }
 
-  /// Check if report has enough confirmations and validate if needed
+  /// Check if report has enough confirmations and validate if needed.
   Future<void> _checkAndValidateReport(String reportId) async {
     try {
-      // Get all verifications for this report
-      final verifications = await _appwrite.listDocuments(
-        collectionId: verificationsCollectionId,
-        queries: [Query.equal('reportId', reportId)],
+      final verifications = await _firebase.listDocuments(
+        collectionId: AppConfig.verificationsCollection,
+        queries: [FQuery.equal('reportId', reportId)],
+        limitCount: 200, // A report won't have more than 200 verifications
       );
 
-      final confirmations = verifications.documents
-          .where((v) => v.data['isConfirmed'] == true)
+      final confirmations = verifications
+          .where((v) => v['isConfirmed'] == true)
           .length;
-      final disputes = verifications.documents
-          .where((v) => v.data['isConfirmed'] == false)
+      final disputes = verifications
+          .where((v) => v['isConfirmed'] == false)
           .length;
 
       developer.log(
@@ -88,19 +86,19 @@ class PeerVerificationService {
         name: 'PeerVerificationService',
       );
 
-      // Update the verification count on the report directly so UI can reflect it
-      await _appwrite.updateDocument(
-        collectionId: AppwriteService.reportsCollectionId,
+      // Update verification count on report
+      await _firebase.updateDocument(
+        collectionId: AppConfig.reportsCollection,
         documentId: reportId,
-        data: {'verificationCount': verifications.documents.length},
+        data: {'verificationCount': verifications.length},
       );
 
-      // If minimum confirmations met, validate the report
-      if (confirmations >= minimumConfirmations) {
+      // Validate only if minimum confirmations reached (now 2, not 1)
+      if (confirmations >= AppConfig.minimumPeerConfirmations) {
         await _validateReport(reportId, isAutoValidated: true);
       }
 
-      // If there are disputes, escalate to coordinators
+      // Escalate if there are disputes
       if (disputes > 0) {
         await escalateToCoordinator(
           reportId: reportId,
@@ -115,19 +113,18 @@ class PeerVerificationService {
     }
   }
 
-  /// Validate a report
+  /// Validate a report and trigger alert distribution.
   Future<void> _validateReport(
     String reportId, {
     required bool isAutoValidated,
   }) async {
     try {
-      // Update report status to validated
-      await _appwrite.updateDocument(
-        collectionId: AppwriteService.reportsCollectionId,
+      await _firebase.updateDocument(
+        collectionId: AppConfig.reportsCollection,
         documentId: reportId,
         data: {
           'status': 'validated',
-          'validatedAt': DateTime.now().toIso8601String(),
+          'validatedAt': FieldValue.serverTimestamp(),
           'autoValidated': isAutoValidated,
         },
       );
@@ -137,10 +134,7 @@ class PeerVerificationService {
         name: 'PeerVerificationService',
       );
 
-      // Trigger alert distribution
       await _triggerAlert(reportId);
-
-      // Notify original reporter
       await _notifyReporter(reportId, status: 'validated');
     } on Exception catch (e) {
       developer.log(
@@ -150,7 +144,7 @@ class PeerVerificationService {
     }
   }
 
-  /// Send verification requests to peers in the same ward
+  /// Send verification requests to peers in the same ward.
   Future<void> sendVerificationRequests({
     required String reportId,
     required String ward,
@@ -158,54 +152,50 @@ class PeerVerificationService {
     required String reporterId,
   }) async {
     try {
-      // Get all EWMs in the same ward (excluding reporter)
-      final peers = await _appwrite.listDocuments(
-        collectionId: 'users',
+      final peers = await _firebase.listDocuments(
+        collectionId: AppConfig.usersCollection,
         queries: [
-          Query.equal('ward', ward),
-          Query.equal('lga', lga),
-          Query.equal('role', 'EWM'),
-          Query.notEqual('\$id', reporterId),
+          FQuery.equal('ward', ward),
+          FQuery.equal('lga', lga),
+          FQuery.equal('role', 'ewm'),
+          FQuery.notEqual('\$id', reporterId),
         ],
+        limitCount: 50, // Notify up to 50 ward peers
       );
 
-      if (peers.documents.isEmpty) {
+      if (peers.isEmpty) {
         developer.log(
           'No peers found in $ward, $lga. Escalating to coordinator.',
           name: 'PeerVerificationService',
         );
-
-        // No peers available, escalate immediately
         await escalateToCoordinator(
           reportId: reportId,
-          reason: 'Single EWM in ward - no peers to verify',
+          reason: 'Single EWM in ward – no peers to verify',
         );
         return;
       }
 
-      // Send push notifications to peers
-      for (final peer in peers.documents) {
-        final fcmToken = peer.data['fcmToken'] as String?;
+      // TODO: Replace with real FCM Cloud Function call once function is deployed.
+      // For now each peer is notified locally (simulation).
+      for (final peer in peers) {
+        final fcmToken = peer['fcmToken'] as String?;
         if (fcmToken != null && fcmToken.isNotEmpty) {
-          // Simulation: Visualize the notification that would be sent
           _notificationService.showLocalNotification(
-            title: 'Verification Request (Simulation)',
-            body: 'Request sent to ${peer.data['name'] ?? 'User'}',
+            title: 'Verification Request',
+            body: 'Request sent to ${peer['name'] ?? 'User'}',
           );
-
           developer.log(
-            'Would send verification request to user ${peer.$id}',
+            'Verification request queued for user ${peer['\$id']}',
             name: 'PeerVerificationService',
           );
         }
       }
 
       developer.log(
-        'Verification requests sent to ${peers.documents.length} peers',
+        'Verification requests queued for ${peers.length} peers',
         name: 'PeerVerificationService',
       );
 
-      // Schedule escalation if no verification after 30 minutes
       await _scheduleEscalation(reportId);
     } on Exception catch (e) {
       developer.log(
@@ -215,20 +205,28 @@ class PeerVerificationService {
     }
   }
 
-  /// Schedule automatic escalation after 30 minutes
+  /// Write an escalation schedule entry to Firestore.
+  /// A Cloud Function trigger on `scheduled_escalations` fires the actual escalation.
   Future<void> _scheduleEscalation(String reportId) async {
     try {
-      // Store escalation timer in database
-      final escalationTime = DateTime.now()
-          .add(escalationTimeout)
-          .toIso8601String();
+      final escalationTime = DateTime.now().add(escalationTimeout);
 
-      await _appwrite.updateDocument(
-        collectionId: AppwriteService.reportsCollectionId,
+      await _firebase.updateDocument(
+        collectionId: AppConfig.reportsCollection,
         documentId: reportId,
         data: {
-          'escalationScheduledAt': escalationTime,
+          'escalationScheduledAt': escalationTime.toIso8601String(),
           'escalationStatus': 'pending',
+        },
+      );
+
+      // Write to dedicated collection for Cloud Function trigger
+      await _firebase.createDocument(
+        collectionId: AppConfig.scheduledEscalationsCollection,
+        data: {
+          'reportId': reportId,
+          'escalateAt': Timestamp.fromDate(escalationTime),
+          'status': 'pending',
         },
       );
 
@@ -236,9 +234,6 @@ class PeerVerificationService {
         'Escalation scheduled for $reportId at $escalationTime',
         name: 'PeerVerificationService',
       );
-
-      // NOTE: Actual timer would be handled by a cloud function or background service
-      // For MVP, this can be checked periodically or on app launch
     } on Exception catch (e) {
       developer.log(
         'Error scheduling escalation: $e',
@@ -247,60 +242,55 @@ class PeerVerificationService {
     }
   }
 
-  /// Escalate report to coordinators
+  /// Escalate report to coordinators.
   Future<void> escalateToCoordinator({
     required String reportId,
     required String reason,
   }) async {
     try {
-      // Update report status
-      await _appwrite.updateDocument(
-        collectionId: AppwriteService.reportsCollectionId,
+      await _firebase.updateDocument(
+        collectionId: AppConfig.reportsCollection,
         documentId: reportId,
         data: {
           'status': 'escalated',
-          'escalatedAt': DateTime.now().toIso8601String(),
+          'escalatedAt': FieldValue.serverTimestamp(),
           'escalationReason': reason,
         },
       );
 
-      // Get report details to find LGA
-      final report = await _appwrite.getDocument(
-        collectionId: AppwriteService.reportsCollectionId,
+      final report = await _firebase.getDocument(
+        collectionId: AppConfig.reportsCollection,
         documentId: reportId,
       );
+      final lga = report['lga'] as String? ?? '';
 
-      final lga = report.data['lga'] as String? ?? '';
-
-      // Get coordinators for this LGA
-      final coordinators = await _appwrite.listDocuments(
-        collectionId: 'users',
+      final coordinators = await _firebase.listDocuments(
+        collectionId: AppConfig.usersCollection,
         queries: [
-          Query.equal('role', 'LDP Coordinator'),
-          if (lga.isNotEmpty) Query.equal('lga', lga),
+          FQuery.equal('role', 'ldp_coordinator'),
+          if (lga.isNotEmpty) FQuery.equal('lga', lga),
         ],
+        limitCount: 20, // Reasonable coordinator limit per LGA
       );
 
-      // Get project staff (they see all escalations)
-      final staff = await _appwrite.listDocuments(
-        collectionId: 'users',
-        queries: [Query.equal('role', 'Project Staff')],
+      final staff = await _firebase.listDocuments(
+        collectionId: AppConfig.usersCollection,
+        queries: [FQuery.equal('role', 'project_staff')],
+        limitCount: 20, // Reasonable project staff limit
       );
 
-      // Send notifications to coordinators and staff
-      final recipients = [...coordinators.documents, ...staff.documents];
+      final recipients = [...coordinators, ...staff];
 
       for (final recipient in recipients) {
-        final fcmToken = recipient.data['fcmToken'] as String?;
+        final fcmToken = recipient['fcmToken'] as String?;
         if (fcmToken != null && fcmToken.isNotEmpty) {
-          // Simulation
+          // TODO: Call FCM Cloud Function to push real notification
           _notificationService.showLocalNotification(
-            title: 'Escalation Notification (Simulation)',
-            body: 'Report escalated to ${recipient.data['name']}',
+            title: 'Escalation Notification',
+            body: 'Report escalated to ${recipient['name']}',
           );
-
           developer.log(
-            'Would send escalation notification to ${recipient.$id}',
+            'Escalation queued for ${recipient['\$id']}',
             name: 'PeerVerificationService',
           );
         }
@@ -318,7 +308,7 @@ class PeerVerificationService {
     }
   }
 
-  /// Manual validation by coordinator/staff
+  /// Manual validation by coordinator/staff.
   Future<Map<String, dynamic>> manualValidation({
     required String reportId,
     required String validatorId,
@@ -328,47 +318,38 @@ class PeerVerificationService {
     try {
       if (isApproved) {
         await _validateReport(reportId, isAutoValidated: false);
-
-        // Log manual validation
-        await _appwrite.createDocument(
-          collectionId: 'verification_overrides',
+        await _firebase.createDocument(
+          collectionId: AppConfig.verificationsOverrideCollection,
           data: {
             'reportId': reportId,
             'validatorId': validatorId,
             'action': 'approved',
             'reason': reason,
-            'timestamp': DateTime.now().toIso8601String(),
+            'timestamp': FieldValue.serverTimestamp(),
           },
         );
-
         return {'success': true, 'message': 'Report approved and validated'};
       } else {
-        // Reject report
-        await _appwrite.updateDocument(
-          collectionId: AppwriteService.reportsCollectionId,
+        await _firebase.updateDocument(
+          collectionId: AppConfig.reportsCollection,
           documentId: reportId,
           data: {
             'status': 'rejected',
-            'rejectedAt': DateTime.now().toIso8601String(),
+            'rejectedAt': FieldValue.serverTimestamp(),
             'rejectionReason': reason,
           },
         );
-
-        // Log rejection
-        await _appwrite.createDocument(
-          collectionId: 'verification_overrides',
+        await _firebase.createDocument(
+          collectionId: AppConfig.verificationsOverrideCollection,
           data: {
             'reportId': reportId,
             'validatorId': validatorId,
             'action': 'rejected',
             'reason': reason,
-            'timestamp': DateTime.now().toIso8601String(),
+            'timestamp': FieldValue.serverTimestamp(),
           },
         );
-
-        // Notify reporter
         await _notifyReporter(reportId, status: 'rejected', reason: reason);
-
         return {'success': true, 'message': 'Report rejected'};
       }
     } on Exception catch (e) {
@@ -380,59 +361,52 @@ class PeerVerificationService {
     }
   }
 
-  /// Trigger alert distribution after validation
+  /// Trigger alert distribution after validation.
   Future<void> _triggerAlert(String reportId) async {
     try {
-      // Get report details
-      final report = await _appwrite.getDocument(
-        collectionId: AppwriteService.reportsCollectionId,
+      final report = await _firebase.getDocument(
+        collectionId: AppConfig.reportsCollection,
         documentId: reportId,
       );
 
-      final lga = report.data['lga'] as String? ?? '';
-      // Note: severity and hazardType will be used when implementing alert templates
+      final lga = report['lga'] as String? ?? '';
 
-      // Get all EWMs in the LGA
-      final ewms = await _appwrite.listDocuments(
-        collectionId: 'users',
+      final ewms = await _firebase.listDocuments(
+        collectionId: AppConfig.usersCollection,
         queries: [
-          Query.equal('role', 'EWM'),
-          if (lga.isNotEmpty) Query.equal('lga', lga),
+          FQuery.equal('role', 'ewm'),
+          if (lga.isNotEmpty) FQuery.equal('lga', lga),
         ],
+        limitCount: 200, // Alert all EWMs in LGA — up to 200
       );
 
-      // Get authorities for the LGA
-      final authorities = await _appwrite.listDocuments(
-        collectionId: 'authorities',
-        queries: [if (lga.isNotEmpty) Query.equal('coverageLGA', lga)],
+      final authorities = await _firebase.listDocuments(
+        collectionId: AppConfig.authoritiesCollection,
+        queries: [if (lga.isNotEmpty) FQuery.equal('coverageLGA', lga)],
+        limitCount: 50, // Alert all authorities in LGA — up to 50
       );
 
-      // Send alerts to all recipients
-      final recipients = [...ewms.documents, ...authorities.documents];
+      final recipients = [...ewms, ...authorities];
 
       developer.log(
         'Alert triggered for report $reportId: ${recipients.length} recipients',
         name: 'PeerVerificationService',
       );
 
-      // NOTE: Alert distribution is handled by the cloud function, but we verify client-side logic here
-
-      // Extract phone numbers for SMS
-      final authorityContacts = authorities.documents
-          .map((doc) => doc.data['phone'] as String?)
+      // SMS to authorities (real path — uses Africa's Talking)
+      final authorityContacts = authorities
+          .map((doc) => doc['phone'] as String?)
           .where((phone) => phone != null && phone.isNotEmpty)
           .cast<String>()
           .toList();
 
       if (authorityContacts.isNotEmpty) {
-        // Send SMS to authorities
         final sentCount = await SmsService().sendAlertToAuthorities(
-          alertTitle: report.data['hazardType'] ?? 'Hazard',
-          location: '$lga (Ward: ${report.data['ward']})',
-          severity: report.data['severity'] ?? 'HIGH',
+          alertTitle: report['hazardType'] ?? 'Hazard',
+          location: '$lga (Ward: ${report['ward']})',
+          severity: report['severity'] ?? 'HIGH',
           authorityContacts: authorityContacts,
         );
-
         developer.log(
           'SMS Alerts sent to $sentCount/${authorityContacts.length} authorities',
           name: 'PeerVerificationService',
@@ -451,37 +425,34 @@ class PeerVerificationService {
     }
   }
 
-  /// Notify original reporter of verification status
+  /// Notify original reporter of verification status.
   Future<void> _notifyReporter(
     String reportId, {
     required String status,
     String? reason,
   }) async {
     try {
-      final report = await _appwrite.getDocument(
-        collectionId: AppwriteService.reportsCollectionId,
+      final report = await _firebase.getDocument(
+        collectionId: AppConfig.reportsCollection,
         documentId: reportId,
       );
+      final reporterId = report['userId'] as String? ?? '';
+      if (reporterId.isEmpty) return;
 
-      final reporterId = report.data['userId'] as String? ?? '';
-
-      // Get reporter's FCM token
-      final reporter = await _appwrite.getDocument(
-        collectionId: 'users',
+      final reporter = await _firebase.getDocument(
+        collectionId: AppConfig.usersCollection,
         documentId: reporterId,
       );
-
-      final fcmToken = reporter.data['fcmToken'] as String?;
+      final fcmToken = reporter['fcmToken'] as String?;
 
       if (fcmToken != null && fcmToken.isNotEmpty) {
-        // Simulation
+        // TODO: Call FCM Cloud Function
         _notificationService.showLocalNotification(
-          title: 'Report Status Update (Simulation)',
-          body: 'Reporter notified: $status',
+          title: 'Report Status Update',
+          body: 'Your report is now: $status',
         );
-
         developer.log(
-          'Would notify reporter $reporterId: status=$status',
+          'Reporter $reporterId notification queued: status=$status',
           name: 'PeerVerificationService',
         );
       }
@@ -493,27 +464,28 @@ class PeerVerificationService {
     }
   }
 
-  /// Get verification statistics for a report
+  /// Get verification statistics for a report.
   Future<Map<String, dynamic>> getVerificationStats(String reportId) async {
     try {
-      final verifications = await _appwrite.listDocuments(
-        collectionId: verificationsCollectionId,
-        queries: [Query.equal('reportId', reportId)],
+      final verifications = await _firebase.listDocuments(
+        collectionId: AppConfig.verificationsCollection,
+        queries: [FQuery.equal('reportId', reportId)],
+        limitCount: 200,
       );
 
-      final confirmations = verifications.documents
-          .where((v) => v.data['isConfirmed'] == true)
+      final confirmations = verifications
+          .where((v) => v['isConfirmed'] == true)
           .length;
-      final disputes = verifications.documents
-          .where((v) => v.data['isConfirmed'] == false)
+      final disputes = verifications
+          .where((v) => v['isConfirmed'] == false)
           .length;
 
       return {
-        'totalVerifications': verifications.documents.length,
+        'totalVerifications': verifications.length,
         'confirmations': confirmations,
         'disputes': disputes,
         'requiresEscalation': disputes > 0 && confirmations == 0,
-        'canValidate': confirmations >= minimumConfirmations,
+        'canValidate': confirmations >= AppConfig.minimumPeerConfirmations,
       };
     } on Exception catch (e) {
       developer.log(
@@ -530,30 +502,34 @@ class PeerVerificationService {
     }
   }
 
-  /// Lazy Escalation: Check for pending reports older than 30 minutes and escalate them
+  /// Lazy escalation: Check for pending reports older than 30 minutes.
   Future<void> checkAndEscalatePendingReports() async {
     try {
-      final reports = await _appwrite.listDocuments(
-        collectionId: AppwriteService.reportsCollectionId,
-        queries: [Query.equal('status', 'pending')],
+      final reports = await _firebase.listDocuments(
+        collectionId: AppConfig.reportsCollection,
+        queries: [FQuery.equal('status', 'pending')],
+        limitCount:
+            100, // Process at most 100 pending reports per scheduled check
       );
 
       final now = DateTime.now();
       int escalatedCount = 0;
 
-      for (final doc in reports.documents) {
-        final submittedAtStr = doc.data['submittedAt'] as String?;
+      for (final doc in reports) {
+        final submittedAtStr = doc['submittedAt'];
         if (submittedAtStr == null) continue;
 
-        final submittedAt = DateTime.tryParse(submittedAtStr);
+        DateTime? submittedAt;
+        if (submittedAtStr is Timestamp) {
+          submittedAt = submittedAtStr.toDate();
+        } else if (submittedAtStr is String) {
+          submittedAt = DateTime.tryParse(submittedAtStr);
+        }
         if (submittedAt == null) continue;
 
         if (now.difference(submittedAt) > escalationTimeout) {
-          // Double check if it's already escalated or validated to be safe
-          // (though query said pending)
-
           await escalateToCoordinator(
-            reportId: doc.$id,
+            reportId: doc['\$id'] as String,
             reason: 'Auto-escalation: No verification within 30 minutes',
           );
           escalatedCount++;

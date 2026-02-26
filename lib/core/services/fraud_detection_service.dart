@@ -1,6 +1,7 @@
 import 'dart:developer' as developer;
-import 'package:climate_app/core/services/appwrite_service.dart';
-import 'package:appwrite/appwrite.dart';
+import 'package:climate_app/core/services/firebase_service.dart';
+import 'package:climate_app/core/constants/app_config.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 /// Risk levels for fraud detection
 enum FraudRisk { low, medium, high, critical }
@@ -20,22 +21,18 @@ class FraudAssessment {
   });
 }
 
-/// Service for detecting fraudulent login attempts
+/// Service for detecting fraudulent login attempts.
 ///
-/// Analyzes login patterns to detect:
-/// - New device logins
-/// - Logins from unusual locations
-/// - Multiple failed attempts
-/// - Impossible travel (two locations too quickly)
+/// Analyzes login patterns to detect new devices, failed attempts, etc.
+/// Now backed by Firestore instead of Appwrite.
 class FraudDetectionService {
   static final FraudDetectionService _instance =
       FraudDetectionService._internal();
   factory FraudDetectionService() => _instance;
   FraudDetectionService._internal();
 
-  final AppwriteService _appwrite = AppwriteService();
+  final FirebaseService _firebase = FirebaseService();
 
-  /// Assess risk level for a login attempt
   Future<FraudAssessment> assessLoginRisk({
     required String userId,
     required String deviceFingerprint,
@@ -44,7 +41,6 @@ class FraudDetectionService {
       final flags = <String>[];
       FraudRisk risk = FraudRisk.low;
 
-      // Check if device is recognized
       final isKnownDevice = await _isDeviceRecognized(
         userId,
         deviceFingerprint,
@@ -54,23 +50,20 @@ class FraudDetectionService {
         risk = FraudRisk.medium;
       }
 
-      // Check recent failed login attempts
       final failedAttempts = await _getRecentFailedAttempts(userId);
       if (failedAttempts >= 3) {
         flags.add('multiple_failed_attempts');
         risk = FraudRisk.high;
       }
 
-      // Determine if additional verification is needed
       final requiresVerification =
           risk == FraudRisk.high ||
           risk == FraudRisk.critical ||
           flags.contains('new_device');
 
-      final String reason = _getRiskReason(flags);
-
+      final reason = _getRiskReason(flags);
       developer.log(
-        'Fraud assessment: $risk - $reason',
+        'Fraud assessment: $risk – $reason',
         name: 'FraudDetectionService',
       );
 
@@ -85,7 +78,6 @@ class FraudDetectionService {
         'Error assessing fraud risk: $e',
         name: 'FraudDetectionService',
       );
-      // Default to low risk if assessment fails
       return FraudAssessment(
         risk: FraudRisk.low,
         reason: 'Assessment unavailable',
@@ -93,85 +85,68 @@ class FraudDetectionService {
     }
   }
 
-  /// Check if device is recognized for this user
   Future<bool> _isDeviceRecognized(
     String userId,
     String deviceFingerprint,
   ) async {
     try {
-      // Check trusted_devices collection
-      final devices = await _appwrite.listDocuments(
-        collectionId: AppwriteService.trustedDevicesCollectionId,
+      final devices = await _firebase.listDocuments(
+        collectionId: AppConfig.trustedDevicesCollection,
         queries: [
-          Query.equal('userId', userId),
-          Query.equal('deviceFingerprint', deviceFingerprint),
+          FQuery.equal('userId', userId),
+          FQuery.equal('deviceFingerprint', deviceFingerprint),
         ],
       );
-
-      return devices.total > 0;
+      return devices.isNotEmpty;
     } on Exception catch (e) {
       developer.log('Error checking device: $e');
-      return false; // Assume unknown device on error
+      return false;
     }
   }
 
-  /// Get count of recent failed login attempts
   Future<int> _getRecentFailedAttempts(String userId) async {
     try {
       final oneHourAgo = DateTime.now().subtract(const Duration(hours: 1));
-
-      final attempts = await _appwrite.listDocuments(
-        collectionId: AppwriteService.loginHistoryCollectionId,
+      final attempts = await _firebase.listDocuments(
+        collectionId: AppConfig.loginHistoryCollection,
         queries: [
-          Query.equal('userId', userId),
-          Query.equal('success', false),
-          Query.greaterThan('timestamp', oneHourAgo.toIso8601String()),
+          FQuery.equal('userId', userId),
+          FQuery.equal('success', false),
+          FQuery.greaterThan('timestamp', oneHourAgo.toIso8601String()),
         ],
       );
-
-      return attempts.total;
+      return attempts.length;
     } on Exception catch (e) {
       developer.log('Error getting failed attempts: $e');
       return 0;
     }
   }
 
-  /// Generate human-readable risk reason
   String _getRiskReason(List<String> flags) {
-    if (flags.isEmpty) {
-      return 'Normal login activity';
-    }
-
+    if (flags.isEmpty) return 'Normal login activity';
     if (flags.contains('multiple_failed_attempts')) {
       return 'Multiple failed login attempts detected';
     }
-
-    if (flags.contains('new_device')) {
-      return 'Login from new device';
-    }
-
+    if (flags.contains('new_device')) return 'Login from new device';
     return 'Unusual activity detected';
   }
 
-  /// Register a new trusted device
   Future<void> registerTrustedDevice({
     required String userId,
     required String deviceFingerprint,
     required String deviceName,
   }) async {
     try {
-      await _appwrite.createDocument(
-        collectionId: AppwriteService.trustedDevicesCollectionId,
+      await _firebase.createDocument(
+        collectionId: AppConfig.trustedDevicesCollection,
         data: {
           'userId': userId,
           'deviceFingerprint': deviceFingerprint,
           'deviceName': deviceName,
           'trusted': true,
-          'lastUsed': DateTime.now().toIso8601String(),
-          'createdAt': DateTime.now().toIso8601String(),
+          'lastUsed': FieldValue.serverTimestamp(),
         },
       );
-
       developer.log(
         'Trusted device registered for user: $userId',
         name: 'FraudDetectionService',
@@ -182,7 +157,6 @@ class FraudDetectionService {
     }
   }
 
-  /// Record login attempt for fraud tracking
   Future<void> recordLoginAttempt({
     required String userId,
     required bool success,
@@ -190,25 +164,24 @@ class FraudDetectionService {
     String? deviceName,
   }) async {
     try {
-      await _appwrite.createDocument(
-        collectionId: AppwriteService.loginHistoryCollectionId,
+      await _firebase.createDocument(
+        collectionId: AppConfig.loginHistoryCollection,
         data: {
           'userId': userId,
           'success': success,
           'deviceFingerprint': deviceFingerprint,
           'deviceName': deviceName ?? 'Unknown',
-          'timestamp': DateTime.now().toIso8601String(),
-          'riskScore': 0, // Calculated by assessment
+          'timestamp': FieldValue.serverTimestamp(),
+          'riskScore': 0,
         },
       );
-
       developer.log(
         'Login attempt recorded: ${success ? "SUCCESS" : "FAILED"}',
         name: 'FraudDetectionService',
       );
     } on Exception catch (e) {
       developer.log('Error recording login attempt: $e');
-      // Don't rethrow - login should continue even if logging fails
+      // Non-critical — don't rethrow
     }
   }
 }

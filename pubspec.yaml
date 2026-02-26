@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.0.4+7
+version: 1.0.5+8
 
 environment:
   sdk: ^3.10.3
@@ -47,7 +47,7 @@ dependencies:
   uuid: ^4.5.2
   shared_preferences: ^2.5.4
   path_provider: ^2.1.5
-  flutter_tts: ^3.7.0
+  flutter_tts: ^4.2.5
   
   # Security packages
   flutter_secure_storage: ^10.0.0
@@ -82,20 +82,25 @@ dependencies:
   flutter_map: ^8.2.2
   latlong2: ^0.9.1
   # Chat
-  flutter_chat_ui: ^1.6.15  # Locked to v1 due to breaking changes in v2
+  flutter_chat_ui: ^2.11.1  # Locked to v1 due to breaking changes in v2
   flutter_chat_types: ^3.6.2
-  # Backend
-  appwrite: ^21.0.0
+  flutter_chat_core: ^2.9.0  # Explicit dep — transitively used by flutter_chat_ui
+  # Backend – Firebase
+  firebase_auth: ^6.1.4
+  cloud_firestore: ^6.1.2
+  firebase_storage: ^13.0.6
   # Firebase Cloud Messaging for push notifications
   firebase_messaging: ^16.1.1
   firebase_core: ^4.4.0
   firebase_crashlytics: ^5.0.7
   permission_handler: ^12.0.1
-  dart_appwrite: ^21.1.0
   path: ^1.9.1
-  # Security - Screen capture prevention
-  # TEMPORARILY DISABLED - Compatibility issue with Android Gradle 8
-  # flutter_windowmanager: ^0.2.0
+  # Package info for dynamic version string in Settings
+  package_info_plus: ^8.0.0
+  # Image compression before Firebase Storage upload (reduces upload size 70-90%)
+  flutter_image_compress: ^2.3.0
+  # Firebase App Check — server-side request verification (anti-abuse)
+  firebase_app_check: ^0.4.1+4
 
 
 dev_dependencies:

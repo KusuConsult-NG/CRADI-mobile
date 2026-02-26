@@ -1,4 +1,5 @@
-import 'package:climate_app/core/services/appwrite_service.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+
 import 'package:climate_app/core/utils/validators.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
@@ -67,8 +68,7 @@ class _VerificationRequestScreenState extends State<VerificationRequestScreen> {
     }
 
     try {
-      final appwrite = AppwriteService();
-      final user = await appwrite.getCurrentUser();
+      final user = FirebaseAuth.instance.currentUser;
 
       if (user == null) {
         if (mounted) {
@@ -83,7 +83,7 @@ class _VerificationRequestScreenState extends State<VerificationRequestScreen> {
         context
             .read<ReportsStatusProvider>()
             .submitVerificationRequest(
-              userId: user.$id,
+              userId: user.uid,
               hazardType: _selectedHazard,
               severity: _selectedSeverity,
               description: _descriptionController.text,

@@ -10,6 +10,7 @@ import 'package:intl/intl.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 import 'package:climate_app/shared/widgets/custom_button.dart';
+import 'package:climate_app/core/utils/input_sanitizer.dart';
 
 class ReportDetailsScreen extends StatefulWidget {
   const ReportDetailsScreen({super.key});
@@ -640,7 +641,7 @@ class _ReportDetailsScreenState extends State<ReportDetailsScreen> {
               child: CustomButton(
                 onPressed: () {
                   context.read<ReportingProvider>().setDescription(
-                    _descController.text,
+                    InputSanitizer.fullSanitize(_descController.text),
                   );
                   context.push('/report/review');
                 },

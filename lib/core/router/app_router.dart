@@ -282,7 +282,29 @@ GoRouter createRouter(BuildContext context) {
         ],
       ),
 
-      // Reporting Routes (Outside Shell to hide bottom nav)
+      // ── Deep Link Routes ───────────────────────────────────────────────────
+      // Handles cradi://report/:id and https://cradi.ng/report/:id
+      // These are the URL structures used in App Links / Universal Links.
+      // When a user taps a shared report/alert URL, the OS opens the app here.
+      GoRoute(
+        path: '/report/:reportId',
+        redirect: (context, state) {
+          final auth = Provider.of<AuthProvider>(context, listen: false);
+          if (!auth.isAuthenticated) return '/login';
+          // Redirect to the existing /report/details route with the ID as a query param
+          final id = state.pathParameters['reportId'] ?? '';
+          return '/report/details?deepLinkId=$id';
+        },
+      ),
+      GoRoute(
+        path: '/alert/:alertId',
+        redirect: (context, state) {
+          final auth = Provider.of<AuthProvider>(context, listen: false);
+          if (!auth.isAuthenticated) return '/login';
+          final id = state.pathParameters['alertId'] ?? '';
+          return '/alerts/detail?deepLinkId=$id';
+        },
+      ),
       GoRoute(
         path: '/report',
         builder: (context, state) => const HazardSelectionScreen(),

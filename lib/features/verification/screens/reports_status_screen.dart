@@ -23,7 +23,7 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final currentUserId = context.read<AuthProvider>().currentUser?.$id;
+      final currentUserId = context.read<AuthProvider>().currentUser?.uid;
       context.read<ReportsStatusProvider>().refreshReports(
         excludeUserId: currentUserId,
       );
@@ -116,7 +116,7 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
     ReportsStatusProvider provider,
     ReportStatus status,
   ) {
-    final currentUserId = context.read<AuthProvider>().currentUser?.$id;
+    final currentUserId = context.read<AuthProvider>().currentUser?.uid;
     final reports = provider.getReports(status, excludeUserId: currentUserId);
     final isLoading = provider.isLoading(status, excludeUserId: currentUserId);
     final hasMore = provider.hasMore(status, excludeUserId: currentUserId);
@@ -144,7 +144,7 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
                 final currentUserId = context
                     .read<AuthProvider>()
                     .currentUser
-                    ?.$id;
+                    ?.uid;
                 provider.fetchReports(
                   status: status,
                   excludeUserId: currentUserId,
@@ -159,7 +159,7 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
 
     return RefreshIndicator(
       onRefresh: () async {
-        final currentUserId = context.read<AuthProvider>().currentUser?.$id;
+        final currentUserId = context.read<AuthProvider>().currentUser?.uid;
         await provider.fetchReports(
           status: status,
           excludeUserId: currentUserId,
@@ -170,7 +170,7 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
           if (!isLoading &&
               hasMore &&
               scrollInfo.metrics.pixels == scrollInfo.metrics.maxScrollExtent) {
-            final currentUserId = context.read<AuthProvider>().currentUser?.$id;
+            final currentUserId = context.read<AuthProvider>().currentUser?.uid;
             provider.fetchReports(
               loadMore: true,
               status: status,

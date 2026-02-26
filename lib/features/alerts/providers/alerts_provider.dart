@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:appwrite/appwrite.dart';
-import 'package:climate_app/core/services/appwrite_service.dart';
+import 'package:climate_app/core/services/firebase_service.dart';
 import 'package:climate_app/core/services/offline_storage_service.dart';
+import 'package:climate_app/core/constants/app_config.dart';
 import 'dart:developer' as developer;
 import 'package:climate_app/core/utils/error_handler.dart';
 
 class AlertsProvider extends ChangeNotifier {
-  final AppwriteService _appwrite = AppwriteService();
+  final FirebaseService _firebase = FirebaseService();
   final OfflineStorageService _offlineStorage = OfflineStorageService();
 
   List<Map<String, dynamic>> _alerts = [];
@@ -27,14 +27,12 @@ class AlertsProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      // 1. Try fetching from Appwrite
-      final response = await _appwrite.listDocuments(
-        collectionId: AppwriteService.alertsCollectionId,
-        queries: [Query.orderDesc('\$createdAt'), Query.limit(20)],
+      final documents = await _firebase.listDocuments(
+        collectionId: AppConfig.alertsCollection,
+        queries: [FQuery.orderDesc('\$createdAt')],
+        limitCount: 20,
       );
 
-      // 2. Cache successful response
-      final documents = response.documents.map((doc) => doc.data).toList();
       await _offlineStorage.cacheAlerts(documents);
       _alerts = documents;
 
@@ -46,11 +44,10 @@ class AlertsProvider extends ChangeNotifier {
       ErrorHandler.logError(e, context: 'AlertsProvider.fetchAlerts');
       _error = 'Failed to load alerts';
 
-      // 3. Fallback to offline cache
       final cached = _offlineStorage.getCachedAlerts();
       if (cached.isNotEmpty) {
         _alerts = cached;
-        _error = null; // Clear error if we have cached data
+        _error = null;
         developer.log(
           'Loaded ${_alerts.length} alerts from cache',
           name: 'AlertsProvider',
