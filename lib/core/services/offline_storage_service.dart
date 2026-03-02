@@ -4,6 +4,7 @@ import 'dart:developer' as developer;
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as path;
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 /// Service for storing draft reports offline using Hive
 /// Allows users to create reports without internet and sync later
@@ -263,6 +264,88 @@ class OfflineStorageService {
     }
   }
 
+  /// Sync all pending queue items to Firestore.
+  ///
+  /// Called automatically by [ConnectivityProvider.onReconnect] when the
+  /// device transitions from offline → online. Items that have failed
+  /// more than 5 times are permanently skipped.
+  Future<void> syncPendingReports() async {
+    if (!isInitialized) {
+      developer.log(
+        'syncPendingReports: not initialized, skipping',
+        name: 'OfflineStorageService',
+      );
+      return;
+    }
+
+    final pending = _syncQueueBox!.values
+        .where(
+          (item) =>
+              item['status'] == 'pending' &&
+              ((item['retryCount'] as int?) ?? 0) < 5,
+        )
+        .toList();
+
+    if (pending.isEmpty) {
+      developer.log(
+        'syncPendingReports: no pending items',
+        name: 'OfflineStorageService',
+      );
+      return;
+    }
+
+    developer.log(
+      'syncPendingReports: syncing ${pending.length} items',
+      name: 'OfflineStorageService',
+    );
+
+    final firestore = FirebaseFirestore.instance;
+    int successCount = 0;
+
+    for (final rawItem in pending) {
+      final item = Map<String, dynamic>.from(rawItem);
+      final queueId = item['queueId'] as String? ?? '';
+      if (queueId.isEmpty) continue;
+
+      try {
+        final data = Map<String, dynamic>.from(item['data'] as Map? ?? {});
+        final collection = item['collection'] as String? ?? 'reports';
+
+        // If there's an existing doc ID, update; otherwise create a new doc.
+        final docId = item['docId'] as String?;
+        if (docId != null && docId.isNotEmpty) {
+          await firestore
+              .collection(collection)
+              .doc(docId)
+              .set(
+                data..['syncedAt'] = FieldValue.serverTimestamp(),
+                SetOptions(merge: true),
+              );
+        } else {
+          data['syncedAt'] = FieldValue.serverTimestamp();
+          await firestore.collection(collection).add(data);
+        }
+
+        await markAsSynced(queueId);
+        successCount++;
+      } on Exception catch (e) {
+        await markAsFailed(queueId, e.toString());
+        developer.log(
+          'syncPendingReports: failed item $queueId: $e',
+          name: 'OfflineStorageService',
+        );
+      }
+    }
+
+    // Cleanup synced entries
+    if (successCount > 0) await clearSyncedItems();
+
+    developer.log(
+      'syncPendingReports: $successCount/${pending.length} synced successfully',
+      name: 'OfflineStorageService',
+    );
+  }
+
   /// Clear synced items from queue (cleanup)
   Future<void> clearSyncedItems() async {
     _ensureInitialized();
@@ -393,6 +476,10 @@ class OfflineStorageService {
     _ensureInitialized();
     final cached = _contentCacheBox!.get('user_profile');
     if (cached != null) {
+      if (_isCacheStale(cached)) {
+        _contentCacheBox!.delete('user_profile');
+        return null;
+      }
       return Map<String, dynamic>.from(cached['data']);
     }
     return null;
@@ -423,6 +510,10 @@ class OfflineStorageService {
     _ensureInitialized();
     final cached = _contentCacheBox!.get('guides');
     if (cached != null && cached['data'] is List) {
+      if (_isCacheStale(cached)) {
+        _contentCacheBox!.delete('guides');
+        return [];
+      }
       return (cached['data'] as List)
           .map((e) => Map<String, dynamic>.from(e))
           .toList();
@@ -444,6 +535,10 @@ class OfflineStorageService {
     _ensureInitialized();
     final cached = _contentCacheBox!.get('alerts');
     if (cached != null && cached['data'] is List) {
+      if (_isCacheStale(cached)) {
+        _contentCacheBox!.delete('alerts');
+        return [];
+      }
       return (cached['data'] as List)
           .map((e) => Map<String, dynamic>.from(e))
           .toList();
@@ -467,11 +562,24 @@ class OfflineStorageService {
     _ensureInitialized();
     final cached = _contentCacheBox!.get('verifications');
     if (cached != null && cached['data'] is List) {
+      if (_isCacheStale(cached)) {
+        _contentCacheBox!.delete('verifications');
+        return [];
+      }
       return (cached['data'] as List)
           .map((e) => Map<String, dynamic>.from(e))
           .toList();
     }
     return [];
+  }
+
+  /// Returns true when a cached entry is older than [maxAge] (default 24 hours).
+  bool _isCacheStale(Map entry, {Duration maxAge = const Duration(hours: 24)}) {
+    final timestampStr = entry['timestamp'] as String?;
+    if (timestampStr == null) return true;
+    final cached = DateTime.tryParse(timestampStr);
+    if (cached == null) return true;
+    return DateTime.now().difference(cached) > maxAge;
   }
 
   /// Get storage statistics

@@ -11,8 +11,7 @@ import 'package:climate_app/core/design/glass_container.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
-// TEMPORARILY DISABLED - Compatibility issue\n// import 'package:flutter_windowmanager/flutter_windowmanager.dart';
-import 'dart:io' show Platform;
+import 'package:climate_app/core/utils/screen_security.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -21,7 +20,8 @@ class LoginScreen extends StatefulWidget {
   State<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen> {
+class _LoginScreenState extends State<LoginScreen>
+    with ScreenSecurityMixin<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
   final _identifierController = TextEditingController();
   final _passwordController = TextEditingController();
@@ -35,37 +35,11 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   void initState() {
     super.initState();
-    _enableScreenSecurity();
     _checkRateLimit();
-  }
-
-  /// Enable screenshot prevention on Android
-  Future<void> _enableScreenSecurity() async {
-    if (Platform.isAndroid) {
-      // TEMPORARILY DISABLED - flutter_windowmanager compatibility issue
-      // try {
-      //   await FlutterWindowManager.addFlags(FlutterWindowManager.FLAG_SECURE);
-      // } on Exception catch (e) {
-      //   // Silently fail - non-critical security feature
-      //   ErrorHandler.logError(e, context: 'LoginScreen.enableScreenSecurity');
-      // }
-    }
-  }
-
-  Future<void> _disableScreenSecurity() async {
-    if (Platform.isAndroid) {
-      // TEMPORARILY DISABLED
-      // try {
-      //   await FlutterWindowManager.clearFlags(FlutterWindowManager.FLAG_SECURE);
-      // } on Exception {
-      //   // Silently fail
-      // }
-    }
   }
 
   @override
   void dispose() {
-    _disableScreenSecurity();
     _identifierController.dispose();
     _passwordController.dispose();
     super.dispose();

@@ -23,35 +23,6 @@ class SecureStorageService {
   static const String _keyLastLoginAttempt = 'last_login_attempt';
   static const String _keyAccountLockedUntil = 'account_locked_until';
   static const String _keyBiometricEnabled = 'biometric_enabled';
-  static const String _keyVerificationEmail = 'verification_email';
-  static const String _keyOtpHash = 'temp_otp_hash';
-  static const String _keyOtpExpiry = 'temp_otp_expiry';
-  static const String _keyOtpPhone = 'temp_otp_phone';
-
-  // OTP Management
-  Future<void> saveOtpData({
-    required String hash,
-    required DateTime expiry,
-    required String phone,
-  }) async {
-    await _storage.write(key: _keyOtpHash, value: hash);
-    await _storage.write(key: _keyOtpExpiry, value: expiry.toIso8601String());
-    await _storage.write(key: _keyOtpPhone, value: phone);
-  }
-
-  Future<Map<String, String?>> getOtpData() async {
-    return {
-      'hash': await _storage.read(key: _keyOtpHash),
-      'expiry': await _storage.read(key: _keyOtpExpiry),
-      'phone': await _storage.read(key: _keyOtpPhone),
-    };
-  }
-
-  Future<void> clearOtpData() async {
-    await _storage.delete(key: _keyOtpHash);
-    await _storage.delete(key: _keyOtpExpiry);
-    await _storage.delete(key: _keyOtpPhone);
-  }
 
   // Authentication token management
   Future<void> saveAuthToken(String token) async {
@@ -166,22 +137,6 @@ class SecureStorageService {
   Future<bool> isBiometricEnabled() async {
     final enabledStr = await _storage.read(key: _keyBiometricEnabled);
     return enabledStr == 'true';
-  }
-
-  // Email verification storage (for email link auth)
-  static Future<void> saveVerificationEmail(String email) async {
-    final instance = SecureStorageService();
-    await instance.write(_keyVerificationEmail, email);
-  }
-
-  static Future<String?> getVerificationEmail() async {
-    final instance = SecureStorageService();
-    return await instance.read(_keyVerificationEmail);
-  }
-
-  static Future<void> deleteVerificationEmail() async {
-    final instance = SecureStorageService();
-    await instance.delete(_keyVerificationEmail);
   }
 
   // Generic secure storage

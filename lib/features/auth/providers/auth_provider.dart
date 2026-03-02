@@ -14,11 +14,6 @@ import 'package:climate_app/core/services/fraud_detection_service.dart';
 import 'package:climate_app/core/constants/app_config.dart';
 
 import 'package:flutter/material.dart';
-import 'dart:math';
-import 'dart:convert';
-import 'package:crypto/crypto.dart';
-import 'package:climate_app/core/services/sms_service.dart';
-import 'package:climate_app/core/services/email_service.dart';
 
 enum UserRole { user, ewm, ewv, ewr, admin, techSupport }
 
@@ -240,12 +235,7 @@ class AuthProvider extends ChangeNotifier {
       // 2. Determine role
       final userRole = role ?? UserRole.user;
 
-      // 3. Generate OTP for email verification
-      final rnd = Random.secure();
-      final otp = (rnd.nextInt(900000) + 100000).toString();
-      final hash = sha256.convert(utf8.encode(otp)).toString();
-      final expiry = DateTime.now().add(const Duration(minutes: 10));
-      await _storage.saveOtpData(hash: hash, expiry: expiry, phone: email);
+      // 3. Skip OTP Generation since email verification is handled via Action Links directly if needed
 
       // 4. Create Firestore user document
       developer.log(
@@ -269,11 +259,12 @@ class AuthProvider extends ChangeNotifier {
       // 5. Start session
       await _startUserSession(user, userRole, isVerified: isVerified ?? false);
 
-      // 6. Send OTP email if not pre-verified
+      // 6. Send OTP email (legacy method no longer functional without proper flow, stub it out)
       if (isVerified != true) {
-        developer.log('Sending Email OTP...', name: 'AuthProvider');
-        await EmailService().sendVerificationCode(email, otp, name: name);
-        developer.log('Email OTP sent', name: 'AuthProvider');
+        developer.log(
+          'Email verification required, but OTP bypass is active.',
+          name: 'AuthProvider',
+        );
       }
 
       _isLoading = false;
@@ -438,174 +429,18 @@ class AuthProvider extends ChangeNotifier {
   // ─────────────────────────── OTP ─────────────────────────────────────────
 
   Future<bool> sendOtpForPhone(String phone) async {
-    try {
-      _isLoading = true;
-      notifyListeners();
-
-      final rateLimitResult = await _rateLimiter.checkLoginAttempt();
-      if (!rateLimitResult.allowed) {
-        throw AuthException(rateLimitResult.userMessage);
-      }
-
-      final rnd = Random.secure();
-      final otp = (rnd.nextInt(900000) + 100000).toString();
-
-      if (!SmsService().isReady) {
-        throw AuthException('SMS service is currently unavailable.');
-      }
-
-      final hash = sha256.convert(utf8.encode(otp)).toString();
-      final expiry = DateTime.now().add(const Duration(minutes: 10));
-      await _storage.saveOtpData(hash: hash, expiry: expiry, phone: phone);
-
-      final msgId = await SmsService().sendOtp(to: phone, otp: otp);
-      if (msgId == null) {
-        throw AuthException('Failed to send SMS. Please try again.');
-      }
-
-      _isLoading = false;
-      notifyListeners();
-      return true;
-    } on AuthException {
-      rethrow;
-    } on Exception catch (e) {
-      _isLoading = false;
-      notifyListeners();
-      throw AuthException('An error occurred while sending OTP: $e');
-    }
+    throw AuthException('Phone OTP is disabled.');
   }
 
   Future<bool> sendOtpForEmail(String email, {String? name}) async {
-    try {
-      _isLoading = true;
-      notifyListeners();
-
-      final rateLimitResult = await _rateLimiter.checkLoginAttempt();
-      if (!rateLimitResult.allowed) {
-        throw AuthException(rateLimitResult.userMessage);
-      }
-
-      final rnd = Random.secure();
-      final otp = (rnd.nextInt(900000) + 100000).toString();
-      final hash = sha256.convert(utf8.encode(otp)).toString();
-      final expiry = DateTime.now().add(const Duration(minutes: 10));
-      await _storage.saveOtpData(hash: hash, expiry: expiry, phone: email);
-
-      final success = await EmailService().sendVerificationCode(
-        email,
-        otp,
-        name: name,
-      );
-      if (!success) {
-        throw AuthException('Failed to send email. Please try again.');
-      }
-
-      _isLoading = false;
-      notifyListeners();
-      return true;
-    } on AuthException {
-      rethrow;
-    } on Exception catch (e) {
-      _isLoading = false;
-      notifyListeners();
-      throw AuthException('An error occurred while sending OTP: $e');
-    }
+    throw AuthException('Email OTP is disabled.');
   }
 
   Future<bool> verifyOtpAndLogin(
     String otp, {
     Map<String, dynamic>? registrationData,
   }) async {
-    try {
-      _isLoading = true;
-      notifyListeners();
-
-      final otpData = await _storage.getOtpData();
-      final storedHash = otpData['hash'];
-      final storedExpiryStr = otpData['expiry'];
-      final storedPhone = otpData['phone'];
-
-      if (storedHash == null ||
-          storedExpiryStr == null ||
-          storedPhone == null) {
-        throw AuthException('OTP session expired. Please request a new code.');
-      }
-
-      final expiry = DateTime.parse(storedExpiryStr);
-      if (DateTime.now().isAfter(expiry)) {
-        await _storage.clearOtpData();
-        throw AuthException('OTP has expired. Please request a new code.');
-      }
-
-      final hash = sha256.convert(utf8.encode(otp)).toString();
-      if (hash != storedHash) {
-        throw AuthException('Invalid OTP. Please try again.');
-      }
-
-      // Scenario A: User already logged in (just registered), mark as verified
-      if (_currentUser != null) {
-        try {
-          await _firebase.updateDocument(
-            collectionId: AppConfig.usersCollection,
-            documentId: _currentUser!.uid,
-            data: {'isVerified': true},
-          );
-          _isVerified = true;
-          await _storage.clearOtpData();
-          _isLoading = false;
-          notifyListeners();
-          return true;
-        } on Exception catch (_) {
-          throw AuthException('Failed to update verification status.');
-        }
-      }
-
-      // Scenario B: Not logged in — try mapped email login
-      final mappedEmail = storedPhone.contains('@')
-          ? storedPhone
-          : '${storedPhone.replaceAll(RegExp(r'[^0-9]'), '')}@cradi.local';
-      final mappedPassword = storedPhone.contains('@')
-          ? '${storedPhone}_cradi!0'
-          : 'cradi_${storedPhone.replaceAll(RegExp(r'[^0-9]'), '')}!0';
-
-      try {
-        await signInWithEmail(email: mappedEmail, password: mappedPassword);
-      } on AuthException catch (e) {
-        if (e.userMessage.contains('Invalid email or password') ||
-            e.userMessage.contains('Login failed')) {
-          if (storedPhone.contains('@')) {
-            throw AuthException('User document missing. Please login again.');
-          }
-          await signUpWithEmail(
-            email: mappedEmail,
-            password: mappedPassword,
-            name: registrationData?['name'] ?? 'User ($storedPhone)',
-            phoneNumber: storedPhone,
-            isVerified: true,
-            address: registrationData?['address'] ?? 'No Address Provided',
-            role: registrationData?['role'] ?? UserRole.user,
-            state: registrationData?['state'],
-            lga: registrationData?['lga'],
-            ward: registrationData?['ward'],
-          );
-        } else {
-          rethrow;
-        }
-      }
-
-      await _storage.clearOtpData();
-      _isLoading = false;
-      notifyListeners();
-      return true;
-    } on AuthException {
-      _isLoading = false;
-      notifyListeners();
-      rethrow;
-    } on Exception catch (e) {
-      _isLoading = false;
-      notifyListeners();
-      throw AuthException('An error occurred during verification: $e');
-    }
+    throw AuthException('OTP verification is disabled.');
   }
 
   Future<void> resendVerificationLink() async {
@@ -620,10 +455,8 @@ class AuthProvider extends ChangeNotifier {
       }
       _isLoading = true;
       notifyListeners();
-      await sendOtpForEmail(
-        _currentUser!.email!,
-        name: _currentUser!.displayName,
-      );
+      // Use Firebase's native email verification link (no OTP required)
+      await _firebase.sendEmailVerification();
       _isLoading = false;
       notifyListeners();
     } on Exception catch (e) {

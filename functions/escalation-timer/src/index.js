@@ -1,71 +1,136 @@
-const sdk = require('node-appwrite');
-
 /**
- * Escalation Timer Function
- * 
- * Scheduled: Every 5 minutes (*/5 * * * *)
- * Logic: 
- * 1. Queries reports with status 'pending'
-    * 2. Filters those where 'submittedAt' is older than 30 minutes
-        * 3. Updates status to 'escalated' and notifies coordinators
-            */
+ * CRADI — Escalation Timer Cloud Function (Firebase Admin SDK)
+ *
+ * Schedule: every 5 minutes
+ *
+ * Behaviour:
+ * 1. Queries Firestore 'reports' for documents where:
+ * - status == 'pending'
+        * - submittedAt < now - 30 minutes
+            * 2. For each such report:
+ * a.Updates its status to 'escalated' with a reason + timestamp.
+ * b.Reads ldp_coordinator and project_staff users in the same LGA.
+ * c.Sends an FCM push to each coordinator / staff FCM token.
+ *
+ * Note: only 100 reports are processed per invocation to keep execution
+    * time well under the 9 - minute Cloud Functions v2 timeout.
+ */
 
-module.exports = async ({ req, res, log, error }) => {
-    const client = new sdk.Client()
-        .setEndpoint(process.env.APPWRITE_FUNCTION_ENDPOINT)
-        .setProject(process.env.APPWRITE_FUNCTION_PROJECT_ID)
-        .setKey(process.env.APPWRITE_API_KEY);
+'use strict';
 
-    const databases = new sdk.Databases(client);
-    const DATABASE_ID = process.env.DATABASE_ID;
-    const REPORTS_COLLECTION_ID = process.env.REPORTS_COLLECTION_ID;
+const { onSchedule } = require('firebase-functions/v2/scheduler');
+const { initializeApp, getApps } = require('firebase-admin/app');
+const { getFirestore, FieldValue } = require('firebase-admin/firestore');
+const { getMessaging } = require('firebase-admin/messaging');
 
-    try {
-        log('Checking for reports requiring escalation...');
+if (!getApps().length) initializeApp();
+const db = getFirestore();
+const messaging = getMessaging();
 
-        // 30 minutes in milliseconds
-        const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+// ─────────────────────────────────────────────────────────────────────────────
+// Helper: send FCM multicast (silently ignores empty token lists)
+// ─────────────────────────────────────────────────────────────────────────────
+async function sendFcmToTokens(tokens, notification, data = {}) {
+    if (!tokens || tokens.length === 0) return;
 
-        // Get pending reports created > 30 mins ago that aren't already escalated
-        const response = await databases.listDocuments(
-            DATABASE_ID,
-            REPORTS_COLLECTION_ID,
-            [
-                sdk.Query.equal('status', 'pending'),
-                sdk.Query.lessThan('$createdAt', thirtyMinutesAgo),
-                sdk.Query.limit(100) // Process in chunks
-            ]
-        );
+    const result = await messaging.sendEachForMulticast({
+        tokens,
+        notification,
+        data: Object.fromEntries(Object.entries(data).map(([k, v]) => [k, String(v)])),
+        android: {
+            priority: 'high',
+            notification: { channelId: 'alerts_channel', priority: 'max', defaultSound: true },
+        },
+        apns: {
+            payload: { aps: { alert: notification, sound: 'default', badge: 1 } },
+        },
+    });
 
-        log(`Found ${response.documents.length} reports to process.`);
+    console.log(
+        `[escalationTimer] FCM — success: ${result.successCount}, failed: ${result.failureCount}`,
+    );
+}
 
-        const updates = response.documents.map(async (report) => {
-            try {
-                await databases.updateDocument(
-                    DATABASE_ID,
-                    REPORTS_COLLECTION_ID,
-                    report.$id,
-                    {
-                        status: 'escalated',
-                        escalatedAt: new Date().toISOString(),
-                        escalationReason: 'Peer verification timeout (30m)'
-                    }
-                );
-                log(`Escalated report ${report.$id}`);
-            } catch (e) {
-                error(`Failed to update report ${report.$id}: ${e.message}`);
+// ─────────────────────────────────────────────────────────────────────────────
+// Cloud Function: escalationTimer
+// ─────────────────────────────────────────────────────────────────────────────
+exports.escalationTimer = onSchedule(
+    { schedule: 'every 5 minutes', region: 'us-central1', timeoutSeconds: 540 },
+    async (_context) => {
+        console.log('[escalationTimer] Starting scheduled escalation check...');
+
+        const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000);
+
+        // ── Fetch pending reports older than 30 minutes ───────────────────────
+        const snap = await db
+            .collection('reports')
+            .where('status', '==', 'pending')
+            .where('submittedAt', '<', thirtyMinutesAgo)
+            .limit(100)
+            .get();
+
+        console.log(`[escalationTimer] ${snap.size} report(s) to escalate.`);
+        if (snap.empty) return;
+
+        const batch = db.batch();
+
+        // Group reports by LGA so we can do one coordinator lookup per LGA
+        const lgaMap = new Map();
+        for (const doc of snap.docs) {
+            const lga = doc.data().lga || '';
+            if (!lgaMap.has(lga)) lgaMap.set(lga, []);
+            lgaMap.get(lga).push(doc);
+
+            // Mark escalated in the batch
+            batch.update(doc.ref, {
+                status: 'escalated',
+                escalatedAt: FieldValue.serverTimestamp(),
+                escalationReason: 'Auto-escalation: No peer verification within 30 minutes',
+            });
+        }
+
+        // Commit status updates
+        await batch.commit();
+        console.log(`[escalationTimer] Marked ${snap.size} report(s) as escalated.`);
+
+        // ── Notify coordinators per LGA ───────────────────────────────────────
+        for (const [lga, reports] of lgaMap.entries()) {
+            const [coordSnap, staffSnap] = await Promise.all([
+                db.collection('users')
+                    .where('role', '==', 'ldp_coordinator')
+                    .where('lga', '==', lga)
+                    .limit(20)
+                    .get(),
+                db.collection('users')
+                    .where('role', '==', 'project_staff')
+                    .limit(20)
+                    .get(),
+            ]);
+
+            const tokens = [...coordSnap.docs, ...staffSnap.docs]
+                .map(d => d.data().fcmToken)
+                .filter(Boolean);
+
+            if (tokens.length === 0) {
+                console.log(`[escalationTimer] No coordinator/staff tokens for LGA: ${lga}`);
+                continue;
             }
-        });
 
-        await Promise.all(updates);
+            const reportCount = reports.length;
+            await sendFcmToTokens(
+                tokens,
+                {
+                    title: '⏰ Unverified Reports Escalated',
+                    body: `${reportCount} hazard report${reportCount > 1 ? 's' : ''} in ${lga || 'your area'} passed the 30-minute verification window.`,
+                },
+                { type: 'escalation_auto', lga },
+            );
 
-        return res.json({
-            success: true,
-            processed: response.documents.length
-        });
+            console.log(
+                `[escalationTimer] Notified ${tokens.length} coordinator(s)/staff for LGA: ${lga}`,
+            );
+        }
 
-    } catch (err) {
-        error(`Escalation function error: ${err.message}`);
-        return res.json({ success: false, error: err.message }, 500);
-    }
-};
+        console.log('[escalationTimer] Done.');
+    },
+);

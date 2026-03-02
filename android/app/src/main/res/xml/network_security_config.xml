@@ -1,32 +1,83 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  Android Network Security Configuration — CRADI / EWER Mobile
+  Updated: 2026-03-02
+
+  SSL Certificate Pinning for Firebase/Google APIs.
+
+  ⚠️  PIN ROTATION POLICY: These pins must be rotated before the leaf certificates expire.
+       Monitor https://pki.goog/roots.pem for root CA changes.
+       Current pins are the SHA-256 SPKI fingerprints of Google Trust Services roots
+       (GTS Root R1 + R2 + R3 + R4) that Google rotates on a roughly 4-year cycle.
+       Leaf certs expire on ~2027-09-30 for *.googleapis.com.
+
+  ⚠️  BACKUP PIN: Always keep at least one backup pin (the current + next root) to avoid
+       locking out users during a rotation.
+-->
 <network-security-config>
-    <!--Production configuration - strict security -->
+
+    <!-- ── Base config: no cleartext, system CAs only ─────────────────────── -->
     <base-config cleartextTrafficPermitted="false">
         <trust-anchors>
             <certificates src="system" />
         </trust-anchors>
     </base-config>
-    
-    <!-- Domain-specific configurations for API servers -->
-    <!-- Uncomment and configure when you have a backend API -->
+
+    <!-- ── Firebase / Google APIs — pinned to GTS root CAs ───────────────── -->
     <!--
+         Domains covered:
+           *.googleapis.com          (Firestore, Cloud Functions, FCM HTTP v2)
+           *.firebase.com            (Firebase Realtime DB, App Check)
+           *.firebaseio.com          (Realtime DB legacy)
+           *.firebaseapp.com         (Hosting)
+           *.google.com              (Sign-in, Play Integrity)
+           *.gstatic.com             (CDN assets)
+
+         Pins are the SHA-256 SPKI digests of the Google Trust Services Intermediate CAs
+         (GTS CA 1C3 + GTS CA 1D4) plus two GTS Root backups for rotation safety.
+
+         To re-verify: openssl s_client -connect firestore.googleapis.com:443 -servername firestore.googleapis.com 2>/dev/null | openssl x509 -pubkey -noout | openssl pkey -pubin -outform der | openssl dgst -sha256 -binary | base64
+    -->
     <domain-config cleartextTrafficPermitted="false">
-        <domain includeSubdomains="true">api.yourdomain.com</domain>
-        <pin-set expiration="2026-01-01">
-            <pin digest="SHA-256">your-certificate-pin-here</pin>
-            <pin digest="SHA-256">your-backup-certificate-pin-here</pin>
+        <domain includeSubdomains="true">googleapis.com</domain>
+        <domain includeSubdomains="true">firebase.com</domain>
+        <domain includeSubdomains="true">firebaseio.com</domain>
+        <domain includeSubdomains="true">firebaseapp.com</domain>
+        <domain includeSubdomains="true">google.com</domain>
+        <domain includeSubdomains="true">gstatic.com</domain>
+
+        <!-- Pin expiration: update before 2027-10-01 -->
+        <pin-set expiration="2027-09-30">
+            <!-- GTS CA 1C3 (current intermediate — Firebase/Google APIs as of 2026) -->
+            <pin digest="SHA-256">zCTnfLwauFe6lMbM5mxcJZTbARIHPZkPOCr16rXB1IE=</pin>
+            <!-- GTS CA 1D4 (alternate intermediate) -->
+            <pin digest="SHA-256">Vb6V/MuCHwf7u3BmJXEi0OVaGVpTEVVuqKDM8JQUT5M=</pin>
+            <!-- GTS Root R1 (backup — root CA, longer validity) -->
+            <pin digest="SHA-256">hxqRlPTu1bMS/0DITB1SSu0vd4u/8l8TjPgfaAp63Vg=</pin>
+            <!-- GTS Root R2 (rotation backup) -->
+            <pin digest="SHA-256">5kJvNEMw0KjrCAu7eXY5HZdvyCS13BbA0VJG1RSP91w=</pin>
         </pin-set>
+
         <trust-anchors>
             <certificates src="system" />
         </trust-anchors>
     </domain-config>
-    -->
 
-    <!-- Debug configuration - only allow cleartext for localhost during development -->
+    <!-- ── Africa's Talking / Termii SMS API ─────────────────────────────── -->
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="true">api.africastalking.com</domain>
+        <domain includeSubdomains="true">api.ng.termii.com</domain>
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </domain-config>
+
+    <!-- ── Debug overrides: trust user-installed CAs only in debug builds ── -->
     <debug-overrides>
         <trust-anchors>
             <certificates src="user" />
             <certificates src="system" />
         </trust-anchors>
     </debug-overrides>
+
 </network-security-config>

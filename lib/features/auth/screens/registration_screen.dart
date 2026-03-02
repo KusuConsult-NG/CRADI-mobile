@@ -5,7 +5,7 @@ import 'package:climate_app/shared/widgets/custom_text_field.dart';
 import 'package:climate_app/core/utils/error_handler.dart';
 import 'package:climate_app/core/utils/validators.dart';
 import 'package:climate_app/core/utils/input_sanitizer.dart';
-
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -50,6 +50,22 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
   bool _isPasswordVisible = false;
   bool _isConfirmPasswordVisible = false;
   bool _isPhoneAuth = false;
+  bool _ndpaConsented = false;
+
+  static const String _ndpaPolicyVersion = '1.0.0';
+  static const String _ndpaPolicyText = '''
+Nigeria Data Protection Act (NDPA) — Data Processing Notice
+
+Your data is processed by EWER Mobile (a CRADI / KusuConsult-NG service) for climate hazard early warning purposes.
+
+• Data collected: name, phone, email, location (state/LGA/ward), hazard reports, and FCM device tokens.
+• Purpose: community hazard reporting, peer verification, and emergency alerts.
+• Storage: Firebase Cloud Firestore hosted on Google's us-central1 (Iowa, USA) servers.
+• US residency: Pursuant to NDPA Article 24, we disclose that your data is transferred to and stored in the United States of America. This transfer is necessary to provide the service. You have the right to withdraw consent at any time by deleting your account.
+• Retention: Data is retained for 5 years after your last activity, then anonymised.
+• Your rights: access, rectification, erasure, and data portability under the NDPA 2023.
+
+By tapping "I Agree", you consent to these terms and the international transfer of your personal data.''';
 
   @override
   void initState() {
@@ -81,9 +97,111 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
     );
   }
 
+  /// Shows the full NDPA consent dialog. Returns true if user agrees.
+  Future<bool> _showNdpaConsentDialog() async {
+    return await showDialog<bool>(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => AlertDialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            title: Row(
+              children: [
+                const Icon(
+                  Icons.privacy_tip_outlined,
+                  color: AppColors.primaryRed,
+                  size: 22,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'Data Privacy Notice',
+                  style: GoogleFonts.lexend(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
+              ],
+            ),
+            content: SizedBox(
+              width: double.maxFinite,
+              child: SingleChildScrollView(
+                child: Text(
+                  _ndpaPolicyText,
+                  style: GoogleFonts.lexend(fontSize: 13, height: 1.6),
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: Text(
+                  'Decline',
+                  style: GoogleFonts.lexend(color: Colors.grey),
+                ),
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primaryRed,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                onPressed: () => Navigator.pop(context, true),
+                child: Text(
+                  'I Agree',
+                  style: GoogleFonts.lexend(fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+  }
+
+  /// Records the consent in Firestore for NDPA audit trail.
+  Future<void> _recordNdpaConsent(String uid) async {
+    try {
+      await FirebaseFirestore.instance
+          .collection('ndpa_consents')
+          .doc(uid)
+          .set({
+            'uid': uid,
+            'consentedAt': FieldValue.serverTimestamp(),
+            'policyVersion': _ndpaPolicyVersion,
+            'dataResidency': 'us-central1',
+            'platform': 'mobile',
+            'method': 'registration_screen',
+          });
+      developer.log(
+        'NDPA consent recorded for $uid',
+        name: 'RegistrationScreen',
+      );
+    } on Exception catch (e) {
+      // Non-fatal: log but don\'t block registration. Retry on next launch.
+      developer.log(
+        'NDPA consent record failed: $e',
+        name: 'RegistrationScreen',
+      );
+    }
+  }
+
   Future<void> _handleRegister() async {
-    if (!_formKey.currentState!.validate()) {
-      return;
+    if (!_formKey.currentState!.validate()) return;
+
+    // NDPA: Show consent dialog before any data is submitted
+    if (!_ndpaConsented) {
+      final agreed = await _showNdpaConsentDialog();
+      if (!mounted) return;
+      if (!agreed) {
+        _showToast(
+          'You must accept the Data Privacy Notice to register.',
+          isError: true,
+        );
+        return;
+      }
+      setState(() => _ndpaConsented = true);
     }
 
     // Additional validation for Dropdowns
@@ -189,6 +307,11 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
         setState(() => _isLoading = false);
 
         if (success) {
+          // Record NDPA consent in Firestore (uid captured synchronously — safe)
+          final uid = context.read<AuthProvider>().currentUser?.uid;
+          if (uid != null) await _recordNdpaConsent(uid);
+          if (!mounted) return;
+
           // If already verified (pre-signup), go straight to dashboard
           if (widget.isVerified) {
             _showToast('Account created!');

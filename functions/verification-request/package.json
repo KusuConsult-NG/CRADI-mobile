@@ -1,9 +1,13 @@
 {
     "name": "verification-request",
-    "version": "1.0.0",
-    "description": "Notifies peers in the same ward to verify a new report.",
+    "version": "2.0.0",
+    "description": "Notifies EWM peers in the same ward to verify a new report (Firebase Admin SDK).",
     "main": "src/index.js",
     "dependencies": {
-        "node-appwrite": "^11.0.0"
+        "firebase-admin": "^12.0.0",
+        "firebase-functions": "^6.0.0"
+    },
+    "engines": {
+        "node": "20"
     }
 }

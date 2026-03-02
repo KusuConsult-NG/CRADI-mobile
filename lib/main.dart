@@ -26,6 +26,8 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:climate_app/l10n/app_localizations.dart';
+import 'package:climate_app/core/services/remote_config_service.dart';
+import 'package:climate_app/core/services/security_service.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 
 /// Background message handler (must be top-level function)
@@ -37,6 +39,9 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Security: Enforce SSL Certificate Pinning before any network calls
+  await SecurityService().initializePinning();
 
   // Initialize Firebase
   try {
@@ -72,6 +77,9 @@ Future<void> main() async {
       providerApple: const AppleDeviceCheckProvider(),
     );
     debugPrint('✅ Firebase App Check activated');
+
+    // Initialize Remote Config — fetches peer threshold, SMS caps, feature flags
+    await RemoteConfigService().initialize();
   } on Exception catch (e) {
     // Firebase not configured yet - app will work without crash reporting
     debugPrint('Firebase initialization failed: $e');
@@ -132,6 +140,27 @@ class _ClimateAppState extends State<ClimateApp> {
     super.initState();
     // Initialize FCM after app starts
     _initializeNotifications();
+    // Wire auto-sync: when connectivity is restored, flush the offline queue
+    _wireAutoSync();
+  }
+
+  void _wireAutoSync() {
+    // Use addPostFrameCallback so the Provider tree is fully built before we read
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      try {
+        context.read<ConnectivityProvider>().onReconnect = () async {
+          debugPrint('🔄 Auto-sync triggered by connectivity restore');
+          try {
+            await OfflineStorageService().syncPendingReports();
+          } on Exception catch (e) {
+            debugPrint('Auto-sync error: $e');
+          }
+        };
+      } on Exception catch (e) {
+        debugPrint('Auto-sync wire-up error: $e');
+      }
+    });
   }
 
   Future<void> _initializeNotifications() async {

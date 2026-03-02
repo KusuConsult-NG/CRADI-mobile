@@ -30,5 +30,15 @@
     "firestore": {
         "rules": "firestore.rules",
         "indexes": "firestore.indexes.json"
-    }
+    },
+    "functions": [
+        {
+            "source": "firebase-functions",
+            "codebase": "cradi-email",
+            "ignore": [
+                "node_modules",
+                ".git"
+            ]
+        }
+    ]
 }

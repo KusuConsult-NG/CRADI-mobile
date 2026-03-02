@@ -201,6 +201,30 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "5.1.2"
+  cloud_functions:
+    dependency: "direct main"
+    description:
+      name: cloud_functions
+      sha256: b4c3701f8e6deb615dba2ec47fce463c8f17c98ec3d4c3ccdb0fd6e193344c6f
+      url: "https://pub.dev"
+    source: hosted
+    version: "6.0.6"
+  cloud_functions_platform_interface:
+    dependency: transitive
+    description:
+      name: cloud_functions_platform_interface
+      sha256: "4685216f16eb88fddc0ec74e52cbb827c887102598ac28b831711d9555a792d9"
+      url: "https://pub.dev"
+    source: hosted
+    version: "5.8.9"
+  cloud_functions_web:
+    dependency: transitive
+    description:
+      name: cloud_functions_web
+      sha256: ddc9e08c744db93f56f47e04905318e4f15f1502d1968a533fed79242895adbb
+      url: "https://pub.dev"
+    source: hosted
+    version: "5.1.2"
   code_assets:
     dependency: transitive
     description:
@@ -537,6 +561,30 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "4.1.2"
+  firebase_remote_config:
+    dependency: "direct main"
+    description:
+      name: firebase_remote_config
+      sha256: "6d7be334b726537b3aa3a3ef1db9782951cd93c2b996eebc33f64a9f140e0409"
+      url: "https://pub.dev"
+    source: hosted
+    version: "6.1.4"
+  firebase_remote_config_platform_interface:
+    dependency: transitive
+    description:
+      name: firebase_remote_config_platform_interface
+      sha256: f895915923bebb9e8b36a6387fac31a9dd36fbb63fa2ee1ea2cbe309634eecdf
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.0.7"
+  firebase_remote_config_web:
+    dependency: transitive
+    description:
+      name: firebase_remote_config_web
+      sha256: a4de6b86e5eb0416a46948dcb1fa9fce6a71d41f80fa107f6e202ae579ec81b2
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.10.3"
   firebase_storage:
     dependency: "direct main"
     description:
@@ -797,6 +845,14 @@ packages:
     description: flutter
     source: sdk
     version: "0.0.0"
+  flutter_windowmanager_plus:
+    dependency: "direct main"
+    description:
+      name: flutter_windowmanager_plus
+      sha256: "4e2bf7c7f374699fd74d59785f1d74efd40052c24a5edde5a4d825cc72608d40"
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.0.1"
   fluttertoast:
     dependency: "direct main"
     description:
@@ -981,6 +1037,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.6.0"
+  http_certificate_pinning:
+    dependency: "direct main"
+    description:
+      name: http_certificate_pinning
+      sha256: "1501c69142a3906a5ad4876d7e71696fa6a6a187fc6f4a746d7a5ba32f9f8fcf"
+      url: "https://pub.dev"
+    source: hosted
+    version: "3.0.1"
   http_multi_server:
     dependency: transitive
     description:

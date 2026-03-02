@@ -101,6 +101,13 @@ dependencies:
   flutter_image_compress: ^2.3.0
   # Firebase App Check — server-side request verification (anti-abuse)
   firebase_app_check: ^0.4.1+4
+  # Firebase Cloud Functions — callable functions for FCM peer notifications
+  cloud_functions: ^6.0.6
+  # Screen security — FLAG_SECURE for sensitive screens (login, profile, settings)
+  flutter_windowmanager_plus: ^1.0.1
+  # Firebase Remote Config — server-side parameters (peer threshold, SMS caps, feature flags)
+  firebase_remote_config: ^6.1.4
+  http_certificate_pinning: ^3.0.1
 
 
 dev_dependencies:

@@ -2,23 +2,28 @@ import 'dart:convert';
 import 'dart:developer' as developer;
 import 'package:http/http.dart' as http;
 import 'package:climate_app/core/config/sms_config.dart';
+import 'package:climate_app/core/services/remote_config_service.dart';
 
-/// SMS Service using Africa's Talking API
-///
-/// Handles sending SMS for alerts, notifications, and OTPs
+/// SMS Service using Termii / Africa's Talking API
 ///
 /// Features:
 /// - Send single SMS
-/// - Send bulk SMS
-/// - Delivery reports
-/// - Error handling
-/// - Sandbox/Production modes
+/// - Send bulk SMS to authorities
+/// - Per-LGA daily SMS cap (remote-configurable, default 50/LGA/day)
+/// - Per-event deduplication (suppress duplicate sends within a time window)
+/// - Error handling + sandbox/production modes
 
 class SmsService {
-  // Singleton pattern
   static final SmsService _instance = SmsService._internal();
   factory SmsService() => _instance;
   SmsService._internal();
+
+  // ── In-memory rate-limit state ────────────────────────────────────────────
+  // Key = LGA name, Value = {count, windowStart}
+  final Map<String, _SmsRateWindow> _lgaWindows = {};
+
+  // Dedup: key = "lga:alertTitle", value = last send timestamp
+  final Map<String, DateTime> _dedupMap = {};
 
   // ==================== PUBLIC API ====================
 
@@ -201,14 +206,40 @@ class SmsService {
   /// [location]: Location of the incident
   /// [severity]: Severity level
   /// [authorityContacts]: List of authority phone numbers
+  /// [lga]: LGA name used for rate-limiting (e.g. 'Donga')
   ///
-  /// Returns: Number of successful sends
+  /// Returns: Number of successful sends, or -1 if blocked by rate cap / dedup.
   Future<int> sendAlertToAuthorities({
     required String alertTitle,
     required String location,
     required String severity,
     required List<String> authorityContacts,
+    String lga = 'unknown',
   }) async {
+    // ── Deduplication guard ──────────────────────────────────────────────────
+    if (_checkDedup(lga, alertTitle)) {
+      developer.log(
+        '⚠️  SMS suppressed (dedup): "$alertTitle" in $lga already sent within window.',
+        name: 'SmsService',
+      );
+      return -1;
+    }
+
+    // ── Per-LGA daily cap ────────────────────────────────────────────────────
+    final rc = RemoteConfigService();
+    final cappedContacts = authorityContacts
+        .take(rc.maxSmsPerAlertEvent)
+        .toList();
+
+    if (_checkLgaRateLimit(lga, cappedContacts.length)) {
+      developer.log(
+        '⚠️  SMS blocked (LGA daily cap reached): $lga '
+        'cap=${rc.maxSmsPerLgaPerDay}',
+        name: 'SmsService',
+      );
+      return -1;
+    }
+
     final message =
         '''
 🚨 EWER ALERT
@@ -219,11 +250,14 @@ Respond immediately.
 ''';
 
     final results = await sendBulkSms(
-      recipients: authorityContacts,
+      recipients: cappedContacts,
       message: message,
     );
 
-    return results.values.where((id) => id != null).length;
+    final successCount = results.values.where((id) => id != null).length;
+    if (successCount > 0) _recordSend(lga, alertTitle, successCount);
+
+    return successCount;
   }
 
   /// Send alert SMS to affected community members
@@ -310,6 +344,48 @@ Do not share this code.
     return '$countryCode$cleaned';
   }
 
+  // ── Rate-limiting helpers ─────────────────────────────────────────────────
+
+  /// Returns true if sending [count] SMS to [lga] would exceed the daily cap.
+  bool _checkLgaRateLimit(String lga, int count) {
+    final rc = RemoteConfigService();
+    final cap = rc.maxSmsPerLgaPerDay;
+    final now = DateTime.now();
+    final window = _lgaWindows[lga];
+
+    if (window == null || now.difference(window.windowStart).inHours >= 24) {
+      // New or expired window — reset
+      _lgaWindows[lga] = _SmsRateWindow(count: 0, windowStart: now);
+      return false;
+    }
+
+    return (window.count + count) > cap;
+  }
+
+  /// Returns true if the same alert was sent to this LGA within the dedup window.
+  bool _checkDedup(String lga, String alertTitle) {
+    final key = '$lga:$alertTitle';
+    final last = _dedupMap[key];
+    if (last == null) return false;
+    final windowMins = RemoteConfigService().smsDeduplicationWindowMinutes;
+    return DateTime.now().difference(last).inMinutes < windowMins;
+  }
+
+  /// Records a successful bulk send in rate-window and dedup maps.
+  void _recordSend(String lga, String alertTitle, int count) {
+    final now = DateTime.now();
+    final window = _lgaWindows[lga];
+    if (window == null || now.difference(window.windowStart).inHours >= 24) {
+      _lgaWindows[lga] = _SmsRateWindow(count: count, windowStart: now);
+    } else {
+      _lgaWindows[lga] = _SmsRateWindow(
+        count: window.count + count,
+        windowStart: window.windowStart,
+      );
+    }
+    _dedupMap['$lga:$alertTitle'] = now;
+  }
+
   /// Get configuration status
   String getConfigurationStatus() {
     return SmsConfig.configurationStatus;
@@ -320,4 +396,11 @@ Do not share this code.
 
   /// Check if running in sandbox mode
   bool get isSandbox => SmsConfig.isSandbox;
+}
+
+// ── Helper: rolling 24-hour SMS window per LGA ─────────────────────────────
+class _SmsRateWindow {
+  final int count;
+  final DateTime windowStart;
+  const _SmsRateWindow({required this.count, required this.windowStart});
 }

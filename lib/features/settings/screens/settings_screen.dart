@@ -9,9 +9,10 @@ import 'package:provider/provider.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'dart:io';
+import 'package:climate_app/core/utils/screen_security.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:flutter/services.dart';
+
 import 'package:package_info_plus/package_info_plus.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -21,7 +22,8 @@ class SettingsScreen extends StatefulWidget {
   State<SettingsScreen> createState() => _SettingsScreenState();
 }
 
-class _SettingsScreenState extends State<SettingsScreen> {
+class _SettingsScreenState extends State<SettingsScreen>
+    with ScreenSecurityMixin<SettingsScreen> {
   bool _pushNotifications = true;
   bool _criticalAlerts = true;
   bool _biometricAvailable = false;
@@ -32,41 +34,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   void initState() {
     super.initState();
-    _enableScreenSecurity();
     _checkBiometric();
     _loadVersion();
-  }
-
-  @override
-  void dispose() {
-    _disableScreenSecurity();
-    super.dispose();
-  }
-
-  /// Enable screenshot prevention on Android (FLAG_SECURE = 0x2000)
-  Future<void> _enableScreenSecurity() async {
-    if (Platform.isAndroid) {
-      try {
-        await const MethodChannel('flutter/platform').invokeMethod(
-          'SystemChrome.setApplicationSwitcherDescription',
-          <String, Object>{'label': '', 'primaryColor': 0},
-        );
-        // Set FLAG_SECURE directly via platform view
-        await SystemChannels.platform.invokeMethod<void>(
-          'SystemChrome.setEnabledSystemUIMode',
-          <String, Object>{'overlays': []},
-        );
-      } on MissingPluginException {
-        // No-op on non-Android or test environments
-      } on Exception {
-        // Non-critical — silently ignore
-      }
-    }
-  }
-
-  /// Disable screenshot prevention when leaving screen
-  Future<void> _disableScreenSecurity() async {
-    // FLAG_SECURE lifted automatically when Activity is backgrounded
   }
 
   /// Load app version from pubspec.yaml via PackageInfo

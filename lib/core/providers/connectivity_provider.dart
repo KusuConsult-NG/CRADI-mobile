@@ -14,6 +14,10 @@ class ConnectivityProvider extends ChangeNotifier {
   bool _manualOffline = false;
   bool _initialCheckDone = false;
 
+  /// Called when connectivity transitions from offline → online.
+  /// Wire this in main.dart to trigger sync of the offline queue.
+  VoidCallback? onReconnect;
+
   /// Whether the device is currently online (considering manual override)
   bool get isOnline => _isOnline && !_manualOffline;
 
@@ -80,6 +84,14 @@ class ConnectivityProvider extends ChangeNotifier {
     // Only notify if status actually changed
     if (wasOnline != _isOnline) {
       notifyListeners();
+      // Trigger auto-sync when transitioning from offline → online
+      if (!wasOnline && _isOnline && !_manualOffline) {
+        developer.log(
+          'Back online — triggering offline queue sync',
+          name: 'ConnectivityProvider',
+        );
+        onReconnect?.call();
+      }
     }
   }
 

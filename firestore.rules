@@ -3,14 +3,16 @@ rules_version = '2';
 // ─────────────────────────────────────────────────────────────────────────────
 //  CRADI / EWER Firebase Firestore Security Rules
 //  Project: ewer-8f788
-//  Last updated: 2026-02-26
+//  Last updated: 2026-03-02
 // ─────────────────────────────────────────────────────────────────────────────
 //
 //  Role hierarchy (stored on each user document at users/{uid}.role):
 //    user         → community member, can submit reports
-//    ewm          → Early Warning Monitor, can verify reports
+//    ewm          → Early Warning Monitor, can verify reports in their ward
 //    ewv          → Early Warning Validator, can verify + reject reports
 //    ewr          → Early Warning Responder, can mark resolved
+//    ldp_coordinator → LGA-level coordinator, escalation recipient
+//    project_staff   → Project-wide staff
 //    techSupport  → tech support, read-only most collections
 //    admin        → full read/write across all collections
 //
@@ -29,8 +31,12 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == uid;
     }
 
+    function userDoc() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
     function getUserRole() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+      return userDoc().role;
     }
 
     function hasRole(role) {
@@ -42,32 +48,66 @@ service cloud.firestore {
     }
 
     function isStaff() {
-      return isAuthenticated() && getUserRole() in ['ewm', 'ewv', 'ewr', 'admin', 'techSupport'];
+      return isAuthenticated() && getUserRole() in [
+        'ewm', 'ewv', 'ewr', 'ldp_coordinator', 'project_staff', 'admin', 'techSupport'
+      ];
+    }
+
+    function isVerifier() {
+      return isAuthenticated() && getUserRole() in ['ewm', 'ewv', 'ewr', 'admin'];
+    }
+
+    // Ward-scoped: caller must belong to the same ward as the resource
+    function sameWard(ward) {
+      return isAuthenticated() && userDoc().ward == ward;
+    }
+
+    // LGA-scoped: caller must belong to the same LGA as the resource
+    function sameLga(lga) {
+      return isAuthenticated() && userDoc().lga == lga;
     }
 
     // ── users ─────────────────────────────────────────────────────────────────
     match /users/{uid} {
-      // Users can read and update their own profile.
-      // Admins and tech support can read all profiles.
+      // Users can read their own profile. Staff can read all profiles (for peer lookup).
       allow read: if isOwner(uid) || isStaff();
-      allow create: if isAuthenticated() && request.auth.uid == uid;
-      allow update: if isOwner(uid) || isAdmin();
+
+      // Anyone authenticated can create their own user document on signup.
+      allow create: if isAuthenticated() && request.auth.uid == uid
+        // Must not self-assign elevated roles at creation time.
+        && request.resource.data.role in ['user', 'ewm'];
+
+      // Users can update their own non-sensitive fields.
+      // Admins can update anything, including role.
+      allow update: if isAdmin()
+        || (isOwner(uid) && (
+          // Only allow specific field updates for non-admins
+          !request.resource.data.diff(resource.data).affectedKeys()
+            .hasAny(['role', 'isApproved'])
+        ));
+
       allow delete: if isAdmin();
     }
 
     // ── reports ───────────────────────────────────────────────────────────────
     match /reports/{reportId} {
-      // Anyone authenticated can submit a report.
+      // Authenticated users can submit their own reports (status must start as 'pending').
       allow create: if isAuthenticated()
         && request.resource.data.userId == request.auth.uid
-        && request.resource.data.status == 'pending';
+        && request.resource.data.status == 'pending'
+        // Prevent userId spoofing
+        && request.resource.data.keys().hasAll(['userId', 'status', 'hazardType', 'lga']);
 
-      // Authors and staff can read reports.
-      allow read: if isAuthenticated()
-        && (resource.data.userId == request.auth.uid || isStaff());
+      // Authors can always read their own reports.
+      // EWMs can read pending/escalated reports in their own ward only.
+      // Senior staff (ewv, ewr, coordinator, admin) can read all reports.
+      allow read: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid
+        || (hasRole('ewm') && sameWard(resource.data.ward))
+        || getUserRole() in ['ewv', 'ewr', 'ldp_coordinator', 'project_staff', 'admin', 'techSupport']
+      );
 
-      // Status updates (verify/reject/resolve) restricted to staff.
-      // Authors can update their own reports only if status remains 'pending'.
+      // Staff can update status fields. Authors can only update their own 'pending' reports.
       allow update: if isStaff()
         || (isOwner(resource.data.userId) && resource.data.status == 'pending');
 
@@ -77,22 +117,24 @@ service cloud.firestore {
 
     // ── verifications ─────────────────────────────────────────────────────────
     match /verifications/{verificationId} {
-      allow read: if isStaff();
-      // EWM/EWV/EWR and above can create verifications.
-      // A user cannot verify their own report.
-      allow create: if isAuthenticated()
-        && getUserRole() in ['ewm', 'ewv', 'ewr', 'admin']
-        && get(/databases/$(database)/documents/reports/$(request.resource.data.reportId)).data.userId != request.auth.uid;
-      allow update: if isAdmin();
-      allow delete: if isAdmin();
+      // Verifiers can read verifications; tech support can too.
+      allow read: if isVerifier() || hasRole('techSupport');
+
+      // EWM/EWV/EWR can create verifications, but NOT for their own reports.
+      allow create: if isVerifier()
+        && get(/databases/$(database)/documents/reports/$(request.resource.data.reportId)).data.userId != request.auth.uid
+        // Enforce required fields
+        && request.resource.data.keys().hasAll(['reportId', 'verifierId', 'isConfirmed']);
+
+      allow update, delete: if isAdmin();
     }
 
     // ── alerts ────────────────────────────────────────────────────────────────
     match /alerts/{alertId} {
       // All authenticated users can read alerts (community broadcasts).
       allow read: if isAuthenticated();
-      // Only staff can create, update, or delete alerts.
-      allow write: if isStaff();
+      // Only senior staff can write alerts (Cloud Functions use Admin SDK and bypass rules).
+      allow write: if getUserRole() in ['ewv', 'ewr', 'ldp_coordinator', 'project_staff', 'admin'];
     }
 
     // ── messages (chat) ───────────────────────────────────────────────────────
@@ -100,33 +142,34 @@ service cloud.firestore {
       allow read: if isAuthenticated();
       allow create: if isAuthenticated()
         && request.resource.data.senderId == request.auth.uid;
-      // Authors can update/delete their own messages. Admins can delete any.
       allow update: if isAuthenticated() && resource.data.senderId == request.auth.uid;
-      allow delete: if isAuthenticated() && (resource.data.senderId == request.auth.uid || isAdmin());
+      allow delete: if isAuthenticated()
+        && (resource.data.senderId == request.auth.uid || isAdmin());
     }
 
     // ── contacts ──────────────────────────────────────────────────────────────
     match /contacts/{contactId} {
       allow read: if isAuthenticated();
-      allow create: if isAuthenticated();
-      // Only the contact creator or admin can update/delete.
+      allow create: if isAuthenticated()
+        && request.resource.data.userId == request.auth.uid;
       allow update, delete: if isOwner(resource.data.userId) || isAdmin();
     }
 
     // ── knowledge_base ────────────────────────────────────────────────────────
     match /knowledge_base/{guideId} {
-      // Any authenticated user can read guides.
       allow read: if isAuthenticated();
-      // Only admins and staff can manage guides.
       allow write: if isAdmin();
     }
 
     // ── trusted_devices ───────────────────────────────────────────────────────
     match /trusted_devices/{deviceId} {
-      allow read, write: if isAuthenticated()
+      // Users can only access their own device records.
+      allow read, delete: if isAuthenticated()
         && resource.data.userId == request.auth.uid;
       allow create: if isAuthenticated()
         && request.resource.data.userId == request.auth.uid;
+      // No update — devices are immutable; re-register to replace.
+      allow update: if false;
     }
 
     // ── login_history ─────────────────────────────────────────────────────────
@@ -134,17 +177,32 @@ service cloud.firestore {
       allow read: if isOwner(resource.data.userId) || isAdmin();
       allow create: if isAuthenticated()
         && request.resource.data.userId == request.auth.uid;
-      // Immutable once written (no update/delete).
+      // Immutable once written.
       allow update, delete: if isAdmin();
     }
 
-    // ── scheduled_escalations (written by PeerVerificationService) ────────────
+    // ── scheduled_escalations ─────────────────────────────────────────────────
+    // Written by PeerVerificationService; processed by Cloud Functions (Admin SDK).
+    // The Admin SDK bypasses all rules, so the only concern is app-layer writes.
     match /scheduled_escalations/{docId} {
-      // Only cloud functions (admin SDK) and app admins read escalations.
-      allow read: if isAdmin();
-      // App can create escalation entries for Cloud Function triggers.
-      allow create: if isAuthenticated();
-      // Only admins / Cloud Functions (using Admin SDK, which bypasses rules) update.
+      // Only senior staff / admin can read (or Cloud Functions via Admin SDK).
+      allow read: if getUserRole() in ['ldp_coordinator', 'project_staff', 'admin'];
+
+      // Any verified EWM/EWV/EWR can create an escalation entry for their own report actions.
+      allow create: if isVerifier()
+        && request.resource.data.keys().hasAll(['reportId', 'escalateAt', 'status'])
+        && request.resource.data.status == 'pending';
+
+      // Only admin and Cloud Functions (Admin SDK) can update/delete.
+      allow update, delete: if isAdmin();
+    }
+
+    // ── ndpa_consents ─────────────────────────────────────────────────────────
+    // Stores user consent records for NDPA audit trail.
+    match /ndpa_consents/{uid} {
+      // Users can read and write only their own consent record.
+      allow read, create: if isOwner(uid);
+      // Consent records are immutable after creation (no update/delete).
       allow update, delete: if isAdmin();
     }
 

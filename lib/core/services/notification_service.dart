@@ -177,6 +177,7 @@ class NotificationService {
 
     await _notificationsBox!.put(id, notification);
     _updateUnreadCount();
+    await _evictOldNotifications();
     developer.log('Notification saved: $id', name: 'NotificationService');
   }
 
@@ -228,6 +229,55 @@ class NotificationService {
     if (_notificationsBox == null) return;
     await _notificationsBox!.clear();
     _updateUnreadCount();
+  }
+
+  /// Evict notifications older than 30 days and trim box to 200 entries.
+  Future<void> _evictOldNotifications() async {
+    if (_notificationsBox == null) return;
+
+    const maxEntries = 200;
+    const maxAge = Duration(days: 30);
+    final cutoff = DateTime.now().subtract(maxAge);
+
+    // Delete entries older than 30 days
+    final staleKeys = _notificationsBox!.keys.where((key) {
+      final n = _notificationsBox!.get(key);
+      if (n == null) return true;
+      final ts = DateTime.tryParse(n['timestamp']?.toString() ?? '');
+      return ts != null && ts.isBefore(cutoff);
+    }).toList();
+
+    if (staleKeys.isNotEmpty) {
+      await _notificationsBox!.deleteAll(staleKeys);
+      developer.log(
+        'Evicted ${staleKeys.length} notifications older than 30 days',
+        name: 'NotificationService',
+      );
+    }
+
+    // Trim to max 200 — delete oldest first
+    if (_notificationsBox!.length > maxEntries) {
+      final sorted =
+          _notificationsBox!.values
+              .map((n) => Map<String, dynamic>.from(n))
+              .toList()
+            ..sort(
+              (a, b) => a['timestamp'].toString().compareTo(
+                b['timestamp'].toString(),
+              ),
+            );
+
+      final toDelete = sorted
+          .take(_notificationsBox!.length - maxEntries)
+          .map((n) => n['id'] as String)
+          .toList();
+
+      await _notificationsBox!.deleteAll(toDelete);
+      developer.log(
+        'Trimmed ${toDelete.length} notifications to stay within $maxEntries limit',
+        name: 'NotificationService',
+      );
+    }
   }
 
   /// Handle notification tap when app is in background

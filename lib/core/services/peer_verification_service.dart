@@ -2,7 +2,9 @@ import 'package:climate_app/core/services/firebase_service.dart';
 import 'package:climate_app/core/services/notification_service.dart';
 import 'package:climate_app/core/services/sms_service.dart';
 import 'package:climate_app/core/constants/app_config.dart';
+import 'package:climate_app/core/services/remote_config_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'dart:developer' as developer;
 
 /// Service for managing peer verification workflow.
@@ -93,8 +95,8 @@ class PeerVerificationService {
         data: {'verificationCount': verifications.length},
       );
 
-      // Validate only if minimum confirmations reached (now 2, not 1)
-      if (confirmations >= AppConfig.minimumPeerConfirmations) {
+      // Validate only if minimum confirmations reached (configurable via Firebase Remote Config)
+      if (confirmations >= RemoteConfigService().minimumPeerConfirmations) {
         await _validateReport(reportId, isAutoValidated: true);
       }
 
@@ -175,24 +177,43 @@ class PeerVerificationService {
         return;
       }
 
-      // TODO: Replace with real FCM Cloud Function call once function is deployed.
-      // For now each peer is notified locally (simulation).
-      for (final peer in peers) {
-        final fcmToken = peer['fcmToken'] as String?;
-        if (fcmToken != null && fcmToken.isNotEmpty) {
-          _notificationService.showLocalNotification(
-            title: 'Verification Request',
-            body: 'Request sent to ${peer['name'] ?? 'User'}',
-          );
+      // Collect FCM tokens from peers and call the server-side FCM function.
+      final peerTokens = peers
+          .map((p) => p['fcmToken'] as String?)
+          .where((t) => t != null && t.isNotEmpty)
+          .cast<String>()
+          .toList();
+
+      if (peerTokens.isNotEmpty) {
+        try {
+          await FirebaseFunctions.instance
+              .httpsCallable('sendVerificationRequest')
+              .call({
+                'reportId': reportId,
+                'ward': ward,
+                'lga': lga,
+                'reporterId': reporterId,
+                'peerTokens': peerTokens,
+              });
           developer.log(
-            'Verification request queued for user ${peer['\$id']}',
+            'FCM verification request sent to ${peerTokens.length} peers via Cloud Function',
             name: 'PeerVerificationService',
+          );
+        } on FirebaseFunctionsException catch (e) {
+          developer.log(
+            'Cloud Function call failed: ${e.code} — ${e.message}. Falling back.',
+            name: 'PeerVerificationService',
+          );
+          // Fallback: local notification to submitting device only
+          _notificationService.showLocalNotification(
+            title: 'Verification Requested',
+            body: 'Notified ${peerTokens.length} peer(s) in $ward',
           );
         }
       }
 
       developer.log(
-        'Verification requests queued for ${peers.length} peers',
+        'Verification requests dispatched to ${peers.length} peers',
         name: 'PeerVerificationService',
       );
 
@@ -281,16 +302,28 @@ class PeerVerificationService {
 
       final recipients = [...coordinators, ...staff];
 
-      for (final recipient in recipients) {
-        final fcmToken = recipient['fcmToken'] as String?;
-        if (fcmToken != null && fcmToken.isNotEmpty) {
-          // TODO: Call FCM Cloud Function to push real notification
-          _notificationService.showLocalNotification(
-            title: 'Escalation Notification',
-            body: 'Report escalated to ${recipient['name']}',
-          );
+      final recipientTokens = recipients
+          .map((r) => r['fcmToken'] as String?)
+          .where((t) => t != null && t.isNotEmpty)
+          .cast<String>()
+          .toList();
+
+      if (recipientTokens.isNotEmpty) {
+        try {
+          await FirebaseFunctions.instance
+              .httpsCallable('sendEscalationNotification')
+              .call({
+                'reportId': reportId,
+                'reason': reason,
+                'recipientTokens': recipientTokens,
+              });
           developer.log(
-            'Escalation queued for ${recipient['\$id']}',
+            'Escalation FCM sent to ${recipientTokens.length} coordinators/staff via Cloud Function',
+            name: 'PeerVerificationService',
+          );
+        } on FirebaseFunctionsException catch (e) {
+          developer.log(
+            'Escalation Cloud Function failed: ${e.code} — ${e.message}.',
             name: 'PeerVerificationService',
           );
         }
@@ -446,15 +479,30 @@ class PeerVerificationService {
       final fcmToken = reporter['fcmToken'] as String?;
 
       if (fcmToken != null && fcmToken.isNotEmpty) {
-        // TODO: Call FCM Cloud Function
-        _notificationService.showLocalNotification(
-          title: 'Report Status Update',
-          body: 'Your report is now: $status',
-        );
-        developer.log(
-          'Reporter $reporterId notification queued: status=$status',
-          name: 'PeerVerificationService',
-        );
+        try {
+          await FirebaseFunctions.instance
+              .httpsCallable('sendReporterStatusUpdate')
+              .call({
+                'reporterToken': fcmToken,
+                'reportId': reportId,
+                'status': status,
+                if (reason != null) 'reason': reason,
+              });
+          developer.log(
+            'Reporter $reporterId status update sent via Cloud Function: $status',
+            name: 'PeerVerificationService',
+          );
+        } on FirebaseFunctionsException catch (e) {
+          developer.log(
+            'Reporter notification Cloud Function failed: ${e.code}',
+            name: 'PeerVerificationService',
+          );
+          // Fallback: local notification
+          _notificationService.showLocalNotification(
+            title: 'Report Status Update',
+            body: 'Your report is now: $status',
+          );
+        }
       }
     } on Exception catch (e) {
       developer.log(
