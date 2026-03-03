@@ -11,6 +11,9 @@ import 'package:climate_app/core/services/rate_limiter.dart';
 import 'package:climate_app/core/services/biometric_service.dart';
 import 'package:climate_app/core/services/device_fingerprint_service.dart';
 import 'package:climate_app/core/services/fraud_detection_service.dart';
+import 'dart:math' as math;
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:climate_app/core/services/email_service.dart';
 import 'package:climate_app/core/constants/app_config.dart';
 
 import 'package:flutter/material.dart';
@@ -433,14 +436,125 @@ class AuthProvider extends ChangeNotifier {
   }
 
   Future<bool> sendOtpForEmail(String email, {String? name}) async {
-    throw AuthException('Email OTP is disabled.');
+    try {
+      _isLoading = true;
+      notifyListeners();
+
+      // Implement rate limiting
+      final rateLimitResult = await _rateLimiter.checkOtpResend();
+      if (!rateLimitResult.allowed) {
+        throw AuthException(rateLimitResult.userMessage);
+      }
+
+      // Generate a cryptographically secure 6-digit OTP
+      final secureRandom = math.Random.secure();
+      final otp = (100000 + secureRandom.nextInt(900000)).toString();
+
+      // Save it to Firestore
+      final expiryTime = DateTime.now().add(const Duration(minutes: 10));
+      await FirebaseFirestore.instance
+          .collection('otp_verifications')
+          .doc(email.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '_'))
+          .set({
+            'email': email,
+            'code': otp,
+            'expiresAt': Timestamp.fromDate(expiryTime),
+            'createdAt': FieldValue.serverTimestamp(),
+            'used': false,
+          });
+
+      // Send the OTP via EmailService (Resend)
+      final emailService = EmailService();
+      final success = await emailService.sendVerificationCode(
+        email,
+        otp,
+        name: name,
+      );
+
+      if (!success) {
+        throw AuthException(
+          'Failed to send verification email. Please try again.',
+        );
+      }
+
+      await _rateLimiter.recordOtpResend();
+
+      _isLoading = false;
+      notifyListeners();
+      return true;
+    } on AuthException {
+      _isLoading = false;
+      notifyListeners();
+      rethrow;
+    } on Exception catch (e) {
+      _isLoading = false;
+      notifyListeners();
+      ErrorHandler.logError(e, context: 'AuthProvider.sendOtpForEmail');
+      throw AuthException('Failed to send verification code.');
+    }
   }
 
   Future<bool> verifyOtpAndLogin(
     String otp, {
     Map<String, dynamic>? registrationData,
   }) async {
-    throw AuthException('OTP verification is disabled.');
+    try {
+      _isLoading = true;
+      notifyListeners();
+
+      if (registrationData == null || !registrationData.containsKey('email')) {
+        // Fallback for an existing user logging in or verifying without full registration data
+        final user = _firebase.getCurrentUser();
+        if (user == null) {
+          throw AuthException('No user context for verification.');
+        }
+        registrationData = {'email': user.email};
+      }
+
+      final email = registrationData['email'] as String;
+      final docId = email.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '_');
+
+      try {
+        await FirebaseFirestore.instance
+            .collection('otp_verifications')
+            .doc(docId)
+            .update({'verifyCode': otp, 'used': true});
+
+        // Verification successful, update the user in Firestore if they are logged in
+        final user = _firebase.getCurrentUser();
+        if (user != null) {
+          await _firebase.updateDocument(
+            collectionId: AppConfig.usersCollection,
+            documentId: user.uid,
+            data: {'isVerified': true},
+          );
+          _isVerified = true;
+        }
+
+        _isLoading = false;
+        notifyListeners();
+        return true;
+      } on FirebaseException catch (e) {
+        if (e.code == 'not-found') {
+          throw AuthException('Invalid or expired verification code.');
+        }
+        if (e.code == 'permission-denied') {
+          throw AuthException(
+            'Invalid or expired verification code. Please request a new one.',
+          );
+        }
+        rethrow;
+      }
+    } on AuthException {
+      _isLoading = false;
+      notifyListeners();
+      rethrow;
+    } on Exception catch (e) {
+      _isLoading = false;
+      notifyListeners();
+      ErrorHandler.logError(e, context: 'AuthProvider.verifyOtpAndLogin');
+      throw AuthException('Failed to verify code.');
+    }
   }
 
   Future<void> resendVerificationLink() async {
@@ -453,15 +567,12 @@ class AuthProvider extends ChangeNotifier {
           throw AuthException('User not logged in');
         }
       }
-      _isLoading = true;
-      notifyListeners();
-      // Use Firebase's native email verification link (no OTP required)
-      await _firebase.sendEmailVerification();
-      _isLoading = false;
-      notifyListeners();
+
+      await sendOtpForEmail(
+        _currentUser!.email!,
+        name: _currentUser!.displayName,
+      );
     } on Exception catch (e) {
-      _isLoading = false;
-      notifyListeners();
       throw AuthException('Failed to resend code: $e');
     }
   }

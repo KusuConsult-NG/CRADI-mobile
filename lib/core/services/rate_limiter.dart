@@ -137,8 +137,8 @@ class RateLimiter {
   }
 
   /// Check if OTP request is allowed
-  Future<RateLimitResult> checkOtpRequest(String phoneNumber) async {
-    final key = 'otp_requests_$phoneNumber';
+  Future<RateLimitResult> checkOtpRequest(String identifier) async {
+    final key = 'otp_requests_$identifier';
     final requestData = await _storage.readJson(key);
 
     if (requestData == null) {
@@ -150,7 +150,6 @@ class RateLimiter {
       );
     }
 
-    final lastRequest = DateTime.parse(requestData['lastRequest'] as String);
     final requests = requestData['count'] as int;
     final windowStart = DateTime.parse(requestData['windowStart'] as String);
 
@@ -161,20 +160,6 @@ class RateLimiter {
         allowed: true,
         remainingAttempts: maxOtpRequests - 1,
         threatLevel: ThreatLevel.low,
-      );
-    }
-
-    // Check cooldown period
-    if (DateTime.now().difference(lastRequest) < otpResendCooldown) {
-      final waitTime =
-          otpResendCooldown - DateTime.now().difference(lastRequest);
-      return RateLimitResult(
-        allowed: false,
-        remainingAttempts: maxOtpRequests - requests,
-        threatLevel: ThreatLevel.medium,
-        waitDuration: waitTime,
-        reason:
-            'Please wait ${waitTime.inSeconds} seconds before requesting another code',
       );
     }
 
@@ -199,9 +184,40 @@ class RateLimiter {
     );
   }
 
+  /// Check if OTP resend cooldown has elapsed
+  Future<RateLimitResult> checkOtpResend() async {
+    final lastAttemptStr = await _storage.read('last_otp_resend');
+    if (lastAttemptStr != null) {
+      final lastAttempt = DateTime.parse(lastAttemptStr);
+      final elapsed = DateTime.now().difference(lastAttempt);
+
+      if (elapsed < otpResendCooldown) {
+        final waitTime = otpResendCooldown - elapsed;
+        return RateLimitResult(
+          allowed: false,
+          remainingAttempts: 0,
+          threatLevel: ThreatLevel.medium,
+          waitDuration: waitTime,
+          reason:
+              'Please wait ${waitTime.inSeconds} seconds before requesting another code',
+        );
+      }
+    }
+    return RateLimitResult(
+      allowed: true,
+      remainingAttempts: 1,
+      threatLevel: ThreatLevel.low,
+    );
+  }
+
+  /// Record an OTP resend action
+  Future<void> recordOtpResend() async {
+    await _storage.write('last_otp_resend', DateTime.now().toIso8601String());
+  }
+
   /// Record OTP request
-  Future<void> recordOtpRequest(String phoneNumber) async {
-    final key = 'otp_requests_$phoneNumber';
+  Future<void> recordOtpRequest(String identifier) async {
+    final key = 'otp_requests_$identifier';
     final requestData = await _storage.readJson(key);
 
     final now = DateTime.now();
@@ -236,8 +252,8 @@ class RateLimiter {
   }
 
   /// Reset OTP request counter
-  Future<void> resetOtpRequests(String phoneNumber) async {
-    final key = 'otp_requests_$phoneNumber';
+  Future<void> resetOtpRequests(String identifier) async {
+    final key = 'otp_requests_$identifier';
     await _storage.delete(key);
   }
 

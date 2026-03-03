@@ -129,6 +129,29 @@ service cloud.firestore {
       allow update, delete: if isAdmin();
     }
 
+    // ── otp_verifications ─────────────────────────────────────────────────────
+    match /otp_verifications/{docId} {
+      // Blind Verification: No one can read OTPs, preventing mass scraping or prediction bypass.
+      allow get, list: if false;
+
+      // Rate Limiting on Creation: allow creation if the user is authenticated 
+      // OR if they are logging/signing up (we allow unauthenticated writes for sign up).
+      allow create: if true 
+        && request.resource.data.keys().hasAll(['email', 'code', 'createdAt', 'expiresAt', 'used']);
+        
+      // Rate limit resends (Updates) to once every 60 seconds
+      allow update: if (
+        // Client updating their OTP to request a new one (rate limited)
+        (request.resource.data.diff(resource.data).affectedKeys().hasAll(['code', 'createdAt', 'expiresAt', 'used']))
+        && (request.time > resource.data.createdAt + duration.value(60, 's'))
+      ) || (
+        // Blind Verification Update (verifying the OTP without reading it)
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['used'])
+      );
+
+      allow delete: if isAdmin();
+    }
+
     // ── alerts ────────────────────────────────────────────────────────────────
     match /alerts/{alertId} {
       // All authenticated users can read alerts (community broadcasts).

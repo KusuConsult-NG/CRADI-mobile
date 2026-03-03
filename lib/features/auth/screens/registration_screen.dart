@@ -319,7 +319,7 @@ By tapping "I Agree", you consent to these terms and the international transfer 
             return; // Stop here
           }
 
-          // Navigate to OTP Screen (Since the OTP has been triggered internally inside signUpWithEmail)
+          // Registration flow ends here. User will verify via OTP.
           final registrationData = {
             'name': name,
             'address': address,
@@ -327,6 +327,7 @@ By tapping "I Agree", you consent to these terms and the international transfer 
             'state': _selectedState,
             'lga': _selectedLga,
             'ward': _selectedWard,
+            'email': email,
           };
 
           if (mounted) {

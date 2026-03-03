@@ -486,7 +486,7 @@ class PeerVerificationService {
                 'reporterToken': fcmToken,
                 'reportId': reportId,
                 'status': status,
-                if (reason != null) 'reason': reason,
+                ...?reason != null ? {'reason': reason} : null,
               });
           developer.log(
             'Reporter $reporterId status update sent via Cloud Function: $status',
