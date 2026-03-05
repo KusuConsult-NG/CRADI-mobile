@@ -7,10 +7,21 @@ import 'dart:async';
 import 'dart:developer' as developer;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:climate_app/core/services/offline_storage_service.dart';
+import 'package:climate_app/features/profile/providers/profile_provider.dart';
 
 class ReportsStatusProvider extends ChangeNotifier {
   final FirebaseService _firebase = FirebaseService();
   final OfflineStorageService _offlineStorage = OfflineStorageService();
+  ProfileProvider? _profileProvider;
+
+  ReportsStatusProvider({ProfileProvider? profileProvider}) {
+    _profileProvider = profileProvider;
+  }
+
+  void updateContext(ProfileProvider? profileProvider) {
+    _profileProvider = profileProvider;
+    // Don't auto-fetch here as it might trigger rebuild loops. Allow UI to pull.
+  }
 
   bool _isSubmitting = false;
   bool get isSubmitting => _isSubmitting;
@@ -86,12 +97,12 @@ class ReportsStatusProvider extends ChangeNotifier {
     };
 
     try {
-      await _firebase.createDocument(
-        collectionId: AppConfig.reportsCollection,
-        data: data,
-      );
+      developer.log('Checking network connectivity for submission...');
+      await _firebase
+          .createDocument(collectionId: AppConfig.reportsCollection, data: data)
+          .timeout(const Duration(seconds: 10));
       developer.log('Verification request submitted online');
-    } on FirebaseException catch (e) {
+    } on Exception catch (e) {
       developer.log('Online submission failed, queuing offline: $e');
       try {
         await _offlineStorage.addToSyncQueue({
@@ -144,7 +155,7 @@ class ReportsStatusProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final queries = <QueryFilter>[FQuery.orderDesc('\$createdAt')];
+      final queries = <QueryFilter>[FQuery.orderDesc('submittedAt')];
 
       if (status != null) {
         queries.add(FQuery.equal('status', status.name));
@@ -156,10 +167,25 @@ class ReportsStatusProvider extends ChangeNotifier {
         queries.add(FQuery.notEqual('userId', excludeUserId));
       }
 
+      // Inject Monitoring Zone enforcement here if passed down (or fetch from Profile)
+      // We only apply this filter if we are NOT fetching "My Reports" (userId == null).
+      if (userId == null && _profileProvider?.monitoringZone != null) {
+        final zone = _profileProvider!.monitoringZone!;
+        // Simple heuristic for demo: State vs LGA logic
+        if (zone.toLowerCase().contains('state')) {
+          queries.add(FQuery.equal('state', zone.replaceAll(' State', '')));
+        } else {
+          queries.add(
+            FQuery.equal('lga', zone),
+          ); // Uses the exact zone string as LGA match for this MVP scope
+        }
+      }
+
       final docs = await _firebase.listDocuments(
         collectionId: AppConfig.reportsCollection,
         queries: queries,
         limitCount: 20,
+        startAfter: loadMore ? _lastDocMap[key] : null,
       );
 
       if (docs.length < 20) {
@@ -169,7 +195,7 @@ class ReportsStatusProvider extends ChangeNotifier {
       final newReports = docs.map((data) {
         final reportStatus = _parseStatus(data['status']);
         return VerificationReport(
-          id: data['\$id'] as String? ?? '',
+          id: data['id'] as String? ?? data['\$id'] as String? ?? '',
           title: _formatTitle(data['hazardType'] ?? 'Unknown Hazard'),
           type: data['hazardType'] ?? 'Unknown',
           reporter: 'Community Report',
@@ -190,8 +216,8 @@ class ReportsStatusProvider extends ChangeNotifier {
 
       // Store pagination cursor
       if (docs.isNotEmpty) {
-        _lastDocMap[key] =
-            null; // FirebaseService.listDocuments handles internally
+        _lastDocMap[key] = docs.last['\$snapshot'];
+        developer.log('Pagination cursor updated: ${_lastDocMap[key] != null}');
       }
     } on Exception catch (e) {
       developer.log('Error fetching reports: $e');
@@ -405,7 +431,7 @@ class ReportsStatusProvider extends ChangeNotifier {
     }
 
     final diff = DateTime.now().difference(dateTime);
-    if (diff.inMinutes < 1) return 'Just now';
+    if (diff.isNegative || diff.inMinutes < 1) return 'Just now';
     if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
     if (diff.inHours < 24) return '${diff.inHours}h ago';
     if (diff.inDays < 7) return '${diff.inDays}d ago';

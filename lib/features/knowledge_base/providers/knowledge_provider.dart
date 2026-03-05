@@ -50,7 +50,7 @@ class KnowledgeProvider extends ChangeNotifier {
                       (data['hazardType'] as String?)?.toUpperCase() ?? 'GUIDE',
                   'imageUrl': _getImageForType(data['hazardType']),
                   'source': 'EWER Admin',
-                  'updatedAt': data['\$updatedAt'],
+                  'updatedAt': data['updatedAt'],
                   'isOffline': false,
                 },
               )

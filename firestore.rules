@@ -142,11 +142,15 @@ service cloud.firestore {
       // Rate limit resends (Updates) to once every 60 seconds
       allow update: if (
         // Client updating their OTP to request a new one (rate limited)
-        (request.resource.data.diff(resource.data).affectedKeys().hasAll(['code', 'createdAt', 'expiresAt', 'used']))
+        request.resource.data.used == false
+        && request.resource.data.keys().hasAll(['email', 'code', 'createdAt', 'expiresAt', 'used'])
         && (request.time > resource.data.createdAt + duration.value(60, 's'))
       ) || (
         // Blind Verification Update (verifying the OTP without reading it)
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['used'])
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['used', 'verifyCode'])
+        && request.resource.data.verifyCode == resource.data.code
+        && request.resource.data.used == true
+        && request.time < resource.data.expiresAt
       );
 
       allow delete: if isAdmin();

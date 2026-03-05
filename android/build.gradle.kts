@@ -5,16 +5,7 @@ allprojects {
     }
 }
 
-// Configure Java toolchain to use Java 17 for all projects
-subprojects {
-    afterEvaluate {
-        if (project.hasProperty("android")) {
-            tasks.withType<JavaCompile>().configureEach {
-                options.compilerArgs.addAll(listOf("-Xlint:-options"))
-            }
-        }
-    }
-}
+// Removed Java 17 toolchain override to allow JBR 21 to govern.
 
 val newBuildDir: Directory =
     rootProject.layout.buildDirectory

@@ -457,7 +457,7 @@ class OfflineStorageService {
   Future<void> cacheGuides(List<Map<String, dynamic>> guides) async {
     _ensureInitialized();
     await _contentCacheBox!.put('guides', {
-      'data': guides,
+      'data': guides.map((g) => _sanitizeForHive(g)).toList(),
       'timestamp': DateTime.now().toIso8601String(),
     });
   }
@@ -466,7 +466,7 @@ class OfflineStorageService {
   Future<void> cacheUserProfile(Map<String, dynamic> profile) async {
     _ensureInitialized();
     await _contentCacheBox!.put('user_profile', {
-      'data': profile,
+      'data': _sanitizeForHive(profile),
       'timestamp': DateTime.now().toIso8601String(),
     });
   }
@@ -525,7 +525,7 @@ class OfflineStorageService {
   Future<void> cacheAlerts(List<Map<String, dynamic>> alerts) async {
     _ensureInitialized();
     await _contentCacheBox!.put('alerts', {
-      'data': alerts,
+      'data': alerts.map((a) => _sanitizeForHive(a)).toList(),
       'timestamp': DateTime.now().toIso8601String(),
     });
   }
@@ -552,7 +552,7 @@ class OfflineStorageService {
   ) async {
     _ensureInitialized();
     await _contentCacheBox!.put('verifications', {
-      'data': verifications,
+      'data': verifications.map((v) => _sanitizeForHive(v)).toList(),
       'timestamp': DateTime.now().toIso8601String(),
     });
   }
@@ -606,11 +606,44 @@ class OfflineStorageService {
     };
   }
 
-  /// Close Hive boxes (call on app dispose)
-  Future<void> dispose() async {
+  /// Closes the hive boxes
+  Future<void> close() async {
     await _draftsBox?.close();
     await _syncQueueBox?.close();
     await _contentCacheBox?.close();
     developer.log('Offline storage disposed', name: 'OfflineStorageService');
+  }
+
+  /// Sanitizes maps before sending them to hive
+  Map<String, dynamic> _sanitizeForHive(Map<String, dynamic> data) {
+    final Map<String, dynamic> sanitized = {};
+    data.forEach((key, value) {
+      if (value is Timestamp) {
+        sanitized[key] = value.toDate().toIso8601String();
+      } else if (value is GeoPoint) {
+        sanitized[key] = {
+          'latitude': value.latitude,
+          'longitude': value.longitude,
+        };
+      } else if (value is DocumentReference) {
+        sanitized[key] = value.path;
+      } else if (value is Map<String, dynamic>) {
+        sanitized[key] = _sanitizeForHive(value);
+      } else if (value is List) {
+        sanitized[key] = value.map((e) {
+          if (e is Map<String, dynamic>) return _sanitizeForHive(e);
+          if (e is Timestamp) return e.toDate().toIso8601String();
+          if (e is GeoPoint)
+            return {'latitude': e.latitude, 'longitude': e.longitude};
+          if (e is DocumentReference) return e.path;
+          return e;
+        }).toList();
+      } else if (value is DateTime) {
+        sanitized[key] = value.toIso8601String();
+      } else {
+        sanitized[key] = value;
+      }
+    });
+    return sanitized;
   }
 }

@@ -9,6 +9,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import 'package:climate_app/shared/widgets/custom_button.dart';
+import 'package:climate_app/features/verification/providers/reports_status_provider.dart';
 
 class ReportReviewScreen extends StatefulWidget {
   const ReportReviewScreen({super.key});
@@ -137,6 +138,7 @@ class _ReportReviewScreenState extends State<ReportReviewScreen> {
                 child: CustomButton(
                   onPressed: () {
                     // Provider is already reset in submitReport
+                    context.read<ReportsStatusProvider>().refreshReports();
                     context.go('/dashboard');
                   },
                   text: 'Return to Dashboard',

@@ -173,7 +173,9 @@ class _SettingsScreenState extends State<SettingsScreen>
                               color: AppColors.primaryRed,
                               width: 2,
                             ),
-                            image: profile.profileImagePath != null
+                            image:
+                                profile.profileImagePath != null &&
+                                    profile.profileImagePath!.isNotEmpty
                                 ? DecorationImage(
                                     image:
                                         profile.profileImagePath!.startsWith(
@@ -189,11 +191,15 @@ class _SettingsScreenState extends State<SettingsScreen>
                                     fit: BoxFit.cover,
                                   )
                                 : null,
-                            color: profile.profileImagePath == null
+                            color:
+                                profile.profileImagePath == null ||
+                                    profile.profileImagePath!.isEmpty
                                 ? Colors.grey.shade300
                                 : null,
                           ),
-                          child: profile.profileImagePath == null
+                          child:
+                              profile.profileImagePath == null ||
+                                  profile.profileImagePath!.isEmpty
                               ? const Icon(Icons.person, color: Colors.grey)
                               : Align(
                                   alignment: Alignment.bottomRight,

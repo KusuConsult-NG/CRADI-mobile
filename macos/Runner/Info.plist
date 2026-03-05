@@ -28,5 +28,9 @@
 	<string>MainMenu</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>This app needs to recognize your speech to transcribe hazard descriptions.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>This app needs microphone access to listen to your voice input for hazard reports.</string>
 </dict>
 </plist>

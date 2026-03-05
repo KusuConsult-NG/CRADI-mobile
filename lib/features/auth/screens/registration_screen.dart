@@ -438,7 +438,7 @@ By tapping "I Agree", you consent to these terms and the international transfer 
                       ),
                       const SizedBox(height: 12),
                       Text(
-                        'Select your role and location to get started.',
+                        'Select your location to get started.',
                         style: GoogleFonts.lexend(
                           fontSize: 18, // Increased from 16
                           color: AppColors.textSecondary,
@@ -593,7 +593,7 @@ By tapping "I Agree", you consent to these terms and the international transfer 
                             const SizedBox(height: 24),
 
                             Text(
-                              'Role & Location',
+                              'Location',
                               style: GoogleFonts.lexend(
                                 fontSize: 16,
                                 fontWeight: FontWeight.bold,

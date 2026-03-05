@@ -11,6 +11,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'dart:developer' as developer;
 import 'package:provider/provider.dart';
 import 'package:climate_app/core/utils/string_extensions.dart';
+import 'package:uuid/uuid.dart';
 
 enum HazardType { flood, drought, temp, wind, erosion, fire, pest }
 
@@ -180,13 +181,17 @@ class ReportingProvider extends ChangeNotifier {
         throw Exception('User must be logged in to submit a report');
       }
 
+      final String docId = const Uuid().v4();
+
       // Upload images to Firebase Storage
       final List<String> imageUrls = [];
-      for (final photo in _photos) {
+      for (int i = 0; i < _photos.length; i++) {
+        final photo = _photos[i];
         final file = File(photo.path);
+        final fileName = photo.name;
         final url = await _firebase.uploadFileFromPath(
           storagePath:
-              '${AppConfig.reportImagesBucket}/${firebaseUser.uid}/${DateTime.now().millisecondsSinceEpoch}_${photo.name}',
+              '${AppConfig.reportImagesBucket}/${firebaseUser.uid}/${docId}_${i}_$fileName',
           file: file,
         );
         imageUrls.add(url);
@@ -213,10 +218,14 @@ class ReportingProvider extends ChangeNotifier {
       };
 
       try {
-        final doc = await _firebase.createDocument(
-          collectionId: AppConfig.reportsCollection,
-          data: reportData,
-        );
+        developer.log('Checking network connectivity for submission...');
+        final doc = await _firebase
+            .createDocument(
+              collectionId: AppConfig.reportsCollection,
+              documentId: docId,
+              data: reportData,
+            )
+            .timeout(const Duration(seconds: 10));
         final reportId = doc['\$id'] as String;
 
         // Send peer verification requests
@@ -244,15 +253,19 @@ class ReportingProvider extends ChangeNotifier {
               'Report submitted successfully! Verification requests sent to peers.',
           'reportId': reportId,
         };
-      } on FirebaseException catch (e) {
-        // Submission failed — add to sync queue
-        await OfflineStorageService().addToSyncQueue(reportData);
+      } on Exception catch (e) {
+        // Submission failed or timed out — add to sync queue
+        await OfflineStorageService().addToSyncQueue({
+          ...reportData,
+          'docId': docId,
+        });
         reset();
         _isLoading = false;
         notifyListeners();
         return {
           'success': false,
-          'message': '⚠️ Submission failed: ${e.message}. Added to sync queue.',
+          'message':
+              '⚠️ Submission failed: ${e.toString()}. Added to sync queue.',
           'queued': true,
         };
       }
@@ -280,9 +293,12 @@ class ReportingProvider extends ChangeNotifier {
       for (final item in queue) {
         if (item['status'] == 'synced') continue;
         try {
+          final docId = item['docId'] as String?;
           await _firebase.createDocument(
             collectionId: AppConfig.reportsCollection,
+            documentId: docId,
             data: {...item, 'status': 'pending'}
+              ..remove('docId')
               ..remove('queueId')
               ..remove('addedToQueueAt')
               ..remove('retryCount')
@@ -300,14 +316,17 @@ class ReportingProvider extends ChangeNotifier {
       final drafts = offlineService.getAllDrafts();
       for (final draft in drafts) {
         try {
+          final draftId = draft['id'] as String;
           final List<String> imageUrls = [];
           if (draft['imagePaths'] != null) {
             final paths = (draft['imagePaths'] as List).cast<String>();
-            for (final path in paths) {
+            for (int i = 0; i < paths.length; i++) {
+              final path = paths[i];
               if (File(path).existsSync()) {
+                final fileName = path.split('/').last;
                 final url = await _firebase.uploadFileFromPath(
                   storagePath:
-                      '${AppConfig.reportImagesBucket}/${firebaseUser.uid}/${DateTime.now().millisecondsSinceEpoch}',
+                      '${AppConfig.reportImagesBucket}/${firebaseUser.uid}/${draftId}_${i}_$fileName',
                   file: File(path),
                 );
                 imageUrls.add(url);
@@ -317,6 +336,7 @@ class ReportingProvider extends ChangeNotifier {
 
           await _firebase.createDocument(
             collectionId: AppConfig.reportsCollection,
+            documentId: draftId,
             data: {
               'userId': firebaseUser.uid,
               'hazardType': draft['hazardType'],

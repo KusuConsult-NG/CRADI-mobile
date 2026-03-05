@@ -71,5 +71,13 @@
 	<string>This app needs access to location when open to pinpoint incident reports.</string>
 	<key>NSLocationAlwaysUsageDescription</key>
 	<string>This app needs access to location when in the background to pinpoint incident reports.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>This app needs to recognize your speech to transcribe hazard descriptions.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>This app needs microphone access to listen to your voice input for hazard reports.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>This app requires access to the photo library to upload hazard evidence.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>This app requires access to the camera to take hazard evidence photos.</string>
 </dict>
 </plist>

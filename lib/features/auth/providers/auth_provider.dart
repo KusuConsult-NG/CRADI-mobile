@@ -262,12 +262,9 @@ class AuthProvider extends ChangeNotifier {
       // 5. Start session
       await _startUserSession(user, userRole, isVerified: isVerified ?? false);
 
-      // 6. Send OTP email (legacy method no longer functional without proper flow, stub it out)
+      // 6. Send OTP email
       if (isVerified != true) {
-        developer.log(
-          'Email verification required, but OTP bypass is active.',
-          name: 'AuthProvider',
-        );
+        await sendOtpForEmail(email, name: name);
       }
 
       _isLoading = false;
@@ -504,11 +501,14 @@ class AuthProvider extends ChangeNotifier {
 
       if (registrationData == null || !registrationData.containsKey('email')) {
         // Fallback for an existing user logging in or verifying without full registration data
-        final user = _firebase.getCurrentUser();
-        if (user == null) {
-          throw AuthException('No user context for verification.');
+        final userEmail =
+            _currentUser?.email ?? _firebase.getCurrentUser()?.email;
+        if (userEmail == null || userEmail.isEmpty) {
+          throw AuthException(
+            'No user context for verification. Please login again.',
+          );
         }
-        registrationData = {'email': user.email};
+        registrationData = {'email': userEmail};
       }
 
       final email = registrationData['email'] as String;

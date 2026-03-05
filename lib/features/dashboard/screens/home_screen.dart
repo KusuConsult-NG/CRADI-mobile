@@ -37,7 +37,14 @@ class _HomeScreenState extends State<HomeScreen> {
 
     // Lazy Escalation Check
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      PeerVerificationService().checkAndEscalatePendingReports();
+      final role = context.read<AuthProvider>().userRole;
+      if (role == UserRole.admin ||
+          role == UserRole.ewm ||
+          role == UserRole.ewr ||
+          role == UserRole.ewv ||
+          role == UserRole.techSupport) {
+        PeerVerificationService().checkAndEscalatePendingReports();
+      }
 
       // Setup connectivity listener for auto-sync
       try {
@@ -359,7 +366,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 onTap: () => context.push('/profile'),
                 child: Consumer<ProfileProvider>(
                   builder: (context, profile, _) {
-                    if (profile.profileImagePath != null) {
+                    if (profile.profileImagePath != null &&
+                        profile.profileImagePath!.isNotEmpty) {
                       final imagePath = profile.profileImagePath!;
                       final isNetworkImage = imagePath.startsWith('http');
 
@@ -639,14 +647,14 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildFeedContent() {
     final statusProvider = context.watch<ReportsStatusProvider>();
 
-    if (_selectedFilterIndex == 2) {
+    if (_selectedFilterIndex == 0) {
       // To Verify
       return _buildListFeed(
         statusProvider.getReports(ReportStatus.pending),
         statusProvider.isLoading(ReportStatus.pending),
         'No reports to verify',
       );
-    } else if (_selectedFilterIndex == 1) {
+    } else if (_selectedFilterIndex == 2) {
       // My Reports
       final userId = context.read<AuthProvider>().currentUser?.uid;
       return _buildListFeed(
@@ -655,12 +663,12 @@ class _HomeScreenState extends State<HomeScreen> {
         'You haven\'t submitted any reports yet',
       );
     } else {
-      // Recent (All)
+      // Alerts (All)
       // Only fetch pending + active + resolved for general feed
       return _buildListFeed(
         statusProvider.getReports(null),
         statusProvider.isLoading(null),
-        'No recent reports',
+        'No recent alerts',
       );
     }
   }

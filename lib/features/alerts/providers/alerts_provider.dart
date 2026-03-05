@@ -29,7 +29,7 @@ class AlertsProvider extends ChangeNotifier {
     try {
       final documents = await _firebase.listDocuments(
         collectionId: AppConfig.alertsCollection,
-        queries: [FQuery.orderDesc('\$createdAt')],
+        queries: [FQuery.orderDesc('createdAt')],
         limitCount: 20,
       );
 

@@ -61,7 +61,7 @@ class ProfileProvider extends ChangeNotifier {
       collectionId: AppConfig.reportsCollection,
       queries: [
         FQuery.equal('userId', user.uid),
-        FQuery.orderDesc('\$createdAt'),
+        FQuery.orderDesc('createdAt'),
       ],
     );
   }

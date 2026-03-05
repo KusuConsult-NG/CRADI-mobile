@@ -113,8 +113,11 @@ Future<void> main() async {
         ChangeNotifierProvider(create: (_) => ReportingProvider()),
         ChangeNotifierProvider(create: (_) => LanguageProvider()),
         ChangeNotifierProvider(create: (_) => ConnectivityProvider()),
-        ChangeNotifierProvider(create: (_) => ReportsStatusProvider()),
         ChangeNotifierProvider(create: (_) => ProfileProvider()),
+        ChangeNotifierProxyProvider<ProfileProvider, ReportsStatusProvider>(
+          create: (_) => ReportsStatusProvider(),
+          update: (_, profile, reports) => reports!..updateContext(profile),
+        ),
         ChangeNotifierProvider(create: (_) => ChatProvider()),
         ChangeNotifierProvider(create: (_) => EmergencyContactsProvider()),
         ChangeNotifierProvider(create: (_) => SettingsProvider()),

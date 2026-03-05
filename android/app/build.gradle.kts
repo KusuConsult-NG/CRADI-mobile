@@ -17,22 +17,22 @@ plugins {
 }
 
 android {
-    namespace = "com.cradi.ewer"
+    namespace = "com.westgatestratagem.climate_app.climate_app"
     compileSdk = 36  // Required by plugins (connectivity_plus, image_picker, etc.)
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
+        sourceCompatibility = JavaVersion.VERSION_21
+        targetCompatibility = JavaVersion.VERSION_21
         isCoreLibraryDesugaringEnabled = true
     }
 
     kotlinOptions {
-        jvmTarget = JavaVersion.VERSION_17.toString()
+        jvmTarget = JavaVersion.VERSION_21.toString()
     }
 
     defaultConfig {
-        applicationId = "com.cradi.ewer"
+        applicationId = "com.westgatestratagem.climate_app.climate_app"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion  // Android 6.0 - broad compatibility

@@ -228,7 +228,7 @@ class FirebaseService {
   }) async {
     try {
       final ts = FieldValue.serverTimestamp();
-      final payload = {...data, '\$createdAt': ts, '\$updatedAt': ts};
+      final payload = {...data, 'createdAt': ts, 'updatedAt': ts};
 
       DocumentReference<Map<String, dynamic>> ref;
       if (documentId != null && documentId.isNotEmpty) {
@@ -285,6 +285,7 @@ class FirebaseService {
     required String collectionId,
     List<QueryFilter>? queries,
     int? limitCount,
+    DocumentSnapshot? startAfter,
   }) async {
     try {
       Query<Map<String, dynamic>> query = _db.collection(collectionId);
@@ -299,10 +300,15 @@ class FirebaseService {
         query = query.limit(limitCount);
       }
 
+      if (startAfter != null) {
+        query = query.startAfterDocument(startAfter);
+      }
+
       final snapshot = await query.get();
       return snapshot.docs.map((doc) {
         final data = doc.data();
         data['\$id'] = doc.id;
+        data['\$snapshot'] = doc;
         return data;
       }).toList();
     } on FirebaseException catch (e) {
@@ -321,7 +327,7 @@ class FirebaseService {
     required Map<String, dynamic> data,
   }) async {
     try {
-      final payload = {...data, '\$updatedAt': FieldValue.serverTimestamp()};
+      final payload = {...data, 'updatedAt': FieldValue.serverTimestamp()};
       await _db.collection(collectionId).doc(documentId).update(payload);
       developer.log(
         'Document updated: $documentId in $collectionId',

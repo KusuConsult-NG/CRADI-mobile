@@ -544,9 +544,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                   // Account Status Badge
                   Consumer<app_auth.AuthProvider>(
                     builder: (context, authProvider, _) {
-                      // Use isApproved or check mocked verification status
-                      // For this MVP, we can check a local flag or the provider
-                      final isVerified = authProvider.isApproved ?? false;
+                      final isVerified = authProvider.isVerified;
 
                       return Column(
                         children: [
@@ -667,20 +665,27 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                         padding: const EdgeInsets.symmetric(horizontal: 16),
                         child: Row(
                           children: [
-                            GestureDetector(
-                              onTap: () => context.push('/reports-status'),
-                              child: _buildStatCard('$totalReports', 'Reports'),
-                            ),
-                            const SizedBox(width: 12),
-                            GestureDetector(
-                              onTap: () => context.push('/reports-status'),
-                              child: _buildStatCard(
-                                '$verifiedCount',
-                                'Verified',
+                            Expanded(
+                              child: GestureDetector(
+                                onTap: () => context.push('/reports-status'),
+                                child: _buildStatCard(
+                                  '$totalReports',
+                                  'Reports',
+                                ),
                               ),
                             ),
                             const SizedBox(width: 12),
-                            _buildDaysActiveCard(profile),
+                            Expanded(
+                              child: GestureDetector(
+                                onTap: () => context.push('/reports-status'),
+                                child: _buildStatCard(
+                                  '$verifiedCount',
+                                  'Verified',
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(child: _buildDaysActiveCard(profile)),
                           ],
                         ),
                       );
@@ -946,30 +951,28 @@ class _UserProfileScreenState extends State<UserProfileScreen>
   }
 
   Widget _buildStatCard(String value, String label) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 16),
-        decoration: _cardDecoration(),
-        child: Column(
-          children: [
-            Text(
-              value,
-              style: GoogleFonts.lexend(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                color: AppColors.primaryRed,
-              ),
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 16),
+      decoration: _cardDecoration(),
+      child: Column(
+        children: [
+          Text(
+            value,
+            style: GoogleFonts.lexend(
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+              color: AppColors.primaryRed,
             ),
-            const SizedBox(height: 4),
-            Text(
-              label,
-              style: GoogleFonts.lexend(
-                fontSize: 12,
-                color: AppColors.textSecondary,
-              ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            label,
+            style: GoogleFonts.lexend(
+              fontSize: 12,
+              color: AppColors.textSecondary,
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
