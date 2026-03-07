@@ -21,6 +21,7 @@ class _MainShellScreenState extends State<MainShellScreen> {
     if (location.startsWith('/dashboard')) return 0;
     if (location.startsWith('/alerts')) return 1;
     if (location.startsWith('/knowledge-base')) return 2;
+    if (location.startsWith('/admin')) return 4;
     if (location.startsWith('/settings')) return 3;
     return 0;
   }
@@ -38,6 +39,9 @@ class _MainShellScreenState extends State<MainShellScreen> {
         break;
       case 3:
         context.go('/settings');
+        break;
+      case 4:
+        context.go('/admin');
         break;
     }
   }
@@ -136,33 +140,44 @@ class _MainShellScreenState extends State<MainShellScreen> {
           ),
         ),
         body: ConnectivityBanner(child: widget.child),
-        bottomNavigationBar: Consumer<LanguageProvider>(
-          builder: (context, provider, _) => NavigationBar(
-            selectedIndex: selectedIndex,
-            onDestinationSelected: _onItemTapped,
-            destinations: [
-              NavigationDestination(
-                icon: const Icon(Icons.grid_view),
-                selectedIcon: const Icon(Icons.grid_view_rounded, fill: 1),
-                label: provider.navHome,
-              ),
-              NavigationDestination(
-                icon: const Icon(Icons.notifications_outlined),
-                selectedIcon: const Icon(Icons.notifications),
-                label: provider.navAlerts,
-              ),
-              NavigationDestination(
-                icon: const Icon(Icons.menu_book_outlined),
-                selectedIcon: const Icon(Icons.menu_book),
-                label: provider.navGuides,
-              ),
-              NavigationDestination(
-                icon: const Icon(Icons.settings_outlined),
-                selectedIcon: const Icon(Icons.settings),
-                label: provider.navSettings,
-              ),
-            ],
-          ),
+        bottomNavigationBar: Consumer2<LanguageProvider, AuthProvider>(
+          builder: (context, langProvider, authProvider, _) {
+            final isAdmin =
+                authProvider.userRole == UserRole.admin ||
+                authProvider.userRole == UserRole.techSupport;
+            return NavigationBar(
+              selectedIndex: _calculateSelectedIndex(context),
+              onDestinationSelected: _onItemTapped,
+              destinations: [
+                NavigationDestination(
+                  icon: const Icon(Icons.grid_view),
+                  selectedIcon: const Icon(Icons.grid_view_rounded, fill: 1),
+                  label: langProvider.navHome,
+                ),
+                NavigationDestination(
+                  icon: const Icon(Icons.notifications_outlined),
+                  selectedIcon: const Icon(Icons.notifications),
+                  label: langProvider.navAlerts,
+                ),
+                NavigationDestination(
+                  icon: const Icon(Icons.menu_book_outlined),
+                  selectedIcon: const Icon(Icons.menu_book),
+                  label: langProvider.navGuides,
+                ),
+                NavigationDestination(
+                  icon: const Icon(Icons.settings_outlined),
+                  selectedIcon: const Icon(Icons.settings),
+                  label: langProvider.navSettings,
+                ),
+                if (isAdmin)
+                  const NavigationDestination(
+                    icon: Icon(Icons.admin_panel_settings_outlined),
+                    selectedIcon: Icon(Icons.admin_panel_settings),
+                    label: 'Admin',
+                  ),
+              ],
+            );
+          },
         ),
       ),
     );

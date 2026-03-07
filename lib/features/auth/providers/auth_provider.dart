@@ -14,6 +14,7 @@ import 'package:climate_app/core/services/fraud_detection_service.dart';
 import 'dart:math' as math;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:climate_app/core/services/email_service.dart';
+import 'package:climate_app/core/services/sms_service.dart';
 import 'package:climate_app/core/constants/app_config.dart';
 
 import 'package:flutter/material.dart';
@@ -295,7 +296,80 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
-  // ─────────────────────────── Sign In ─────────────────────────────────────
+  // ─────────────────────────── Phone Sign-Up ───────────────────────────────
+
+  /// Creates a Firebase Auth account for a phone-registered user after OTP
+  /// verification. Since Firebase Auth requires email+password, we derive a
+  /// surrogate email (`{sanitised_phone}@ewer.phone`) and generate a secure
+  /// random password that is stored in SecureStorage so the user can log in
+  /// again without knowing it (transparent to them).
+  Future<bool> signUpWithPhone({
+    required String phone,
+    String? name,
+    String? address,
+    UserRole? role,
+    String? state,
+    String? lga,
+    String? ward,
+  }) async {
+    // Derive a stable Firebase-safe email for the phone user
+    final sanitisedPhone = phone.trim().replaceAll(RegExp(r'[^0-9]'), '');
+    final derivedEmail = '$sanitisedPhone@ewer.phone';
+
+    // Generate a 32-char URL-safe secure password
+    final rand = math.Random.secure();
+    const chars =
+        'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_';
+    final generatedPassword = List.generate(
+      32,
+      (_) => chars[rand.nextInt(chars.length)],
+    ).join();
+
+    // Store derived credentials so the user can re-authenticate later
+    await _storage.write('phone_derived_email_$sanitisedPhone', derivedEmail);
+    await _storage.write(
+      'phone_derived_password_$sanitisedPhone',
+      generatedPassword,
+    );
+
+    // Clear any stale Firebase session
+    try {
+      await _firebase.logout();
+    } on Exception {
+      /* ignore */
+    }
+
+    // Create Firebase Auth account
+    final user = await _firebase.createAccount(
+      email: derivedEmail,
+      password: generatedPassword,
+      name: name ?? 'User',
+    );
+    _currentUser = user;
+
+    final userRole = role ?? UserRole.user;
+
+    // Create Firestore user document (phone stored as primary identifier)
+    await _createUserDocument(
+      userId: user.uid,
+      email: derivedEmail,
+      role: userRole,
+      name: name,
+      address: address,
+      state: state,
+      lga: lga,
+      ward: ward,
+      isVerified: true, // OTP already verified before this call
+      phoneNumber: phone,
+    );
+
+    await _startUserSession(user, userRole, isVerified: true);
+    developer.log(
+      'signUpWithPhone: account created uid=${user.uid}',
+      name: 'AuthProvider',
+    );
+    return true;
+  }
 
   Future<bool> signInWithEmail({
     required String email,
@@ -429,7 +503,70 @@ class AuthProvider extends ChangeNotifier {
   // ─────────────────────────── OTP ─────────────────────────────────────────
 
   Future<bool> sendOtpForPhone(String phone) async {
-    throw AuthException('Phone OTP is disabled.');
+    try {
+      _isLoading = true;
+      notifyListeners();
+
+      // Rate limiting
+      final rateLimitResult = await _rateLimiter.checkOtpResend();
+      if (!rateLimitResult.allowed) {
+        throw AuthException(rateLimitResult.userMessage);
+      }
+
+      // Normalise and validate
+      final normalised = phone.trim().toLowerCase();
+      if (normalised.isEmpty) {
+        throw AuthException('Invalid phone number.');
+      }
+
+      // Generate a cryptographically secure 6-digit OTP
+      final secureRandom = math.Random.secure();
+      final otp = (100000 + secureRandom.nextInt(900000)).toString();
+
+      // Doc ID = sanitised phone (e.g. +2348012345678 → _2348012345678)
+      final docId = normalised.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '_');
+      final expiryTime = DateTime.now().add(const Duration(minutes: 10));
+
+      await FirebaseFirestore.instance
+          .collection('otp_verifications')
+          .doc(docId)
+          .set({
+            'phone': normalised,
+            'code': otp,
+            'expiresAt': Timestamp.fromDate(expiryTime),
+            'createdAt': FieldValue.serverTimestamp(),
+            'used': false,
+            'attempts': 0,
+          });
+
+      // Send OTP via Termii SMS
+      final smsService = SmsService();
+      if (!smsService.isReady) {
+        throw AuthException(
+          'SMS service is not configured. Please contact support.',
+        );
+      }
+
+      final messageId = await smsService.sendOtp(to: phone, otp: otp);
+      if (messageId == null) {
+        throw AuthException('Failed to send SMS. Please try again.');
+      }
+
+      await _rateLimiter.recordOtpResend();
+
+      _isLoading = false;
+      notifyListeners();
+      return true;
+    } on AuthException {
+      _isLoading = false;
+      notifyListeners();
+      rethrow;
+    } on Exception catch (e) {
+      _isLoading = false;
+      notifyListeners();
+      ErrorHandler.logError(e, context: 'AuthProvider.sendOtpForPhone');
+      throw AuthException('Failed to send verification SMS.');
+    }
   }
 
   Future<bool> sendOtpForEmail(String email, {String? name}) async {
@@ -447,17 +584,20 @@ class AuthProvider extends ChangeNotifier {
       final secureRandom = math.Random.secure();
       final otp = (100000 + secureRandom.nextInt(900000)).toString();
 
-      // Save it to Firestore
+      // Normalise email to lowercase to prevent case-mismatch on doc ID
+      final normalisedEmail = email.trim().toLowerCase();
+      final docId = normalisedEmail.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '_');
       final expiryTime = DateTime.now().add(const Duration(minutes: 10));
       await FirebaseFirestore.instance
           .collection('otp_verifications')
-          .doc(email.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '_'))
+          .doc(docId)
           .set({
-            'email': email,
+            'email': normalisedEmail,
             'code': otp,
             'expiresAt': Timestamp.fromDate(expiryTime),
             'createdAt': FieldValue.serverTimestamp(),
             'used': false,
+            'attempts': 0,
           });
 
       // Send the OTP via EmailService (Resend)
@@ -499,8 +639,10 @@ class AuthProvider extends ChangeNotifier {
       _isLoading = true;
       notifyListeners();
 
-      if (registrationData == null || !registrationData.containsKey('email')) {
-        // Fallback for an existing user logging in or verifying without full registration data
+      if (registrationData == null ||
+          (!registrationData.containsKey('email') &&
+              !registrationData.containsKey('phone'))) {
+        // Fallback: use current Firebase user email
         final userEmail =
             _currentUser?.email ?? _firebase.getCurrentUser()?.email;
         if (userEmail == null || userEmail.isEmpty) {
@@ -511,16 +653,91 @@ class AuthProvider extends ChangeNotifier {
         registrationData = {'email': userEmail};
       }
 
-      final email = registrationData['email'] as String;
-      final docId = email.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '_');
+      // Resolve doc ID — prefer phone key (phone flow) over email key
+      final rawKey =
+          ((registrationData['phone'] ?? registrationData['email']) as String)
+              .trim()
+              .toLowerCase();
+      final docId = rawKey.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '_');
 
-      try {
-        await FirebaseFirestore.instance
-            .collection('otp_verifications')
-            .doc(docId)
-            .update({'verifyCode': otp, 'used': true});
+      // 1. READ the stored OTP document (no write required — avoids permission-denied)
+      final docRef = FirebaseFirestore.instance
+          .collection('otp_verifications')
+          .doc(docId);
 
-        // Verification successful, update the user in Firestore if they are logged in
+      final docSnap = await docRef.get();
+      if (!docSnap.exists) {
+        throw AuthException('Invalid or expired verification code.');
+      }
+
+      final data = docSnap.data()!;
+
+      // 2. Check if already used
+      final alreadyUsed = data['used'] as bool? ?? false;
+      if (alreadyUsed) {
+        throw AuthException(
+          'This code has already been used. Please request a new one.',
+        );
+      }
+
+      // 3. Check expiry
+      final expiresAt = data['expiresAt'];
+      if (expiresAt != null && expiresAt is Timestamp) {
+        if (expiresAt.toDate().isBefore(DateTime.now())) {
+          throw AuthException(
+            'Verification code has expired. Please request a new one.',
+          );
+        }
+      }
+
+      // 4. Check attempt counter — lock after 5 failed tries
+      final attempts = (data['attempts'] as int?) ?? 0;
+      if (attempts >= 5) {
+        throw AuthException(
+          'Too many incorrect attempts. Please request a new code.',
+        );
+      }
+
+      // 5. Compare submitted OTP against stored code
+      final storedCode = (data['code'] as String? ?? '').trim();
+      final submittedCode = otp.trim();
+      if (storedCode.isEmpty || storedCode != submittedCode) {
+        // Increment attempt counter (best-effort, non-blocking)
+        try {
+          await docRef.update({'attempts': FieldValue.increment(1)});
+        } on Exception catch (_) {}
+        final remaining = 4 - attempts;
+        if (remaining <= 0) {
+          throw AuthException(
+            'Too many incorrect attempts. Please request a new code.',
+          );
+        }
+        throw AuthException(
+          'Incorrect code. $remaining attempt${remaining == 1 ? '' : 's'} remaining.',
+        );
+      }
+
+      // 6. Mark the OTP as used
+      await docRef.update({'used': true});
+
+      // 7. Complete account creation / mark verified
+      final isPhoneFlow =
+          registrationData.containsKey('phone') &&
+          !registrationData.containsKey('email');
+
+      if (isPhoneFlow) {
+        // Phone registration: Firebase account doesn't exist yet — create it now.
+        await signUpWithPhone(
+          phone: registrationData['phone'] as String,
+          name: registrationData['name'] as String?,
+          address: registrationData['address'] as String?,
+          role: registrationData['role'] as UserRole?,
+          state: registrationData['state'] as String?,
+          lga: registrationData['lga'] as String?,
+          ward: registrationData['ward'] as String?,
+        );
+      } else {
+        // Email registration: account already exists — just mark as verified.
         final user = _firebase.getCurrentUser();
         if (user != null) {
           await _firebase.updateDocument(
@@ -530,25 +747,26 @@ class AuthProvider extends ChangeNotifier {
           );
           _isVerified = true;
         }
-
-        _isLoading = false;
-        notifyListeners();
-        return true;
-      } on FirebaseException catch (e) {
-        if (e.code == 'not-found') {
-          throw AuthException('Invalid or expired verification code.');
-        }
-        if (e.code == 'permission-denied') {
-          throw AuthException(
-            'Invalid or expired verification code. Please request a new one.',
-          );
-        }
-        rethrow;
       }
+
+      _isLoading = false;
+      notifyListeners();
+      return true;
     } on AuthException {
       _isLoading = false;
       notifyListeners();
       rethrow;
+    } on FirebaseException catch (e) {
+      _isLoading = false;
+      notifyListeners();
+      developer.log(
+        'FirebaseException in verifyOtpAndLogin: ${e.code} – ${e.message}',
+        name: 'AuthProvider',
+      );
+      if (e.code == 'not-found') {
+        throw AuthException('Invalid or expired verification code.');
+      }
+      throw AuthException('Verification failed. Please try again.');
     } on Exception catch (e) {
       _isLoading = false;
       notifyListeners();

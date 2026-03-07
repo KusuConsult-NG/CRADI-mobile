@@ -125,6 +125,7 @@ dev_dependencies:
   mockito: ^5.4.4
   build_runner: ^2.4.13
   flutter_launcher_icons: ^0.14.1
+  fake_cloud_firestore: ^4.0.1
 
 # App icon configuration
 flutter_launcher_icons:

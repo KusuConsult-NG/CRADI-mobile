@@ -2,7 +2,6 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:climate_app/features/profile/providers/profile_provider.dart';
-import 'package:climate_app/core/router/app_router.dart';
 import 'package:flutter/foundation.dart';
 import 'package:climate_app/core/services/hive_encryption_service.dart';
 import 'dart:developer' as developer;
@@ -341,21 +340,13 @@ class NotificationService {
   /// Handle notification navigation
   void _handleNotificationNavigation(Map<String, dynamic> data) {
     final type = data['type'] ?? 'alert';
-
-    switch (type) {
-      case 'alert':
-        appRouter.push('/alerts');
-        break;
-      case 'message':
-        appRouter.push('/chat');
-        break;
-      case 'report':
-        appRouter.push('/reports-status');
-        break;
-      default:
-        appRouter.push('/');
-    }
-    developer.log('Handling notification: $data', name: 'NotificationService');
+    // TODO: inject a GlobalKey<NavigatorState> to enable proper imperative
+    // navigation from this service. For now, log the intended destination.
+    // Routing is handled by the FCM deep-link routes in app_router.dart.
+    developer.log(
+      'Notification nav intent: type=$type data=$data',
+      name: 'NotificationService',
+    );
   }
 
   /// Subscribe to a topic

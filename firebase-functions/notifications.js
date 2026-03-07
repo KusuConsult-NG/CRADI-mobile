@@ -160,8 +160,8 @@ exports.processEscalations = onDocumentCreated(
 
         const lga = reportDoc.data().lga || '';
         const [coordSnap, staffSnap] = await Promise.all([
-            db.collection('users').where('role', '==', 'ldp_coordinator').where('lga', '==', lga).limit(20).get(),
-            db.collection('users').where('role', '==', 'project_staff').limit(20).get(),
+            db.collection('users').where('role', '==', 'ewr').where('lga', '==', lga).limit(20).get(),
+            db.collection('users').where('role', '==', 'ewv').limit(20).get(),
         ]);
 
         const tokens = [...coordSnap.docs, ...staffSnap.docs]

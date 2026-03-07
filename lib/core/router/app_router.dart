@@ -36,6 +36,9 @@ import 'package:climate_app/features/auth/providers/auth_provider.dart';
 import 'package:climate_app/features/auth/screens/access_code_verification_screen.dart';
 import 'package:climate_app/features/auth/screens/otp_verification_screen.dart';
 import 'package:climate_app/core/providers/connectivity_provider.dart';
+import 'package:climate_app/features/admin/screens/admin_screen.dart';
+import 'package:climate_app/features/admin/screens/admin_users_screen.dart';
+import 'package:climate_app/features/admin/screens/admin_reports_screen.dart';
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
@@ -368,6 +371,26 @@ GoRouter createRouter(BuildContext context) {
           return '/alerts/detail?deepLinkId=$id';
         },
       ),
+      GoRoute(
+        path: '/admin',
+        redirect: (context, state) =>
+            _requireRole(context, [UserRole.admin, UserRole.techSupport]),
+        builder: (context, state) => const AdminScreen(),
+        routes: [
+          GoRoute(
+            path: 'users',
+            redirect: (context, state) =>
+                _requireRole(context, [UserRole.admin, UserRole.techSupport]),
+            builder: (context, state) => const AdminUsersScreen(),
+          ),
+          GoRoute(
+            path: 'reports',
+            redirect: (context, state) =>
+                _requireRole(context, [UserRole.admin, UserRole.techSupport]),
+            builder: (context, state) => const AdminReportsScreen(),
+          ),
+        ],
+      ),
     ],
   );
 }
@@ -385,144 +408,5 @@ String? _requireRole(BuildContext context, List<UserRole> allowedRoles) {
   return null; // Allow access
 }
 
-/// Legacy global router for backward compatibility
-/// This will be replaced by createRouter() called from main.dart
-final GoRouter appRouter = GoRouter(
-  initialLocation: '/',
-  routes: [
-    GoRoute(
-      path: '/onboarding',
-      builder: (context, state) => const OnboardingScreen(),
-    ),
-    GoRoute(path: '/', redirect: (context, state) => '/splash'),
-    GoRoute(
-      path: '/register',
-      builder: (context, state) => const RegistrationScreen(),
-    ),
-    GoRoute(
-      path: '/welcome',
-      builder: (context, state) => const WelcomeScreen(),
-    ),
-    GoRoute(path: '/login', builder: (context, state) => const LoginScreen()),
-    GoRoute(
-      path: '/pending-approval',
-      builder: (context, state) => const PendingApprovalScreen(),
-    ),
-    GoRoute(
-      path: '/verify-otp',
-      builder: (context, state) {
-        final phone = state.uri.queryParameters['phone'] ?? '';
-        final extra = state.extra as Map<String, dynamic>?;
-        return OtpVerificationScreen(
-          phoneNumber: phone,
-          registrationData: extra,
-        );
-      },
-    ),
-    ShellRoute(
-      builder: (context, state, child) => MainShellScreen(child: child),
-      routes: [
-        GoRoute(
-          path: '/dashboard',
-          builder: (context, state) => const HomeScreen(),
-        ),
-        GoRoute(
-          path: '/verification',
-          builder: (context, state) => const VerificationListScreen(),
-        ),
-        GoRoute(
-          path: '/alerts',
-          builder: (context, state) {
-            final category = state.extra as String?;
-            return AlertsListScreen(initialCategory: category);
-          },
-          routes: [
-            GoRoute(
-              path: 'detail',
-              builder: (context, state) {
-                final alert = state.extra as Map<String, dynamic>;
-                return AlertDetailScreen(alert: alert);
-              },
-            ),
-          ],
-        ),
-        GoRoute(
-          path: '/knowledge-base',
-          builder: (context, state) => const KnowledgeBaseScreen(),
-          routes: [
-            GoRoute(
-              path: 'detail',
-              builder: (context, state) {
-                final guide = state.extra as Map<String, dynamic>;
-                return KnowledgeDetailScreen(guide: guide);
-              },
-            ),
-          ],
-        ),
-      ],
-    ),
-    GoRoute(
-      path: '/report',
-      builder: (context, state) => const HazardSelectionScreen(),
-      routes: [
-        GoRoute(
-          path: 'severity',
-          builder: (context, state) => const SeveritySelectionScreen(),
-        ),
-        GoRoute(
-          path: 'location',
-          builder: (context, state) => const LocationPickerScreen(),
-        ),
-        GoRoute(
-          path: 'details',
-          builder: (context, state) => const ReportDetailsScreen(),
-        ),
-        GoRoute(
-          path: 'review',
-          builder: (context, state) => const ReportReviewScreen(),
-        ),
-      ],
-    ),
-    GoRoute(
-      path: '/profile',
-      builder: (context, state) => const UserProfileScreen(),
-    ),
-    GoRoute(
-      path: '/settings',
-      builder: (context, state) => const SettingsScreen(),
-    ),
-    GoRoute(
-      path: '/contacts',
-      builder: (context, state) => const EmergencyContactsScreen(),
-    ),
-    GoRoute(
-      path: '/knowledge-base/guides',
-      builder: (context, state) => const HazardGuidesScreen(),
-    ),
-    GoRoute(
-      path: '/verification/request',
-      builder: (context, state) => const VerificationRequestScreen(),
-    ),
-    GoRoute(
-      path: '/reports-status',
-      builder: (context, state) => const ReportsStatusScreen(),
-    ),
-    GoRoute(path: '/chat', builder: (context, state) => const ChatScreen()),
-    GoRoute(
-      path: '/offline',
-      builder: (context, state) => const OfflineHomeScreen(),
-    ),
-    GoRoute(
-      path: '/notifications',
-      builder: (context, state) => const NotificationsScreen(),
-    ),
-    GoRoute(
-      path: '/help',
-      builder: (context, state) => const HelpSupportScreen(),
-    ),
-    GoRoute(
-      path: '/about',
-      builder: (context, state) => const AboutAppScreen(),
-    ),
-  ],
-);
+// NOTE: Use createRouter(context) from main.dart — this file no longer exports
+// a global router. The legacy appRouter has been removed.

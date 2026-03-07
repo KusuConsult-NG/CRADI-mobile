@@ -131,26 +131,40 @@ service cloud.firestore {
 
     // ── otp_verifications ─────────────────────────────────────────────────────
     match /otp_verifications/{docId} {
-      // Blind Verification: No one can read OTPs, preventing mass scraping or prediction bypass.
-      allow get, list: if false;
+      // Allow an authenticated user to read their OWN OTP document.
+      // Ownership: stored email or phone must match the Firebase Auth token claim.
+      allow get: if isAuthenticated() && (
+        resource.data.email == request.auth.token.email
+        || resource.data.phone == request.auth.token.phone_number
+      );
 
-      // Rate Limiting on Creation: allow creation if the user is authenticated 
-      // OR if they are logging/signing up (we allow unauthenticated writes for sign up).
-      allow create: if true 
-        && request.resource.data.keys().hasAll(['email', 'code', 'createdAt', 'expiresAt', 'used']);
-        
-      // Rate limit resends (Updates) to once every 60 seconds
+      // Listing all OTPs is always denied.
+      allow list: if false;
+
+      // Anyone (including unauthenticated sign-up) can create with required fields.
+      allow create: if true
+        && request.resource.data.keys().hasAll(['code', 'createdAt', 'expiresAt', 'used', 'attempts']);
+
       allow update: if (
-        // Client updating their OTP to request a new one (rate limited)
+        // 1. Resend: full replacement, rate-limited to once per 60 s
         request.resource.data.used == false
-        && request.resource.data.keys().hasAll(['email', 'code', 'createdAt', 'expiresAt', 'used'])
+        && request.resource.data.keys().hasAll(['code', 'createdAt', 'expiresAt', 'used', 'attempts'])
         && (request.time > resource.data.createdAt + duration.value(60, 's'))
       ) || (
-        // Blind Verification Update (verifying the OTP without reading it)
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['used', 'verifyCode'])
-        && request.resource.data.verifyCode == resource.data.code
+        // 2. Mark-as-used after app-side verification.
+        //    Only `used` may change; expiry must still be valid.
+        isAuthenticated()
+        && (
+          resource.data.email == request.auth.token.email
+          || resource.data.phone == request.auth.token.phone_number
+        )
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['used'])
         && request.resource.data.used == true
         && request.time < resource.data.expiresAt
+      ) || (
+        // 3. Increment attempts counter (pre-auth — allowed for brute-force tracking).
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['attempts'])
+        && request.resource.data.attempts == resource.data.attempts + 1
       );
 
       allow delete: if isAdmin();

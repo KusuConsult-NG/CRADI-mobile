@@ -5,17 +5,26 @@ import 'package:flutter/foundation.dart';
 class ErrorHandler {
   /// Get user-friendly error message
   static String getUserMessage(dynamic error) {
-    // DEBUGGING: Force detailed message even in release mode to troubleshoot auth issue
+    if (kReleaseMode) {
+      return _getGenericMessage(error);
+    }
     return _getDetailedMessage(error);
-
-    // Original code restored later:
-    // if (kReleaseMode) {
-    //   return _getGenericMessage(error);
-    // }
-    // return _getDetailedMessage(error);
   }
 
-  /// Get generic user-friendly message
+  /// Get generic user-friendly message (release builds)
+  static String _getGenericMessage(dynamic error) {
+    // Classify common known patterns without leaking internals
+    final msg = error.toString().toLowerCase();
+    if (msg.contains('network') ||
+        msg.contains('socket') ||
+        msg.contains('connection')) {
+      return 'Network error. Please check your connection.';
+    }
+    if (msg.contains('permission') || msg.contains('denied')) {
+      return 'You do not have permission to perform this action.';
+    }
+    return 'An unexpected error occurred. Please try again.';
+  }
 
   /// Get detailed message (debug mode only)
   static String _getDetailedMessage(dynamic error) {
@@ -126,17 +135,10 @@ class SecureException implements Exception {
 
   @override
   String toString() {
-    // DEBUGGING: Force details in release mode too
-    if (technicalDetails != null) {
-      return '$userMessage\n(Debug: $technicalDetails)';
+    if (kDebugMode && technicalDetails != null) {
+      return 'SecureException: $userMessage\nDetails: $technicalDetails';
     }
     return userMessage;
-
-    // Original:
-    // if (kDebugMode && technicalDetails != null) {
-    //   return 'SecureException: $userMessage\nDetails: $technicalDetails';
-    // }
-    // return userMessage;
   }
 }
 

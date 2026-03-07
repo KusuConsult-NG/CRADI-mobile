@@ -53,6 +53,10 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
   bool _ndpaConsented = false;
 
   static const String _ndpaPolicyVersion = '1.0.0';
+
+  /// Set to false to hide Phone Auth until Termii is configured.
+  /// Toggle back to true once TERMII_API_KEY is confirmed in --dart-define.
+  static const bool _phoneAuthEnabled = true;
   static const String _ndpaPolicyText = '''
 Nigeria Data Protection Act (NDPA) — Data Processing Notice
 
@@ -241,6 +245,7 @@ By tapping "I Agree", you consent to these terms and the international transfer 
                 'state': _selectedState,
                 'lga': _selectedLga,
                 'ward': _selectedWard,
+                'phone': phone,
               };
 
               showDialog(
@@ -327,7 +332,9 @@ By tapping "I Agree", you consent to these terms and the international transfer 
             'state': _selectedState,
             'lga': _selectedLga,
             'ward': _selectedWard,
-            'email': email,
+            'email': email
+                .trim()
+                .toLowerCase(), // normalised to match Firestore doc ID
           };
 
           if (mounted) {
@@ -463,70 +470,72 @@ By tapping "I Agree", you consent to these terms and the international transfer 
                               ),
                             ),
                             const SizedBox(height: 12),
-                            // Toggle for Email vs Phone Auth
-                            Container(
-                              height: 48,
-                              decoration: BoxDecoration(
-                                color: Colors.grey.withValues(alpha: 0.1),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Row(
-                                children: [
-                                  Expanded(
-                                    child: GestureDetector(
-                                      onTap: () =>
-                                          setState(() => _isPhoneAuth = false),
-                                      child: Container(
-                                        decoration: BoxDecoration(
-                                          color: !_isPhoneAuth
-                                              ? AppColors.primaryRed
-                                              : Colors.transparent,
-                                          borderRadius: BorderRadius.circular(
-                                            12,
-                                          ),
+                            // Toggle for Email vs Phone Auth — only shown when phone auth is enabled
+                            if (_phoneAuthEnabled)
+                              Container(
+                                height: 48,
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                      child: GestureDetector(
+                                        onTap: () => setState(
+                                          () => _isPhoneAuth = false,
                                         ),
-                                        alignment: Alignment.center,
-                                        child: Text(
-                                          'Email',
-                                          style: GoogleFonts.lexend(
+                                        child: Container(
+                                          decoration: BoxDecoration(
                                             color: !_isPhoneAuth
-                                                ? Colors.white
-                                                : AppColors.textSecondary,
-                                            fontWeight: FontWeight.w600,
+                                                ? AppColors.primaryRed
+                                                : Colors.transparent,
+                                            borderRadius: BorderRadius.circular(
+                                              12,
+                                            ),
+                                          ),
+                                          alignment: Alignment.center,
+                                          child: Text(
+                                            'Email',
+                                            style: GoogleFonts.lexend(
+                                              color: !_isPhoneAuth
+                                                  ? Colors.white
+                                                  : AppColors.textSecondary,
+                                              fontWeight: FontWeight.w600,
+                                            ),
                                           ),
                                         ),
                                       ),
                                     ),
-                                  ),
-                                  Expanded(
-                                    child: GestureDetector(
-                                      onTap: () =>
-                                          setState(() => _isPhoneAuth = true),
-                                      child: Container(
-                                        decoration: BoxDecoration(
-                                          color: _isPhoneAuth
-                                              ? AppColors.primaryRed
-                                              : Colors.transparent,
-                                          borderRadius: BorderRadius.circular(
-                                            12,
-                                          ),
-                                        ),
-                                        alignment: Alignment.center,
-                                        child: Text(
-                                          'Phone Number',
-                                          style: GoogleFonts.lexend(
+                                    Expanded(
+                                      child: GestureDetector(
+                                        onTap: () =>
+                                            setState(() => _isPhoneAuth = true),
+                                        child: Container(
+                                          decoration: BoxDecoration(
                                             color: _isPhoneAuth
-                                                ? Colors.white
-                                                : AppColors.textSecondary,
-                                            fontWeight: FontWeight.w600,
+                                                ? AppColors.primaryRed
+                                                : Colors.transparent,
+                                            borderRadius: BorderRadius.circular(
+                                              12,
+                                            ),
+                                          ),
+                                          alignment: Alignment.center,
+                                          child: Text(
+                                            'Phone Number',
+                                            style: GoogleFonts.lexend(
+                                              color: _isPhoneAuth
+                                                  ? Colors.white
+                                                  : AppColors.textSecondary,
+                                              fontWeight: FontWeight.w600,
+                                            ),
                                           ),
                                         ),
                                       ),
                                     ),
-                                  ),
-                                ],
+                                  ],
+                                ),
                               ),
-                            ),
                             const SizedBox(height: 24),
                             Text(
                               'Personal Information',
