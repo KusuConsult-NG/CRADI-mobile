@@ -37,24 +37,25 @@ class KnowledgeProvider extends ChangeNotifier {
         );
 
         if (docs.isNotEmpty) {
-          _guides = docs
-              .map(
-                (data) => <String, dynamic>{
-                  'id': data['\$id'],
-                  'title': data['title'] ?? '',
-                  'subtitle': data['category'] ?? 'Manual',
-                  'content': data['content'] ?? '',
-                  'category': data['category'] ?? 'General',
-                  'hazardType': data['hazardType'],
-                  'tag':
-                      (data['hazardType'] as String?)?.toUpperCase() ?? 'GUIDE',
-                  'imageUrl': _getImageForType(data['hazardType']),
-                  'source': 'EWER Admin',
-                  'updatedAt': data['updatedAt'],
-                  'isOffline': false,
-                },
-              )
-              .toList();
+          _guides = docs.map((data) {
+            final rawUrl = data['imageUrl']?.toString() ?? '';
+            final imageUrl = (rawUrl.isNotEmpty && rawUrl.startsWith('http'))
+                ? rawUrl
+                : _getImageForType(data['hazardType'] ?? data['category']);
+            return <String, dynamic>{
+              'id': data['\$id'],
+              'title': data['title'] ?? '',
+              'subtitle': data['category'] ?? 'Manual',
+              'content': data['content'] ?? '',
+              'category': data['category'] ?? 'General',
+              'hazardType': data['hazardType'],
+              'tag': (data['hazardType'] as String?)?.toUpperCase() ?? 'GUIDE',
+              'imageUrl': imageUrl,
+              'source': data['source'] ?? 'EWER Admin',
+              'updatedAt': data['updatedAt'],
+              'isOffline': false,
+            };
+          }).toList();
 
           await _offlineStorage.cacheGuides(_guides);
           developer.log(

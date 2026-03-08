@@ -75,7 +75,31 @@ class ProfileProvider extends ChangeNotifier {
 
       if (user != null) {
         _email = user.email ?? '';
-        _name = user.displayName ?? 'User';
+        // ── Fast path: load from secure-storage cache immediately ──────────
+        // This ensures the name is correct on the very first frame,
+        // without waiting for the Firestore round-trip.
+        final cachedEmail = await _storage.read('profile_email');
+        if (cachedEmail == user.email) {
+          final cachedName = await _storage.read('profile_name');
+          if (cachedName != null && cachedName.isNotEmpty) {
+            _name = cachedName;
+          } else {
+            _name = user.displayName ?? 'User';
+          }
+          _phone = await _storage.read('profile_phone') ?? '';
+          _profileImagePath = await _storage.read('profile_image');
+          _state = await _storage.read('profile_state');
+          _lga = await _storage.read('profile_lga');
+          _ward = await _storage.read('profile_ward');
+          _monitoringZone = await _storage.read('monitoring_zone');
+          final bioEnabled = await _storage.read('biometric_enabled');
+          _biometricsEnabled = bioEnabled == 'true';
+          // Notify immediately so the UI shows cached data, then continue
+          // fetching from Firestore to refresh.
+          notifyListeners();
+        } else {
+          _name = user.displayName ?? 'User';
+        }
         _registrationDate = user.metadata.creationTime;
 
         // Load from Firestore (source of truth)
@@ -133,20 +157,6 @@ class ProfileProvider extends ChangeNotifier {
           if (cached != null) {
             _userProfile = cached;
           }
-        }
-
-        // Fallback to secure storage if email matches
-        final cachedEmail = await _storage.read('profile_email');
-        if (cachedEmail == user.email) {
-          _name = await _storage.read('profile_name') ?? _name;
-          _phone = await _storage.read('profile_phone') ?? _phone;
-          _profileImagePath = await _storage.read('profile_image');
-          _state ??= await _storage.read('profile_state');
-          _lga ??= await _storage.read('profile_lga');
-          _ward ??= await _storage.read('profile_ward');
-          _monitoringZone ??= await _storage.read('monitoring_zone');
-          final bioEnabled = await _storage.read('biometric_enabled');
-          _biometricsEnabled = bioEnabled == 'true';
         }
       } else {
         clearProfile();
