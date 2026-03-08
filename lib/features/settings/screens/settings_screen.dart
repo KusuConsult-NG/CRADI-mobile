@@ -4,7 +4,9 @@ import 'package:climate_app/features/auth/providers/auth_provider.dart';
 import 'package:climate_app/core/providers/connectivity_provider.dart';
 import 'package:climate_app/features/profile/providers/profile_provider.dart';
 import 'package:climate_app/core/providers/settings_provider.dart';
+import 'package:climate_app/core/services/biometric_service.dart';
 import 'package:climate_app/core/utils/error_handler.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
@@ -52,9 +54,17 @@ class _SettingsScreenState extends State<SettingsScreen>
       final available = await authProvider.isBiometricAvailable();
       final enabled = await authProvider.isBiometricEnabled();
 
+      // Also check that the user has actually enrolled credentials
+      // (hardware can be present but have no fingerprints/face enrolled).
+      bool hasEnrolled = false;
+      if (available) {
+        final biometrics = await BiometricService().getAvailableBiometrics();
+        hasEnrolled = biometrics.isNotEmpty;
+      }
+
       if (mounted) {
         setState(() {
-          _biometricAvailable = available;
+          _biometricAvailable = available && hasEnrolled;
           _biometricEnabled = enabled;
           _checkingBiometric = false;
         });
@@ -85,6 +95,29 @@ class _SettingsScreenState extends State<SettingsScreen>
           ),
         );
       }
+    } on PlatformException catch (e) {
+      if (!mounted) return;
+      // noCredentialsSet = no fingerprints/face enrolled on device
+      if (e.code == 'noCredentialsSet' || e.code == 'NotEnrolled') {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'No biometrics enrolled. Please add a fingerprint or Face ID in your device Settings first.',
+            ),
+            backgroundColor: Colors.orange,
+            duration: Duration(seconds: 4),
+          ),
+        );
+        // Refresh biometric availability status
+        await _checkBiometric();
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Biometric error: ${e.message ?? e.code}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     } on AuthException catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -92,7 +125,22 @@ class _SettingsScreenState extends State<SettingsScreen>
         );
       }
     } on Exception catch (e) {
-      if (mounted) {
+      // Check if it's a PlatformException wrapped in a generic Exception
+      final msg = e.toString();
+      if (msg.contains('noCredentialsSet') || msg.contains('NotEnrolled')) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'No biometrics enrolled. Please add a fingerprint in your device Settings first.',
+              ),
+              backgroundColor: Colors.orange,
+              duration: Duration(seconds: 4),
+            ),
+          );
+          await _checkBiometric();
+        }
+      } else if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(ErrorHandler.getUserMessage(e)),

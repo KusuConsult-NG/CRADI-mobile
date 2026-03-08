@@ -22,7 +22,7 @@ void main() {
   // ─── Helpers ─────────────────────────────────────────────────────────────
 
   /// Seeds a valid OTP document into [fakeFs] and returns the doc reference.
-  Future<DocumentReference<Map<String, dynamic>>> _seedOtpDoc(
+  Future<DocumentReference<Map<String, dynamic>>> seedOtpDoc(
     FakeFirebaseFirestore fakeFs, {
     required String email,
     required String code,
@@ -73,8 +73,9 @@ void main() {
       final docRef = fs.collection('otp_verifications').doc(docId);
       final docSnap = await docRef.get();
 
-      if (!docSnap.exists)
+      if (!docSnap.exists) {
         throw AuthException('Invalid or expired verification code.');
+      }
       final data = docSnap.data()!;
 
       if (data['used'] as bool? ?? false) {
@@ -117,7 +118,7 @@ void main() {
     }
 
     test('correct code returns ok and marks document as used', () async {
-      await _seedOtpDoc(fakeFs, email: email, code: code);
+      await seedOtpDoc(fakeFs, email: email, code: code);
 
       final result = await runVerify(fakeFs, email, code);
       expect(result, equals('ok'));
@@ -132,7 +133,7 @@ void main() {
     });
 
     test('wrong code throws with remaining-attempts message', () async {
-      await _seedOtpDoc(fakeFs, email: email, code: code, attempts: 0);
+      await seedOtpDoc(fakeFs, email: email, code: code, attempts: 0);
 
       expect(
         () => runVerify(fakeFs, email, '000000'),
@@ -147,7 +148,7 @@ void main() {
     });
 
     test('wrong code increments attempts counter in Firestore', () async {
-      await _seedOtpDoc(fakeFs, email: email, code: code, attempts: 0);
+      await seedOtpDoc(fakeFs, email: email, code: code, attempts: 0);
       try {
         await runVerify(fakeFs, email, '000000');
       } on AuthException catch (_) {}
@@ -162,7 +163,7 @@ void main() {
 
     test('5th wrong attempt shows lockout message', () async {
       // 4 previous failures recorded
-      await _seedOtpDoc(fakeFs, email: email, code: code, attempts: 4);
+      await seedOtpDoc(fakeFs, email: email, code: code, attempts: 4);
 
       expect(
         () => runVerify(fakeFs, email, '000000'),
@@ -177,7 +178,7 @@ void main() {
     });
 
     test('already at 5 attempts blocks even correct code', () async {
-      await _seedOtpDoc(fakeFs, email: email, code: code, attempts: 5);
+      await seedOtpDoc(fakeFs, email: email, code: code, attempts: 5);
 
       expect(
         () => runVerify(fakeFs, email, code),
@@ -193,7 +194,7 @@ void main() {
 
     test('expired OTP throws expiry message', () async {
       final past = DateTime.now().subtract(const Duration(minutes: 1));
-      await _seedOtpDoc(fakeFs, email: email, code: code, expiresAt: past);
+      await seedOtpDoc(fakeFs, email: email, code: code, expiresAt: past);
 
       expect(
         () => runVerify(fakeFs, email, code),
@@ -208,7 +209,7 @@ void main() {
     });
 
     test('already-used OTP throws used message', () async {
-      await _seedOtpDoc(fakeFs, email: email, code: code, used: true);
+      await seedOtpDoc(fakeFs, email: email, code: code, used: true);
 
       expect(
         () => runVerify(fakeFs, email, code),
@@ -240,7 +241,7 @@ void main() {
       'email lookup is case-insensitive (uppercase email resolves same doc)',
       () async {
         // Seed with lowercase
-        await _seedOtpDoc(fakeFs, email: 'user@test.com', code: code);
+        await seedOtpDoc(fakeFs, email: 'user@test.com', code: code);
 
         // Submit with mixed-case — should still find the doc
         final result = await runVerify(fakeFs, 'User@Test.COM', code);

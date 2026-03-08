@@ -54,6 +54,8 @@ class EmergencyGuidesService {
         'tags': ['safety', 'river benue', 'lagdo dam', 'evacuation'],
         'source': 'Benue SEMA / NEMA',
         'sourceUrl': 'https://nema.gov.ng',
+        'imageUrl':
+            'https://images.unsplash.com/photo-1504701954957-2010ec3bcec1?auto=format&fit=crop&q=80&w=800',
         'createdAt': now,
         'updatedAt': now,
       },
@@ -83,6 +85,8 @@ class EmergencyGuidesService {
         'tags': ['gully', 'landslide', 'newmap', 'conservation'],
         'source': 'NEMA / NEWMAP',
         'sourceUrl': 'https://nema.gov.ng',
+        'imageUrl':
+            'https://images.unsplash.com/photo-1591700608620-4cdcf1d47898?auto=format&fit=crop&q=80&w=800',
         'createdAt': now,
         'updatedAt': now,
       },
@@ -111,6 +115,8 @@ class EmergencyGuidesService {
         'tags': ['heatwave', 'hydration', 'farming', 'health'],
         'source': 'Federal Ministry of Health / NiMet',
         'sourceUrl': 'https://health.gov.ng',
+        'imageUrl':
+            'https://images.unsplash.com/photo-1504192010706-dd7f569ee2be?auto=format&fit=crop&q=80&w=800',
         'createdAt': now,
         'updatedAt': now,
       },
@@ -136,6 +142,8 @@ class EmergencyGuidesService {
         'tags': ['harmattan', 'bush burning', 'smoke'],
         'source': 'Federal Fire Service',
         'sourceUrl': 'https://fire.gov.ng',
+        'imageUrl':
+            'https://images.unsplash.com/photo-1516912481808-3406841bd33c?auto=format&fit=crop&q=80&w=800',
         'createdAt': now,
         'updatedAt': now,
       },
@@ -176,6 +184,8 @@ class EmergencyGuidesService {
         'tags': ['storm', 'severe weather', 'lightning'],
         'source': 'NOAA/FEMA',
         'sourceUrl': 'https://www.ready.gov/severe-weather',
+        'imageUrl':
+            'https://images.unsplash.com/photo-1535350356005-fd52b3b524fb?auto=format&fit=crop&q=80&w=800',
         'createdAt': now,
         'updatedAt': now,
       },
@@ -217,6 +227,8 @@ class EmergencyGuidesService {
         'tags': ['earthquake', 'seismic', 'tsunami'],
         'source': 'FEMA/USGS',
         'sourceUrl': 'https://www.ready.gov/earthquakes',
+        'imageUrl':
+            'https://images.unsplash.com/photo-1548337138-e87d889cc369?auto=format&fit=crop&q=80&w=800',
         'createdAt': now,
         'updatedAt': now,
       },
@@ -260,6 +272,8 @@ class EmergencyGuidesService {
         'tags': ['disease', 'pandemic', 'health', 'outbreak'],
         'source': 'CDC/WHO',
         'sourceUrl': 'https://www.cdc.gov/emergency-preparedness',
+        'imageUrl':
+            'https://images.unsplash.com/photo-1584036561566-b93a50208c3c?auto=format&fit=crop&q=80&w=800',
         'createdAt': now,
         'updatedAt': now,
       },
@@ -312,6 +326,8 @@ class EmergencyGuidesService {
         'tags': ['emergency kit', 'preparedness', 'supplies'],
         'source': 'FEMA/Red Cross',
         'sourceUrl': 'https://www.ready.gov/kit',
+        'imageUrl':
+            'https://images.unsplash.com/photo-1496247749665-49cf5b1022e9?auto=format&fit=crop&q=80&w=800',
         'createdAt': now,
         'updatedAt': now,
       },

@@ -137,6 +137,18 @@ class FirebaseService {
   /// Sign out the current user.
   Future<void> logout() async {
     try {
+      // Clear Firestore offline persistence before signing out.
+      // This prevents cached listeners from replaying on next app boot with
+      // a stale/missing auth token, which causes PERMISSION_DENIED errors.
+      try {
+        await _db.clearPersistence();
+        developer.log('Firestore cache cleared', name: 'FirebaseService');
+      } on Exception catch (e) {
+        developer.log(
+          'clearPersistence failed (non-fatal): $e',
+          name: 'FirebaseService',
+        );
+      }
       await _auth.signOut();
       developer.log('Signed out', name: 'FirebaseService');
     } on FirebaseAuthException catch (e) {

@@ -3,7 +3,7 @@ import 'package:climate_app/core/theme/app_colors.dart';
 
 enum ButtonType { primary, secondary, ghost }
 
-class CustomButton extends StatelessWidget {
+class CustomButton extends StatefulWidget {
   final String text;
   final VoidCallback? onPressed;
   final ButtonType type;
@@ -28,18 +28,47 @@ class CustomButton extends StatelessWidget {
   });
 
   @override
+  State<CustomButton> createState() => _CustomButtonState();
+}
+
+class _CustomButtonState extends State<CustomButton> {
+  bool _isPressed = false;
+
+  @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: width ?? double.infinity,
-      height: 48,
-      child: _buildButton(context),
+    return AnimatedScale(
+      scale: _isPressed ? 0.95 : 1.0,
+      duration: const Duration(milliseconds: 100),
+      curve: Curves.easeInOut,
+      child: GestureDetector(
+        onTapDown: (_) {
+          if (widget.onPressed != null && !widget.isLoading) {
+            setState(() => _isPressed = true);
+          }
+        },
+        onTapUp: (_) {
+          if (widget.onPressed != null && !widget.isLoading) {
+            setState(() => _isPressed = false);
+          }
+        },
+        onTapCancel: () {
+          if (widget.onPressed != null && !widget.isLoading) {
+            setState(() => _isPressed = false);
+          }
+        },
+        // We still need the buttons to intercept the tap and trigger onPressed
+        // to keep their internal ripple, so we don't handle onTap here
+        child: SizedBox(
+          width: widget.width ?? double.infinity,
+          height: 48,
+          child: _buildButton(context),
+        ),
+      ),
     );
   }
 
   Widget _buildButton(BuildContext context) {
-    if (isLoading) {
-      // Loading state is consistent across button types for now,
-      // but could be specialized if needed (e.g. spinner color).
+    if (widget.isLoading) {
       return Center(
         child: SizedBox(
           width: 24,
@@ -47,20 +76,22 @@ class CustomButton extends StatelessWidget {
           child: CircularProgressIndicator(
             strokeWidth: 2,
             valueColor: AlwaysStoppedAnimation<Color>(
-              type == ButtonType.primary ? Colors.white : AppColors.primaryRed,
+              widget.type == ButtonType.primary
+                  ? Colors.white
+                  : AppColors.primaryRed,
             ),
           ),
         ),
       );
     }
 
-    switch (type) {
+    switch (widget.type) {
       case ButtonType.primary:
         return ElevatedButton(
-          onPressed: onPressed,
+          onPressed: widget.onPressed,
           style: ElevatedButton.styleFrom(
-            backgroundColor: backgroundColor ?? AppColors.primaryRed,
-            foregroundColor: foregroundColor ?? Colors.white,
+            backgroundColor: widget.backgroundColor ?? AppColors.primaryRed,
+            foregroundColor: widget.foregroundColor ?? Colors.white,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(8),
             ),
@@ -71,10 +102,12 @@ class CustomButton extends StatelessWidget {
 
       case ButtonType.secondary:
         return OutlinedButton(
-          onPressed: onPressed,
+          onPressed: widget.onPressed,
           style: OutlinedButton.styleFrom(
-            foregroundColor: foregroundColor ?? AppColors.textPrimary,
-            side: BorderSide(color: borderColor ?? AppColors.primaryGrey),
+            foregroundColor: widget.foregroundColor ?? AppColors.textPrimary,
+            side: BorderSide(
+              color: widget.borderColor ?? AppColors.primaryGrey,
+            ),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(8),
             ),
@@ -84,9 +117,9 @@ class CustomButton extends StatelessWidget {
 
       case ButtonType.ghost:
         return TextButton(
-          onPressed: onPressed,
+          onPressed: widget.onPressed,
           style: TextButton.styleFrom(
-            foregroundColor: foregroundColor ?? AppColors.primaryRed,
+            foregroundColor: widget.foregroundColor ?? AppColors.primaryRed,
           ),
           child: _buildContent(),
         );
@@ -94,29 +127,23 @@ class CustomButton extends StatelessWidget {
   }
 
   Widget _buildContent() {
-    if (icon != null) {
+    if (widget.icon != null) {
       return Row(
         mainAxisSize: MainAxisSize.min,
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(icon, size: 24), // Increased icon size
+          Icon(widget.icon, size: 24),
           const SizedBox(width: 8),
           Text(
-            text,
-            style: const TextStyle(
-              fontSize: 18, // Increased font size
-              fontWeight: FontWeight.bold,
-            ),
+            widget.text,
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
           ),
         ],
       );
     }
     return Text(
-      text,
-      style: const TextStyle(
-        fontSize: 18, // Increased font size
-        fontWeight: FontWeight.bold,
-      ),
+      widget.text,
+      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
     );
   }
 }

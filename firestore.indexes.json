@@ -231,6 +231,24 @@
             ]
         },
         {
+            "collectionGroup": "login_history",
+            "queryScope": "COLLECTION",
+            "fields": [
+                {
+                    "fieldPath": "success",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "userId",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "timestamp",
+                    "order": "ASCENDING"
+                }
+            ]
+        },
+        {
             "collectionGroup": "trusted_devices",
             "queryScope": "COLLECTION",
             "fields": [

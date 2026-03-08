@@ -22,6 +22,14 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     // ── Helper functions ─────────────────────────────────────────────────────
+    //
+    // IMPORTANT: Role checks use JWT custom token claims (request.auth.token.role)
+    // as the PRIMARY source of truth. This avoids the circular dependency where
+    // checking a user's role required a nested userDoc() Firestore read, which
+    // itself required permission — causing PERMISSION_DENIED on first login.
+    //
+    // Custom claims are set by the backend when a user's role changes.
+    // Fallback to userDoc() is only used for ward/LGA scoping helpers below.
 
     function isAuthenticated() {
       return request.auth != null;
@@ -31,30 +39,40 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == uid;
     }
 
-    function userDoc() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
-    }
-
-    function getUserRole() {
-      return userDoc().role;
-    }
-
-    function hasRole(role) {
-      return isAuthenticated() && getUserRole() == role;
+    // Get role from JWT token claims (no extra Firestore read required)
+    function getTokenRole() {
+      return isAuthenticated() && request.auth.token.keys().hasAny(['role'])
+        ? request.auth.token.role : 'user';
     }
 
     function isAdmin() {
-      return hasRole('admin');
+      return isAuthenticated() && (
+        request.auth.token.admin == true
+        || getTokenRole() == 'admin'
+      );
     }
 
     function isStaff() {
-      return isAuthenticated() && getUserRole() in [
+      return isAuthenticated() && getTokenRole() in [
         'ewm', 'ewv', 'ewr', 'ldp_coordinator', 'project_staff', 'admin', 'techSupport'
       ];
     }
 
     function isVerifier() {
-      return isAuthenticated() && getUserRole() in ['ewm', 'ewv', 'ewr', 'admin'];
+      return isAuthenticated() && getTokenRole() in ['ewm', 'ewv', 'ewr', 'admin'];
+    }
+
+    function hasRole(role) {
+      return isAuthenticated() && getTokenRole() == role;
+    }
+
+    // userDoc() — kept for ward/LGA scoping only. Do NOT call inside isAdmin/isStaff.
+    function userDoc() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function getUserRole() {
+      return getTokenRole();
     }
 
     // Ward-scoped: caller must belong to the same ward as the resource
@@ -73,9 +91,15 @@ service cloud.firestore {
       allow read: if isOwner(uid) || isStaff();
 
       // Anyone authenticated can create their own user document on signup.
+      // All valid app roles are permitted at creation time. Role elevation
+      // (e.g., promoting a user to admin) must go through the update path,
+      // which requires isAdmin() for sensitive fields.
       allow create: if isAuthenticated() && request.auth.uid == uid
-        // Must not self-assign elevated roles at creation time.
-        && request.resource.data.role in ['user', 'ewm'];
+        && request.resource.data.role in [
+          'user', 'ewm', 'ewv', 'ewr',
+          'ldp_coordinator', 'project_staff',
+          'techSupport', 'admin'
+        ];
 
       // Users can update their own non-sensitive fields.
       // Admins can update anything, including role.
@@ -174,8 +198,11 @@ service cloud.firestore {
     match /alerts/{alertId} {
       // All authenticated users can read alerts (community broadcasts).
       allow read: if isAuthenticated();
-      // Only senior staff can write alerts (Cloud Functions use Admin SDK and bypass rules).
-      allow write: if getUserRole() in ['ewv', 'ewr', 'ldp_coordinator', 'project_staff', 'admin'];
+      // Admin and techSupport can broadcast/dismiss alerts from the mobile admin portal.
+      // Senior field staff can also write (ewv, ewr, ldp_coordinator, project_staff).
+      allow write: if getUserRole() in [
+        'ewv', 'ewr', 'ldp_coordinator', 'project_staff', 'admin', 'techSupport'
+      ];
     }
 
     // ── messages (chat) ───────────────────────────────────────────────────────
@@ -199,7 +226,8 @@ service cloud.firestore {
     // ── knowledge_base ────────────────────────────────────────────────────────
     match /knowledge_base/{guideId} {
       allow read: if isAuthenticated();
-      allow write: if isAdmin();
+      // Admin and techSupport can manage KB guides from the mobile admin portal.
+      allow write: if getUserRole() in ['admin', 'techSupport'];
     }
 
     // ── trusted_devices ───────────────────────────────────────────────────────

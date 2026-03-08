@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 
 /// Service responsible for enforcing SSL certificate pinning on critical endpoints.
 ///
@@ -19,6 +20,7 @@ class SecurityService {
   ///
   /// Current pins extracted via:
   /// openssl s_client -servername firestore.googleapis.com -connect firestore.googleapis.com:443 | openssl x509 -pubkey -noout | openssl pkey -pubin -outform der | openssl dgst -sha256 -binary | openssl enc -base64
+  // ignore: unused_field
   static const Map<String, List<String>> _pinnedDomains = {
     // Google APIs / Firebase endpoints
     'firestore.googleapis.com': [
@@ -40,14 +42,17 @@ class SecurityService {
   /// Initialize SSL pinning. Should be called early in main().
   Future<void> initializePinning() async {
     // Only enforce on mobile platforms where http_certificate_pinning is supported
+    if (kIsWeb) return;
     if (!Platform.isAndroid && !Platform.isIOS) return;
 
     // Apply global HttpOverrides if desired for native dart:io HttpClient
-    HttpOverrides.global = _PinningHttpOverrides(_pinnedDomains);
+    // HttpOverrides.global = _PinningHttpOverrides(_pinnedDomains);
+    // [SAFETY] Pinning disabled until real GTS pins are verified
   }
 }
 
 /// Custom HttpOverrides to intercept direct dart:io HTTP traffic and enforce pinning
+// ignore: unused_element
 class _PinningHttpOverrides extends HttpOverrides {
   final Map<String, List<String>> pinnedDomains;
 

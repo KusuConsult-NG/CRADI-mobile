@@ -39,6 +39,8 @@ import 'package:climate_app/core/providers/connectivity_provider.dart';
 import 'package:climate_app/features/admin/screens/admin_screen.dart';
 import 'package:climate_app/features/admin/screens/admin_users_screen.dart';
 import 'package:climate_app/features/admin/screens/admin_reports_screen.dart';
+import 'package:climate_app/features/admin/screens/admin_alerts_screen.dart';
+import 'package:climate_app/features/admin/screens/admin_knowledge_screen.dart';
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
@@ -230,7 +232,11 @@ GoRouter createRouter(BuildContext context) {
         routes: [
           GoRoute(
             path: '/dashboard',
-            builder: (context, state) => const HomeScreen(),
+            pageBuilder: (context, state) => _buildTransitionPage(
+              context: context,
+              state: state,
+              child: const HomeScreen(),
+            ),
           ),
           GoRoute(
             path: '/verification',
@@ -244,9 +250,13 @@ GoRouter createRouter(BuildContext context) {
           ),
           GoRoute(
             path: '/alerts',
-            builder: (context, state) {
+            pageBuilder: (context, state) {
               final category = state.extra as String?;
-              return AlertsListScreen(initialCategory: category);
+              return _buildTransitionPage(
+                context: context,
+                state: state,
+                child: AlertsListScreen(initialCategory: category),
+              );
             },
             routes: [
               GoRoute(
@@ -260,7 +270,11 @@ GoRouter createRouter(BuildContext context) {
           ),
           GoRoute(
             path: '/knowledge-base',
-            builder: (context, state) => const KnowledgeBaseScreen(),
+            pageBuilder: (context, state) => _buildTransitionPage(
+              context: context,
+              state: state,
+              child: const KnowledgeBaseScreen(),
+            ),
             routes: [
               GoRoute(
                 path: 'guides',
@@ -280,7 +294,55 @@ GoRouter createRouter(BuildContext context) {
           ),
           GoRoute(
             path: '/settings',
-            builder: (context, state) => const SettingsScreen(),
+            pageBuilder: (context, state) => _buildTransitionPage(
+              context: context,
+              state: state,
+              child: const SettingsScreen(),
+            ),
+          ),
+          GoRoute(
+            path: '/admin',
+            redirect: (context, state) =>
+                _requireRole(context, [UserRole.admin, UserRole.techSupport]),
+            pageBuilder: (context, state) => _buildTransitionPage(
+              context: context,
+              state: state,
+              child: const AdminScreen(),
+            ),
+            routes: [
+              GoRoute(
+                path: 'users',
+                redirect: (context, state) => _requireRole(context, [
+                  UserRole.admin,
+                  UserRole.techSupport,
+                ]),
+                builder: (context, state) => const AdminUsersScreen(),
+              ),
+              GoRoute(
+                path: 'reports',
+                redirect: (context, state) => _requireRole(context, [
+                  UserRole.admin,
+                  UserRole.techSupport,
+                ]),
+                builder: (context, state) => const AdminReportsScreen(),
+              ),
+              GoRoute(
+                path: 'alerts',
+                redirect: (context, state) => _requireRole(context, [
+                  UserRole.admin,
+                  UserRole.techSupport,
+                ]),
+                builder: (context, state) => const AdminAlertsScreen(),
+              ),
+              GoRoute(
+                path: 'knowledge',
+                redirect: (context, state) => _requireRole(context, [
+                  UserRole.admin,
+                  UserRole.techSupport,
+                ]),
+                builder: (context, state) => const AdminKnowledgeScreen(),
+              ),
+            ],
           ),
         ],
       ),
@@ -371,26 +433,6 @@ GoRouter createRouter(BuildContext context) {
           return '/alerts/detail?deepLinkId=$id';
         },
       ),
-      GoRoute(
-        path: '/admin',
-        redirect: (context, state) =>
-            _requireRole(context, [UserRole.admin, UserRole.techSupport]),
-        builder: (context, state) => const AdminScreen(),
-        routes: [
-          GoRoute(
-            path: 'users',
-            redirect: (context, state) =>
-                _requireRole(context, [UserRole.admin, UserRole.techSupport]),
-            builder: (context, state) => const AdminUsersScreen(),
-          ),
-          GoRoute(
-            path: 'reports',
-            redirect: (context, state) =>
-                _requireRole(context, [UserRole.admin, UserRole.techSupport]),
-            builder: (context, state) => const AdminReportsScreen(),
-          ),
-        ],
-      ),
     ],
   );
 }
@@ -410,3 +452,39 @@ String? _requireRole(BuildContext context, List<UserRole> allowedRoles) {
 
 // NOTE: Use createRouter(context) from main.dart — this file no longer exports
 // a global router. The legacy appRouter has been removed.
+
+Widget _buildPageTransition(
+  BuildContext context,
+  Animation<double> animation,
+  Animation<double> secondaryAnimation,
+  Widget child,
+) {
+  const curve = Curves.easeOutCubic;
+  final slideAnimation = Tween(
+    begin: const Offset(0.0, 0.05),
+    end: Offset.zero,
+  ).animate(CurvedAnimation(parent: animation, curve: curve));
+
+  final fadeAnimation = Tween(
+    begin: 0.0,
+    end: 1.0,
+  ).animate(CurvedAnimation(parent: animation, curve: curve));
+
+  return FadeTransition(
+    opacity: fadeAnimation,
+    child: SlideTransition(position: slideAnimation, child: child),
+  );
+}
+
+CustomTransitionPage<T> _buildTransitionPage<T>({
+  required BuildContext context,
+  required GoRouterState state,
+  required Widget child,
+}) {
+  return CustomTransitionPage<T>(
+    key: state.pageKey,
+    child: child,
+    transitionsBuilder: _buildPageTransition,
+    transitionDuration: const Duration(milliseconds: 300),
+  );
+}

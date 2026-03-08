@@ -53,7 +53,7 @@ async function sendFcmToTokens(tokens, notification, data = {}) {
 //    Input: { reportId, ward, lga, reporterId, peerTokens[] }
 // ─────────────────────────────────────────────────────────────────────────────
 
-exports.sendVerificationRequest = onCall({ region: 'us-central1' }, async (request) => {
+exports.sendVerificationRequest = onCall({ region: 'us-central1', enforceAppCheck: true }, async (request) => {
     const { reportId, ward, lga, reporterId, peerTokens } = request.data;
 
     if (!reportId || !peerTokens || peerTokens.length === 0) {
@@ -81,7 +81,7 @@ exports.sendVerificationRequest = onCall({ region: 'us-central1' }, async (reque
 //    Input: { reportId, reason, recipientTokens[] }
 // ─────────────────────────────────────────────────────────────────────────────
 
-exports.sendEscalationNotification = onCall({ region: 'us-central1' }, async (request) => {
+exports.sendEscalationNotification = onCall({ region: 'us-central1', enforceAppCheck: true }, async (request) => {
     const { reportId, reason, recipientTokens } = request.data;
 
     if (!reportId || !recipientTokens || recipientTokens.length === 0) {
@@ -110,7 +110,7 @@ exports.sendEscalationNotification = onCall({ region: 'us-central1' }, async (re
 //    Input: { reporterToken, reportId, status, reason? }
 // ─────────────────────────────────────────────────────────────────────────────
 
-exports.sendReporterStatusUpdate = onCall({ region: 'us-central1' }, async (request) => {
+exports.sendReporterStatusUpdate = onCall({ region: 'us-central1', enforceAppCheck: true }, async (request) => {
     const { reporterToken, reportId, status, reason } = request.data;
 
     if (!reporterToken || !reportId || !status) {
@@ -141,7 +141,7 @@ exports.sendReporterStatusUpdate = onCall({ region: 'us-central1' }, async (requ
 // ─────────────────────────────────────────────────────────────────────────────
 
 exports.processEscalations = onDocumentCreated(
-    { document: 'scheduled_escalations/{docId}', region: 'us-central1' },
+    'scheduled_escalations/{docId}',
     async (event) => {
         const data = event.data.data();
         const { reportId, escalateAt } = data;
@@ -192,7 +192,7 @@ exports.processEscalations = onDocumentCreated(
 // ─────────────────────────────────────────────────────────────────────────────
 
 exports.distributeValidatedAlert = onDocumentUpdated(
-    { document: 'reports/{reportId}', region: 'us-central1' },
+    'reports/{reportId}',
     async (event) => {
         const before = event.data.before.data();
         const after = event.data.after.data();

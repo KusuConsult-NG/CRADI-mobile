@@ -18,7 +18,8 @@ import 'package:climate_app/core/providers/connectivity_provider.dart';
 import 'package:climate_app/core/services/peer_verification_service.dart';
 import 'package:climate_app/core/services/notification_service.dart';
 import 'package:climate_app/features/reporting/providers/reporting_provider.dart';
-// Removed unused import for localizations
+import 'package:climate_app/shared/widgets/shimmer_loading.dart';
+import 'package:climate_app/shared/widgets/animated_list_item.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -679,10 +680,14 @@ class _HomeScreenState extends State<HomeScreen> {
     String emptyMessage,
   ) {
     if (isLoading && reports.isEmpty) {
-      return const Center(
-        child: Padding(
-          padding: EdgeInsets.all(40),
-          child: CircularProgressIndicator(),
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 20),
+        child: Column(
+          children: [
+            ShimmerSkeletons.listTile(),
+            ShimmerSkeletons.listTile(),
+            ShimmerSkeletons.listTile(),
+          ],
         ),
       );
     }
@@ -724,7 +729,7 @@ class _HomeScreenState extends State<HomeScreen> {
       separatorBuilder: (_, _) => const SizedBox(height: 12),
       itemBuilder: (context, index) {
         final report = reports[index];
-        return _buildReportItem(report);
+        return AnimatedListItem(index: index, child: _buildReportItem(report));
       },
     );
   }

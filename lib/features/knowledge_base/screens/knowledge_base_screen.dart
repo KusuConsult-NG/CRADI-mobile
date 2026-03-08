@@ -292,8 +292,7 @@ class _KnowledgeBaseScreenState extends State<KnowledgeBaseScreen> {
                         guide['title'] ?? 'Guide',
                         tag,
                         tagColor,
-                        guide['imageUrl'] ??
-                            'https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?auto=format&fit=crop&q=80&w=800',
+                        _resolveGuideImage(guide),
                         context,
                         guideData: guide,
                       );
@@ -459,6 +458,40 @@ class _KnowledgeBaseScreenState extends State<KnowledgeBaseScreen> {
         ),
       ),
     );
+  }
+
+  /// Returns a guaranteed non-null, topic-matched network image URL.
+  String _resolveGuideImage(Map<String, dynamic> guide) {
+    final url = guide['imageUrl']?.toString() ?? '';
+    if (url.isNotEmpty && url.startsWith('http')) return url;
+    final cat = (guide['category'] ?? guide['hazardType'] ?? '')
+        .toString()
+        .toLowerCase();
+    switch (cat) {
+      case 'flood':
+        return 'https://images.unsplash.com/photo-1504701954957-2010ec3bcec1?auto=format&fit=crop&q=80&w=800';
+      case 'fire':
+      case 'wildfires':
+        return 'https://images.unsplash.com/photo-1516912481808-3406841bd33c?auto=format&fit=crop&q=80&w=800';
+      case 'accident':
+        return 'https://images.unsplash.com/photo-1544636331-e26879cd4d9b?auto=format&fit=crop&q=80&w=800';
+      case 'erosion':
+        return 'https://images.unsplash.com/photo-1591700608620-4cdcf1d47898?auto=format&fit=crop&q=80&w=800';
+      case 'disease':
+      case 'epidemic':
+        return 'https://images.unsplash.com/photo-1584036561566-b93a50208c3c?auto=format&fit=crop&q=80&w=800';
+      case 'conflict':
+        return 'https://images.unsplash.com/photo-1599059813005-11265ba4b4ce?auto=format&fit=crop&q=80&w=800';
+      case 'storm':
+        return 'https://images.unsplash.com/photo-1535350356005-fd52b3b524fb?auto=format&fit=crop&q=80&w=800';
+      case 'earthquake':
+        return 'https://images.unsplash.com/photo-1548337138-e87d889cc369?auto=format&fit=crop&q=80&w=800';
+      case 'extreme heat':
+      case 'drought':
+        return 'https://images.unsplash.com/photo-1504192010706-dd7f569ee2be?auto=format&fit=crop&q=80&w=800';
+      default:
+        return 'https://images.unsplash.com/photo-1496247749665-49cf5b1022e9?auto=format&fit=crop&q=80&w=800';
+    }
   }
 
   Widget _buildFavoriteCard(

@@ -633,8 +633,9 @@ class OfflineStorageService {
         sanitized[key] = value.map((e) {
           if (e is Map<String, dynamic>) return _sanitizeForHive(e);
           if (e is Timestamp) return e.toDate().toIso8601String();
-          if (e is GeoPoint)
+          if (e is GeoPoint) {
             return {'latitude': e.latitude, 'longitude': e.longitude};
+          }
           if (e is DocumentReference) return e.path;
           return e;
         }).toList();

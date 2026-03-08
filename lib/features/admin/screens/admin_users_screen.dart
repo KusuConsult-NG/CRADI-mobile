@@ -16,6 +16,14 @@ class AdminUsersScreen extends StatefulWidget {
 class _AdminUsersScreenState extends State<AdminUsersScreen> {
   String _roleFilter = 'all';
   bool _pendingOnly = false;
+  String _searchQuery = '';
+  final TextEditingController _searchCtrl = TextEditingController();
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
 
   static const _roles = [
     'all',
@@ -66,22 +74,27 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
       builder: (ctx) => AlertDialog(
         title: Text('Change Role', style: GoogleFonts.lexend()),
         content: StatefulBuilder(
-          builder: (ctx, setS) => RadioGroup<String>(
-            groupValue: selected ?? '',
-            onChanged: (v) => setS(() => selected = v),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: roleOptions
-                  .map(
-                    (r) => RadioListTile<String>(
-                      title: Text(
-                        _roleLabels[r] ?? r,
-                        style: GoogleFonts.lexend(fontSize: 14),
+          builder: (ctx, setS) => SizedBox(
+            width: double.maxFinite,
+            child: RadioGroup<String>(
+              groupValue: selected ?? '',
+              onChanged: (v) => setS(() => selected = v),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: roleOptions
+                    .map(
+                      (r) => RadioListTile<String>(
+                        dense: true,
+                        title: Text(
+                          _roleLabels[r] ?? r,
+                          style: GoogleFonts.lexend(fontSize: 14),
+                        ),
+                        value: r,
+                        activeColor: AppColors.primaryRed,
                       ),
-                      value: r,
-                    ),
-                  )
-                  .toList(),
+                    )
+                    .toList(),
+              ),
             ),
           ),
         ),
@@ -106,9 +119,13 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
                   name: 'AdminUsersScreen',
                 );
                 if (mounted) {
-                  ScaffoldMessenger.of(
-                    context,
-                  ).showSnackBar(const SnackBar(content: Text('Role updated')));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                        'Role updated. User must re-login for it to take effect.',
+                      ),
+                    ),
+                  );
                 }
               }
             },
@@ -117,6 +134,20 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
         ],
       ),
     );
+  }
+
+  Future<void> _setDisabled(String uid, bool disabled) async {
+    await FirebaseFirestore.instance.collection('users').doc(uid).update({
+      'isDisabled': disabled,
+    });
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(disabled ? 'User disabled' : 'User re-enabled'),
+          backgroundColor: disabled ? Colors.red : Colors.green,
+        ),
+      );
+    }
   }
 
   @override
@@ -133,12 +164,50 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
       ),
       body: Column(
         children: [
-          // ── Filters ──
+          // ── Search bar ──
           Container(
             color: Colors.white,
             padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
             child: Column(
               children: [
+                // Search
+                TextField(
+                  controller: _searchCtrl,
+                  onChanged: (v) =>
+                      setState(() => _searchQuery = v.toLowerCase()),
+                  decoration: InputDecoration(
+                    hintText: 'Search by name or email…',
+                    hintStyle: GoogleFonts.lexend(
+                      fontSize: 13,
+                      color: Colors.grey.shade400,
+                    ),
+                    prefixIcon: const Icon(Icons.search, size: 20),
+                    suffixIcon: _searchQuery.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(Icons.clear, size: 18),
+                            onPressed: () {
+                              _searchCtrl.clear();
+                              setState(() => _searchQuery = '');
+                            },
+                          )
+                        : null,
+                    isDense: true,
+                    contentPadding: const EdgeInsets.symmetric(
+                      vertical: 10,
+                      horizontal: 12,
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: BorderSide(color: Colors.grey.shade300),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: BorderSide(color: Colors.grey.shade300),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 6),
+                // Role filter chips
                 SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
                   child: Row(
@@ -188,7 +257,19 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
                 if (snap.connectionState == ConnectionState.waiting) {
                   return const Center(child: CircularProgressIndicator());
                 }
-                final docs = snap.data?.docs ?? [];
+                final allDocs = snap.data?.docs ?? [];
+                // Apply in-memory search filter
+                final docs = _searchQuery.isEmpty
+                    ? allDocs
+                    : allDocs.where((d) {
+                        final data = d.data();
+                        final name = (data['name'] as String? ?? '')
+                            .toLowerCase();
+                        final email = (data['email'] as String? ?? '')
+                            .toLowerCase();
+                        return name.contains(_searchQuery) ||
+                            email.contains(_searchQuery);
+                      }).toList();
                 if (docs.isEmpty) {
                   return Center(
                     child: Text(
@@ -267,6 +348,8 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
                             if (action == 'approve') _setApproval(uid, true);
                             if (action == 'reject') _setApproval(uid, false);
                             if (action == 'role') _changeRole(uid, role);
+                            if (action == 'disable') _setDisabled(uid, true);
+                            if (action == 'enable') _setDisabled(uid, false);
                           },
                           itemBuilder: (_) => [
                             if (!approved)
@@ -282,6 +365,22 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
                             const PopupMenuItem(
                               value: 'role',
                               child: Text('🔄 Change role'),
+                            ),
+                            const PopupMenuDivider(),
+                            PopupMenuItem(
+                              value: d['isDisabled'] == true
+                                  ? 'enable'
+                                  : 'disable',
+                              child: Text(
+                                d['isDisabled'] == true
+                                    ? '🔓 Re-enable user'
+                                    : '🚫 Disable user',
+                                style: TextStyle(
+                                  color: d['isDisabled'] == true
+                                      ? Colors.green
+                                      : Colors.red,
+                                ),
+                              ),
                             ),
                           ],
                         ),

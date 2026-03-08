@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:climate_app/core/router/app_router.dart';
 import 'package:climate_app/core/theme/app_theme.dart';
 import 'package:climate_app/features/auth/providers/auth_provider.dart';
@@ -18,7 +19,6 @@ import 'package:climate_app/core/providers/settings_provider.dart';
 import 'package:climate_app/core/services/notification_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'dart:ui';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -68,15 +68,23 @@ Future<void> main() async {
 
     debugPrint('✅ Firebase Crashlytics initialized');
 
-    // Initialize Firebase App Check — prevents unauthorized API calls
-    // In debug/emulator: uses debug provider (prints debug token to console)
+    // Initialize Firebase App Check
     // In release: uses Play Integrity (Android) or Device Check (iOS)
-    await FirebaseAppCheck.instance.activate(
-      providerAndroid: const AndroidPlayIntegrityProvider(),
-      // For local testing replace with: const AndroidDebugProvider()
-      providerApple: const AppleDeviceCheckProvider(),
-    );
-    debugPrint('✅ Firebase App Check activated');
+    // We strictly bypass this in local emulator testing by entirely skipping initialization
+    // to avoid Permission Denied constraints without requiring manual Debug Token uploads.
+    if (!kDebugMode) {
+      await FirebaseAppCheck.instance.activate(
+        providerAndroid: const AndroidPlayIntegrityProvider(),
+        providerApple: const AppleDeviceCheckProvider(),
+      );
+      debugPrint('✅ Firebase App Check activated (Release)');
+    } else {
+      await FirebaseAppCheck.instance.activate(
+        providerAndroid: const AndroidDebugProvider(),
+        providerApple: const AppleDebugProvider(),
+      );
+      debugPrint('✅ Firebase App Check activated (Debug)');
+    }
 
     // Initialize Remote Config — fetches peer threshold, SMS caps, feature flags
     await RemoteConfigService().initialize();

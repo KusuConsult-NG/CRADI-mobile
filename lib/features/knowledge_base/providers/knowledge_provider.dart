@@ -164,23 +164,38 @@ class KnowledgeProvider extends ChangeNotifier {
   String _getImageForType(String? type) {
     switch (type?.toLowerCase()) {
       case 'flood':
-        return 'https://images.unsplash.com/photo-1547683905-f686c993aae5?auto=format&fit=crop&q=80&w=800';
+        // Flooded street / submerged homes
+        return 'https://images.unsplash.com/photo-1504701954957-2010ec3bcec1?auto=format&fit=crop&q=80&w=800';
       case 'fire':
-        return 'https://images.unsplash.com/photo-1497911270199-1c552ee64aa4?auto=format&fit=crop&q=80&w=800';
+      case 'wildfires':
+        // Active wildfire / burning landscape
+        return 'https://images.unsplash.com/photo-1516912481808-3406841bd33c?auto=format&fit=crop&q=80&w=800';
       case 'accident':
-        return 'https://images.unsplash.com/photo-1563820258-090c2e68449c?auto=format&fit=crop&q=80&w=800';
+        // Road accident / emergency response scene
+        return 'https://images.unsplash.com/photo-1544636331-e26879cd4d9b?auto=format&fit=crop&q=80&w=800';
       case 'erosion':
-        return 'https://images.unsplash.com/photo-1532884989635-c350639906d2?auto=format&fit=crop&q=80&w=800';
+        // Severe soil erosion / cracked ground
+        return 'https://images.unsplash.com/photo-1591700608620-4cdcf1d47898?auto=format&fit=crop&q=80&w=800';
       case 'disease':
+      case 'epidemic':
+        // Healthcare / disease response
         return 'https://images.unsplash.com/photo-1584036561566-b93a50208c3c?auto=format&fit=crop&q=80&w=800';
       case 'conflict':
-        return 'https://images.unsplash.com/photo-1555627685-7977a4216833?auto=format&fit=crop&q=80&w=800';
+        // Crisis / security emergency scene
+        return 'https://images.unsplash.com/photo-1599059813005-11265ba4b4ce?auto=format&fit=crop&q=80&w=800';
       case 'storm':
-        return 'https://images.unsplash.com/photo-1527482797697-8798539dae07?auto=format&fit=crop&q=80&w=800';
+        // Dark storm clouds / severe weather
+        return 'https://images.unsplash.com/photo-1535350356005-fd52b3b524fb?auto=format&fit=crop&q=80&w=800';
       case 'earthquake':
-        return 'https://images.unsplash.com/photo-1521295121757-bb09b2e259b1?auto=format&fit=crop&q=80&w=800';
+        // Collapsed building / earthquake damage
+        return 'https://images.unsplash.com/photo-1548337138-e87d889cc369?auto=format&fit=crop&q=80&w=800';
+      case 'extreme heat':
+      case 'drought':
+        // Cracked dry earth / drought landscape
+        return 'https://images.unsplash.com/photo-1504192010706-dd7f569ee2be?auto=format&fit=crop&q=80&w=800';
       default:
-        return 'https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?auto=format&fit=crop&q=80&w=800';
+        // Emergency preparedness / general safety
+        return 'https://images.unsplash.com/photo-1496247749665-49cf5b1022e9?auto=format&fit=crop&q=80&w=800';
     }
   }
 }

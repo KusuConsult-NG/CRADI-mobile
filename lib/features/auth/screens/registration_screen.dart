@@ -10,7 +10,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
-import 'package:fluttertoast/fluttertoast.dart';
+import 'package:climate_app/shared/widgets/custom_toast.dart';
 import 'package:climate_app/core/design/glass_container.dart';
 import 'package:climate_app/core/widgets/location_selector_widget.dart';
 import 'dart:developer' as developer;
@@ -91,14 +91,11 @@ By tapping "I Agree", you consent to these terms and the international transfer 
   }
 
   void _showToast(String message, {bool isError = false}) {
-    Fluttertoast.showToast(
-      msg: message,
-      toastLength: Toast.LENGTH_LONG,
-      gravity: ToastGravity.BOTTOM,
-      backgroundColor: isError ? Colors.red.shade700 : Colors.green.shade700,
-      textColor: Colors.white,
-      fontSize: 16.0,
-    );
+    if (isError) {
+      CustomToast.showError(context, message);
+    } else {
+      CustomToast.showSuccess(context, message);
+    }
   }
 
   /// Shows the full NDPA consent dialog. Returns true if user agrees.

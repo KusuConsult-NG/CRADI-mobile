@@ -267,7 +267,7 @@ class _HazardGuidesScreenState extends State<HazardGuidesScreen> {
                           guide['subtitle'] ?? guide['category'] ?? 'Manual',
                           guide['tag'] ?? 'GUIDE',
                           _getTagColor(guide['tag']),
-                          guide['imageUrl'] ?? 'assets/images/ewer_logo.jpg',
+                          _resolveImage(guide),
                           isDownloaded: guide['isOffline'] ?? true,
                           onTap: () {
                             context.push(
@@ -285,6 +285,101 @@ class _HazardGuidesScreenState extends State<HazardGuidesScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  /// Returns a guaranteed non-null network image URL for a guide,
+  /// using category→image mapping. Never returns the app logo.
+  String _resolveImage(Map<String, dynamic> guide) {
+    final url = guide['imageUrl']?.toString() ?? '';
+    if (url.isNotEmpty && url.startsWith('http')) return url;
+    // No valid imageUrl stored — derive from category/hazardType
+    final cat = (guide['category'] ?? guide['hazardType'] ?? '').toString();
+    return _getImageForType(cat);
+  }
+
+  String _getImageForType(String? type) {
+    switch (type?.toLowerCase()) {
+      case 'flood':
+        return 'https://images.unsplash.com/photo-1504701954957-2010ec3bcec1?auto=format&fit=crop&q=80&w=800';
+      case 'fire':
+      case 'wildfires':
+        return 'https://images.unsplash.com/photo-1516912481808-3406841bd33c?auto=format&fit=crop&q=80&w=800';
+      case 'accident':
+        return 'https://images.unsplash.com/photo-1544636331-e26879cd4d9b?auto=format&fit=crop&q=80&w=800';
+      case 'erosion':
+        return 'https://images.unsplash.com/photo-1591700608620-4cdcf1d47898?auto=format&fit=crop&q=80&w=800';
+      case 'disease':
+      case 'epidemic':
+        return 'https://images.unsplash.com/photo-1584036561566-b93a50208c3c?auto=format&fit=crop&q=80&w=800';
+      case 'conflict':
+        return 'https://images.unsplash.com/photo-1599059813005-11265ba4b4ce?auto=format&fit=crop&q=80&w=800';
+      case 'storm':
+        return 'https://images.unsplash.com/photo-1535350356005-fd52b3b524fb?auto=format&fit=crop&q=80&w=800';
+      case 'earthquake':
+        return 'https://images.unsplash.com/photo-1548337138-e87d889cc369?auto=format&fit=crop&q=80&w=800';
+      case 'extreme heat':
+      case 'drought':
+        return 'https://images.unsplash.com/photo-1504192010706-dd7f569ee2be?auto=format&fit=crop&q=80&w=800';
+      default:
+        return 'https://images.unsplash.com/photo-1496247749665-49cf5b1022e9?auto=format&fit=crop&q=80&w=800';
+    }
+  }
+
+  /// Hazard-colored placeholder shown when the network image fails to load.
+  Widget _errorPlaceholder(String? category) {
+    final cat = (category ?? '').toLowerCase();
+    Color bg;
+    IconData icon;
+    switch (cat) {
+      case 'flood':
+        bg = Colors.blue.shade800;
+        icon = Icons.water;
+        break;
+      case 'fire':
+      case 'wildfires':
+        bg = Colors.deepOrange.shade800;
+        icon = Icons.local_fire_department;
+        break;
+      case 'accident':
+        bg = Colors.red.shade800;
+        icon = Icons.car_crash;
+        break;
+      case 'erosion':
+        bg = Colors.brown.shade700;
+        icon = Icons.landscape;
+        break;
+      case 'disease':
+      case 'epidemic':
+        bg = Colors.teal.shade700;
+        icon = Icons.coronavirus;
+        break;
+      case 'conflict':
+        bg = Colors.grey.shade800;
+        icon = Icons.shield;
+        break;
+      case 'storm':
+        bg = Colors.blueGrey.shade700;
+        icon = Icons.thunderstorm;
+        break;
+      case 'earthquake':
+        bg = Colors.deepPurple.shade800;
+        icon = Icons.vibration;
+        break;
+      case 'extreme heat':
+      case 'drought':
+        bg = Colors.orange.shade800;
+        icon = Icons.wb_sunny;
+        break;
+      default:
+        bg = Colors.grey.shade800;
+        icon = Icons.health_and_safety;
+    }
+    return Container(
+      color: bg,
+      child: Center(
+        child: Icon(icon, color: Colors.white.withValues(alpha: 0.6), size: 40),
       ),
     );
   }
@@ -338,30 +433,12 @@ class _HazardGuidesScreenState extends State<HazardGuidesScreen> {
                 fit: BoxFit.cover,
                 width: double.infinity,
                 height: double.infinity,
-                errorBuilder: (context, error, stackTrace) {
-                  return Image.asset(
-                    'assets/images/ewer_logo.jpg',
-                    fit: BoxFit.cover,
-                    width: double.infinity,
-                    height: double.infinity,
-                  );
-                },
+                errorBuilder: (context, error, stackTrace) =>
+                    _errorPlaceholder(null),
               )
             else
-              Image.asset(
-                imageUrl,
-                fit: BoxFit.cover,
-                width: double.infinity,
-                height: double.infinity,
-                errorBuilder: (context, error, stackTrace) {
-                  return Image.asset(
-                    'assets/images/ewer_logo.jpg',
-                    fit: BoxFit.cover,
-                    width: double.infinity,
-                    height: double.infinity,
-                  );
-                },
-              ),
+              // Should never happen — imageUrl is always http via _resolveImage
+              _errorPlaceholder(null),
             Container(
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(12),

@@ -55,6 +55,9 @@ class AuthProvider extends ChangeNotifier {
   bool _isInitialized = false;
   bool _hasCompletedOnboarding = false;
   bool _isLocked = false;
+  // Set to true during a fresh manual login to prevent _onAuthStateChanged
+  // from immediately re-locking the app via the biometric lock screen.
+  bool _justLoggedIn = false;
 
   // Auth state subscription (initialized in constructor indirectly via late field).
   // This is safe: late fields are initialized on first access, which happens
@@ -96,19 +99,38 @@ class AuthProvider extends ChangeNotifier {
 
     _currentUser = user;
 
+    // Force-refresh the token so any custom claims (role, admin) set via
+    // Firebase Admin SDK are immediately included. Without this, Firestore
+    // security rules see stale claims and deny reads for newly-promoted users.
+    try {
+      await user.getIdToken(true);
+      developer.log(
+        'Token refreshed — custom claims loaded',
+        name: 'AuthProvider',
+      );
+    } on Exception catch (e) {
+      developer.log(
+        'Token refresh failed (non-fatal): $e',
+        name: 'AuthProvider',
+      );
+    }
+
     // Load onboarding status
     final prefs = await SharedPreferences.getInstance();
     _hasCompletedOnboarding =
         prefs.getBool('has_completed_onboarding') ?? false;
 
-    // Check biometric lock
+    // Check biometric lock — but only on cold-start/app-resume.
+    // If the user JUST logged in manually (_justLoggedIn == true), skip locking
+    // so they are taken directly to the dashboard.
     final bioEnabled = await _storage.isBiometricEnabled();
-    if (bioEnabled) {
+    if (bioEnabled && !_justLoggedIn) {
       _isLocked = true;
       _isAuthenticated = false;
     } else {
       _isAuthenticated = true;
     }
+    _justLoggedIn = false; // Reset flag regardless
 
     // Load role from secure storage (fast path)
     final userRoleStr = await _storage.getUserRole();
@@ -339,12 +361,29 @@ class AuthProvider extends ChangeNotifier {
       /* ignore */
     }
 
-    // Create Firebase Auth account
-    final user = await _firebase.createAccount(
-      email: derivedEmail,
-      password: generatedPassword,
-      name: name ?? 'User',
-    );
+    // Create Firebase Auth account or fall back if exists
+    User? user;
+    try {
+      user = await _firebase.createAccount(
+        email: derivedEmail,
+        password: generatedPassword,
+        name: name ?? 'User',
+      );
+    } on FirebaseAuthException catch (e) {
+      if (e.code == 'email-already-in-use') {
+        developer.log(
+          'Phone user exists. Falling back to login.',
+          name: 'AuthProvider',
+        );
+        user = await _firebase.createEmailPasswordSession(
+          email: derivedEmail,
+          password: generatedPassword,
+        );
+      } else {
+        rethrow;
+      }
+    }
+
     _currentUser = user;
 
     final userRole = role ?? UserRole.user;
@@ -365,7 +404,7 @@ class AuthProvider extends ChangeNotifier {
 
     await _startUserSession(user, userRole, isVerified: true);
     developer.log(
-      'signUpWithPhone: account created uid=${user.uid}',
+      'signUpWithPhone: account created/logged in uid=${user.uid}',
       name: 'AuthProvider',
     );
     return true;
@@ -400,7 +439,9 @@ class AuthProvider extends ChangeNotifier {
       deviceFingerprint = await _fingerprintService.generateFingerprint();
       final deviceName = await _fingerprintService.getDeviceName();
 
-      // Sign in with Firebase
+      // Sign in with Firebase — flag prevents biometric lock from triggering
+      // in the _onAuthStateChanged callback for this fresh login.
+      _justLoggedIn = true;
       final user = await _firebase.createEmailPasswordSession(
         email: email,
         password: password,
@@ -968,26 +1009,67 @@ class AuthProvider extends ChangeNotifier {
     bool isVerified = false,
     String? phoneNumber,
   }) async {
-    await _firebase.createDocument(
-      collectionId: AppConfig.usersCollection,
-      documentId: userId,
-      data: {
-        'email': email,
-        'name': name ?? 'User',
-        'role': _roleToString(role),
-        'address': address ?? '',
-        'state': state ?? '',
-        'lga': lga ?? '',
-        'ward': ward ?? '',
-        'isVerified': isVerified,
-        'isApproved': false,
-        'biometricsEnabled': false,
-        'createdAt': DateTime.now().toIso8601String(),
-        'lastLoginAt': DateTime.now().toIso8601String(),
-        'phone': phoneNumber ?? '',
-        'profileImageUrl': '',
-      },
+    // Map the enum explicitly to strings that Firestore rules expect
+    final roleString = role == UserRole.user
+        ? 'user'
+        : role == UserRole.ewm
+        ? 'ewm'
+        : role == UserRole.ewv
+        ? 'ewv'
+        : role == UserRole.ewr
+        ? 'ewr'
+        : role == UserRole.admin
+        ? 'admin'
+        : role == UserRole.techSupport
+        ? 'techSupport'
+        : 'user';
+
+    final payload = {
+      'email': email,
+      'name': name ?? 'User',
+      'role': roleString,
+      'address': address ?? '',
+      'state': state ?? '',
+      'lga': lga ?? '',
+      'ward': ward ?? '',
+      'isVerified': isVerified,
+      'isApproved': false,
+      'biometricsEnabled': false,
+      'createdAt': DateTime.now().toIso8601String(),
+      'lastLoginAt': DateTime.now().toIso8601String(),
+      'phone': phoneNumber ?? '',
+      'profileImageUrl': '',
+    };
+
+    developer.log(
+      'Creating Firestore document for $userId with payload: $payload',
+      name: 'AuthProvider',
     );
+
+    // Structural retry loop to handle Firebase Auth token propagation delays
+    // causing immediate PERMISSION_DENIED errors on initial account creation
+    int retryCount = 0;
+    const maxRetries = 3;
+
+    while (retryCount < maxRetries) {
+      try {
+        await _firebase.createDocument(
+          collectionId: AppConfig.usersCollection,
+          documentId: userId,
+          data: payload,
+        );
+        return; // Success
+      } on Exception catch (e) {
+        retryCount++;
+        developer.log(
+          'Error creating user document (attempt $retryCount): $e',
+          name: 'AuthProvider',
+        );
+        if (retryCount >= maxRetries) rethrow;
+        // Wait 1.5s for the Auth JWT to fully propagate to the Firestore client SDK
+        await Future.delayed(const Duration(milliseconds: 1500));
+      }
+    }
   }
 
   Future<void> _startUserSession(
@@ -1005,14 +1087,23 @@ class AuthProvider extends ChangeNotifier {
 
   UserRole? _parseUserRole(String? roleStr) {
     if (roleStr == null) return null;
-    try {
-      return UserRole.values.firstWhere((r) => r.name == roleStr);
-    } on Exception catch (_) {
-      return null;
+    switch (roleStr) {
+      case 'user':
+        return UserRole.user;
+      case 'ewm':
+        return UserRole.ewm;
+      case 'ewv':
+        return UserRole.ewv;
+      case 'ewr':
+        return UserRole.ewr;
+      case 'admin':
+        return UserRole.admin;
+      case 'techSupport':
+        return UserRole.techSupport;
+      default:
+        return null;
     }
   }
-
-  String _roleToString(UserRole role) => role.name;
 
   @override
   void dispose() {

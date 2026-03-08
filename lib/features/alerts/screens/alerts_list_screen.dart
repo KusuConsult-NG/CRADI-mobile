@@ -5,6 +5,9 @@ import 'package:climate_app/core/theme/app_colors.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:climate_app/shared/widgets/custom_button.dart';
+import 'package:climate_app/shared/widgets/shimmer_loading.dart';
+import 'package:climate_app/shared/widgets/custom_toast.dart';
+import 'package:climate_app/shared/widgets/animated_list_item.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 class AlertsListScreen extends StatefulWidget {
@@ -234,13 +237,13 @@ class _AlertsListScreenState extends State<AlertsListScreen> {
                                 color: isSelected
                                     ? AppColors.successGreen
                                     : Colors.grey.shade200,
-                                ),
                               ),
-                              showCheckmark: false,
-                            );
-                          },
-                        ),
+                            ),
+                            showCheckmark: false,
+                          );
+                        },
                       ),
+                    ),
 
                     const SizedBox(height: 16),
 
@@ -305,23 +308,36 @@ class _AlertsListScreenState extends State<AlertsListScreen> {
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 16),
                         child: Column(
-                          children: filteredReports.map((report) {
+                          children: filteredReports.asMap().entries.map((
+                            entry,
+                          ) {
+                            final index = entry.key;
+                            final report = entry.value;
                             return Padding(
                               padding: const EdgeInsets.only(bottom: 12),
-                              child: _buildAlertCardFromReport(
-                                report,
-                                provider,
+                              child: AnimatedListItem(
+                                index: index,
+                                child: _buildAlertCardFromReport(
+                                  report,
+                                  provider,
+                                ),
                               ),
                             );
                           }).toList(),
                         ),
                       ),
-                      if (isLoading)
+                      if (isLoading && filteredReports.isEmpty)
+                        Column(
+                          children: [
+                            ShimmerSkeletons.card(height: 100),
+                            ShimmerSkeletons.card(height: 100),
+                            ShimmerSkeletons.card(height: 100),
+                          ],
+                        )
+                      else if (isLoading)
                         const Padding(
                           padding: EdgeInsets.all(16.0),
-                          child: Center(
-                              child: CircularProgressIndicator(),
-                          ),
+                          child: Center(child: CircularProgressIndicator()),
                         ),
                     ],
 
@@ -499,18 +515,11 @@ class _AlertsListScreenState extends State<AlertsListScreen> {
                         try {
                           await provider.rejectReport(report.id);
                           if (mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Report rejected')),
-                            );
+                            CustomToast.showSuccess(context, 'Report rejected');
                           }
                         } on Exception catch (e) {
                           if (mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text('Error: $e'),
-                                backgroundColor: Colors.red,
-                              ),
-                            );
+                            CustomToast.showError(context, 'Error: $e');
                           }
                         }
                       },
@@ -528,18 +537,14 @@ class _AlertsListScreenState extends State<AlertsListScreen> {
                         try {
                           await provider.verifyReport(report.id);
                           if (mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Report confirmed')),
+                            CustomToast.showSuccess(
+                              context,
+                              'Report confirmed',
                             );
                           }
                         } on Exception catch (e) {
                           if (mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text('Error: $e'),
-                                backgroundColor: Colors.red,
-                              ),
-                            );
+                            CustomToast.showError(context, 'Error: $e');
                           }
                         }
                       },
