@@ -2,6 +2,7 @@ import 'package:climate_app/core/services/secure_storage_service.dart';
 import 'package:climate_app/core/services/firebase_service.dart';
 import 'package:climate_app/core/services/offline_storage_service.dart';
 import 'package:climate_app/core/constants/app_config.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -110,7 +111,11 @@ class ProfileProvider extends ChangeNotifier {
           );
 
           if (doc.isNotEmpty) {
-            _userProfile = doc;
+            // Sanitize the Firestore document BEFORE storing in _userProfile.
+            // Firestore returns Timestamp, GeoPoint, and DocumentReference objects
+            // which Hive cannot serialize. By converting here, every downstream
+            // call that merges into or caches _userProfile is safe by default.
+            _userProfile = _sanitizeFirestoreDoc(doc);
             await _offlineStorage.cacheUserProfile(_userProfile!);
 
             _name = doc['name'] ?? _name;
@@ -329,5 +334,42 @@ class ProfileProvider extends ChangeNotifier {
   Future<void> updateFCMToken(String token) async {
     await _updateLocalState({'fcmToken': token});
     await _syncToFirestore({'fcmToken': token});
+  }
+
+  /// Recursively converts Firestore-specific types to Hive-safe primitives.
+  /// Call this on any raw Firestore document map before storing in [_userProfile]
+  /// or writing to a Hive box — Hive has no built-in adapter for [Timestamp],
+  /// [GeoPoint], or [DocumentReference].
+  Map<String, dynamic> _sanitizeFirestoreDoc(Map<String, dynamic> data) {
+    final result = <String, dynamic>{};
+    data.forEach((key, value) {
+      if (value is Timestamp) {
+        result[key] = value.toDate().toIso8601String();
+      } else if (value is GeoPoint) {
+        result[key] = {
+          'latitude': value.latitude,
+          'longitude': value.longitude,
+        };
+      } else if (value is DocumentReference) {
+        result[key] = value.path;
+      } else if (value is Map<String, dynamic>) {
+        result[key] = _sanitizeFirestoreDoc(value);
+      } else if (value is List) {
+        result[key] = value.map((e) {
+          if (e is Timestamp) return e.toDate().toIso8601String();
+          if (e is GeoPoint) {
+            return {'latitude': e.latitude, 'longitude': e.longitude};
+          }
+          if (e is DocumentReference) return e.path;
+          if (e is Map<String, dynamic>) return _sanitizeFirestoreDoc(e);
+          return e;
+        }).toList();
+      } else if (value is DateTime) {
+        result[key] = value.toIso8601String();
+      } else {
+        result[key] = value;
+      }
+    });
+    return result;
   }
 }
