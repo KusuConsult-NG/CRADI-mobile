@@ -15,8 +15,6 @@ import 'package:climate_app/core/utils/screen_security.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-import 'package:package_info_plus/package_info_plus.dart';
-
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
 
@@ -31,21 +29,11 @@ class _SettingsScreenState extends State<SettingsScreen>
   bool _biometricAvailable = false;
   bool _biometricEnabled = false;
   bool _checkingBiometric = true;
-  String _appVersion = '...';
 
   @override
   void initState() {
     super.initState();
     _checkBiometric();
-    _loadVersion();
-  }
-
-  /// Load app version from pubspec.yaml via PackageInfo
-  Future<void> _loadVersion() async {
-    final info = await PackageInfo.fromPlatform();
-    if (mounted) {
-      setState(() => _appVersion = '${info.version}+${info.buildNumber}');
-    }
   }
 
   Future<void> _checkBiometric() async {
@@ -597,23 +585,12 @@ class _SettingsScreenState extends State<SettingsScreen>
               ),
               const SizedBox(height: 16),
               Center(
-                child: Column(
-                  children: [
-                    Text(
-                      'Climate Early Warning System (CEWS)',
-                      style: GoogleFonts.lexend(
-                        fontSize: 12,
-                        color: Colors.grey.shade400,
-                      ),
-                    ),
-                    Text(
-                      'Version $_appVersion',
-                      style: GoogleFonts.lexend(
-                        fontSize: 12,
-                        color: Colors.grey.shade500,
-                      ),
-                    ),
-                  ],
+                child: Text(
+                  'Climate Early Warning System (CEWS)',
+                  style: GoogleFonts.lexend(
+                    fontSize: 12,
+                    color: Colors.grey.shade400,
+                  ),
                 ),
               ),
               const SizedBox(height: 40),
