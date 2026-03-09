@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.0.8+11
+version: 1.0.9+12
 
 environment:
   sdk: ^3.10.3
@@ -103,8 +103,8 @@ dependencies:
   firebase_app_check: ^0.4.1+4
   # Firebase Cloud Functions — callable functions for FCM peer notifications
   cloud_functions: ^6.0.6
-  # Screen security — FLAG_SECURE for sensitive screens (login, profile, settings)
-  flutter_windowmanager_plus: ^1.0.1
+  # FLAG_SECURE is implemented via native MethodChannel in MainActivity.java.
+  # flutter_windowmanager_plus removed — incompatible with AGP 8.0+ (missing namespace).
   # Firebase Remote Config — server-side parameters (peer threshold, SMS caps, feature flags)
   firebase_remote_config: ^6.1.4
   http_certificate_pinning: ^3.0.1
