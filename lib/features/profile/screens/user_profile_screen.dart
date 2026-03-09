@@ -18,7 +18,6 @@ import 'package:provider/provider.dart';
 import 'package:climate_app/shared/widgets/custom_button.dart';
 import 'package:climate_app/shared/widgets/custom_text_field.dart';
 import 'package:climate_app/l10n/app_localizations.dart';
-import 'package:climate_app/core/utils/screen_security.dart';
 
 class UserProfileScreen extends StatefulWidget {
   const UserProfileScreen({super.key});
@@ -27,8 +26,7 @@ class UserProfileScreen extends StatefulWidget {
   State<UserProfileScreen> createState() => _UserProfileScreenState();
 }
 
-class _UserProfileScreenState extends State<UserProfileScreen>
-    with ScreenSecurityMixin<UserProfileScreen> {
+class _UserProfileScreenState extends State<UserProfileScreen> {
   final ImagePicker _picker = ImagePicker();
 
   Future<void> _pickImage(ImageSource source) async {

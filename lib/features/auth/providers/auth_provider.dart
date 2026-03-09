@@ -577,7 +577,7 @@ class AuthProvider extends ChangeNotifier {
         context: 'AuthProvider.signInWithEmail',
       );
       throw AuthException(
-        'Login failed (${e.code}). Please try again or contact support.',
+        'Login failed (${e.code}): ${e.message ?? "No additional details"}',
       );
     } on Exception catch (e) {
       _isLoading = false;

@@ -11,7 +11,6 @@ import 'package:provider/provider.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'dart:io';
-import 'package:climate_app/core/utils/screen_security.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -22,8 +21,7 @@ class SettingsScreen extends StatefulWidget {
   State<SettingsScreen> createState() => _SettingsScreenState();
 }
 
-class _SettingsScreenState extends State<SettingsScreen>
-    with ScreenSecurityMixin<SettingsScreen> {
+class _SettingsScreenState extends State<SettingsScreen> {
   bool _pushNotifications = true;
   bool _criticalAlerts = true;
   bool _biometricAvailable = false;
