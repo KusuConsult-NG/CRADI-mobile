@@ -1,0 +1,9 @@
+#!/bin/bash
+git checkout lib/features/auth/screens/login_screen.dart
+cat << 'INJECT' > fix.dart
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+INJECT
+sed -i '' 's/import .package:flutter\/material.dart.;/import "package:flutter\/material.dart";\nimport "package:firebase_auth\/firebase_auth.dart";\nimport "package:cloud_firestore\/cloud_firestore.dart";/g' lib/features/auth/screens/login_screen.dart
+sed -i '' 's/void _submit() async {/void _submit() async {\n    print("--- Running test direct signup ---");\n    try {\n      final cred = await FirebaseAuth.instance.createUserWithEmailAndPassword(email: "direct_test_${DateTime.now().millisecondsSinceEpoch}@test.com", password: "Password123");\n      print("User created in Auth: ${cred.user?.uid}");\n      await FirebaseFirestore.instance.collection("users").doc(cred.user!.uid).set({\n        "uid": cred.user!.uid,\n        "email": cred.user!.email,\n        "firstName": "Test",\n        "lastName": "User",\n        "phone": "+2348000000000",\n        "state": "Lagos",\n        "lga": "Ikeja",\n        "ward": "Ward A",\n        "address": "Test Address",\n        "role": "user",\n        "createdAt": FieldValue.serverTimestamp(),\n        "updatedAt": FieldValue.serverTimestamp(),\n        "isApproved": true,\n        "isActive": true,\n        "points": 0,\n        "communityRank": "Novice"\n      });\n      print("--- FIRESTORE WRITE SUCCESSFUL! ---");\n    } catch (e, stack) {\n      print("--- FIRESTORE WRITE FAILED! ---");\n      print(e);\n      print(stack);\n    }\n    return;/g' lib/features/auth/screens/login_screen.dart
+flutter analyze lib/features/auth/screens/login_screen.dart

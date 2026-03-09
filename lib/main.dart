@@ -23,7 +23,6 @@ import 'package:hive_flutter/hive_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:climate_app/l10n/app_localizations.dart';
 import 'package:climate_app/core/services/remote_config_service.dart';
@@ -67,24 +66,6 @@ Future<void> main() async {
     };
 
     debugPrint('✅ Firebase Crashlytics initialized');
-
-    // Initialize Firebase App Check
-    // In release: uses Play Integrity (Android) or Device Check (iOS)
-    // We strictly bypass this in local emulator testing by entirely skipping initialization
-    // to avoid Permission Denied constraints without requiring manual Debug Token uploads.
-    if (!kDebugMode) {
-      await FirebaseAppCheck.instance.activate(
-        providerAndroid: const AndroidPlayIntegrityProvider(),
-        providerApple: const AppleDeviceCheckProvider(),
-      );
-      debugPrint('✅ Firebase App Check activated (Release)');
-    } else {
-      await FirebaseAppCheck.instance.activate(
-        providerAndroid: const AndroidDebugProvider(),
-        providerApple: const AppleDebugProvider(),
-      );
-      debugPrint('✅ Firebase App Check activated (Debug)');
-    }
 
     // Initialize Remote Config — fetches peer threshold, SMS caps, feature flags
     await RemoteConfigService().initialize();

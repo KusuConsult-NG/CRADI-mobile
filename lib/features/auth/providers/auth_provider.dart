@@ -326,19 +326,6 @@ class AuthProvider extends ChangeNotifier {
             'Too many attempts. Please wait a few minutes before trying again.',
           );
         default:
-          // Scrub any Firebase internal strings before showing to user
-          final msg = e.message ?? '';
-          final isInternalError =
-              msg.toLowerCase().contains('pin') ||
-              msg.toLowerCase().contains('internal error') ||
-              msg.toLowerCase().contains('app check') ||
-              msg.toLowerCase().contains('attestation') ||
-              msg.toLowerCase().contains('play integrity');
-          if (isInternalError) {
-            throw AuthException(
-              'Registration could not be completed. Please ensure Google Play Services is up to date and try again.',
-            );
-          }
           throw AuthException('Registration failed. Please try again.');
       }
     } on Exception catch (e) {
@@ -578,19 +565,6 @@ class AuthProvider extends ChangeNotifier {
       if (e.code == 'user-disabled') {
         throw AuthException(
           'This account has been disabled. Please contact support.',
-        );
-      }
-      // App Check / Play Integrity rejection
-      if (e.code == 'app-check-token-invalid' ||
-          (e.message?.toLowerCase().contains('pin') ?? false) ||
-          (e.message?.toLowerCase().contains('app check') ?? false) ||
-          (e.message?.toLowerCase().contains('attestation') ?? false)) {
-        developer.log(
-          'App Check rejection detected: ${e.code} – ${e.message}',
-          name: 'AuthProvider',
-        );
-        throw AuthException(
-          'Login failed. Please ensure your device has Google Play Services up to date and try again.',
         );
       }
       // Network / connectivity

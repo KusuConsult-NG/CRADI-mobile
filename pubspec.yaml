@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.0.9+13
+version: 1.0.9+14
 
 environment:
   sdk: ^3.10.3
@@ -99,8 +99,6 @@ dependencies:
   package_info_plus: ^8.0.0
   # Image compression before Firebase Storage upload (reduces upload size 70-90%)
   flutter_image_compress: ^2.3.0
-  # Firebase App Check — server-side request verification (anti-abuse)
-  firebase_app_check: ^0.4.1+4
   # Firebase Cloud Functions — callable functions for FCM peer notifications
   cloud_functions: ^6.0.6
   # FLAG_SECURE is implemented via native MethodChannel in MainActivity.java.

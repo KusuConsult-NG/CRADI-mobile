@@ -27,13 +27,8 @@ class ErrorHandler {
     if (msg.contains('permission') || msg.contains('denied')) {
       return 'You do not have permission to perform this action.';
     }
-    // Firebase / App Check SDK internal strings — must be scrubbed
-    if (msg.contains('pin') ||
-        msg.contains('app check') ||
-        msg.contains('attestation') ||
-        msg.contains('internal error') ||
-        msg.contains('play integrity') ||
-        msg.contains('firebase')) {
+    // Firebase SDK internal strings — must be scrubbed
+    if (msg.contains('internal error') || msg.contains('firebase')) {
       return 'An error occurred. Please try again or contact support.';
     }
     return 'An unexpected error occurred. Please try again.';
