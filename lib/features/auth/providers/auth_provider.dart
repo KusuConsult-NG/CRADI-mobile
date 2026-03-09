@@ -913,8 +913,10 @@ class AuthProvider extends ChangeNotifier {
         _currentUser!.email!,
         name: _currentUser!.displayName,
       );
-    } on Exception catch (e) {
-      throw AuthException('Failed to resend code: $e');
+    } on Exception catch (_) {
+      throw AuthException(
+        'Failed to resend verification code. Please try again.',
+      );
     }
   }
 
