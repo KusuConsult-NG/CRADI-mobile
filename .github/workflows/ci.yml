@@ -20,10 +20,10 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Flutter (via FVM pin in .fvmrc)
+      - name: Set up Flutter 3.38.4
         uses: subosito/flutter-action@v2
         with:
-          flutter-version-file: .fvmrc   # Reads the pinned version from .fvmrc
+          flutter-version: '3.38.4'  # Pinned; update .fvmrc and here in sync
           channel: stable
           cache: true
 
@@ -62,10 +62,10 @@ jobs:
           distribution: temurin
           java-version: '21'
 
-      - name: Set up Flutter
+      - name: Set up Flutter 3.38.4
         uses: subosito/flutter-action@v2
         with:
-          flutter-version-file: .fvmrc
+          flutter-version: '3.38.4'
           channel: stable
           cache: true
 
@@ -99,10 +99,10 @@ jobs:
           distribution: temurin
           java-version: '21'
 
-      - name: Set up Flutter
+      - name: Set up Flutter 3.38.4
         uses: subosito/flutter-action@v2
         with:
-          flutter-version-file: .fvmrc
+          flutter-version: '3.38.4'
           channel: stable
           cache: true
 

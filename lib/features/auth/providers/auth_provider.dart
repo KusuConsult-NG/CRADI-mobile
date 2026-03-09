@@ -522,19 +522,58 @@ class AuthProvider extends ChangeNotifier {
       return true;
     } on FirebaseAuthException catch (e) {
       _isLoading = false;
+      _justLoggedIn = false;
       notifyListeners();
-      developer.log('Login error: ${e.code} – ${e.message}');
+      developer.log(
+        'Login FirebaseAuthException: ${e.code} – ${e.message}',
+        name: 'AuthProvider',
+      );
+      // Credential errors
       if (e.code == 'invalid-credential' ||
           e.code == 'wrong-password' ||
           e.code == 'user-not-found') {
         throw AuthException('Invalid email or password');
       }
-      if (e.code == 'rate-limited') {
-        throw AuthException(e.message ?? 'Too many attempts');
+      // Rate / brute-force
+      if (e.code == 'too-many-requests' || e.code == 'rate-limited') {
+        throw AuthException(
+          'Too many login attempts. Please wait a few minutes and try again.',
+        );
       }
-      throw AuthException('Login failed. Please check your connection.');
+      // Account disabled
+      if (e.code == 'user-disabled') {
+        throw AuthException(
+          'This account has been disabled. Please contact support.',
+        );
+      }
+      // App Check / Play Integrity rejection
+      if (e.code == 'app-check-token-invalid' ||
+          (e.message?.toLowerCase().contains('pin') ?? false) ||
+          (e.message?.toLowerCase().contains('app check') ?? false) ||
+          (e.message?.toLowerCase().contains('attestation') ?? false)) {
+        developer.log(
+          'App Check rejection detected: ${e.code} – ${e.message}',
+          name: 'AuthProvider',
+        );
+        throw AuthException(
+          'Login failed. Please ensure your device has Google Play Services up to date and try again.',
+        );
+      }
+      // Network / connectivity
+      if (e.code == 'network-request-failed') {
+        throw AuthException('Login failed. Please check your connection.');
+      }
+      // Default: log the raw code to Crashlytics, show generic message
+      ErrorHandler.logError(
+        'Unhandled FirebaseAuthException: ${e.code} – ${e.message}',
+        context: 'AuthProvider.signInWithEmail',
+      );
+      throw AuthException(
+        'Login failed (${e.code}). Please try again or contact support.',
+      );
     } on Exception catch (e) {
       _isLoading = false;
+      _justLoggedIn = false;
       notifyListeners();
       ErrorHandler.logError(e, context: 'AuthProvider.signInWithEmail');
       throw AuthException('An unexpected error occurred during login');

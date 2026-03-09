@@ -11,17 +11,30 @@ class ErrorHandler {
     return _getDetailedMessage(error);
   }
 
-  /// Get generic user-friendly message (release builds)
+  /// Get generic user-friendly message (release builds).
+  /// IMPORTANT: Firebase SDK internal messages (e.g. '[ Pin verification failed')
+  /// must NEVER be surfaced raw to the user — they leak implementation detail
+  /// and confuse end users.
   static String _getGenericMessage(dynamic error) {
-    // Classify common known patterns without leaking internals
     final msg = error.toString().toLowerCase();
+    // Network / connectivity
     if (msg.contains('network') ||
         msg.contains('socket') ||
         msg.contains('connection')) {
       return 'Network error. Please check your connection.';
     }
+    // Permission / access
     if (msg.contains('permission') || msg.contains('denied')) {
       return 'You do not have permission to perform this action.';
+    }
+    // Firebase / App Check SDK internal strings — must be scrubbed
+    if (msg.contains('pin') ||
+        msg.contains('app check') ||
+        msg.contains('attestation') ||
+        msg.contains('internal error') ||
+        msg.contains('play integrity') ||
+        msg.contains('firebase')) {
+      return 'An error occurred. Please try again or contact support.';
     }
     return 'An unexpected error occurred. Please try again.';
   }
