@@ -300,10 +300,47 @@ class AuthProvider extends ChangeNotifier {
         'SignUp FirebaseAuthException: ${e.code} – ${e.message}',
         name: 'AuthProvider',
       );
-      if (e.code == 'email-already-in-use') {
-        throw AuthException('Email is already registered. Please login.');
+      // Map known codes to user-friendly messages.
+      // IMPORTANT: never pass e.message raw — Firebase SDK internal strings
+      // like 'An internal error has occurred. [ Pin verification failed' must
+      // never reach the UI.
+      switch (e.code) {
+        case 'email-already-in-use':
+          throw AuthException('Email is already registered. Please login.');
+        case 'invalid-email':
+          throw AuthException('Please enter a valid email address.');
+        case 'weak-password':
+          throw AuthException(
+            'Password is too weak. Use at least 8 characters with letters, numbers and symbols.',
+          );
+        case 'operation-not-allowed':
+          throw AuthException(
+            'Email registration is currently disabled. Please contact support.',
+          );
+        case 'network-request-failed':
+          throw AuthException(
+            'Network error. Please check your connection and try again.',
+          );
+        case 'too-many-requests':
+          throw AuthException(
+            'Too many attempts. Please wait a few minutes before trying again.',
+          );
+        default:
+          // Scrub any Firebase internal strings before showing to user
+          final msg = e.message ?? '';
+          final isInternalError =
+              msg.toLowerCase().contains('pin') ||
+              msg.toLowerCase().contains('internal error') ||
+              msg.toLowerCase().contains('app check') ||
+              msg.toLowerCase().contains('attestation') ||
+              msg.toLowerCase().contains('play integrity');
+          if (isInternalError) {
+            throw AuthException(
+              'Registration could not be completed. Please ensure Google Play Services is up to date and try again.',
+            );
+          }
+          throw AuthException('Registration failed. Please try again.');
       }
-      throw AuthException(e.message ?? 'Registration failed');
     } on Exception catch (e) {
       _isLoading = false;
       notifyListeners();
