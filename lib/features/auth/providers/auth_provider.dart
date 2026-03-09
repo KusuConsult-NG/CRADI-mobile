@@ -429,11 +429,8 @@ class AuthProvider extends ChangeNotifier {
       _isAuthenticated = false;
       _userRole = null;
 
-      // Rate limit check
-      final rateLimitResult = await _rateLimiter.checkLoginAttempt();
-      if (!rateLimitResult.allowed) {
-        throw AuthException(rateLimitResult.userMessage);
-      }
+      // Note: rate-limit check is enforced inside firebase_service.createEmailPasswordSession
+      // to keep the logic co-located with the actual auth call. No need to duplicate here.
 
       // Device fingerprint for fraud tracking
       deviceFingerprint = await _fingerprintService.generateFingerprint();
@@ -576,7 +573,16 @@ class AuthProvider extends ChangeNotifier {
       _justLoggedIn = false;
       notifyListeners();
       ErrorHandler.logError(e, context: 'AuthProvider.signInWithEmail');
-      throw AuthException('An unexpected error occurred during login');
+      // Surface the actual exception type+message in debug for field diagnosis.
+      // In release this is scrubbed by ErrorHandler and never shown raw.
+      if (kDebugMode) {
+        throw AuthException(
+          'Login error: ${e.runtimeType} – ${e.toString().substring(0, e.toString().length.clamp(0, 200))}',
+        );
+      }
+      throw AuthException(
+        'An unexpected error occurred during login. Please try again.',
+      );
     }
   }
 

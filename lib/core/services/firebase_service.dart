@@ -125,9 +125,20 @@ class FirebaseService {
       );
       return credential.user!;
     } on FirebaseAuthException catch (e) {
-      await _rateLimiter.recordFailedLogin();
+      // Only count attempts against the rate limiter for CREDENTIAL errors.
+      // Network failures, App Check rejections, and Firebase-side rate limits
+      // must NOT consume the device's local attempt budget — otherwise a single
+      // App Check outage (or bad Wi-Fi) will lock the user out after 5 tries.
+      final isCredentialError =
+          e.code == 'wrong-password' ||
+          e.code == 'user-not-found' ||
+          e.code == 'invalid-credential' ||
+          e.code == 'invalid-email';
+      if (isCredentialError) {
+        await _rateLimiter.recordFailedLogin();
+      }
       developer.log(
-        'signIn error: ${e.code} – ${e.message}',
+        'signIn error [credential=$isCredentialError]: ${e.code} – ${e.message}',
         name: 'FirebaseService',
       );
       rethrow;
