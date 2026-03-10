@@ -24,11 +24,22 @@ class InputSanitizer {
 
     // Escape single quotes and remove SQL keywords
     String sanitized = input.replaceAll("'", "''");
-    
+
     // Remove dangerous SQL keywords
     final dangerousKeywords = [
-      'DROP', 'DELETE', 'INSERT', 'UPDATE', 'CREATE', 'ALTER',
-      'EXEC', 'EXECUTE', 'SCRIPT', 'UNION', 'SELECT', '--', ';'
+      'DROP',
+      'DELETE',
+      'INSERT',
+      'UPDATE',
+      'CREATE',
+      'ALTER',
+      'EXEC',
+      'EXECUTE',
+      'SCRIPT',
+      'UNION',
+      'SELECT',
+      '--',
+      ';',
     ];
 
     for (final keyword in dangerousKeywords) {
@@ -42,7 +53,7 @@ class InputSanitizer {
   /// Remove all HTML tags
   static String stripHtml(String input) {
     if (input.isEmpty) return input;
-    
+
     return input.replaceAll(RegExp(r'<[^>]*>'), '');
   }
 
@@ -76,7 +87,7 @@ class InputSanitizer {
 
     // Block dangerous protocols
     final dangerousProtocols = ['javascript:', 'data:', 'vbscript:', 'file:'];
-    
+
     for (final protocol in dangerousProtocols) {
       if (lowercaseUrl.startsWith(protocol)) {
         return null; // Reject the URL
@@ -84,7 +95,7 @@ class InputSanitizer {
     }
 
     // Only allow http and https
-    if (!lowercaseUrl.startsWith('http://') && 
+    if (!lowercaseUrl.startsWith('http://') &&
         !lowercaseUrl.startsWith('https://')) {
       return null;
     }
