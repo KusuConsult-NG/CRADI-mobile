@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:developer' as developer;
 import 'package:http/http.dart' as http;
-import 'package:climate_app/core/config/sms_config.dart';
+import '../config/sms_config.dart';
 import 'package:climate_app/core/services/remote_config_service.dart';
 
 /// SMS Service using Termii / Africa's Talking API
