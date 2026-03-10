@@ -23,45 +23,7 @@
         </trust-anchors>
     </base-config>
 
-    <!-- ── Firebase / Google APIs — pinned to GTS root CAs ───────────────── -->
-    <!--
-         Domains covered:
-           *.googleapis.com          (Firestore, Cloud Functions, FCM HTTP v2)
-           *.firebase.com            (Firebase Realtime DB, App Check)
-           *.firebaseio.com          (Realtime DB legacy)
-           *.firebaseapp.com         (Hosting)
-           *.google.com              (Sign-in, Play Integrity)
-           *.gstatic.com             (CDN assets)
 
-         Pins are the SHA-256 SPKI digests of the Google Trust Services Intermediate CAs
-         (GTS CA 1C3 + GTS CA 1D4) plus two GTS Root backups for rotation safety.
-
-         To re-verify: openssl s_client -connect firestore.googleapis.com:443 -servername firestore.googleapis.com 2>/dev/null | openssl x509 -pubkey -noout | openssl pkey -pubin -outform der | openssl dgst -sha256 -binary | base64
-    -->
-    <domain-config cleartextTrafficPermitted="false">
-        <domain includeSubdomains="true">googleapis.com</domain>
-        <domain includeSubdomains="true">firebase.com</domain>
-        <domain includeSubdomains="true">firebaseio.com</domain>
-        <domain includeSubdomains="true">firebaseapp.com</domain>
-        <domain includeSubdomains="true">google.com</domain>
-        <domain includeSubdomains="true">gstatic.com</domain>
-
-        <!-- Pin expiration: update before 2027-10-01 -->
-        <pin-set expiration="2027-09-30">
-            <!-- GTS CA 1C3 (current intermediate — Firebase/Google APIs as of 2026) -->
-            <pin digest="SHA-256">zCTnfLwauFe6lMbM5mxcJZTbARIHPZkPOCr16rXB1IE=</pin>
-            <!-- GTS CA 1D4 (alternate intermediate) -->
-            <pin digest="SHA-256">Vb6V/MuCHwf7u3BmJXEi0OVaGVpTEVVuqKDM8JQUT5M=</pin>
-            <!-- GTS Root R1 (backup — root CA, longer validity) -->
-            <pin digest="SHA-256">hxqRlPTu1bMS/0DITB1SSu0vd4u/8l8TjPgfaAp63Vg=</pin>
-            <!-- GTS Root R2 (rotation backup) -->
-            <pin digest="SHA-256">5kJvNEMw0KjrCAu7eXY5HZdvyCS13BbA0VJG1RSP91w=</pin>
-        </pin-set>
-
-        <trust-anchors>
-            <certificates src="system" />
-        </trust-anchors>
-    </domain-config>
 
     <!-- ── Africa's Talking / Termii SMS API ─────────────────────────────── -->
     <domain-config cleartextTrafficPermitted="false">

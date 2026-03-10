@@ -39,6 +39,7 @@ class SmsService {
     required String message,
     String? senderId,
     bool isDnd = false,
+    String channel = 'generic',
   }) async {
     try {
       // Validate configuration
@@ -65,7 +66,7 @@ class SmsService {
         'from': senderId ?? SmsConfig.senderId,
         'sms': message,
         'type': 'plain',
-        'channel': isDnd ? 'dnd' : 'generic', // "dnd" for OTPs if registered
+        'channel': channel,
         'api_key': SmsConfig.apiKey,
       };
 
@@ -299,12 +300,13 @@ Stay safe. For updates, check EWER app.
   Future<String?> sendOtp({required String to, required String otp}) async {
     final message =
         '''
-Your EWER verification code is: $otp
+Your CRADI verification code is: $otp
 Valid for 10 minutes.
 Do not share this code.
 ''';
 
-    return await sendSms(to: to, message: message, isDnd: true);
+    // OTPs must go through the 'dnd' channel to reach non-MTN networks reliably.
+    return await sendSms(to: to, message: message, isDnd: true, channel: 'dnd');
   }
 
   // ==================== HELPER METHODS ====================

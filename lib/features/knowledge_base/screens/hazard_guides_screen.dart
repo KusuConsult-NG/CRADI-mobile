@@ -309,10 +309,10 @@ class _HazardGuidesScreenState extends State<HazardGuidesScreen> {
       case 'accident':
         return 'https://images.unsplash.com/photo-1544636331-e26879cd4d9b?auto=format&fit=crop&q=80&w=800';
       case 'erosion':
-        return 'https://images.unsplash.com/photo-1591700608620-4cdcf1d47898?auto=format&fit=crop&q=80&w=800';
+        return 'https://images.unsplash.com/photo-1509316785289-025f5b846b35?auto=format&fit=crop&q=80&w=800';
       case 'disease':
       case 'epidemic':
-        return 'https://images.unsplash.com/photo-1584036561566-b93a50208c3c?auto=format&fit=crop&q=80&w=800';
+        return 'https://images.unsplash.com/photo-1588681664899-f142ff2dc9b1?auto=format&fit=crop&q=80&w=800';
       case 'conflict':
         return 'https://images.unsplash.com/photo-1599059813005-11265ba4b4ce?auto=format&fit=crop&q=80&w=800';
       case 'storm':

@@ -269,26 +269,28 @@ GoRouter createRouter(BuildContext context) {
             ],
           ),
           GoRoute(
-            path: '/knowledge-base',
+            path: '/report',
             pageBuilder: (context, state) => _buildTransitionPage(
               context: context,
               state: state,
-              child: const KnowledgeBaseScreen(),
+              child: const HazardSelectionScreen(),
             ),
             routes: [
               GoRoute(
-                path: 'guides',
-                builder: (context, state) {
-                  final category = state.extra as String?;
-                  return HazardGuidesScreen(initialCategory: category);
-                },
+                path: 'severity',
+                builder: (context, state) => const SeveritySelectionScreen(),
               ),
               GoRoute(
-                path: 'detail',
-                builder: (context, state) {
-                  final guide = state.extra as Map<String, dynamic>;
-                  return KnowledgeDetailScreen(guide: guide);
-                },
+                path: 'location',
+                builder: (context, state) => const LocationPickerScreen(),
+              ),
+              GoRoute(
+                path: 'details',
+                builder: (context, state) => const ReportDetailsScreen(),
+              ),
+              GoRoute(
+                path: 'review',
+                builder: (context, state) => const ReportReviewScreen(),
               ),
             ],
           ),
@@ -348,24 +350,22 @@ GoRouter createRouter(BuildContext context) {
       ),
 
       GoRoute(
-        path: '/report',
-        builder: (context, state) => const HazardSelectionScreen(),
+        path: '/knowledge-base',
+        builder: (context, state) => const KnowledgeBaseScreen(),
         routes: [
           GoRoute(
-            path: 'severity',
-            builder: (context, state) => const SeveritySelectionScreen(),
+            path: 'guides',
+            builder: (context, state) {
+              final category = state.extra as String?;
+              return HazardGuidesScreen(initialCategory: category);
+            },
           ),
           GoRoute(
-            path: 'location',
-            builder: (context, state) => const LocationPickerScreen(),
-          ),
-          GoRoute(
-            path: 'details',
-            builder: (context, state) => const ReportDetailsScreen(),
-          ),
-          GoRoute(
-            path: 'review',
-            builder: (context, state) => const ReportReviewScreen(),
+            path: 'detail',
+            builder: (context, state) {
+              final guide = state.extra as Map<String, dynamic>;
+              return KnowledgeDetailScreen(guide: guide);
+            },
           ),
         ],
       ),

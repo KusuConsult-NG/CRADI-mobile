@@ -8,6 +8,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import 'package:fluttertoast/fluttertoast.dart';
+import 'dart:async';
 import 'dart:developer' as developer;
 
 class OtpVerificationScreen extends StatefulWidget {
@@ -29,9 +30,30 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
   final _formKey = GlobalKey<FormState>();
   bool _isLoading = false;
   bool _isResending = false;
+  int _resendSeconds = 60;
+  Timer? _resendTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _startResendTimer();
+  }
+
+  void _startResendTimer() {
+    _resendSeconds = 60;
+    _resendTimer?.cancel();
+    _resendTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (_resendSeconds > 0) {
+        if (mounted) setState(() => _resendSeconds--);
+      } else {
+        timer.cancel();
+      }
+    });
+  }
 
   @override
   void dispose() {
+    _resendTimer?.cancel();
     _otpController.dispose();
     super.dispose();
   }
@@ -55,9 +77,15 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
     try {
       final authProvider = context.read<AuthProvider>();
 
+      final dataParams =
+          widget.registrationData ??
+          (widget.phoneNumber.contains('@')
+              ? {'email': widget.phoneNumber}
+              : {'phone': widget.phoneNumber});
+
       final success = await authProvider.verifyOtpAndLogin(
         _otpController.text.trim(),
-        registrationData: widget.registrationData,
+        registrationData: dataParams,
       );
 
       if (mounted) {
@@ -95,6 +123,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
         setState(() => _isResending = false);
         if (success) {
           _showToast('A new code has been sent.');
+          _startResendTimer();
         }
       }
     } on Exception catch (e) {
@@ -112,7 +141,13 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
       appBar: AppBar(
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: AppColors.textPrimary),
-          onPressed: () => context.pop(),
+          onPressed: () {
+            if (context.canPop()) {
+              context.pop();
+            } else {
+              context.go('/login');
+            }
+          },
         ),
         backgroundColor: Colors.transparent,
         elevation: 0,
@@ -189,7 +224,8 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                       ),
                     ),
                     TextButton(
-                      onPressed: _isResending || _isLoading
+                      onPressed:
+                          _isResending || _isLoading || _resendSeconds > 0
                           ? null
                           : _handleResend,
                       child: _isResending
@@ -202,11 +238,15 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                               ),
                             )
                           : Text(
-                              'Resend Code',
+                              _resendSeconds > 0
+                                  ? 'Resend in ${_resendSeconds}s'
+                                  : 'Resend Code',
                               style: GoogleFonts.lexend(
                                 fontSize: 14,
                                 fontWeight: FontWeight.bold,
-                                color: AppColors.primaryRed,
+                                color: _resendSeconds > 0
+                                    ? AppColors.textSecondary
+                                    : AppColors.primaryRed,
                               ),
                             ),
                     ),

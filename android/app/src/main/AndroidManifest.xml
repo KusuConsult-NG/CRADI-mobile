@@ -9,6 +9,10 @@
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     
+    <!-- Explicitly declare that biometric hardware is NOT required, to prevent Google Play from dropping supported devices -->
+    <uses-feature android:name="android.hardware.fingerprint" android:required="false" />
+    <uses-feature android:name="android.hardware.biometrics" android:required="false" />
+    
     <application
         android:label="EWER"
         android:name="${applicationName}"

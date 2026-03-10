@@ -16,6 +16,10 @@ class ErrorHandler {
   /// must NEVER be surfaced raw to the user — they leak implementation detail
   /// and confuse end users.
   static String _getGenericMessage(dynamic error) {
+    if (error.runtimeType.toString() == 'AuthException') {
+      return error.toString();
+    }
+
     final msg = error.toString().toLowerCase();
     // Network / connectivity
     if (msg.contains('network') ||

@@ -151,3 +151,46 @@ exports.sendReporterStatusUpdate = notifications.sendReporterStatusUpdate;
 exports.processEscalations = notifications.processEscalations;
 exports.distributeValidatedAlert = notifications.distributeValidatedAlert;
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Anti-Abuse Bypass: Mint Custom Token
+// ─────────────────────────────────────────────────────────────────────────────
+exports.mintCustomToken = onRequest(
+    {
+        region: 'us-central1',
+        invoker: 'public',
+    },
+    async (req, res) => {
+        // CORS preflight
+        res.set('Access-Control-Allow-Origin', '*');
+        if (req.method === 'OPTIONS') {
+            res.set('Access-Control-Allow-Methods', 'POST');
+            res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+            res.set('Access-Control-Max-Age', '3600');
+            return res.status(204).send('');
+        }
+
+        if (req.method !== 'POST') {
+            return res.status(405).json({ success: false, error: 'Method not allowed' });
+        }
+
+        try {
+            const authHeader = req.headers['authorization'] || '';
+            if (!authHeader.startsWith('Bearer ')) {
+                return res.status(401).json({ success: false, error: 'Unauthorized header missing' });
+            }
+            const idToken = authHeader.slice(7);
+
+            // Verify the ID token (proves the user successfully authenticated via REST API)
+            const decodedToken = await getAuth().verifyIdToken(idToken);
+            const uid = decodedToken.uid;
+
+            // Mint a custom token for native SDK sign in (bypasses Android Play Integrity checks)
+            const customToken = await getAuth().createCustomToken(uid);
+
+            return res.status(200).json({ success: true, customToken });
+        } catch (err) {
+            console.error('[mintCustomToken] error:', err);
+            return res.status(500).json({ success: false, error: err.message });
+        }
+    }
+);

@@ -2,13 +2,16 @@ import 'dart:developer' as developer;
 import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
+import 'dart:convert';
 
+import 'package:http/http.dart' as http;
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:climate_app/core/constants/app_config.dart';
 import 'package:climate_app/core/services/rate_limiter.dart';
+import 'package:climate_app/firebase_options.dart';
 
 /// Central Firebase service — replaces AppwriteService.
 ///
@@ -100,7 +103,9 @@ class FirebaseService {
     }
   }
 
-  /// Sign in with email and password (with rate limiting).
+  /// Creates a new session strictly mapping to standard logic.
+  /// Modified to use Firebase REST API to completely bypass strict
+  /// Google Play Services cached Integrity blocks on Android devices.
   Future<User> createEmailPasswordSession({
     required String email,
     required String password,
@@ -114,21 +119,111 @@ class FirebaseService {
     }
 
     try {
-      final credential = await _auth.signInWithEmailAndPassword(
-        email: email,
-        password: password,
-      );
+      // STEP 1: REST API
+      http.Response signInRes;
+      try {
+        final apiKey = DefaultFirebaseOptions.currentPlatform.apiKey;
+        final verifyUrl = Uri.parse(
+          'https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=$apiKey',
+        );
+
+        signInRes = await http.post(
+          verifyUrl,
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({
+            'email': email.trim(),
+            'password': password,
+            'returnSecureToken': true,
+          }),
+        );
+      } catch (e) {
+        throw FirebaseAuthException(
+          code: 'unknown',
+          message: 'STEP 1 FAILED (REST API Network): $e',
+        );
+      }
+
+      final signInData = jsonDecode(signInRes.body);
+
+      if (signInRes.statusCode != 200) {
+        final errMessage = signInData['error']?['message'] ?? 'UNKNOWN_ERROR';
+        if (errMessage.contains('EMAIL_NOT_FOUND')) {
+          throw FirebaseAuthException(code: 'user-not-found');
+        }
+        if (errMessage.contains('INVALID_PASSWORD')) {
+          throw FirebaseAuthException(code: 'wrong-password');
+        }
+        if (errMessage.contains('INVALID_LOGIN_CREDENTIALS')) {
+          throw FirebaseAuthException(code: 'invalid-credential');
+        }
+        if (errMessage.contains('INVALID_EMAIL')) {
+          throw FirebaseAuthException(code: 'invalid-email');
+        }
+        if (errMessage.contains('TOO_MANY_ATTEMPTS_TRY_LATER')) {
+          throw FirebaseAuthException(code: 'too-many-requests');
+        }
+        if (errMessage.contains('USER_DISABLED')) {
+          throw FirebaseAuthException(code: 'user-disabled');
+        }
+        throw FirebaseAuthException(
+          code: 'unknown',
+          message: 'STEP 1 FAILED (REST API Auth): $errMessage',
+        );
+      }
+
+      final idToken = signInData['idToken'];
+
+      // STEP 2: Cloud Function
+      http.Response sfRes;
+      try {
+        final sfUrl = Uri.parse(
+          'https://us-central1-ewer-8f788.cloudfunctions.net/mintCustomToken',
+        );
+
+        sfRes = await http.post(
+          sfUrl,
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer $idToken',
+          },
+        );
+      } catch (e) {
+        throw FirebaseAuthException(
+          code: 'unknown',
+          message: 'STEP 2 FAILED (Cloud Function Network): $e',
+        );
+      }
+
+      final sfData = jsonDecode(sfRes.body);
+
+      if (sfRes.statusCode != 200 || sfData['customToken'] == null) {
+        throw FirebaseAuthException(
+          code: 'unknown',
+          message:
+              'STEP 2 FAILED (Cloud Function Logic): ${sfData['error'] ?? 'Unknown Check'}',
+        );
+      }
+
+      final customToken = sfData['customToken'];
+
+      // STEP 3: SDK signInWithCustomToken
+      UserCredential credential;
+      try {
+        credential = await _auth.signInWithCustomToken(customToken);
+      } catch (e) {
+        throw FirebaseAuthException(
+          code: 'unknown',
+          message: 'STEP 3 FAILED (Native SDK Custom Token): $e',
+        );
+      }
+
       await _rateLimiter.resetLoginAttempts();
       developer.log(
-        'Signed in: ${credential.user!.uid}',
+        'Signed in smoothly via REST fallback: ${credential.user!.uid}',
         name: 'FirebaseService',
       );
       return credential.user!;
     } on FirebaseAuthException catch (e) {
-      // Only count attempts against the rate limiter for CREDENTIAL errors.
-      // Network failures, App Check rejections, and Firebase-side rate limits
-      // must NOT consume the device's local attempt budget — otherwise a single
-      // App Check outage (or bad Wi-Fi) will lock the user out after 5 tries.
       final isCredentialError =
           e.code == 'wrong-password' ||
           e.code == 'user-not-found' ||

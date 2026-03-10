@@ -257,7 +257,7 @@ By tapping "I Agree", you consent to these terms and the international transfer 
                     TextButton(
                       onPressed: () {
                         context.pop(); // Close dialog
-                        context.go(
+                        context.push(
                           '/verify-otp?phone=${Uri.encodeComponent(phone)}',
                           extra: registrationData,
                         );
@@ -347,7 +347,7 @@ By tapping "I Agree", you consent to these terms and the international transfer 
                   TextButton(
                     onPressed: () {
                       context.pop(); // Close dialog
-                      context.go(
+                      context.push(
                         '/verify-otp?phone=${Uri.encodeComponent(email)}',
                         extra: registrationData,
                       ); // Go to verification screen

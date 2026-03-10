@@ -77,6 +77,8 @@ class LanguageProvider extends ChangeNotifier {
     ig: 'Ntuziaka',
     pi: 'Guides',
   );
+  String get navReport =>
+      _t(en: 'Report', ha: 'Rahoto', yo: 'Ijabọ', ig: 'Akụkọ', pi: 'Report');
   String get navSettings => _t(
     en: 'Settings',
     ha: 'Saituna',

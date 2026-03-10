@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:developer' as developer;
 import 'package:climate_app/core/utils/error_handler.dart';
 export 'package:climate_app/core/utils/error_handler.dart' show AuthException;
@@ -16,8 +17,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:climate_app/core/services/email_service.dart';
 import 'package:climate_app/core/services/sms_service.dart';
 import 'package:climate_app/core/constants/app_config.dart';
-
-import 'package:flutter/material.dart';
 
 enum UserRole { user, ewm, ewv, ewr, admin, techSupport }
 
@@ -79,9 +78,14 @@ class AuthProvider extends ChangeNotifier {
   // ─────────────────────────── Initialization ───────────────────────────────
 
   void _initializeSessionManager() {
-    _sessionManager.onSessionExpired = () {
-      logout();
-      notifyListeners();
+    _sessionManager.onSessionExpired = () async {
+      final bioEnabled = await _storage.isBiometricEnabled();
+      if (bioEnabled) {
+        _isLocked = true;
+        notifyListeners();
+      } else {
+        await logout();
+      }
     };
   }
 
@@ -126,7 +130,8 @@ class AuthProvider extends ChangeNotifier {
     final bioEnabled = await _storage.isBiometricEnabled();
     if (bioEnabled && !_justLoggedIn) {
       _isLocked = true;
-      _isAuthenticated = false;
+      _isAuthenticated =
+          true; // MUST remain true so GoRouter shows Lock Screen, not Main Login!
     } else {
       _isAuthenticated = true;
     }
@@ -285,6 +290,9 @@ class AuthProvider extends ChangeNotifier {
       // 5. Start session
       await _startUserSession(user, userRole, isVerified: isVerified ?? false);
 
+      // Save credentials for Biometric auto-login bypass
+      await _storage.saveUserCredentials(email, password);
+
       // 6. Send OTP email
       if (isVerified != true) {
         await sendOtpForEmail(email, name: name);
@@ -362,14 +370,11 @@ class AuthProvider extends ChangeNotifier {
     final sanitisedPhone = phone.trim().replaceAll(RegExp(r'[^0-9]'), '');
     final derivedEmail = '$sanitisedPhone@ewer.phone';
 
-    // Generate a 32-char URL-safe secure password
-    final rand = math.Random.secure();
-    const chars =
-        'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_';
-    final generatedPassword = List.generate(
-      32,
-      (_) => chars[rand.nextInt(chars.length)],
-    ).join();
+    // Generate a secure, deterministic password so the user can reinstall the app
+    // or log in on a new device using just their phone number OTP.
+    const salt = 'cradi_ewer_2026_phone_auth_salt';
+    final rawBytes = utf8.encode('${sanitisedPhone}_$salt');
+    final generatedPassword = base64Encode(rawBytes).substring(0, 32);
 
     // Store derived credentials so the user can re-authenticate later
     await _storage.write('phone_derived_email_$sanitisedPhone', derivedEmail);
@@ -387,6 +392,7 @@ class AuthProvider extends ChangeNotifier {
 
     // Create Firebase Auth account or fall back if exists
     User? user;
+    bool isNewUser = true;
     try {
       user = await _firebase.createAccount(
         email: derivedEmail,
@@ -403,6 +409,7 @@ class AuthProvider extends ChangeNotifier {
           email: derivedEmail,
           password: generatedPassword,
         );
+        isNewUser = false;
       } else {
         rethrow;
       }
@@ -412,19 +419,21 @@ class AuthProvider extends ChangeNotifier {
 
     final userRole = role ?? UserRole.user;
 
-    // Create Firestore user document (phone stored as primary identifier)
-    await _createUserDocument(
-      userId: user.uid,
-      email: derivedEmail,
-      role: userRole,
-      name: name,
-      address: address,
-      state: state,
-      lga: lga,
-      ward: ward,
-      isVerified: true, // OTP already verified before this call
-      phoneNumber: phone,
-    );
+    // Create Firestore user document only if it's a new user
+    if (isNewUser) {
+      await _createUserDocument(
+        userId: user.uid,
+        email: derivedEmail,
+        role: userRole,
+        name: name,
+        address: address,
+        state: state,
+        lga: lga,
+        ward: ward,
+        isVerified: true, // OTP already verified before this call
+        phoneNumber: phone,
+      );
+    }
 
     await _startUserSession(user, userRole, isVerified: true);
     developer.log(
@@ -537,6 +546,9 @@ class AuthProvider extends ChangeNotifier {
 
       await _startUserSession(user, role);
       await _rateLimiter.resetLoginAttempts();
+
+      // Save credentials to resurrect the session via Biometrics if it expires
+      await _storage.saveUserCredentials(email, password);
 
       _isLoading = false;
       notifyListeners();
@@ -887,6 +899,8 @@ class AuthProvider extends ChangeNotifier {
         _currentUser!.email!,
         name: _currentUser!.displayName,
       );
+    } on AuthException {
+      rethrow;
     } on Exception catch (_) {
       throw AuthException(
         'Failed to resend verification code. Please try again.',
@@ -920,13 +934,48 @@ class AuthProvider extends ChangeNotifier {
 
       final authenticated = await _biometricService.authenticateForLogin();
       if (authenticated) {
-        final isValid = await _isServerSessionValid();
-        if (!isValid) return false;
+        bool isValid = await _isServerSessionValid();
+
+        if (!isValid) {
+          // Attempt to resurrect the session using securely stored credentials
+          final creds = await _storage.getUserCredentials();
+          if (creds != null) {
+            try {
+              return await signInWithEmail(
+                email: creds['email']!,
+                password: creds['password']!,
+              );
+            } on Exception catch (e) {
+              developer.log(
+                'Biometric auto-login failed: $e',
+                name: 'AuthProvider',
+              );
+              return false;
+            }
+          }
+          return false;
+        }
 
         _isAuthenticated = true;
         final userRoleStr = await _storage.getUserRole();
         _userRole = _parseUserRole(userRoleStr);
         _phoneNumber = await _storage.getPhoneNumber();
+
+        // Ensure isVerified and isApproved are accurate
+        final user = _firebase.getCurrentUser();
+        if (user != null) {
+          try {
+            final userDoc = await _firebase.getDocument(
+              collectionId: AppConfig.usersCollection,
+              documentId: user.uid,
+            );
+            _isApproved = userDoc['isApproved'] as bool? ?? false;
+            _isVerified = userDoc['isVerified'] as bool? ?? false;
+          } on Exception catch (e) {
+            developer.log('Biometric unlock failed to fetch user doc: $e');
+          }
+        }
+
         notifyListeners();
         return true;
       }
@@ -994,6 +1043,15 @@ class AuthProvider extends ChangeNotifier {
 
   Future<bool> _isServerSessionValid() async {
     try {
+      final user = _firebase.getCurrentUser();
+      if (user == null) {
+        developer.log(
+          'No active Firebase user found in session check.',
+          name: 'AuthProvider',
+        );
+        return false;
+      }
+
       // Firebase tokens auto-refresh; a reload confirms validity
       await _firebase.reloadCurrentUser();
       await _sessionManager.extendSession();
@@ -1034,9 +1092,10 @@ class AuthProvider extends ChangeNotifier {
         developer.log('Firebase logout error: $e', name: 'AuthProvider');
       }
 
-      await _storage.clearAll(keepPreferences: false);
+      await _storage.clearAll(keepPreferences: true);
 
       _isAuthenticated = false;
+      _isLocked = false;
       _userRole = null;
       _currentUser = null;
       _phoneNumber = null;
@@ -1046,6 +1105,7 @@ class AuthProvider extends ChangeNotifier {
       notifyListeners();
     } on Exception catch (e) {
       _isAuthenticated = false;
+      _isLocked = false;
       _userRole = null;
       _isLoading = false;
       notifyListeners();

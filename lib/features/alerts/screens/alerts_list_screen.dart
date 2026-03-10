@@ -3,7 +3,7 @@ import 'package:climate_app/features/verification/models/verification_report_mod
 import 'package:provider/provider.dart';
 import 'package:climate_app/core/theme/app_colors.dart';
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
+
 import 'package:climate_app/shared/widgets/custom_button.dart';
 import 'package:climate_app/shared/widgets/shimmer_loading.dart';
 import 'package:climate_app/shared/widgets/custom_toast.dart';
@@ -92,12 +92,6 @@ class _AlertsListScreenState extends State<AlertsListScreen> {
           preferredSize: const Size.fromHeight(1.0),
           child: Container(color: Colors.grey.shade200, height: 1.0),
         ),
-      ),
-      floatingActionButton: FloatingActionButton(
-        heroTag: 'alerts_list_fab',
-        onPressed: () => context.push('/report'),
-        backgroundColor: AppColors.successGreen,
-        child: const Icon(Icons.add_alert, color: Colors.black, size: 28),
       ),
       body: Consumer<ReportsStatusProvider>(
         builder: (context, provider, _) {
@@ -292,14 +286,6 @@ class _AlertsListScreenState extends State<AlertsListScreen> {
                                 ),
                               ),
                               const SizedBox(height: 24),
-                              if (_selectedFilterIndex == 0)
-                                CustomButton(
-                                  onPressed: () => context.push('/report'),
-                                  text: 'Create New Report',
-                                  icon: Icons.add_alert,
-                                  backgroundColor: AppColors.successGreen,
-                                  foregroundColor: Colors.black,
-                                ),
                             ],
                           ),
                         ),

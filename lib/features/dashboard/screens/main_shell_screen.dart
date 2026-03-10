@@ -20,7 +20,7 @@ class _MainShellScreenState extends State<MainShellScreen> {
     final String location = GoRouterState.of(context).uri.path;
     if (location.startsWith('/dashboard')) return 0;
     if (location.startsWith('/alerts')) return 1;
-    if (location.startsWith('/knowledge-base')) return 2;
+    if (location.startsWith('/report')) return 2;
     if (location.startsWith('/admin')) return 4;
     if (location.startsWith('/settings')) return 3;
     return 0;
@@ -35,7 +35,7 @@ class _MainShellScreenState extends State<MainShellScreen> {
         context.go('/alerts');
         break;
       case 2:
-        context.go('/knowledge-base');
+        context.go('/report');
         break;
       case 3:
         context.go('/settings');
@@ -160,9 +160,9 @@ class _MainShellScreenState extends State<MainShellScreen> {
                   label: langProvider.navAlerts,
                 ),
                 NavigationDestination(
-                  icon: const Icon(Icons.menu_book_outlined),
-                  selectedIcon: const Icon(Icons.menu_book),
-                  label: langProvider.navGuides,
+                  icon: const Icon(Icons.add_circle_outline),
+                  selectedIcon: const Icon(Icons.add_circle),
+                  label: langProvider.navReport,
                 ),
                 NavigationDestination(
                   icon: const Icon(Icons.settings_outlined),

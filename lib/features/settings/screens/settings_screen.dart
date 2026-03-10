@@ -442,6 +442,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 child: Column(
                   children: [
                     _buildNavTile(
+                      icon: Icons.menu_book,
+                      color: AppColors.primaryRed,
+                      title: provider.navGuides,
+                      onTap: () => context.push('/knowledge-base'),
+                    ),
+                    Divider(height: 1, color: Colors.grey.shade100, indent: 60),
+                    _buildNavTile(
                       icon: Icons.language,
                       color: Colors.grey,
                       title: provider.language,
