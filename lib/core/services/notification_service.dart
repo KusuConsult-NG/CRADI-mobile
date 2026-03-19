@@ -6,12 +6,6 @@ import 'package:flutter/foundation.dart';
 import 'package:climate_app/core/services/hive_encryption_service.dart';
 import 'dart:developer' as developer;
 
-/// Handle background messages
-@pragma('vm:entry-point')
-Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  developer.log('Background message: ${message.messageId}');
-}
-
 /// Service for handling Firebase Cloud Messaging (FCM) push notifications
 class NotificationService {
   static final NotificationService _instance = NotificationService._internal();
@@ -24,6 +18,7 @@ class NotificationService {
 
   bool _initialized = false;
   String? _fcmToken;
+  ProfileProvider? _profileProvider;
 
   static const String _notificationsBoxName = 'notifications_history';
   Box<Map>? _notificationsBox;
@@ -35,8 +30,12 @@ class NotificationService {
   String? get fcmToken => _fcmToken;
 
   /// Initialize FCM, Local Notifications, and Hive
-  Future<void> initialize() async {
+  ///
+  /// [profileProvider] should be the app-level Provider instance so that
+  /// the FCM token is saved to the correct user profile in Firestore.
+  Future<void> initialize({ProfileProvider? profileProvider}) async {
     if (_initialized) return;
+    _profileProvider = profileProvider;
 
     try {
       // Get encryption cipher for secure notification storage
@@ -92,8 +91,15 @@ class NotificationService {
       _fcmToken = await _fcm.getToken();
       if (_fcmToken != null) {
         developer.log('FCM Token: $_fcmToken', name: 'NotificationService');
-        // Save token to Appwrite user profile
-        await ProfileProvider().updateFCMToken(_fcmToken!);
+        // Save token via the app-level ProfileProvider
+        if (_profileProvider != null) {
+          await _profileProvider!.updateFCMToken(_fcmToken!);
+        } else {
+          developer.log(
+            'Warning: no ProfileProvider — FCM token not persisted',
+            name: 'NotificationService',
+          );
+        }
       }
 
       // Listen for token refresh
@@ -103,13 +109,11 @@ class NotificationService {
           'FCM Token refreshed: $newToken',
           name: 'NotificationService',
         );
-        ProfileProvider().updateFCMToken(newToken);
+        _profileProvider?.updateFCMToken(newToken);
       });
 
-      // Handle background messages
-      FirebaseMessaging.onBackgroundMessage(
-        _firebaseMessagingBackgroundHandler,
-      );
+      // Background handler is already registered in main.dart — do NOT
+      // register a second one here (Firebase only allows one handler).
 
       // Handle foreground messages
       FirebaseMessaging.onMessage.listen(_onForegroundMessage);

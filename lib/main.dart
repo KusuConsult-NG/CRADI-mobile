@@ -157,7 +157,18 @@ class _ClimateAppState extends State<ClimateApp> {
 
   Future<void> _initializeNotifications() async {
     try {
-      await NotificationService().initialize();
+      // Use addPostFrameCallback so Provider tree is ready
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        if (!mounted) return;
+        try {
+          final profileProvider = context.read<ProfileProvider>();
+          await NotificationService().initialize(
+            profileProvider: profileProvider,
+          );
+        } on Exception catch (e) {
+          debugPrint('FCM initialization error: $e');
+        }
+      });
     } on Exception catch (e) {
       debugPrint('FCM initialization error: $e');
       // App continues to work without notifications
