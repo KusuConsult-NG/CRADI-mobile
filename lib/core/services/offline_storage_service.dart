@@ -166,12 +166,26 @@ class OfflineStorageService {
   }
 
   /// Add report to sync queue (for reports that failed to submit)
+  ///
+  /// Callers pass the raw report map (with optional 'docId',
+  /// 'collection'/'collectionId').  We extract the meta keys and
+  /// wrap the remaining payload under a 'data' key so that
+  /// [syncPendingReports] can reliably read it.
   Future<void> addToSyncQueue(Map<String, dynamic> report) async {
     _ensureInitialized();
 
     final queueId = DateTime.now().millisecondsSinceEpoch.toString();
+
+    // Pull out meta keys that syncPendingReports uses directly
+    final docId = report.remove('docId') as String?;
+    final collection = (report.remove('collection') ??
+        report.remove('collectionId') ??
+        'reports') as String;
+
     final queueItem = {
-      ...report,
+      'data': report, // actual Firestore payload
+      'docId': docId,
+      'collection': collection,
       'createdAt': report['createdAt'] ?? DateTime.now().toIso8601String(),
       'queueId': queueId,
       'addedToQueueAt': DateTime.now().toIso8601String(),
@@ -181,7 +195,7 @@ class OfflineStorageService {
 
     await _syncQueueBox!.put(queueId, queueItem);
     developer.log(
-      'Added to sync queue: $queueId',
+      'Added to sync queue: $queueId (collection: $collection)',
       name: 'OfflineStorageService',
     );
   }
@@ -308,8 +322,14 @@ class OfflineStorageService {
       if (queueId.isEmpty) continue;
 
       try {
-        final data = Map<String, dynamic>.from(item['data'] as Map? ?? {});
-        final collection = item['collection'] as String? ?? 'reports';
+        final data = Map<String, dynamic>.from(item['data'] as Map? ?? item);
+        final collection = (item['collection'] ?? item['collectionId'] ?? 'reports') as String;
+        // Remove queue-meta keys to avoid writing them into Firestore
+        data.removeWhere((k, _) => const {
+          'queueId', 'addedToQueueAt', 'retryCount', 'status',
+          'lastError', 'lastAttemptAt', 'syncedAt', 'collection',
+          'collectionId', 'docId',
+        }.contains(k));
 
         // If there's an existing doc ID, update; otherwise create a new doc.
         final docId = item['docId'] as String?;
