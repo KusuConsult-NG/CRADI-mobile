@@ -173,10 +173,12 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
 
   String _getGpsStatus(BuildContext context) {
     if (_isLoadingLocation) return AppLocalizations.of(context)!.acquiringGps;
-    if (_locationError.isNotEmpty)
+    if (_locationError.isNotEmpty) {
       return AppLocalizations.of(context)!.noSignalGps;
-    if (_currentPosition == null)
+    }
+    if (_currentPosition == null) {
       return AppLocalizations.of(context)!.noSignalGps;
+    }
 
     final accuracy = _currentPosition!.accuracy;
     if (accuracy <= 20) return AppLocalizations.of(context)!.gpsStrong;
@@ -186,12 +188,15 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
 
   Color _getGpsStatusColor(BuildContext context) {
     final status = _getGpsStatus(context);
-    if (status == AppLocalizations.of(context)!.gpsStrong)
+    if (status == AppLocalizations.of(context)!.gpsStrong) {
       return Colors.green.shade700;
-    if (status == AppLocalizations.of(context)!.gpsGood)
+    }
+    if (status == AppLocalizations.of(context)!.gpsGood) {
       return Colors.orange.shade700;
-    if (status == AppLocalizations.of(context)!.acquiringGps)
+    }
+    if (status == AppLocalizations.of(context)!.acquiringGps) {
       return Colors.blue.shade700;
+    }
     return Colors.red.shade700;
   }
 

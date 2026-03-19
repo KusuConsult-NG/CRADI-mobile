@@ -296,9 +296,10 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
 
                   DateTime parseDate(dynamic date) {
                     if (date is Timestamp) return date.toDate();
-                    if (date is String)
+                    if (date is String) {
                       return DateTime.tryParse(date) ??
                           DateTime.fromMillisecondsSinceEpoch(0);
+                    }
                     return DateTime.fromMillisecondsSinceEpoch(0);
                   }
 
