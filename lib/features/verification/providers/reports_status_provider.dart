@@ -181,17 +181,22 @@ class ReportsStatusProvider extends ChangeNotifier {
         queries.add(FQuery.notEqual('userId', excludeUserId));
       }
 
-      // Inject Monitoring Zone enforcement here if passed down (or fetch from Profile)
-      // We only apply this filter if we are NOT fetching "My Reports" (userId == null).
+      // Monitoring Zone filter — only apply for State-level zones where
+      // the Firestore `state` field reliably matches.  Sub-zones like
+      // "Benue Zone A" don't map to real LGA names in report documents,
+      // so filtering by them returns zero results.  Skip those quietly.
       if (userId == null && _profileProvider?.monitoringZone != null) {
         final zone = _profileProvider!.monitoringZone!;
-        // Simple heuristic for demo: State vs LGA logic
         if (zone.toLowerCase().contains('state')) {
           queries.add(FQuery.equal('state', zone.replaceAll(' State', '')));
         } else {
-          queries.add(
-            FQuery.equal('lga', zone),
-          ); // Uses the exact zone string as LGA match for this MVP scope
+          // Sub-zone names don't match Firestore LGA values — skip to
+          // avoid silently hiding all reports.
+          developer.log(
+            'Skipping zone filter for sub-zone "$zone" '
+            '(no matching Firestore field)',
+            name: 'ReportsStatusProvider',
+          );
         }
       }
 
