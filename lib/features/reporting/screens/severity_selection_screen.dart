@@ -53,10 +53,7 @@ class _SeveritySelectionScreenState extends State<SeveritySelectionScreen> {
         padding: const EdgeInsets.all(24.0),
         child: Column(
           children: [
-            Text(
-              l10n.howSevereSituation,
-              style: const TextStyle(fontSize: 18),
-            ),
+            Text(l10n.howSevereSituation, style: const TextStyle(fontSize: 18)),
             const Spacer(),
             Container(
               padding: const EdgeInsets.all(24),

@@ -67,9 +67,11 @@ class _VerificationDetailScreenState extends State<VerificationDetailScreen> {
     } on Exception catch (e) {
       if (mounted) {
         setState(() => _isLoading = false);
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(ErrorHandler.handleError(e, context: 'Verification'))));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(ErrorHandler.handleError(e, context: 'Verification')),
+          ),
+        );
       }
     }
   }

@@ -165,11 +165,7 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
           if (!isLoading &&
               hasMore &&
               scrollInfo.metrics.pixels == scrollInfo.metrics.maxScrollExtent) {
-            provider.fetchReports(
-              loadMore: true,
-              status: status,
-              userId: uid,
-            );
+            provider.fetchReports(loadMore: true, status: status, userId: uid);
           }
           return false;
         },
@@ -310,11 +306,14 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
                 ),
               ),
               const Spacer(),
-              if (report.status == ReportStatus.pending && report.reporterId != currentUserId) ...[
+              if (report.status == ReportStatus.pending &&
+                  report.reporterId != currentUserId) ...[
                 ElevatedButton(
                   onPressed: () async {
                     final scaffoldMessenger = ScaffoldMessenger.of(context);
-                    final verifiedMsg = AppLocalizations.of(context)!.reportVerified;
+                    final verifiedMsg = AppLocalizations.of(
+                      context,
+                    )!.reportVerified;
                     try {
                       await provider.verifyReport(report.id);
                       scaffoldMessenger.showSnackBar(
@@ -329,7 +328,9 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
                     } on Exception catch (e) {
                       scaffoldMessenger.showSnackBar(
                         SnackBar(
-                          content: Text(ErrorHandler.handleError(e, context: 'Report')),
+                          content: Text(
+                            ErrorHandler.handleError(e, context: 'Report'),
+                          ),
                           backgroundColor: Colors.red,
                         ),
                       );
@@ -349,7 +350,9 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
                 OutlinedButton(
                   onPressed: () async {
                     final scaffoldMessenger = ScaffoldMessenger.of(context);
-                    final rejectedMsg = AppLocalizations.of(context)!.reportRejectedItem;
+                    final rejectedMsg = AppLocalizations.of(
+                      context,
+                    )!.reportRejectedItem;
                     try {
                       await provider.rejectReport(report.id);
                       scaffoldMessenger.showSnackBar(
@@ -364,7 +367,9 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
                     } on Exception catch (e) {
                       scaffoldMessenger.showSnackBar(
                         SnackBar(
-                          content: Text(ErrorHandler.handleError(e, context: 'Report')),
+                          content: Text(
+                            ErrorHandler.handleError(e, context: 'Report'),
+                          ),
                           backgroundColor: Colors.red,
                         ),
                       );
@@ -380,11 +385,14 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
                   child: Text(AppLocalizations.of(context)!.reject),
                 ),
               ],
-              if (report.status == ReportStatus.verified && report.reporterId != currentUserId) ...[
+              if (report.status == ReportStatus.verified &&
+                  report.reporterId != currentUserId) ...[
                 ElevatedButton(
                   onPressed: () async {
                     final scaffoldMessenger = ScaffoldMessenger.of(context);
-                    final resolvedMsg = AppLocalizations.of(context)!.reportResolvedItem;
+                    final resolvedMsg = AppLocalizations.of(
+                      context,
+                    )!.reportResolvedItem;
                     try {
                       await provider.approveReport(report.id);
                       scaffoldMessenger.showSnackBar(
@@ -399,7 +407,9 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
                     } on Exception catch (e) {
                       scaffoldMessenger.showSnackBar(
                         SnackBar(
-                          content: Text(ErrorHandler.handleError(e, context: 'Report')),
+                          content: Text(
+                            ErrorHandler.handleError(e, context: 'Report'),
+                          ),
                           backgroundColor: Colors.red,
                         ),
                       );
@@ -451,7 +461,8 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
                   ),
                 ),
               ],
-              if (report.status == ReportStatus.approved && report.reporterId != currentUserId) ...[
+              if (report.status == ReportStatus.approved &&
+                  report.reporterId != currentUserId) ...[
                 OutlinedButton(
                   onPressed: () {
                     provider.moveBackToPending(report.id);
@@ -541,7 +552,12 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
               style: GoogleFonts.lexend(fontSize: 14),
             ),
             const SizedBox(height: 12),
-            _buildExportOption(c, provider, AppLocalizations.of(context)!.allReports, null),
+            _buildExportOption(
+              c,
+              provider,
+              AppLocalizations.of(context)!.allReports,
+              null,
+            ),
             _buildExportOption(
               c,
               provider,

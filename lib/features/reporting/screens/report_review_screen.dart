@@ -43,15 +43,24 @@ class _ReportReviewScreenState extends State<ReportReviewScreen> {
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(result['message'] ?? AppLocalizations.of(context)!.submissionFailed)),
+          SnackBar(
+            content: Text(
+              result['message'] ??
+                  AppLocalizations.of(context)!.submissionFailed,
+            ),
+          ),
         );
       }
     } on Exception catch (e) {
       if (!mounted) return;
       setState(() => _isSubmitting = false);
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(ErrorHandler.handleError(e, context: 'Report Submission'))));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            ErrorHandler.handleError(e, context: 'Report Submission'),
+          ),
+        ),
+      );
     }
   }
 
@@ -82,7 +91,9 @@ class _ReportReviewScreenState extends State<ReportReviewScreen> {
               ),
               const SizedBox(height: 24),
               Text(
-                isQueued ? AppLocalizations.of(context)!.savedForLater : AppLocalizations.of(context)!.reportSubmittedTitle,
+                isQueued
+                    ? AppLocalizations.of(context)!.savedForLater
+                    : AppLocalizations.of(context)!.reportSubmittedTitle,
                 style: GoogleFonts.lexend(
                   fontSize: 24,
                   fontWeight: FontWeight.bold,
@@ -112,7 +123,9 @@ class _ReportReviewScreenState extends State<ReportReviewScreen> {
                 child: Column(
                   children: [
                     Text(
-                      isQueued ? AppLocalizations.of(context)!.statusLabel : AppLocalizations.of(context)!.reportIdLabel,
+                      isQueued
+                          ? AppLocalizations.of(context)!.statusLabel
+                          : AppLocalizations.of(context)!.reportIdLabel,
                       style: GoogleFonts.lexend(
                         fontSize: 10,
                         fontWeight: FontWeight.bold,
@@ -142,7 +155,8 @@ class _ReportReviewScreenState extends State<ReportReviewScreen> {
                   onPressed: () {
                     // Provider is already reset in submitReport
                     final router = GoRouter.of(context);
-                    final reportsProvider = context.read<ReportsStatusProvider>();
+                    final reportsProvider = context
+                        .read<ReportsStatusProvider>();
                     final auth = context.read<AuthProvider>();
                     final isUser = auth.userRole == UserRole.user;
                     Navigator.of(context).pop(); // Close dialog first!
@@ -225,7 +239,9 @@ class _ReportReviewScreenState extends State<ReportReviewScreen> {
                               iconColor: Colors.red,
                               iconBg: Colors.red.shade50,
                               label: AppLocalizations.of(context)!.hazardType,
-                              value: provider.hazardType ?? AppLocalizations.of(context)!.notSelected,
+                              value:
+                                  provider.hazardType ??
+                                  AppLocalizations.of(context)!.notSelected,
                             ),
                             Divider(
                               height: 1,
@@ -237,8 +253,12 @@ class _ReportReviewScreenState extends State<ReportReviewScreen> {
                               icon: Icons.warning,
                               iconColor: Colors.orange,
                               iconBg: Colors.orange.shade50,
-                              label: AppLocalizations.of(context)!.severityLevelLabel,
-                              value: provider.severity ?? AppLocalizations.of(context)!.notSelected,
+                              label: AppLocalizations.of(
+                                context,
+                              )!.severityLevelLabel,
+                              value:
+                                  provider.severity ??
+                                  AppLocalizations.of(context)!.notSelected,
                             ),
                           ],
                         ),
@@ -278,7 +298,11 @@ class _ReportReviewScreenState extends State<ReportReviewScreen> {
                   const SizedBox(height: 24),
 
                   // Location
-                  _buildSectionHeader(AppLocalizations.of(context)!.locationLabel, onEdit: () => context.pop(), context: context),
+                  _buildSectionHeader(
+                    AppLocalizations.of(context)!.locationLabel,
+                    onEdit: () => context.pop(),
+                    context: context,
+                  ),
                   Consumer<ReportingProvider>(
                     builder: (context, provider, _) {
                       return Container(
@@ -321,7 +345,8 @@ class _ReportReviewScreenState extends State<ReportReviewScreen> {
                               ),
                             const SizedBox(height: 12),
                             Text(
-                              provider.locationDetails ?? AppLocalizations.of(context)!.notProvided,
+                              provider.locationDetails ??
+                                  AppLocalizations.of(context)!.notProvided,
                               style: GoogleFonts.lexend(
                                 fontSize: 14,
                                 fontWeight: FontWeight.bold,
@@ -355,7 +380,10 @@ class _ReportReviewScreenState extends State<ReportReviewScreen> {
                         decoration: _cardDecoration(),
                         padding: const EdgeInsets.all(16),
                         child: Text(
-                          provider.description ?? AppLocalizations.of(context)!.noDescriptionProvided,
+                          provider.description ??
+                              AppLocalizations.of(
+                                context,
+                              )!.noDescriptionProvided,
                           style: GoogleFonts.lexend(
                             fontSize: 14,
                             color: AppColors.textPrimary,
@@ -368,7 +396,11 @@ class _ReportReviewScreenState extends State<ReportReviewScreen> {
                   const SizedBox(height: 24),
 
                   // Evidence
-                  _buildSectionHeader(AppLocalizations.of(context)!.evidenceLabel, onEdit: () => context.pop(), context: context),
+                  _buildSectionHeader(
+                    AppLocalizations.of(context)!.evidenceLabel,
+                    onEdit: () => context.pop(),
+                    context: context,
+                  ),
                   Consumer<ReportingProvider>(
                     builder: (context, provider, _) {
                       final photos = provider.photos;
@@ -413,9 +445,9 @@ class _ReportReviewScreenState extends State<ReportReviewScreen> {
                                       color: Colors.grey,
                                     ),
                                     const SizedBox(height: 4),
-                                      Text(
-                                        AppLocalizations.of(context)!.addPhotoBtn,
-                                        style: const TextStyle(
+                                    Text(
+                                      AppLocalizations.of(context)!.addPhotoBtn,
+                                      style: const TextStyle(
                                         fontSize: 10,
                                         color: Colors.grey,
                                       ),
@@ -469,7 +501,11 @@ class _ReportReviewScreenState extends State<ReportReviewScreen> {
     );
   }
 
-  Widget _buildSectionHeader(String title, {required VoidCallback onEdit, required BuildContext context}) {
+  Widget _buildSectionHeader(
+    String title, {
+    required VoidCallback onEdit,
+    required BuildContext context,
+  }) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
       child: Row(

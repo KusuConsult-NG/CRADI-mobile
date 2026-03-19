@@ -40,7 +40,8 @@ class PeerVerificationService {
         collectionId: AppConfig.reportsCollection,
         documentId: reportId,
       );
-      final reporterId = reportDoc['userId'] as String? ??
+      final reporterId =
+          reportDoc['userId'] as String? ??
           reportDoc['reporterId'] as String? ??
           '';
       if (reporterId == userId) {
@@ -61,7 +62,7 @@ class PeerVerificationService {
               'success': false,
               'message':
                   'You must be within 2 km of the report location to verify. '
-                      'Current distance: ${dist.toStringAsFixed(1)} km.',
+                  'Current distance: ${dist.toStringAsFixed(1)} km.',
             };
           }
         }
@@ -653,7 +654,8 @@ class PeerVerificationService {
     const R = 6371.0;
     final dLat = _deg2rad(lat2 - lat1);
     final dLng = _deg2rad(lng2 - lng1);
-    final a = math.sin(dLat / 2) * math.sin(dLat / 2) +
+    final a =
+        math.sin(dLat / 2) * math.sin(dLat / 2) +
         math.cos(_deg2rad(lat1)) *
             math.cos(_deg2rad(lat2)) *
             math.sin(dLng / 2) *

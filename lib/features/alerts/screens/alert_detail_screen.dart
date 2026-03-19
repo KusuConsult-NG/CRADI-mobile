@@ -93,7 +93,9 @@ class _AlertDetailScreenState extends State<AlertDetailScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(ErrorHandler.handleError(e, context: 'Alert Verification')),
+            content: Text(
+              ErrorHandler.handleError(e, context: 'Alert Verification'),
+            ),
             backgroundColor: Colors.red,
           ),
         );
@@ -371,9 +373,7 @@ class _AlertDetailScreenState extends State<AlertDetailScreen> {
                                   )
                                 : const Icon(Icons.cancel, size: 20),
                             label: Text(
-                              _isSubmitting
-                                  ? 'Submitting...'
-                                  : 'Decline',
+                              _isSubmitting ? 'Submitting...' : 'Decline',
                               style: GoogleFonts.lexend(
                                 fontSize: 14,
                                 fontWeight: FontWeight.bold,

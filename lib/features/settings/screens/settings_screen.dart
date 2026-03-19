@@ -563,7 +563,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         if (context.mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
-                              content: Text(ErrorHandler.handleError(e, context: 'Logout')),
+                              content: Text(
+                                ErrorHandler.handleError(e, context: 'Logout'),
+                              ),
                               backgroundColor: Colors.red,
                             ),
                           );

@@ -288,9 +288,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             label: 'Email Address',
                             controller: _identifierController,
                             keyboardType: TextInputType.emailAddress,
-                            prefixIcon: const Icon(
-                              Icons.email_outlined,
-                            ),
+                            prefixIcon: const Icon(Icons.email_outlined),
                             hint: 'email@example.com',
                             validator: Validators.validateEmail,
                             enabled: !_isLoading,
@@ -344,7 +342,8 @@ class _LoginScreenState extends State<LoginScreen> {
                                   const Text(
                                     'Remember Me',
                                     style: TextStyle(
-                                      fontSize: 15, // Matched somewhat with other texts
+                                      fontSize:
+                                          15, // Matched somewhat with other texts
                                       fontWeight: FontWeight.w500,
                                     ),
                                   ),
@@ -357,7 +356,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                 child: const Text(
                                   'Forgot Password?',
                                   style: TextStyle(
-                                    fontSize: 15, 
+                                    fontSize: 15,
                                     fontWeight: FontWeight.w600,
                                   ),
                                 ),

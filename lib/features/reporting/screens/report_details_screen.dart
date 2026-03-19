@@ -141,7 +141,11 @@ class _ReportDetailsScreenState extends State<ReportDetailsScreen> {
     } on Exception {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Camera is not available. Please try using the gallery.')),
+          const SnackBar(
+            content: Text(
+              'Camera is not available. Please try using the gallery.',
+            ),
+          ),
         );
       }
     }
@@ -154,7 +158,9 @@ class _ReportDetailsScreenState extends State<ReportDetailsScreen> {
     } on Exception {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not access gallery. Please try again.')),
+          const SnackBar(
+            content: Text('Could not access gallery. Please try again.'),
+          ),
         );
       }
     }
@@ -278,7 +284,9 @@ class _ReportDetailsScreenState extends State<ReportDetailsScreen> {
                           color: AppColors.textPrimary,
                         ),
                         decoration: InputDecoration(
-                          hintText: AppLocalizations.of(context)!.describeHazardHint,
+                          hintText: AppLocalizations.of(
+                            context,
+                          )!.describeHazardHint,
                           hintStyle: GoogleFonts.lexend(
                             color: Colors.grey.shade400,
                           ),
@@ -354,8 +362,12 @@ class _ReportDetailsScreenState extends State<ReportDetailsScreen> {
                           const SizedBox(width: 4),
                           Text(
                             _isListening
-                                ? AppLocalizations.of(context)!.listeningSpeakNow
-                                : AppLocalizations.of(context)!.beSpecificLocationSeverity,
+                                ? AppLocalizations.of(
+                                    context,
+                                  )!.listeningSpeakNow
+                                : AppLocalizations.of(
+                                    context,
+                                  )!.beSpecificLocationSeverity,
                             style: GoogleFonts.lexend(
                               fontSize: 12,
                               fontWeight: FontWeight.w500,
@@ -457,7 +469,9 @@ class _ReportDetailsScreenState extends State<ReportDetailsScreen> {
                                   children: [
                                     Text(
                                       isToday
-                                          ? AppLocalizations.of(context)!.todayLabel
+                                          ? AppLocalizations.of(
+                                              context,
+                                            )!.todayLabel
                                           : _formatDate(selectedDate),
                                       style: GoogleFonts.lexend(
                                         fontSize: 16,
@@ -608,14 +622,18 @@ class _ReportDetailsScreenState extends State<ReportDetailsScreen> {
                               ),
                               children: [
                                 TextSpan(
-                                  text: AppLocalizations.of(context)!.offlineModeReady,
+                                  text: AppLocalizations.of(
+                                    context,
+                                  )!.offlineModeReady,
                                   style: GoogleFonts.lexend(
                                     fontWeight: FontWeight.bold,
                                     color: Colors.blue.shade700,
                                   ),
                                 ),
                                 TextSpan(
-                                  text: AppLocalizations.of(context)!.offlineModeMessage,
+                                  text: AppLocalizations.of(
+                                    context,
+                                  )!.offlineModeMessage,
                                 ),
                               ],
                             ),

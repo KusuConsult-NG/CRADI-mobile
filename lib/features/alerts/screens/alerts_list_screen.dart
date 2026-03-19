@@ -506,7 +506,10 @@ class _AlertsListScreenState extends State<AlertsListScreen> {
                           }
                         } on Exception catch (e) {
                           if (mounted) {
-                            CustomToast.showError(context, ErrorHandler.handleError(e, context: 'Alert'));
+                            CustomToast.showError(
+                              context,
+                              ErrorHandler.handleError(e, context: 'Alert'),
+                            );
                           }
                         }
                       },
@@ -532,7 +535,10 @@ class _AlertsListScreenState extends State<AlertsListScreen> {
                           }
                         } on Exception catch (e) {
                           if (mounted) {
-                            CustomToast.showError(context, ErrorHandler.handleError(e, context: 'Alert'));
+                            CustomToast.showError(
+                              context,
+                              ErrorHandler.handleError(e, context: 'Alert'),
+                            );
                           }
                         }
                       },

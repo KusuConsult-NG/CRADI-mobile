@@ -57,20 +57,27 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
     }
   }
 
-  void _showReportDetails(BuildContext context, String id, Map<String, dynamic> data) {
+  void _showReportDetails(
+    BuildContext context,
+    String id,
+    Map<String, dynamic> data,
+  ) {
     final hazard = data['hazardType'] as String? ?? 'Unknown';
     final severity = data['severity'] as String? ?? '';
     final lga = data['lga'] as String? ?? '';
     final ward = data['ward'] as String? ?? '';
     final locationDetails = data['locationDetails'] as String? ?? '';
-    final description = data['description'] as String? ?? 'No description provided.';
-    final imageUrls = (data['imageUrls'] as List<dynamic>?)?.cast<String>() ?? [];
+    final description =
+        data['description'] as String? ?? 'No description provided.';
+    final imageUrls =
+        (data['imageUrls'] as List<dynamic>?)?.cast<String>() ?? [];
     final status = data['status'] as String? ?? 'pending';
     final createdAt = data['createdAt'];
     String timeStr = '';
     if (createdAt is Timestamp) {
       final dt = createdAt.toDate();
-      timeStr = '${dt.day}/${dt.month}/${dt.year} ${dt.hour}:${dt.minute.toString().padLeft(2, '0')}';
+      timeStr =
+          '${dt.day}/${dt.month}/${dt.year} ${dt.hour}:${dt.minute.toString().padLeft(2, '0')}';
     }
 
     showModalBottomSheet(
@@ -93,13 +100,24 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
+                    border: Border(
+                      bottom: BorderSide(color: Colors.grey.shade200),
+                    ),
                   ),
                   child: Row(
                     children: [
-                      Text('Report Details', style: GoogleFonts.lexend(fontSize: 18, fontWeight: FontWeight.bold)),
+                      Text(
+                        'Report Details',
+                        style: GoogleFonts.lexend(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                       const Spacer(),
-                      IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(context)),
+                      IconButton(
+                        icon: const Icon(Icons.close),
+                        onPressed: () => Navigator.pop(context),
+                      ),
                     ],
                   ),
                 ),
@@ -111,18 +129,37 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
                     children: [
                       _detailRow('Hazard Type', hazard),
                       _detailRow('Severity', severity),
-                      _detailRow('Status', status.capitalize(), _statusColors[status]),
+                      _detailRow(
+                        'Status',
+                        status.capitalize(),
+                        _statusColors[status],
+                      ),
                       _detailRow('Date/Time', timeStr),
                       _detailRow('LGA', lga),
                       _detailRow('Ward', ward),
                       _detailRow('Location Details', locationDetails),
                       const SizedBox(height: 16),
-                      Text('Description', style: GoogleFonts.lexend(fontWeight: FontWeight.w600, color: Colors.grey.shade600)),
+                      Text(
+                        'Description',
+                        style: GoogleFonts.lexend(
+                          fontWeight: FontWeight.w600,
+                          color: Colors.grey.shade600,
+                        ),
+                      ),
                       const SizedBox(height: 4),
-                      Text(description, style: GoogleFonts.lexend(fontSize: 15)),
+                      Text(
+                        description,
+                        style: GoogleFonts.lexend(fontSize: 15),
+                      ),
                       const SizedBox(height: 16),
                       if (imageUrls.isNotEmpty) ...[
-                        Text('Images', style: GoogleFonts.lexend(fontWeight: FontWeight.w600, color: Colors.grey.shade600)),
+                        Text(
+                          'Images',
+                          style: GoogleFonts.lexend(
+                            fontWeight: FontWeight.w600,
+                            color: Colors.grey.shade600,
+                          ),
+                        ),
                         const SizedBox(height: 8),
                         SizedBox(
                           height: 120,
@@ -139,12 +176,13 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
                                     width: 120,
                                     height: 120,
                                     fit: BoxFit.cover,
-                                    errorBuilder: (_, error, stackTrace) => Container(
-                                      width: 120,
-                                      height: 120,
-                                      color: Colors.grey.shade200,
-                                      child: const Icon(Icons.broken_image),
-                                    ),
+                                    errorBuilder: (_, error, stackTrace) =>
+                                        Container(
+                                          width: 120,
+                                          height: 120,
+                                          color: Colors.grey.shade200,
+                                          child: const Icon(Icons.broken_image),
+                                        ),
                                   ),
                                 ),
                               );
@@ -162,7 +200,11 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
                   decoration: const BoxDecoration(
                     color: Colors.white,
                     boxShadow: [
-                      BoxShadow(color: Color.fromRGBO(0, 0, 0, 0.05), blurRadius: 10, offset: Offset(0, -5))
+                      BoxShadow(
+                        color: Color.fromRGBO(0, 0, 0, 0.05),
+                        blurRadius: 10,
+                        offset: Offset(0, -5),
+                      ),
                     ],
                   ),
                   child: SafeArea(
@@ -173,28 +215,49 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
                       children: [
                         if (status != 'approved')
                           ElevatedButton.icon(
-                            style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
-                            onPressed: () { _updateStatus(id, 'approved'); Navigator.pop(context); },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.green,
+                              foregroundColor: Colors.white,
+                            ),
+                            onPressed: () {
+                              _updateStatus(id, 'approved');
+                              Navigator.pop(context);
+                            },
                             icon: const Icon(Icons.check, size: 18),
                             label: const Text('Approve'),
                           ),
                         if (status != 'rejected')
                           ElevatedButton.icon(
-                            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
-                            onPressed: () { _updateStatus(id, 'rejected'); Navigator.pop(context); },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.red,
+                              foregroundColor: Colors.white,
+                            ),
+                            onPressed: () {
+                              _updateStatus(id, 'rejected');
+                              Navigator.pop(context);
+                            },
                             icon: const Icon(Icons.close, size: 18),
                             label: const Text('Reject'),
                           ),
                         if (status != 'verified')
                           ElevatedButton.icon(
-                            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange, foregroundColor: Colors.white),
-                            onPressed: () { _updateStatus(id, 'verified'); Navigator.pop(context); },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.orange,
+                              foregroundColor: Colors.white,
+                            ),
+                            onPressed: () {
+                              _updateStatus(id, 'verified');
+                              Navigator.pop(context);
+                            },
                             icon: const Icon(Icons.verified, size: 18),
                             label: const Text('Mark Verified'),
                           ),
                         if (status != 'pending')
                           OutlinedButton.icon(
-                            onPressed: () { _updateStatus(id, 'pending'); Navigator.pop(context); },
+                            onPressed: () {
+                              _updateStatus(id, 'pending');
+                              Navigator.pop(context);
+                            },
                             icon: const Icon(Icons.refresh, size: 18),
                             label: const Text('Reset'),
                           ),
@@ -264,7 +327,7 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
                   return const Center(child: CircularProgressIndicator());
                 }
                 final allDocs = snap.data?.docs ?? [];
-                
+
                 // Client-side filtering
                 final docs = allDocs.where((d) {
                   final data = d.data();
@@ -274,14 +337,16 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
                   }
                   return true;
                 }).toList();
-                
+
                 docs.sort((a, b) {
                   final aCreatedAt = a.data()['createdAt'];
                   final bCreatedAt = b.data()['createdAt'];
 
                   DateTime parseDate(dynamic date) {
                     if (date is Timestamp) return date.toDate();
-                    if (date is String) return DateTime.tryParse(date) ?? DateTime.fromMillisecondsSinceEpoch(0);
+                    if (date is String)
+                      return DateTime.tryParse(date) ??
+                          DateTime.fromMillisecondsSinceEpoch(0);
                     return DateTime.fromMillisecondsSinceEpoch(0);
                   }
 

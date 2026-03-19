@@ -57,7 +57,9 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Text(ErrorHandler.handleError(e, context: 'Profile Upload')),
+                content: Text(
+                  ErrorHandler.handleError(e, context: 'Profile Upload'),
+                ),
                 backgroundColor: Colors.red,
               ),
             );
@@ -344,7 +346,12 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                             setState(() => isVerifying = false);
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
-                                content: Text(ErrorHandler.handleError(e, context: 'Account Verification')),
+                                content: Text(
+                                  ErrorHandler.handleError(
+                                    e,
+                                    context: 'Account Verification',
+                                  ),
+                                ),
                                 backgroundColor: Colors.red,
                               ),
                             );
@@ -655,8 +662,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                         totalReports = snapshot.data!.length;
                         verifiedCount = snapshot.data!.where((doc) {
                           final status = doc['status'];
-                          return status == 'verified' ||
-                              status == 'approved';
+                          return status == 'verified' || status == 'approved';
                         }).length;
                       }
 

@@ -162,7 +162,7 @@ class _AdminKnowledgeScreenState extends State<AdminKnowledgeScreen> {
                   );
                 }
                 final allDocs = snap.data?.docs ?? [];
-                
+
                 // Client-side filtering
                 final docs = allDocs.where((d) {
                   final data = d.data();
@@ -438,7 +438,12 @@ class _GuideFormSheetState extends State<_GuideFormSheet> {
     } on Exception catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(ErrorHandler.handleError(e, context: 'Knowledge Base')), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text(
+              ErrorHandler.handleError(e, context: 'Knowledge Base'),
+            ),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     } finally {

@@ -56,11 +56,7 @@ class ReportViewScreen extends StatelessWidget {
                 _buildDetailRow(Icons.location_on, 'Location', report.location),
                 _buildDetailRow(Icons.access_time, 'Reported', report.time),
                 if (report.severity != null)
-                  _buildDetailRow(
-                    Icons.speed,
-                    'Severity',
-                    report.severity!,
-                  ),
+                  _buildDetailRow(Icons.speed, 'Severity', report.severity!),
                 _buildDetailRow(
                   Icons.verified_user,
                   'Verifications',
@@ -217,9 +213,7 @@ class ReportViewScreen extends StatelessWidget {
             decoration: BoxDecoration(
               color: statusColor.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(20),
-              border: Border.all(
-                color: statusColor.withValues(alpha: 0.3),
-              ),
+              border: Border.all(color: statusColor.withValues(alpha: 0.3)),
             ),
             child: Text(
               report.status.displayName,

@@ -274,7 +274,10 @@ class ReportingProvider extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
       developer.log('Error submitting report: $e');
-      return {'success': false, 'message': ErrorHandler.handleError(e, context: 'Report Submission')};
+      return {
+        'success': false,
+        'message': ErrorHandler.handleError(e, context: 'Report Submission'),
+      };
     }
   }
 

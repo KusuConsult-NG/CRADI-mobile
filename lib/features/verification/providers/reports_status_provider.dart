@@ -125,14 +125,26 @@ class ReportsStatusProvider extends ChangeNotifier {
   Future<void> refreshReports({String? excludeUserId, String? userId}) async {
     await Future.wait([
       fetchReports(status: null, excludeUserId: excludeUserId, userId: userId),
-      fetchReports(status: ReportStatus.pending, excludeUserId: excludeUserId, userId: userId),
+      fetchReports(
+        status: ReportStatus.pending,
+        excludeUserId: excludeUserId,
+        userId: userId,
+      ),
       fetchReports(
         status: ReportStatus.verified,
         excludeUserId: excludeUserId,
         userId: userId,
       ),
-      fetchReports(status: ReportStatus.approved, excludeUserId: excludeUserId, userId: userId),
-      fetchReports(status: ReportStatus.rejected, excludeUserId: excludeUserId, userId: userId),
+      fetchReports(
+        status: ReportStatus.approved,
+        excludeUserId: excludeUserId,
+        userId: userId,
+      ),
+      fetchReports(
+        status: ReportStatus.rejected,
+        excludeUserId: excludeUserId,
+        userId: userId,
+      ),
     ]);
   }
 
@@ -221,38 +233,40 @@ class ReportsStatusProvider extends ChangeNotifier {
         _hasMoreMap[key] = false;
       }
 
-      final newReports = await Future.wait(docs.map((data) async {
-        final reportStatus = _parseStatus(data['status']);
-        
-        String reporterName = 'Community Report';
-        if (data['userId'] != null) {
-          try {
-            final userDoc = await FirebaseFirestore.instance
-                .collection(AppConfig.usersCollection)
-                .doc(data['userId'])
-                .get();
-            if (userDoc.exists && userDoc.data() != null) {
-              final n = userDoc.data()!['fullName'] as String?;
-              if (n != null && n.trim().isNotEmpty) {
-                reporterName = n;
-              }
-            }
-          } on Exception catch (_) {}
-        }
+      final newReports = await Future.wait(
+        docs.map((data) async {
+          final reportStatus = _parseStatus(data['status']);
 
-        return VerificationReport(
-          id: data['id'] as String? ?? data['\$id'] as String? ?? '',
-          title: _formatTitle(data['hazardType'] ?? 'Unknown Hazard'),
-          type: data['hazardType'] ?? 'Unknown',
-          reporter: reporterName,
-          location: data['locationDetails'] ?? 'Unknown Location',
-          time: _formatTimeAgo(data['submittedAt']),
-          status: reportStatus,
-          iconName: _getIconName(data['hazardType']),
-          iconColor: _getIconColor(data['severity']),
-          bgIconColor: '${_getIconColor(data['severity'])}_50',
-        );
-      }));
+          String reporterName = 'Community Report';
+          if (data['userId'] != null) {
+            try {
+              final userDoc = await FirebaseFirestore.instance
+                  .collection(AppConfig.usersCollection)
+                  .doc(data['userId'])
+                  .get();
+              if (userDoc.exists && userDoc.data() != null) {
+                final n = userDoc.data()!['fullName'] as String?;
+                if (n != null && n.trim().isNotEmpty) {
+                  reporterName = n;
+                }
+              }
+            } on Exception catch (_) {}
+          }
+
+          return VerificationReport(
+            id: data['id'] as String? ?? data['\$id'] as String? ?? '',
+            title: _formatTitle(data['hazardType'] ?? 'Unknown Hazard'),
+            type: data['hazardType'] ?? 'Unknown',
+            reporter: reporterName,
+            location: data['locationDetails'] ?? 'Unknown Location',
+            time: _formatTimeAgo(data['submittedAt']),
+            status: reportStatus,
+            iconName: _getIconName(data['hazardType']),
+            iconColor: _getIconColor(data['severity']),
+            bgIconColor: '${_getIconColor(data['severity'])}_50',
+          );
+        }),
+      );
 
       if (loadMore) {
         _reportsMap[key] = [...(_reportsMap[key] ?? []), ...newReports];
@@ -455,7 +469,7 @@ class ReportsStatusProvider extends ChangeNotifier {
         return ReportStatus.pending;
       case 'verified':
       case 'acknowledged': // legacy compat
-      case 'validated':    // legacy compat
+      case 'validated': // legacy compat
         return ReportStatus.verified;
       case 'approved':
       case 'resolved': // legacy compat

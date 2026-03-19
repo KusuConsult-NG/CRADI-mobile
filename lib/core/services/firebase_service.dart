@@ -453,10 +453,7 @@ class FirebaseService {
       final snapshot = await query.count().get();
       return snapshot.count ?? 0;
     } on Exception catch (e) {
-      developer.log(
-        'countDocuments error: $e',
-        name: 'FirebaseService',
-      );
+      developer.log('countDocuments error: $e', name: 'FirebaseService');
       return 0;
     }
   }

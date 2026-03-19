@@ -180,9 +180,12 @@ class _HomeScreenState extends State<HomeScreen> {
                                   GestureDetector(
                                     onTap: () async {
                                       final auth = context.read<AuthProvider>();
-                                      final isUser = auth.userRole == UserRole.user;
+                                      final isUser =
+                                          auth.userRole == UserRole.user;
                                       await reportsProvider.refreshReports(
-                                        userId: isUser ? auth.currentUser?.uid : null,
+                                        userId: isUser
+                                            ? auth.currentUser?.uid
+                                            : null,
                                       );
                                     },
                                     child: Row(
@@ -202,10 +205,16 @@ class _HomeScreenState extends State<HomeScreen> {
                                         const SizedBox(width: 8),
                                         Text(
                                           isOffline
-                                              ? AppLocalizations.of(context)!.offline
+                                              ? AppLocalizations.of(
+                                                  context,
+                                                )!.offline
                                               : (isSyncing
-                                                    ? AppLocalizations.of(context)!.syncing
-                                                    : AppLocalizations.of(context)!.onlineJustNow),
+                                                    ? AppLocalizations.of(
+                                                        context,
+                                                      )!.syncing
+                                                    : AppLocalizations.of(
+                                                        context,
+                                                      )!.onlineJustNow),
                                           style: GoogleFonts.lexend(
                                             fontSize: 10,
                                             fontWeight: FontWeight.bold,
@@ -280,7 +289,9 @@ class _HomeScreenState extends State<HomeScreen> {
                                   onTap: () => context.push('/reports-status'),
                                   child: _buildStatCard(
                                     count: '$pendingCount',
-                                    label: AppLocalizations.of(context)!.pending,
+                                    label: AppLocalizations.of(
+                                      context,
+                                    )!.pending,
                                     icon: Icons.schedule,
                                     color: Colors.orange,
                                     bgColor: Colors.orange.withValues(
@@ -295,7 +306,9 @@ class _HomeScreenState extends State<HomeScreen> {
                                   onTap: () => context.push('/reports-status'),
                                   child: _buildStatCard(
                                     count: '$approvedCount',
-                                    label: AppLocalizations.of(context)!.approved,
+                                    label: AppLocalizations.of(
+                                      context,
+                                    )!.approved,
                                     icon: Icons.check_circle,
                                     color: AppColors.successGreen,
                                     bgColor: AppColors.successGreen.withValues(
@@ -368,9 +381,18 @@ class _HomeScreenState extends State<HomeScreen> {
                         padding: const EdgeInsets.all(6),
                         child: Row(
                           children: [
-                            _buildFilterTab(0, AppLocalizations.of(context)!.toVerify),
-                            _buildFilterTab(1, AppLocalizations.of(context)!.alerts),
-                            _buildFilterTab(2, AppLocalizations.of(context)!.myReports),
+                            _buildFilterTab(
+                              0,
+                              AppLocalizations.of(context)!.toVerify,
+                            ),
+                            _buildFilterTab(
+                              1,
+                              AppLocalizations.of(context)!.alerts,
+                            ),
+                            _buildFilterTab(
+                              2,
+                              AppLocalizations.of(context)!.myReports,
+                            ),
                             _buildFilterTab(3, 'Nearby'),
                           ],
                         ),
@@ -521,7 +543,11 @@ class _HomeScreenState extends State<HomeScreen> {
                 onTap: () {
                   // Notification action
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text(AppLocalizations.of(context)!.noNewNotifications)),
+                    SnackBar(
+                      content: Text(
+                        AppLocalizations.of(context)!.noNewNotifications,
+                      ),
+                    ),
                   );
                 },
                 child: Stack(
@@ -713,7 +739,11 @@ class _HomeScreenState extends State<HomeScreen> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Icon(Icons.near_me, size: 16, color: AppColors.successGreen),
+                  const Icon(
+                    Icons.near_me,
+                    size: 16,
+                    color: AppColors.successGreen,
+                  ),
                   const SizedBox(width: 6),
                   Text(
                     'Open Nearby Reports',
@@ -724,7 +754,11 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ),
                   const SizedBox(width: 4),
-                  const Icon(Icons.arrow_forward_ios, size: 12, color: AppColors.successGreen),
+                  const Icon(
+                    Icons.arrow_forward_ios,
+                    size: 12,
+                    color: AppColors.successGreen,
+                  ),
                 ],
               ),
             ),

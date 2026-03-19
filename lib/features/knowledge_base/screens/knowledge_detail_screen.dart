@@ -85,9 +85,13 @@ class KnowledgeDetailScreen extends StatelessWidget {
                 }
               } on Exception {
                 if (context.mounted) {
-                  ScaffoldMessenger.of(
-                    context,
-                  ).showSnackBar(const SnackBar(content: Text('Text-to-speech is unavailable. Please try again.')));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                        'Text-to-speech is unavailable. Please try again.',
+                      ),
+                    ),
+                  );
                 }
               }
             },

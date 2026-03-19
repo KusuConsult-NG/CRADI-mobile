@@ -24,9 +24,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
   @override
   void initState() {
     super.initState();
-    _usersStream = FirebaseFirestore.instance
-        .collection('users')
-        .snapshots();
+    _usersStream = FirebaseFirestore.instance.collection('users').snapshots();
   }
 
   @override
@@ -238,17 +236,19 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
                         .toList(),
                   ),
                 ),
-                  SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    dense: true,
-                    title: Text(
-                      _pendingOnly ? 'Showing Pending Approvals' : 'Showing Approved Users',
-                      style: GoogleFonts.lexend(fontSize: 13),
-                    ),
-                    value: _pendingOnly,
-                    activeThumbColor: AppColors.primaryRed,
-                    onChanged: (v) => setState(() => _pendingOnly = v),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                  title: Text(
+                    _pendingOnly
+                        ? 'Showing Pending Approvals'
+                        : 'Showing Approved Users',
+                    style: GoogleFonts.lexend(fontSize: 13),
                   ),
+                  value: _pendingOnly,
+                  activeThumbColor: AppColors.primaryRed,
+                  onChanged: (v) => setState(() => _pendingOnly = v),
+                ),
               ],
             ),
           ),
@@ -275,26 +275,30 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
                   } else {
                     if (!isApproved) return false;
                   }
-                  
+
                   // Apply search filter
                   if (_searchQuery.isNotEmpty) {
                     final name = (data['name'] as String? ?? '').toLowerCase();
-                    final email = (data['email'] as String? ?? '').toLowerCase();
-                    if (!name.contains(_searchQuery) && !email.contains(_searchQuery)) {
+                    final email = (data['email'] as String? ?? '')
+                        .toLowerCase();
+                    if (!name.contains(_searchQuery) &&
+                        !email.contains(_searchQuery)) {
                       return false;
                     }
                   }
-                  
+
                   return true;
                 }).toList();
-                
+
                 docs.sort((a, b) {
                   final aCreatedAt = a.data()['createdAt'];
                   final bCreatedAt = b.data()['createdAt'];
 
                   DateTime parseDate(dynamic date) {
                     if (date is Timestamp) return date.toDate();
-                    if (date is String) return DateTime.tryParse(date) ?? DateTime.fromMillisecondsSinceEpoch(0);
+                    if (date is String)
+                      return DateTime.tryParse(date) ??
+                          DateTime.fromMillisecondsSinceEpoch(0);
                     return DateTime.fromMillisecondsSinceEpoch(0);
                   }
 

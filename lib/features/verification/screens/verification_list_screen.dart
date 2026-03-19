@@ -26,7 +26,9 @@ class VerificationListScreen extends StatelessWidget {
           }
 
           if (snapshot.hasError) {
-            return Center(child: Text(ErrorHandler.getUserMessage(snapshot.error)));
+            return Center(
+              child: Text(ErrorHandler.getUserMessage(snapshot.error)),
+            );
           }
 
           final reports = snapshot.data ?? [];

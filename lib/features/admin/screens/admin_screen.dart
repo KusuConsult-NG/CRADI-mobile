@@ -28,7 +28,7 @@ class AdminScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    
+
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
@@ -181,9 +181,9 @@ class _SummaryGrid extends StatelessWidget {
           onTap: () => context.push('/admin/reports'),
         ),
         _StatCard(
-          l10n.totalUsers, 
-          counts[3], 
-          Colors.teal, 
+          l10n.totalUsers,
+          counts[3],
+          Colors.teal,
           Icons.group_outlined,
           onTap: () => context.push('/admin/users'),
         ),
@@ -213,13 +213,7 @@ class _StatCard extends StatelessWidget {
   final IconData icon;
   final VoidCallback? onTap;
 
-  const _StatCard(
-    this.label,
-    this.count,
-    this.color,
-    this.icon, {
-    this.onTap,
-  });
+  const _StatCard(this.label, this.count, this.color, this.icon, {this.onTap});
 
   @override
   Widget build(BuildContext context) {

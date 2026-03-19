@@ -66,7 +66,10 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
         setState(() {
           _isLoading = false;
         });
-        CustomToast.showError(context, ErrorHandler.handleError(e, context: 'Password Reset'));
+        CustomToast.showError(
+          context,
+          ErrorHandler.handleError(e, context: 'Password Reset'),
+        );
       }
     }
   }

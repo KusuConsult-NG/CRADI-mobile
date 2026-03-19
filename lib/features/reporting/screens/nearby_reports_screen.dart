@@ -111,7 +111,9 @@ class _NearbyReportsScreenState extends State<NearbyReportsScreen> {
     }
 
     final profile = context.read<ProfileProvider>();
-    if (profile.lga == null && profile.state == null && profile.monitoringZone == null) {
+    if (profile.lga == null &&
+        profile.state == null &&
+        profile.monitoringZone == null) {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(48),

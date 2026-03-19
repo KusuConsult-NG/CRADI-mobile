@@ -148,10 +148,7 @@ class _CustomButtonState extends State<CustomButton> {
     }
     return Text(
       widget.text,
-      style: TextStyle(
-        fontSize: widget.fontSize,
-        fontWeight: FontWeight.w600,
-      ),
+      style: TextStyle(fontSize: widget.fontSize, fontWeight: FontWeight.w600),
     );
   }
 }

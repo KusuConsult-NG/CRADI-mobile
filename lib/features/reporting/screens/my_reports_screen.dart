@@ -90,18 +90,24 @@ class _MyReportsScreenState extends State<MyReportsScreen>
           final allReports = provider.getReports(null, userId: uid);
           final isLoading = provider.isLoading(null, userId: uid);
 
-          final activeReports =
-              allReports.where((r) => r.isActive).toList();
-          final historyReports =
-              allReports.where((r) => r.isHistory).toList();
+          final activeReports = allReports.where((r) => r.isActive).toList();
+          final historyReports = allReports.where((r) => r.isHistory).toList();
 
           return TabBarView(
             controller: _tabController,
             children: [
-              _buildReportList(activeReports, isLoading, 'No active reports',
-                  'Reports you submit will appear here while being verified.'),
-              _buildReportList(historyReports, isLoading, 'No report history',
-                  'Your approved and rejected reports will appear here.'),
+              _buildReportList(
+                activeReports,
+                isLoading,
+                'No active reports',
+                'Reports you submit will appear here while being verified.',
+              ),
+              _buildReportList(
+                historyReports,
+                isLoading,
+                'No report history',
+                'Your approved and rejected reports will appear here.',
+              ),
             ],
           );
         },

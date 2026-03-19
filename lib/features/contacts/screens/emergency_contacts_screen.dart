@@ -154,9 +154,16 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
                 }
               } on Exception catch (e) {
                 if (mounted) {
-                  ScaffoldMessenger.of(
-                    context,
-                  ).showSnackBar(SnackBar(content: Text(ErrorHandler.handleError(e, context: 'Emergency Contact'))));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        ErrorHandler.handleError(
+                          e,
+                          context: 'Emergency Contact',
+                        ),
+                      ),
+                    ),
+                  );
                 }
               }
             },
@@ -285,7 +292,9 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
                     : provider.getContactsByCategory(_selectedCategory),
                 builder: (context, snapshot) {
                   if (snapshot.hasError) {
-                    return Center(child: Text(ErrorHandler.getUserMessage(snapshot.error)));
+                    return Center(
+                      child: Text(ErrorHandler.getUserMessage(snapshot.error)),
+                    );
                   }
 
                   if (snapshot.connectionState == ConnectionState.waiting) {

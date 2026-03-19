@@ -19,7 +19,12 @@ class _HazardSelectionScreenState extends State<HazardSelectionScreen> {
 
   List<Map<String, dynamic>> _getHazards(AppLocalizations l10n) {
     return [
-      {'id': 'Flooding', 'name': l10n.flooding, 'icon': Icons.flood, 'color': AppColors.hazardFlood},
+      {
+        'id': 'Flooding',
+        'name': l10n.flooding,
+        'icon': Icons.flood,
+        'color': AppColors.hazardFlood,
+      },
       {
         'id': 'Extreme Temperatures',
         'name': l10n.extremeHeat,
@@ -32,7 +37,12 @@ class _HazardSelectionScreenState extends State<HazardSelectionScreen> {
         'icon': Icons.wb_sunny_rounded,
         'color': AppColors.hazardDrought,
       },
-      {'id': 'Windstorms', 'name': l10n.windstorms, 'icon': Icons.air, 'color': AppColors.hazardWind},
+      {
+        'id': 'Windstorms',
+        'name': l10n.windstorms,
+        'icon': Icons.air,
+        'color': AppColors.hazardWind,
+      },
       {
         'id': 'Wildfires',
         'name': l10n.wildfires,

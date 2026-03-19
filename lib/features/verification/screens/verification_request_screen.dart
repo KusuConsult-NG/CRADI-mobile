@@ -113,7 +113,10 @@ class _VerificationRequestScreenState extends State<VerificationRequestScreen> {
                   // Still pop as it is "saved"
                   Navigator.of(context).pop();
                 } else {
-                  message = ErrorHandler.handleError(e, context: 'Verification');
+                  message = ErrorHandler.handleError(
+                    e,
+                    context: 'Verification',
+                  );
                 }
 
                 ScaffoldMessenger.of(
@@ -124,9 +127,11 @@ class _VerificationRequestScreenState extends State<VerificationRequestScreen> {
       }
     } on Exception catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(ErrorHandler.handleError(e, context: 'Verification'))));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(ErrorHandler.handleError(e, context: 'Verification')),
+          ),
+        );
       }
     }
   }
