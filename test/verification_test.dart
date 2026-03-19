@@ -2,6 +2,8 @@
 import 'dart:io';
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:climate_app/l10n/app_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -95,6 +97,22 @@ class _MockReportsStatusProvider extends ChangeNotifier
   dynamic noSuchMethod(Invocation i) => super.noSuchMethod(i);
 }
 
+class _MockConnectivityProvider extends ChangeNotifier
+    implements ConnectivityProvider {
+  @override
+  bool get isOnline => true;
+  @override
+  bool get isOffline => false;
+  @override
+  bool get manualOffline => false;
+  @override
+  bool get initialCheckDone => true;
+  @override
+  Future<bool> checkConnectivity() async => true;
+  @override
+  dynamic noSuchMethod(Invocation i) => super.noSuchMethod(i);
+}
+
 // ── Router: stubs routes that screens navigate to ────────────────────────────
 
 GoRouter _buildRouter(Widget child) => GoRouter(
@@ -116,7 +134,9 @@ Widget makeTestableWidget({required Widget child}) => MultiProvider(
     ChangeNotifierProvider<ReportingProvider>(
       create: (_) => _MockReportingProvider(),
     ),
-    ChangeNotifierProvider(create: (_) => ConnectivityProvider()),
+    ChangeNotifierProvider<ConnectivityProvider>(
+      create: (_) => _MockConnectivityProvider(),
+    ),
     ChangeNotifierProvider<ProfileProvider>(
       create: (_) => _MockProfileProvider(),
     ),
@@ -133,6 +153,13 @@ Widget makeTestableWidget({required Widget child}) => MultiProvider(
   child: MaterialApp.router(
     theme: AppTheme.lightTheme,
     routerConfig: _buildRouter(child),
+    localizationsDelegates: const [
+      AppLocalizations.delegate,
+      GlobalMaterialLocalizations.delegate,
+      GlobalWidgetsLocalizations.delegate,
+      GlobalCupertinoLocalizations.delegate,
+    ],
+    supportedLocales: AppLocalizations.supportedLocales,
   ),
 );
 

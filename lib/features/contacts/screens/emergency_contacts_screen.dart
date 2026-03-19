@@ -1,4 +1,5 @@
 import 'package:climate_app/core/theme/app_colors.dart';
+import 'package:climate_app/core/utils/error_handler.dart';
 import 'package:climate_app/features/contacts/models/emergency_contact_model.dart';
 import 'package:climate_app/features/contacts/providers/emergency_contacts_provider.dart';
 import 'package:flutter/material.dart';
@@ -155,7 +156,7 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
                 if (mounted) {
                   ScaffoldMessenger.of(
                     context,
-                  ).showSnackBar(SnackBar(content: Text('Error: $e')));
+                  ).showSnackBar(SnackBar(content: Text(ErrorHandler.handleError(e, context: 'Emergency Contact'))));
                 }
               }
             },
@@ -284,7 +285,7 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
                     : provider.getContactsByCategory(_selectedCategory),
                 builder: (context, snapshot) {
                   if (snapshot.hasError) {
-                    return Center(child: Text('Error: ${snapshot.error}'));
+                    return Center(child: Text(ErrorHandler.getUserMessage(snapshot.error)));
                   }
 
                   if (snapshot.connectionState == ConnectionState.waiting) {

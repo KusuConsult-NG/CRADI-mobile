@@ -275,7 +275,7 @@ class ProfileProvider extends ChangeNotifier {
           ? ext
           : 'jpg';
       final timestamp = DateTime.now().millisecondsSinceEpoch;
-      final storagePath = 'profile_images/${user.uid}_$timestamp.$validExt';
+      final storagePath = 'profile_images/${user.uid}/profile_$timestamp.$validExt';
 
       developer.log(
         'Uploading profile image to Firebase Storage: $storagePath',

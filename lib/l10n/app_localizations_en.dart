@@ -12,7 +12,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get appTitle => 'EWER Early Warning';
 
   @override
-  String get monitoringZone => 'MONITORING ZONE';
+  String get monitoringZone => 'Monitoring Zone';
 
   @override
   String get toVerify => 'To Verify';
@@ -171,10 +171,22 @@ class AppLocalizationsEn extends AppLocalizations {
   String get cropDisease => 'Crop Disease';
 
   @override
+  String get conflict => 'Conflict';
+
+  @override
   String get selectSeverity => 'Select Severity';
 
   @override
   String get howSevere => 'How severe is the hazard?';
+
+  @override
+  String get howSevereSituation => 'How severe is the situation?';
+
+  @override
+  String get setSeverity => 'Set Severity';
+
+  @override
+  String get nextLocation => 'Next: Location';
 
   @override
   String get low => 'Low';
@@ -187,6 +199,18 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get critical => 'Critical';
+
+  @override
+  String get lowMinorImpact => 'Low - Minor impact';
+
+  @override
+  String get mediumNoticeableImpact => 'Medium - Noticeable impact';
+
+  @override
+  String get highSignificantDamage => 'High - Significant damage';
+
+  @override
+  String get criticalLifeThreatening => 'Critical - Life threatening';
 
   @override
   String get reportDetails => 'Report Details';
@@ -330,7 +354,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get online => 'Online';
 
   @override
-  String get offlineModeReady => 'Offline Mode Ready:';
+  String get offlineModeReady => 'Offline Mode Ready: ';
 
   @override
   String get offlineModeDescription =>
@@ -354,4 +378,481 @@ class AppLocalizationsEn extends AppLocalizations {
   String validation_maxLength(int length) {
     return 'Must be at most $length characters';
   }
+
+  @override
+  String get syncStatus => 'SYNC STATUS';
+
+  @override
+  String get onlineJustNow => 'Online • Just now';
+
+  @override
+  String get active => 'active';
+
+  @override
+  String get pending => 'Pending';
+
+  @override
+  String get resolved => 'Resolved';
+
+  @override
+  String get verified => 'Verified';
+
+  @override
+  String get approved => 'Approved';
+
+  @override
+  String get floodsCategory => 'Floods';
+
+  @override
+  String get droughtsCategory => 'Droughts';
+
+  @override
+  String get pestsCategory => 'Pests';
+
+  @override
+  String get conflictsCategory => 'Conflicts';
+
+  @override
+  String get noRecentAlerts => 'No recent alerts';
+
+  @override
+  String get selectZone => 'Select Zone';
+
+  @override
+  String get activeZone => 'Active';
+
+  @override
+  String get notSetZone => 'Not Set';
+
+  @override
+  String get noNewNotifications => 'No new notifications';
+
+  @override
+  String get reportsStatus => 'Reports Status';
+
+  @override
+  String get acknowledged => 'Acknowledged';
+
+  @override
+  String get rejected => 'Rejected';
+
+  @override
+  String get generateReport => 'Generate Report';
+
+  @override
+  String noReportsStatus(String status) {
+    return 'No $status Reports';
+  }
+
+  @override
+  String get refresh => 'Refresh';
+
+  @override
+  String reportedBy(String name) {
+    return 'Reported by $name';
+  }
+
+  @override
+  String get viewDetails => 'View Details';
+
+  @override
+  String get reportVerified => 'Report verified successfully';
+
+  @override
+  String get verifyReport => 'Verify';
+
+  @override
+  String get reportRejectedItem => 'Report rejected';
+
+  @override
+  String get reject => 'Reject';
+
+  @override
+  String get reportResolvedItem => 'Report approved';
+
+  @override
+  String get markResolved => 'Approve';
+
+  @override
+  String get reportMovedPending => 'Report moved back to Pending';
+
+  @override
+  String get reopen => 'Reopen';
+
+  @override
+  String get reportReopenedPending => 'Report reopened and moved to Pending';
+
+  @override
+  String get reportDetailsTitle => 'Report Details';
+
+  @override
+  String get descriptionLabel => 'Description';
+
+  @override
+  String get describeHazardHint =>
+      'Describe the hazard here (e.g. flood levels rising, bridge collapsed)...';
+
+  @override
+  String get speechNotAvailable => 'Speech recognition not available';
+
+  @override
+  String get listeningSpeakNow => 'Listening... Speak now';
+
+  @override
+  String get beSpecificLocationSeverity =>
+      'Be specific about location and severity.';
+
+  @override
+  String get whenDidThisOccur => 'When Did This Occur?';
+
+  @override
+  String get optionalLabel => 'Optional';
+
+  @override
+  String get todayLabel => 'Today';
+
+  @override
+  String get tapToSelectDateTime =>
+      'Tap to select date & time. Defaults to now if not changed.';
+
+  @override
+  String get evidenceLabel => 'Evidence';
+
+  @override
+  String get max3Photos => 'Max 3 photos';
+
+  @override
+  String get offlineModeMessage =>
+      'Your photos will be compressed automatically. Reports are saved locally until you have internet.';
+
+  @override
+  String get reviewReportBtn => 'Review Report';
+
+  @override
+  String get cameraBtn => 'Camera';
+
+  @override
+  String get galleryBtn => 'Gallery';
+
+  @override
+  String get submissionFailed => 'Submission failed';
+
+  @override
+  String get savedForLater => 'Saved for Later';
+
+  @override
+  String get reportSubmittedTitle => 'Report Submitted!';
+
+  @override
+  String get offlineReportMessage =>
+      'You are offline. The report will be sent automatically when you are back online.';
+
+  @override
+  String get onlineReportMessage =>
+      'Your report has been successfully sent to central command.';
+
+  @override
+  String get statusLabel => 'STATUS';
+
+  @override
+  String get reportIdLabel => 'REPORT ID';
+
+  @override
+  String get queuedStatus => 'QUEUED';
+
+  @override
+  String get sentStatus => 'SENT';
+
+  @override
+  String get returnToDashboard => 'Return to Dashboard';
+
+  @override
+  String get reviewReportTitle => 'Review Report';
+
+  @override
+  String get reviewReportDesc =>
+      'Please review the details below to ensure accuracy before submitting to the central command.';
+
+  @override
+  String get hazardDetails => 'Hazard Details';
+
+  @override
+  String get hazardType => 'Hazard Type';
+
+  @override
+  String get notSelected => 'Not Selected';
+
+  @override
+  String get severityLevelLabel => 'Severity Level';
+
+  @override
+  String get severityDesc => 'Assess the intensity of the hazard.';
+
+  @override
+  String get severityLowShort => 'Low';
+
+  @override
+  String get severityMedShort => 'Med';
+
+  @override
+  String get severityHighShort => 'High';
+
+  @override
+  String get severityCritShort => 'Crit';
+
+  @override
+  String get dateTimeLabel => 'Date & Time';
+
+  @override
+  String get whenItOccurred => 'When it occurred';
+
+  @override
+  String get todayAt => 'Today at';
+
+  @override
+  String get atTime => 'at';
+
+  @override
+  String get locationLabel => 'Location';
+
+  @override
+  String get notProvided => 'Not Provided';
+
+  @override
+  String get monitorNotes => 'Monitor Notes';
+
+  @override
+  String get noDescriptionProvided => 'No description provided';
+
+  @override
+  String get addPhotoBtn => 'Add';
+
+  @override
+  String get submitReportBtn => 'Submit Report';
+
+  @override
+  String get editBtn => 'Edit';
+
+  @override
+  String get locationPermissionDenied => 'Location permission denied';
+
+  @override
+  String get enableGpsMessage => 'Unable to get location. Please enable GPS.';
+
+  @override
+  String get locationError => 'Location error:';
+
+  @override
+  String get acquiringGps => 'ACQUIRING...';
+
+  @override
+  String get noSignalGps => 'NO SIGNAL';
+
+  @override
+  String get gpsStrong => 'GPS STRONG';
+
+  @override
+  String get gpsGood => 'GPS GOOD';
+
+  @override
+  String get gpsWeak => 'GPS WEAK';
+
+  @override
+  String get couldNotFindLocation => 'Could not find location on map';
+
+  @override
+  String get mapUpdateError => 'Map update error:';
+
+  @override
+  String get incidentLocation => 'Incident Location';
+
+  @override
+  String get gettingLocation => 'Getting location...';
+
+  @override
+  String get noGpsData => 'No GPS data';
+
+  @override
+  String get locationUnavailable => 'Location unavailable';
+
+  @override
+  String get coordinatesLabel => 'COORDINATES';
+
+  @override
+  String get viewDetailsBtn => 'View Details';
+
+  @override
+  String get wardAndLgaSelection => 'Ward & LGA Selection';
+
+  @override
+  String get selectWardDropdown => 'Select your ward from the dropdown';
+
+  @override
+  String get selectLgaWardIncident =>
+      'Select the LGA and Ward where the incident occurred';
+
+  @override
+  String get stateLabel => 'State';
+
+  @override
+  String get selectState => 'Select State';
+
+  @override
+  String get selectStateFirst => 'Select State first';
+
+  @override
+  String get lgaLabel => 'LGA (Local Government Area)';
+
+  @override
+  String get selectLga => 'Select LGA';
+
+  @override
+  String get selectLgaFirst => 'Select LGA first';
+
+  @override
+  String get wardLabel => 'Ward';
+
+  @override
+  String get selectWard => 'Select Ward';
+
+  @override
+  String get enterLocationManually => 'Enter Location Manually';
+
+  @override
+  String get addressOrCoordinates => 'Address or Coordinates';
+
+  @override
+  String get cancelBtn => 'Cancel';
+
+  @override
+  String get setLocationBtn => 'Set';
+
+  @override
+  String get manualLocationSet => 'Manual location set';
+
+  @override
+  String get locationIncorrectManual => 'Location incorrect? Enter manually';
+
+  @override
+  String get pleaseSelectStateLgaWard =>
+      'Please select State, LGA, and Ward before continuing';
+
+  @override
+  String get confirmAndContinue => 'Confirm & Continue';
+
+  @override
+  String get locationDetailsTitle => 'Location Details';
+
+  @override
+  String get latitudeLabel => 'Latitude';
+
+  @override
+  String get longitudeLabel => 'Longitude';
+
+  @override
+  String get accuracyLabel => 'Accuracy';
+
+  @override
+  String get altitudeLabel => 'Altitude';
+
+  @override
+  String get closeBtn => 'Close';
+
+  @override
+  String get selectStatusExport => 'Select status to export:';
+
+  @override
+  String get allReports => 'All Reports';
+
+  @override
+  String get pendingOnly => 'Pending Only';
+
+  @override
+  String get acknowledgedOnly => 'Acknowledged Only';
+
+  @override
+  String get resolvedOnly => 'Resolved Only';
+
+  @override
+  String get verifiedOnly => 'Verified Only';
+
+  @override
+  String get approvedOnly => 'Approved Only';
+
+  @override
+  String get csvExportWeb => 'CSV export available on web version';
+
+  @override
+  String get errorGenericCheckConnection =>
+      'An error occurred. Please check your connection and try again.';
+
+  @override
+  String get adminPortal => 'Admin Portal';
+
+  @override
+  String get systemOverview => 'System Overview';
+
+  @override
+  String get quickActions => 'Quick Actions';
+
+  @override
+  String get userManagement => 'User Management';
+
+  @override
+  String get reportsOverview => 'Reports Overview';
+
+  @override
+  String get alertsBroadcast => 'Alerts & Broadcast';
+
+  @override
+  String get knowledgeManagement => 'Knowledge Management';
+
+  @override
+  String get systemHealth => 'System Health';
+
+  @override
+  String get pendingApprovals => 'Pending Approvals';
+
+  @override
+  String get pendingReports => 'Pending Reports';
+
+  @override
+  String get escalatedReports => 'Escalated Reports';
+
+  @override
+  String get verifiedReports => 'Verified Reports';
+
+  @override
+  String get totalUsers => 'Total Users';
+
+  @override
+  String get activeAlertsAdmin => 'Active Alerts';
+
+  @override
+  String get totalReports => 'Total Reports';
+
+  @override
+  String get userManagementDesc =>
+      'Approve accounts, assign roles, deactivate users';
+
+  @override
+  String get reportsOverviewDesc =>
+      'View, validate, or reject reports across all LGAs';
+
+  @override
+  String get alertsBroadcastDesc =>
+      'Send emergency alerts to users or specific areas';
+
+  @override
+  String get knowledgeManagementDesc =>
+      'Add, edit, or remove emergency knowledge guides';
+
+  @override
+  String get connected => 'Connected';
+
+  @override
+  String get none => 'None';
+
+  @override
+  String get reports => 'reports';
 }

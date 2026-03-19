@@ -446,6 +446,7 @@ class AuthProvider extends ChangeNotifier {
   Future<bool> signInWithEmail({
     required String email,
     required String password,
+    bool rememberMe = false,
   }) async {
     String? deviceFingerprint;
     try {
@@ -544,7 +545,7 @@ class AuthProvider extends ChangeNotifier {
         );
       }
 
-      await _startUserSession(user, role);
+      await _startUserSession(user, role, rememberMe: rememberMe);
       await _rateLimiter.resetLoginAttempts();
 
       // Save credentials to resurrect the session via Biometrics if it expires
@@ -1194,11 +1195,13 @@ class AuthProvider extends ChangeNotifier {
     User user,
     UserRole role, {
     bool isVerified = true,
+    bool rememberMe = false,
   }) async {
     await _storage.saveUserRole(role.name);
     await _sessionManager.startSession(
       authToken: user.uid,
       userRole: role.name,
+      rememberMe: rememberMe,
     );
     _isAuthenticated = true;
   }

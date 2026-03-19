@@ -11,6 +11,7 @@ class SessionManager {
 
   // Session configuration
   static const Duration sessionTimeout = Duration(minutes: 30);
+  static const Duration persistentSessionTimeout = Duration(days: 30);
   static const Duration sessionExtensionThreshold = Duration(minutes: 5);
 
   Timer? _sessionTimer;
@@ -21,8 +22,15 @@ class SessionManager {
   Function? onSessionExtended;
 
   /// Start a new session
-  Future<void> startSession({String? authToken, String? userRole}) async {
-    final expiry = DateTime.now().add(sessionTimeout);
+  Future<void> startSession({
+    String? authToken,
+    String? userRole,
+    bool rememberMe = false,
+  }) async {
+    await _storage.saveRememberMe(rememberMe);
+
+    final timeout = rememberMe ? persistentSessionTimeout : sessionTimeout;
+    final expiry = DateTime.now().add(timeout);
     await _storage.saveSessionExpiry(expiry);
 
     if (authToken != null) {
@@ -38,7 +46,9 @@ class SessionManager {
 
   /// Extend current session
   Future<void> extendSession() async {
-    final expiry = DateTime.now().add(sessionTimeout);
+    final rememberMe = await _storage.getRememberMe();
+    final timeout = rememberMe ? persistentSessionTimeout : sessionTimeout;
+    final expiry = DateTime.now().add(timeout);
     await _storage.saveSessionExpiry(expiry);
 
     onSessionExtended?.call();

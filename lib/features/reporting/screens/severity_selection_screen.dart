@@ -3,6 +3,7 @@ import 'package:climate_app/features/reporting/providers/reporting_provider.dart
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+import 'package:climate_app/l10n/app_localizations.dart';
 import 'package:climate_app/shared/widgets/custom_button.dart';
 
 class SeveritySelectionScreen extends StatefulWidget {
@@ -29,30 +30,32 @@ class _SeveritySelectionScreenState extends State<SeveritySelectionScreen> {
     }
   }
 
-  String _getLabel(SeverityLevel level) {
+  String _getLabel(SeverityLevel level, AppLocalizations l10n) {
     switch (level) {
       case SeverityLevel.low:
-        return 'Low - Minor impact';
+        return l10n.lowMinorImpact;
       case SeverityLevel.medium:
-        return 'Medium - Noticeable impact';
+        return l10n.mediumNoticeableImpact;
       case SeverityLevel.high:
-        return 'High - Significant damage';
+        return l10n.highSignificantDamage;
       case SeverityLevel.critical:
-        return 'Critical - Life threatening';
+        return l10n.criticalLifeThreatening;
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+
     return Scaffold(
-      appBar: AppBar(title: const Text('Set Severity')),
+      appBar: AppBar(title: Text(l10n.setSeverity)),
       body: Padding(
         padding: const EdgeInsets.all(24.0),
         child: Column(
           children: [
-            const Text(
-              'How severe is the situation?',
-              style: TextStyle(fontSize: 18),
+            Text(
+              l10n.howSevereSituation,
+              style: const TextStyle(fontSize: 18),
             ),
             const Spacer(),
             Container(
@@ -70,7 +73,7 @@ class _SeveritySelectionScreenState extends State<SeveritySelectionScreen> {
             ),
             const SizedBox(height: 32),
             Text(
-              _getLabel(_currentLevel),
+              _getLabel(_currentLevel, l10n),
               style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                 fontWeight: FontWeight.bold,
                 color: _getColor(_currentLevel),
@@ -105,13 +108,13 @@ class _SeveritySelectionScreenState extends State<SeveritySelectionScreen> {
               height: 50,
               child: CustomButton(
                 onPressed: () {
-                  // Save full label, not just name
+                  // Save base name (e.g. 'high', 'critical') for backend consistency
                   context.read<ReportingProvider>().setSeverity(
-                    _getLabel(_currentLevel),
+                    _currentLevel.name,
                   );
                   context.push('/report/location');
                 },
-                text: 'Next: Location',
+                text: l10n.nextLocation,
               ),
             ),
           ],

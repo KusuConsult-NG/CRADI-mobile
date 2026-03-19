@@ -1,5 +1,6 @@
 import 'package:firebase_auth/firebase_auth.dart';
 
+import 'package:climate_app/core/utils/error_handler.dart';
 import 'package:climate_app/core/utils/validators.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
@@ -112,7 +113,7 @@ class _VerificationRequestScreenState extends State<VerificationRequestScreen> {
                   // Still pop as it is "saved"
                   Navigator.of(context).pop();
                 } else {
-                  message = 'Error: $e';
+                  message = ErrorHandler.handleError(e, context: 'Verification');
                 }
 
                 ScaffoldMessenger.of(
@@ -125,7 +126,7 @@ class _VerificationRequestScreenState extends State<VerificationRequestScreen> {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('Error: $e')));
+        ).showSnackBar(SnackBar(content: Text(ErrorHandler.handleError(e, context: 'Verification'))));
       }
     }
   }

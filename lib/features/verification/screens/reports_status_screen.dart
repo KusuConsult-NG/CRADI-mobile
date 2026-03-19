@@ -1,4 +1,5 @@
 import 'package:climate_app/core/theme/app_colors.dart';
+import 'package:climate_app/core/utils/error_handler.dart';
 import 'package:climate_app/features/verification/models/verification_report_model.dart';
 import 'package:climate_app/features/verification/providers/reports_status_provider.dart';
 import 'package:flutter/material.dart';
@@ -6,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:climate_app/features/auth/providers/auth_provider.dart';
+import 'package:climate_app/l10n/app_localizations.dart';
 
 class ReportsStatusScreen extends StatefulWidget {
   const ReportsStatusScreen({super.key});
@@ -23,9 +25,10 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final currentUserId = context.read<AuthProvider>().currentUser?.uid;
+      final auth = context.read<AuthProvider>();
+      final isUser = auth.userRole == UserRole.user;
       context.read<ReportsStatusProvider>().refreshReports(
-        excludeUserId: currentUserId,
+        userId: isUser ? auth.currentUser?.uid : null,
       );
     });
   }
@@ -56,7 +59,7 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
           },
         ),
         title: Text(
-          'Reports Status',
+          AppLocalizations.of(context)!.reportsStatus,
           style: GoogleFonts.lexend(
             fontWeight: FontWeight.bold,
             color: AppColors.textPrimary,
@@ -78,11 +81,11 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
             fontSize: 14,
             fontWeight: FontWeight.normal,
           ),
-          tabs: const [
-            Tab(text: 'Pending'),
-            Tab(text: 'Acknowledged'),
-            Tab(text: 'Resolved'),
-            Tab(text: 'Rejected'),
+          tabs: [
+            Tab(text: AppLocalizations.of(context)!.pending),
+            Tab(text: AppLocalizations.of(context)!.verified),
+            Tab(text: AppLocalizations.of(context)!.approved),
+            Tab(text: AppLocalizations.of(context)!.rejected),
           ],
         ),
       ),
@@ -92,8 +95,8 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
             controller: _tabController,
             children: [
               _buildReportsList(provider, ReportStatus.pending),
-              _buildReportsList(provider, ReportStatus.acknowledged),
-              _buildReportsList(provider, ReportStatus.resolved),
+              _buildReportsList(provider, ReportStatus.verified),
+              _buildReportsList(provider, ReportStatus.approved),
               _buildReportsList(provider, ReportStatus.rejected),
             ],
           );
@@ -105,7 +108,7 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
         backgroundColor: AppColors.primaryRed,
         icon: const Icon(Icons.download, color: Colors.white),
         label: Text(
-          'Generate Report',
+          AppLocalizations.of(context)!.generateReport,
           style: GoogleFonts.lexend(color: Colors.white),
         ),
       ),
@@ -116,10 +119,13 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
     ReportsStatusProvider provider,
     ReportStatus status,
   ) {
-    final currentUserId = context.read<AuthProvider>().currentUser?.uid;
-    final reports = provider.getReports(status, excludeUserId: currentUserId);
-    final isLoading = provider.isLoading(status, excludeUserId: currentUserId);
-    final hasMore = provider.hasMore(status, excludeUserId: currentUserId);
+    final auth = context.read<AuthProvider>();
+    final isUser = auth.userRole == UserRole.user;
+    final uid = isUser ? auth.currentUser?.uid : null;
+
+    final reports = provider.getReports(status, userId: uid);
+    final isLoading = provider.isLoading(status, userId: uid);
+    final hasMore = provider.hasMore(status, userId: uid);
 
     if (reports.isEmpty && isLoading) {
       return const Center(child: CircularProgressIndicator());
@@ -133,7 +139,7 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
             Icon(Icons.inbox_outlined, size: 64, color: Colors.grey.shade300),
             const SizedBox(height: 16),
             Text(
-              'No ${status.displayName} Reports',
+              AppLocalizations.of(context)!.noReportsStatus(status.displayName),
               style: GoogleFonts.lexend(
                 fontSize: 16,
                 color: AppColors.textSecondary,
@@ -141,16 +147,9 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
             ),
             ElevatedButton(
               onPressed: () {
-                final currentUserId = context
-                    .read<AuthProvider>()
-                    .currentUser
-                    ?.uid;
-                provider.fetchReports(
-                  status: status,
-                  excludeUserId: currentUserId,
-                );
+                provider.fetchReports(status: status, userId: uid);
               },
-              child: const Text("Refresh"),
+              child: Text(AppLocalizations.of(context)!.refresh),
             ),
           ],
         ),
@@ -159,22 +158,17 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
 
     return RefreshIndicator(
       onRefresh: () async {
-        final currentUserId = context.read<AuthProvider>().currentUser?.uid;
-        await provider.fetchReports(
-          status: status,
-          excludeUserId: currentUserId,
-        );
+        await provider.fetchReports(status: status, userId: uid);
       },
       child: NotificationListener<ScrollNotification>(
         onNotification: (ScrollNotification scrollInfo) {
           if (!isLoading &&
               hasMore &&
               scrollInfo.metrics.pixels == scrollInfo.metrics.maxScrollExtent) {
-            final currentUserId = context.read<AuthProvider>().currentUser?.uid;
             provider.fetchReports(
               loadMore: true,
               status: status,
-              excludeUserId: currentUserId,
+              userId: uid,
             );
           }
           return false;
@@ -204,6 +198,7 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
     VerificationReport report,
     ReportsStatusProvider provider,
   ) {
+    final currentUserId = context.read<AuthProvider>().currentUser?.uid;
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -250,7 +245,7 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'Reported by ${report.reporter}',
+                      AppLocalizations.of(context)!.reportedBy(report.reporter),
                       style: GoogleFonts.lexend(
                         fontSize: 12,
                         color: AppColors.textSecondary,
@@ -271,11 +266,15 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
                 color: AppColors.textSecondary,
               ),
               const SizedBox(width: 4),
-              Text(
-                report.location,
-                style: GoogleFonts.lexend(
-                  fontSize: 12,
-                  color: AppColors.textSecondary,
+              Flexible(
+                child: Text(
+                  report.location,
+                  style: GoogleFonts.lexend(
+                    fontSize: 12,
+                    color: AppColors.textSecondary,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
                 ),
               ),
               const SizedBox(width: 12),
@@ -303,7 +302,7 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
                   context.push('/report/details');
                 },
                 child: Text(
-                  'View Details',
+                  AppLocalizations.of(context)!.viewDetails,
                   style: GoogleFonts.lexend(
                     color: AppColors.primaryRed,
                     fontWeight: FontWeight.bold,
@@ -311,32 +310,29 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
                 ),
               ),
               const Spacer(),
-              if (report.status == ReportStatus.pending) ...[
+              if (report.status == ReportStatus.pending && report.reporterId != currentUserId) ...[
                 ElevatedButton(
                   onPressed: () async {
                     final scaffoldMessenger = ScaffoldMessenger.of(context);
+                    final verifiedMsg = AppLocalizations.of(context)!.reportVerified;
                     try {
                       await provider.verifyReport(report.id);
-                      if (context.mounted) {
-                        scaffoldMessenger.showSnackBar(
-                          SnackBar(
-                            content: Text(
-                              'Report verified and moved to Acknowledged',
-                              style: GoogleFonts.lexend(),
-                            ),
-                            backgroundColor: AppColors.successGreen,
+                      scaffoldMessenger.showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            verifiedMsg,
+                            style: GoogleFonts.lexend(),
                           ),
-                        );
-                      }
+                          backgroundColor: AppColors.successGreen,
+                        ),
+                      );
                     } on Exception catch (e) {
-                      if (context.mounted) {
-                        scaffoldMessenger.showSnackBar(
-                          SnackBar(
-                            content: Text('Error: $e'),
-                            backgroundColor: Colors.red,
-                          ),
-                        );
-                      }
+                      scaffoldMessenger.showSnackBar(
+                        SnackBar(
+                          content: Text(ErrorHandler.handleError(e, context: 'Report')),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
                     }
                   },
                   style: ElevatedButton.styleFrom(
@@ -347,34 +343,31 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
                       borderRadius: BorderRadius.circular(8),
                     ),
                   ),
-                  child: const Text('Verify'),
+                  child: Text(AppLocalizations.of(context)!.verifyReport),
                 ),
                 const SizedBox(width: 8),
                 OutlinedButton(
                   onPressed: () async {
                     final scaffoldMessenger = ScaffoldMessenger.of(context);
+                    final rejectedMsg = AppLocalizations.of(context)!.reportRejectedItem;
                     try {
                       await provider.rejectReport(report.id);
-                      if (context.mounted) {
-                        scaffoldMessenger.showSnackBar(
-                          SnackBar(
-                            content: Text(
-                              'Report rejected',
-                              style: GoogleFonts.lexend(),
-                            ),
-                            backgroundColor: Colors.red,
+                      scaffoldMessenger.showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            rejectedMsg,
+                            style: GoogleFonts.lexend(),
                           ),
-                        );
-                      }
+                          backgroundColor: Colors.red,
+                        ),
+                      );
                     } on Exception catch (e) {
-                      if (context.mounted) {
-                        scaffoldMessenger.showSnackBar(
-                          SnackBar(
-                            content: Text('Error: $e'),
-                            backgroundColor: Colors.red,
-                          ),
-                        );
-                      }
+                      scaffoldMessenger.showSnackBar(
+                        SnackBar(
+                          content: Text(ErrorHandler.handleError(e, context: 'Report')),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
                     }
                   },
                   style: OutlinedButton.styleFrom(
@@ -384,35 +377,32 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
                       borderRadius: BorderRadius.circular(8),
                     ),
                   ),
-                  child: const Text('Reject'),
+                  child: Text(AppLocalizations.of(context)!.reject),
                 ),
               ],
-              if (report.status == ReportStatus.acknowledged) ...[
+              if (report.status == ReportStatus.verified && report.reporterId != currentUserId) ...[
                 ElevatedButton(
                   onPressed: () async {
                     final scaffoldMessenger = ScaffoldMessenger.of(context);
+                    final resolvedMsg = AppLocalizations.of(context)!.reportResolvedItem;
                     try {
-                      await provider.resolveReport(report.id);
-                      if (context.mounted) {
-                        scaffoldMessenger.showSnackBar(
-                          SnackBar(
-                            content: Text(
-                              'Report marked as Resolved',
-                              style: GoogleFonts.lexend(),
-                            ),
-                            backgroundColor: AppColors.successGreen,
+                      await provider.approveReport(report.id);
+                      scaffoldMessenger.showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            resolvedMsg,
+                            style: GoogleFonts.lexend(),
                           ),
-                        );
-                      }
+                          backgroundColor: AppColors.successGreen,
+                        ),
+                      );
                     } on Exception catch (e) {
-                      if (context.mounted) {
-                        scaffoldMessenger.showSnackBar(
-                          SnackBar(
-                            content: Text('Error: $e'),
-                            backgroundColor: Colors.red,
-                          ),
-                        );
-                      }
+                      scaffoldMessenger.showSnackBar(
+                        SnackBar(
+                          content: Text(ErrorHandler.handleError(e, context: 'Report')),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
                     }
                   },
                   style: ElevatedButton.styleFrom(
@@ -428,7 +418,7 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
                     ),
                   ),
                   child: Text(
-                    'Mark Resolved',
+                    AppLocalizations.of(context)!.markResolved,
                     style: GoogleFonts.lexend(fontSize: 13),
                   ),
                 ),
@@ -439,7 +429,7 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
                         content: Text(
-                          'Report moved back to Pending',
+                          AppLocalizations.of(context)!.reportMovedPending,
                           style: GoogleFonts.lexend(),
                         ),
                       ),
@@ -456,19 +446,19 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
                     ),
                   ),
                   child: Text(
-                    'Reopen',
+                    AppLocalizations.of(context)!.reopen,
                     style: GoogleFonts.lexend(fontSize: 13),
                   ),
                 ),
               ],
-              if (report.status == ReportStatus.resolved) ...[
+              if (report.status == ReportStatus.approved && report.reporterId != currentUserId) ...[
                 OutlinedButton(
                   onPressed: () {
                     provider.moveBackToPending(report.id);
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
                         content: Text(
-                          'Report reopened and moved to Pending',
+                          AppLocalizations.of(context)!.reportReopenedPending,
                           style: GoogleFonts.lexend(),
                         ),
                       ),
@@ -485,7 +475,7 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
                     ),
                   ),
                   child: Text(
-                    'Reopen',
+                    AppLocalizations.of(context)!.reopen,
                     style: GoogleFonts.lexend(fontSize: 13),
                   ),
                 ),
@@ -503,10 +493,10 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
       case ReportStatus.pending:
         color = Colors.orange;
         break;
-      case ReportStatus.acknowledged:
+      case ReportStatus.verified:
         color = AppColors.successGreen;
         break;
-      case ReportStatus.resolved:
+      case ReportStatus.approved:
         color = Colors.blue;
         break;
       case ReportStatus.rejected:
@@ -539,7 +529,7 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
       context: context,
       builder: (c) => AlertDialog(
         title: Text(
-          'Generate Report',
+          AppLocalizations.of(context)!.generateReport,
           style: GoogleFonts.lexend(fontWeight: FontWeight.bold),
         ),
         content: Column(
@@ -547,35 +537,35 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Select status to export:',
+              AppLocalizations.of(context)!.selectStatusExport,
               style: GoogleFonts.lexend(fontSize: 14),
             ),
             const SizedBox(height: 12),
-            _buildExportOption(c, provider, 'All Reports', null),
+            _buildExportOption(c, provider, AppLocalizations.of(context)!.allReports, null),
             _buildExportOption(
               c,
               provider,
-              'Pending Only',
+              AppLocalizations.of(context)!.pendingOnly,
               ReportStatus.pending,
             ),
             _buildExportOption(
               c,
               provider,
-              'Acknowledged Only',
-              ReportStatus.acknowledged,
+              AppLocalizations.of(context)!.verifiedOnly,
+              ReportStatus.verified,
             ),
             _buildExportOption(
               c,
               provider,
-              'Resolved Only',
-              ReportStatus.resolved,
+              AppLocalizations.of(context)!.approvedOnly,
+              ReportStatus.approved,
             ),
           ],
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(c),
-            child: const Text('Cancel'),
+            child: Text(AppLocalizations.of(context)!.cancel),
           ),
         ],
       ),
@@ -597,7 +587,7 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              'CSV export available on web version',
+              AppLocalizations.of(context)!.csvExportWeb,
               style: GoogleFonts.lexend(),
             ),
             backgroundColor: AppColors.textSecondary,

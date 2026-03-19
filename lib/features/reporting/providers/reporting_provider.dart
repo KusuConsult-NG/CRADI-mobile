@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:climate_app/core/services/firebase_service.dart';
+import 'package:climate_app/core/utils/error_handler.dart';
 import 'package:climate_app/core/services/offline_storage_service.dart';
 import 'package:climate_app/core/services/peer_verification_service.dart';
 import 'package:climate_app/core/data/mvp_locations_data.dart';
@@ -273,7 +274,7 @@ class ReportingProvider extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
       developer.log('Error submitting report: $e');
-      return {'success': false, 'message': 'Submission Error: $e'};
+      return {'success': false, 'message': ErrorHandler.handleError(e, context: 'Report Submission')};
     }
   }
 

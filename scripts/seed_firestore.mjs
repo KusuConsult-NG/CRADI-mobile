@@ -174,8 +174,8 @@ for (const guide of knowledgeGuides) {
     if (existing.empty) {
         await knowledgeRef.add({
             ...guide,
-            $createdAt: admin.firestore.FieldValue.serverTimestamp(),
-            $updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
         });
         console.log(`\x1b[32m✓\x1b[0m Seeded knowledge guide: ${guide.title}`);
     } else {
@@ -198,7 +198,7 @@ if (!configSnap.exists) {
             knowledgeBaseEnabled: true,
             peerVerificationEnabled: true,
         },
-        $createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
     });
     console.log('\x1b[32m✓\x1b[0m Seeded config/app_settings');
 } else {

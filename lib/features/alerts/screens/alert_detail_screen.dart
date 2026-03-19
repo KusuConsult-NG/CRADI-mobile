@@ -1,4 +1,5 @@
 import 'package:climate_app/core/theme/app_colors.dart';
+import 'package:climate_app/core/utils/error_handler.dart';
 import 'package:climate_app/core/services/peer_verification_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
@@ -38,7 +39,7 @@ class _AlertDetailScreenState extends State<AlertDetailScreen> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('Error: User not logged in'),
+              content: Text('Please log in to continue.'),
               backgroundColor: Colors.red,
             ),
           );
@@ -51,7 +52,7 @@ class _AlertDetailScreenState extends State<AlertDetailScreen> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('Error: Report ID not found'),
+              content: Text('Report details could not be loaded.'),
               backgroundColor: Colors.red,
             ),
           );
@@ -92,7 +93,7 @@ class _AlertDetailScreenState extends State<AlertDetailScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error: ${e.toString()}'),
+            content: Text(ErrorHandler.handleError(e, context: 'Alert Verification')),
             backgroundColor: Colors.red,
           ),
         );
@@ -334,7 +335,7 @@ class _AlertDetailScreenState extends State<AlertDetailScreen> {
                                   )
                                 : const Icon(Icons.check_circle, size: 20),
                             label: Text(
-                              _isSubmitting ? 'Submitting...' : 'I Can Confirm',
+                              _isSubmitting ? 'Submitting...' : 'Confirm',
                               style: GoogleFonts.lexend(
                                 fontSize: 14,
                                 fontWeight: FontWeight.bold,
@@ -343,7 +344,7 @@ class _AlertDetailScreenState extends State<AlertDetailScreen> {
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.green,
                               foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(vertical: 16),
+                              padding: const EdgeInsets.symmetric(vertical: 14),
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(12),
                               ),
@@ -372,7 +373,7 @@ class _AlertDetailScreenState extends State<AlertDetailScreen> {
                             label: Text(
                               _isSubmitting
                                   ? 'Submitting...'
-                                  : 'I Cannot Confirm',
+                                  : 'Decline',
                               style: GoogleFonts.lexend(
                                 fontSize: 14,
                                 fontWeight: FontWeight.bold,
@@ -384,7 +385,7 @@ class _AlertDetailScreenState extends State<AlertDetailScreen> {
                                 color: Colors.red,
                                 width: 2,
                               ),
-                              padding: const EdgeInsets.symmetric(vertical: 16),
+                              padding: const EdgeInsets.symmetric(vertical: 14),
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(12),
                               ),

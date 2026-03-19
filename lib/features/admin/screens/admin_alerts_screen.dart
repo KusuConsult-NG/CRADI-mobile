@@ -17,6 +17,19 @@ class _AdminAlertsScreenState extends State<AdminAlertsScreen> {
   final _formKey = GlobalKey<FormState>();
   final _titleCtrl = TextEditingController();
   final _messageCtrl = TextEditingController();
+  late final Stream<QuerySnapshot<Map<String, dynamic>>> _alertsStream;
+
+  @override
+  void initState() {
+    super.initState();
+    _alertsStream = FirebaseFirestore.instance
+        .collection('alerts')
+        .where('isActive', isEqualTo: true)
+        .orderBy('createdAt', descending: true)
+        .limit(20)
+        .snapshots();
+  }
+
   String _severity = 'warning';
   String _targetLga = 'All';
   bool _sending = false;
@@ -351,12 +364,7 @@ class _AdminAlertsScreenState extends State<AdminAlertsScreen> {
           const SizedBox(height: 12),
 
           StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-            stream: FirebaseFirestore.instance
-                .collection('alerts')
-                .where('isActive', isEqualTo: true)
-                .orderBy('createdAt', descending: true)
-                .limit(20)
-                .snapshots(),
+            stream: _alertsStream,
             builder: (context, snap) {
               if (snap.connectionState == ConnectionState.waiting) {
                 return const Center(child: CircularProgressIndicator());

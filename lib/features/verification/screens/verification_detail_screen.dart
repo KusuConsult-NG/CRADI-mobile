@@ -1,5 +1,6 @@
 import 'package:climate_app/core/services/peer_verification_service.dart';
 import 'package:climate_app/core/theme/app_colors.dart';
+import 'package:climate_app/core/utils/error_handler.dart';
 import 'package:climate_app/shared/widgets/custom_button.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
@@ -68,7 +69,7 @@ class _VerificationDetailScreenState extends State<VerificationDetailScreen> {
         setState(() => _isLoading = false);
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('Error: $e')));
+        ).showSnackBar(SnackBar(content: Text(ErrorHandler.handleError(e, context: 'Verification'))));
       }
     }
   }

@@ -11,6 +11,7 @@ import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 import 'package:climate_app/shared/widgets/custom_button.dart';
 import 'package:climate_app/core/utils/input_sanitizer.dart';
+import 'package:climate_app/l10n/app_localizations.dart';
 
 class ReportDetailsScreen extends StatefulWidget {
   const ReportDetailsScreen({super.key});
@@ -41,8 +42,8 @@ class _ReportDetailsScreenState extends State<ReportDetailsScreen> {
           setState(() => _isListening = false);
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('Error: ${error.errorMsg}'),
+              const SnackBar(
+                content: Text('Speech recognition error. Please try again.'),
                 backgroundColor: Colors.red,
               ),
             );
@@ -91,8 +92,8 @@ class _ReportDetailsScreenState extends State<ReportDetailsScreen> {
   void _toggleListening() async {
     if (!_speechAvailable) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Speech recognition not available'),
+        SnackBar(
+          content: Text(AppLocalizations.of(context)!.speechNotAvailable),
           backgroundColor: Colors.orange,
         ),
       );
@@ -137,10 +138,10 @@ class _ReportDetailsScreenState extends State<ReportDetailsScreen> {
   Future<void> _pickImageFromCamera(ReportingProvider provider) async {
     try {
       await provider.pickImage(ImageSource.camera);
-    } on Exception catch (e) {
+    } on Exception {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Camera error: ${e.toString()}')),
+          const SnackBar(content: Text('Camera is not available. Please try using the gallery.')),
         );
       }
     }
@@ -150,10 +151,10 @@ class _ReportDetailsScreenState extends State<ReportDetailsScreen> {
   Future<void> _pickImageFromGallery(ReportingProvider provider) async {
     try {
       await provider.pickImage(ImageSource.gallery);
-    } on Exception catch (e) {
+    } on Exception {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Gallery error: ${e.toString()}')),
+          const SnackBar(content: Text('Could not access gallery. Please try again.')),
         );
       }
     }
@@ -235,7 +236,7 @@ class _ReportDetailsScreenState extends State<ReportDetailsScreen> {
           onPressed: () => context.pop(),
         ),
         title: Text(
-          'Report Details',
+          AppLocalizations.of(context)!.reportDetailsTitle,
           style: GoogleFonts.lexend(
             fontWeight: FontWeight.bold,
             color: AppColors.textPrimary,
@@ -259,7 +260,7 @@ class _ReportDetailsScreenState extends State<ReportDetailsScreen> {
                 children: [
                   // Description Section
                   Text(
-                    'Description',
+                    AppLocalizations.of(context)!.descriptionLabel,
                     style: GoogleFonts.lexend(
                       fontSize: 20,
                       fontWeight: FontWeight.bold,
@@ -277,8 +278,7 @@ class _ReportDetailsScreenState extends State<ReportDetailsScreen> {
                           color: AppColors.textPrimary,
                         ),
                         decoration: InputDecoration(
-                          hintText:
-                              'Describe the hazard here (e.g. flood levels rising, bridge collapsed)...',
+                          hintText: AppLocalizations.of(context)!.describeHazardHint,
                           hintStyle: GoogleFonts.lexend(
                             color: Colors.grey.shade400,
                           ),
@@ -354,8 +354,8 @@ class _ReportDetailsScreenState extends State<ReportDetailsScreen> {
                           const SizedBox(width: 4),
                           Text(
                             _isListening
-                                ? 'Listening... Speak now'
-                                : 'Be specific about location and severity.',
+                                ? AppLocalizations.of(context)!.listeningSpeakNow
+                                : AppLocalizations.of(context)!.beSpecificLocationSeverity,
                             style: GoogleFonts.lexend(
                               fontSize: 12,
                               fontWeight: FontWeight.w500,
@@ -388,7 +388,7 @@ class _ReportDetailsScreenState extends State<ReportDetailsScreen> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
-                        'When Did This Occur?',
+                        AppLocalizations.of(context)!.whenDidThisOccur,
                         style: GoogleFonts.lexend(
                           fontSize: 20,
                           fontWeight: FontWeight.bold,
@@ -405,7 +405,7 @@ class _ReportDetailsScreenState extends State<ReportDetailsScreen> {
                           borderRadius: BorderRadius.circular(6),
                         ),
                         child: Text(
-                          'Optional',
+                          AppLocalizations.of(context)!.optionalLabel,
                           style: GoogleFonts.lexend(
                             fontSize: 10,
                             fontWeight: FontWeight.bold,
@@ -457,7 +457,7 @@ class _ReportDetailsScreenState extends State<ReportDetailsScreen> {
                                   children: [
                                     Text(
                                       isToday
-                                          ? 'Today'
+                                          ? AppLocalizations.of(context)!.todayLabel
                                           : _formatDate(selectedDate),
                                       style: GoogleFonts.lexend(
                                         fontSize: 16,
@@ -497,7 +497,7 @@ class _ReportDetailsScreenState extends State<ReportDetailsScreen> {
                       const SizedBox(width: 4),
                       Expanded(
                         child: Text(
-                          'Tap to select date & time. Defaults to now if not changed.',
+                          AppLocalizations.of(context)!.tapToSelectDateTime,
                           style: GoogleFonts.lexend(
                             fontSize: 12,
                             fontWeight: FontWeight.w500,
@@ -518,7 +518,7 @@ class _ReportDetailsScreenState extends State<ReportDetailsScreen> {
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
                       Text(
-                        'Evidence',
+                        AppLocalizations.of(context)!.evidenceLabel,
                         style: GoogleFonts.lexend(
                           fontSize: 20,
                           fontWeight: FontWeight.bold,
@@ -535,7 +535,7 @@ class _ReportDetailsScreenState extends State<ReportDetailsScreen> {
                           borderRadius: BorderRadius.circular(6),
                         ),
                         child: Text(
-                          'Max 3 photos',
+                          AppLocalizations.of(context)!.max3Photos,
                           style: GoogleFonts.lexend(
                             fontSize: 10,
                             fontWeight: FontWeight.bold,
@@ -608,15 +608,14 @@ class _ReportDetailsScreenState extends State<ReportDetailsScreen> {
                               ),
                               children: [
                                 TextSpan(
-                                  text: 'Offline Mode Ready: ',
+                                  text: AppLocalizations.of(context)!.offlineModeReady,
                                   style: GoogleFonts.lexend(
                                     fontWeight: FontWeight.bold,
                                     color: Colors.blue.shade700,
                                   ),
                                 ),
-                                const TextSpan(
-                                  text:
-                                      'Your photos will be compressed automatically. Reports are saved locally until you have internet.',
+                                TextSpan(
+                                  text: AppLocalizations.of(context)!.offlineModeMessage,
                                 ),
                               ],
                             ),
@@ -645,7 +644,7 @@ class _ReportDetailsScreenState extends State<ReportDetailsScreen> {
                   );
                   context.push('/report/review');
                 },
-                text: 'Review Report',
+                text: AppLocalizations.of(context)!.reviewReportBtn,
                 icon: Icons.arrow_forward,
               ),
             ),
@@ -723,7 +722,7 @@ class _ReportDetailsScreenState extends State<ReportDetailsScreen> {
             ),
             const SizedBox(height: 8),
             Text(
-              'Camera',
+              AppLocalizations.of(context)!.cameraBtn,
               style: GoogleFonts.lexend(
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
@@ -752,7 +751,7 @@ class _ReportDetailsScreenState extends State<ReportDetailsScreen> {
             Icon(Icons.photo_library, size: 28, color: Colors.green.shade600),
             const SizedBox(height: 4),
             Text(
-              'Gallery',
+              AppLocalizations.of(context)!.galleryBtn,
               style: GoogleFonts.lexend(
                 fontSize: 11,
                 fontWeight: FontWeight.w500,

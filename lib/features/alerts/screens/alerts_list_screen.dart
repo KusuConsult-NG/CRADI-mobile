@@ -1,6 +1,7 @@
 import 'package:climate_app/features/verification/providers/reports_status_provider.dart';
 import 'package:climate_app/features/verification/models/verification_report_model.dart';
 import 'package:provider/provider.dart';
+import 'package:climate_app/core/utils/error_handler.dart';
 import 'package:climate_app/core/theme/app_colors.dart';
 import 'package:flutter/material.dart';
 
@@ -363,8 +364,8 @@ class _AlertsListScreenState extends State<AlertsListScreen> {
     final statusStr = report.status.displayName;
     Color statusColor = Colors.grey;
     if (report.status == ReportStatus.pending) statusColor = Colors.orange;
-    if (report.status == ReportStatus.acknowledged) statusColor = Colors.blue;
-    if (report.status == ReportStatus.resolved) {
+    if (report.status == ReportStatus.verified) statusColor = Colors.blue;
+    if (report.status == ReportStatus.approved) {
       statusColor = AppColors.successGreen;
     }
     if (report.status == ReportStatus.rejected) statusColor = Colors.red;
@@ -505,18 +506,19 @@ class _AlertsListScreenState extends State<AlertsListScreen> {
                           }
                         } on Exception catch (e) {
                           if (mounted) {
-                            CustomToast.showError(context, 'Error: $e');
+                            CustomToast.showError(context, ErrorHandler.handleError(e, context: 'Alert'));
                           }
                         }
                       },
-                      text: 'Cannot confirm',
+                      text: 'Decline',
                       icon: Icons.close,
                       type: ButtonType.secondary,
                       foregroundColor: Colors.red,
                       borderColor: Colors.red,
+                      fontSize: 14,
                     ),
                   ),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: 8),
                   Expanded(
                     child: CustomButton(
                       onPressed: () async {
@@ -530,14 +532,15 @@ class _AlertsListScreenState extends State<AlertsListScreen> {
                           }
                         } on Exception catch (e) {
                           if (mounted) {
-                            CustomToast.showError(context, 'Error: $e');
+                            CustomToast.showError(context, ErrorHandler.handleError(e, context: 'Alert'));
                           }
                         }
                       },
-                      text: 'Confirm this',
+                      text: 'Confirm',
                       icon: Icons.check,
                       backgroundColor: AppColors.successGreen,
                       foregroundColor: Colors.black,
+                      fontSize: 14,
                     ),
                   ),
                 ],

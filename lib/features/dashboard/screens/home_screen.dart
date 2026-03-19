@@ -18,6 +18,7 @@ import 'package:climate_app/core/providers/connectivity_provider.dart';
 import 'package:climate_app/core/services/peer_verification_service.dart';
 import 'package:climate_app/core/services/notification_service.dart';
 import 'package:climate_app/features/reporting/providers/reporting_provider.dart';
+import 'package:climate_app/l10n/app_localizations.dart';
 import 'package:climate_app/shared/widgets/shimmer_loading.dart';
 import 'package:climate_app/shared/widgets/animated_list_item.dart';
 
@@ -38,7 +39,22 @@ class _HomeScreenState extends State<HomeScreen> {
 
     // Lazy Escalation Check
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final role = context.read<AuthProvider>().userRole;
+      // Fetch reports for the current user to populate status widgets
+      final auth = context.read<AuthProvider>();
+      final isUser = auth.userRole == UserRole.user;
+      context.read<ReportsStatusProvider>().refreshReports(
+        userId: isUser ? auth.currentUser?.uid : null,
+      );
+      // Also fetch user-specific reports for the "My Reports" tab
+      // (admins fetch all reports above with userId: null, but the
+      // My Reports tab reads with userId: uid — a different cache key)
+      if (!isUser && auth.currentUser?.uid != null) {
+        context.read<ReportsStatusProvider>().refreshReports(
+          userId: auth.currentUser!.uid,
+        );
+      }
+
+      final role = auth.userRole;
       if (role == UserRole.admin ||
           role == UserRole.ewm ||
           role == UserRole.ewr ||
@@ -94,9 +110,13 @@ class _HomeScreenState extends State<HomeScreen> {
           onRefresh: () async {
             // Reload user profile data and stats
             if (context.mounted) {
+              final auth = context.read<AuthProvider>();
+              final isUser = auth.userRole == UserRole.user;
               await Future.wait([
                 context.read<ProfileProvider>().loadProfile(),
-                context.read<ReportsStatusProvider>().refreshReports(),
+                context.read<ReportsStatusProvider>().refreshReports(
+                  userId: isUser ? auth.currentUser?.uid : null,
+                ),
                 context.read<NewsProvider>().fetchNews(),
               ]);
             }
@@ -149,7 +169,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                     MainAxisAlignment.spaceBetween,
                                 children: [
                                   Text(
-                                    'SYNC STATUS',
+                                    AppLocalizations.of(context)!.syncStatus,
                                     style: GoogleFonts.lexend(
                                       fontSize: 10,
                                       fontWeight: FontWeight.bold,
@@ -158,8 +178,13 @@ class _HomeScreenState extends State<HomeScreen> {
                                     ),
                                   ),
                                   GestureDetector(
-                                    onTap: () =>
-                                        reportsProvider.refreshReports(),
+                                    onTap: () async {
+                                      final auth = context.read<AuthProvider>();
+                                      final isUser = auth.userRole == UserRole.user;
+                                      await reportsProvider.refreshReports(
+                                        userId: isUser ? auth.currentUser?.uid : null,
+                                      );
+                                    },
                                     child: Row(
                                       children: [
                                         Container(
@@ -177,10 +202,10 @@ class _HomeScreenState extends State<HomeScreen> {
                                         const SizedBox(width: 8),
                                         Text(
                                           isOffline
-                                              ? 'Offline'
+                                              ? AppLocalizations.of(context)!.offline
                                               : (isSyncing
-                                                    ? 'Synchronizing...'
-                                                    : 'Online • Just now'),
+                                                    ? AppLocalizations.of(context)!.syncing
+                                                    : AppLocalizations.of(context)!.onlineJustNow),
                                           style: GoogleFonts.lexend(
                                             fontSize: 10,
                                             fontWeight: FontWeight.bold,
@@ -215,16 +240,22 @@ class _HomeScreenState extends State<HomeScreen> {
                       // Quick Stats
                       Consumer<ReportsStatusProvider>(
                         builder: (context, provider, _) {
+                          final auth = context.read<AuthProvider>();
+                          final isUser = auth.userRole == UserRole.user;
+                          final uid = isUser ? auth.currentUser?.uid : null;
                           // Using total counts from provider (requires fetch to be populated)
                           // Assuming refreshReports() is called in initState
                           final activeCount = provider.getTotal(
-                            ReportStatus.acknowledged,
+                            ReportStatus.verified,
+                            userId: uid,
                           );
                           final pendingCount = provider.getTotal(
                             ReportStatus.pending,
+                            userId: uid,
                           );
-                          final resolvedCount = provider.getTotal(
-                            ReportStatus.resolved,
+                          final approvedCount = provider.getTotal(
+                            ReportStatus.approved,
+                            userId: uid,
                           );
 
                           return Row(
@@ -234,7 +265,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                   onTap: () => context.push('/reports-status'),
                                   child: _buildStatCard(
                                     count: '$activeCount',
-                                    label: 'Active',
+                                    label: AppLocalizations.of(context)!.active,
                                     icon: Icons.warning_amber,
                                     color: AppColors.warningYellow,
                                     bgColor: AppColors.warningYellow.withValues(
@@ -249,7 +280,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                   onTap: () => context.push('/reports-status'),
                                   child: _buildStatCard(
                                     count: '$pendingCount',
-                                    label: 'Pending',
+                                    label: AppLocalizations.of(context)!.pending,
                                     icon: Icons.schedule,
                                     color: Colors.orange,
                                     bgColor: Colors.orange.withValues(
@@ -263,8 +294,8 @@ class _HomeScreenState extends State<HomeScreen> {
                                 child: GestureDetector(
                                   onTap: () => context.push('/reports-status'),
                                   child: _buildStatCard(
-                                    count: '$resolvedCount',
-                                    label: 'Resolved',
+                                    count: '$approvedCount',
+                                    label: AppLocalizations.of(context)!.approved,
                                     icon: Icons.check_circle,
                                     color: AppColors.successGreen,
                                     bgColor: AppColors.successGreen.withValues(
@@ -280,38 +311,41 @@ class _HomeScreenState extends State<HomeScreen> {
                       const SizedBox(height: 24),
 
                       // Browse Categories
-                      _buildSectionHeader('Browse Categories', () {}),
+                      _buildSectionHeader(
+                        AppLocalizations.of(context)!.browseCategories,
+                        () => context.push('/alerts'),
+                      ),
                       const SizedBox(height: 12),
                       SingleChildScrollView(
                         scrollDirection: Axis.horizontal,
                         child: Row(
                           children: [
                             _buildCategoryCard(
-                              'Floods',
+                              AppLocalizations.of(context)!.floodsCategory,
                               Icons.flood,
                               Colors.blue,
                               () => _onCategoryTap('Flooding'),
                             ),
                             _buildCategoryCard(
-                              'Droughts',
+                              AppLocalizations.of(context)!.droughtsCategory,
                               Icons.wb_sunny,
                               Colors.orange,
                               () => _onCategoryTap('Drought'),
                             ),
                             _buildCategoryCard(
-                              'Pests',
+                              AppLocalizations.of(context)!.pestsCategory,
                               Icons.pest_control,
                               Colors.green,
                               () => _onCategoryTap('Pest/Disease'),
                             ),
                             _buildCategoryCard(
-                              'Conflicts',
+                              AppLocalizations.of(context)!.conflictsCategory,
                               Icons.shield,
                               Colors.red,
                               () => _onCategoryTap('Conflict'),
                             ),
                             _buildCategoryCard(
-                              'Erosion',
+                              AppLocalizations.of(context)!.erosion,
                               Icons.landscape,
                               Colors.brown,
                               () => _onCategoryTap('Erosion'),
@@ -334,9 +368,10 @@ class _HomeScreenState extends State<HomeScreen> {
                         padding: const EdgeInsets.all(6),
                         child: Row(
                           children: [
-                            _buildFilterTab(0, 'To Verify'),
-                            _buildFilterTab(1, 'Alerts'),
-                            _buildFilterTab(2, 'My Reports'),
+                            _buildFilterTab(0, AppLocalizations.of(context)!.toVerify),
+                            _buildFilterTab(1, AppLocalizations.of(context)!.alerts),
+                            _buildFilterTab(2, AppLocalizations.of(context)!.myReports),
+                            _buildFilterTab(3, 'Nearby'),
                           ],
                         ),
                       ),
@@ -361,95 +396,99 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Row(
-            children: [
-              GestureDetector(
-                onTap: () => context.push('/profile'),
-                child: Consumer<ProfileProvider>(
-                  builder: (context, profile, _) {
-                    if (profile.profileImagePath != null &&
-                        profile.profileImagePath!.isNotEmpty) {
-                      final imagePath = profile.profileImagePath!;
-                      final isNetworkImage = imagePath.startsWith('http');
+          Expanded(
+            child: Row(
+              children: [
+                GestureDetector(
+                  onTap: () => context.push('/profile'),
+                  child: Consumer<ProfileProvider>(
+                    builder: (context, profile, _) {
+                      if (profile.profileImagePath != null &&
+                          profile.profileImagePath!.isNotEmpty) {
+                        final imagePath = profile.profileImagePath!;
+                        final isNetworkImage = imagePath.startsWith('http');
 
+                        return Container(
+                          width: 40,
+                          height: 40,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: AppColors.primaryRed,
+                              width: 2,
+                            ),
+                            image: DecorationImage(
+                              image: isNetworkImage
+                                  ? NetworkImage(imagePath)
+                                  : FileImage(File(imagePath)) as ImageProvider,
+                              fit: BoxFit.cover,
+                            ),
+                          ),
+                        );
+                      }
                       return Container(
                         width: 40,
                         height: 40,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
+                          color: Colors.grey.shade300,
                           border: Border.all(
                             color: AppColors.primaryRed,
                             width: 2,
                           ),
-                          image: DecorationImage(
-                            image: isNetworkImage
-                                ? NetworkImage(imagePath)
-                                : FileImage(File(imagePath)) as ImageProvider,
-                            fit: BoxFit.cover,
+                        ),
+                        child: const Icon(Icons.person, color: Colors.grey),
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: GestureDetector(
+                    onTap: () => _showZoneSelector(context),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          AppLocalizations.of(context)!.monitoringZone,
+                          style: GoogleFonts.lexend(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.textSecondary,
+                            letterSpacing: 0.5,
                           ),
                         ),
-                      );
-                    }
-                    return Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: Colors.grey.shade300,
-                        border: Border.all(
-                          color: AppColors.primaryRed,
-                          width: 2,
-                        ),
-                      ),
-                      child: const Icon(Icons.person, color: Colors.grey),
-                    );
-                  },
-                ),
-              ),
-              const SizedBox(width: 12),
-              GestureDetector(
-                onTap: () => _showZoneSelector(context),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Monitoring Zone',
-                      style: GoogleFonts.lexend(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.textSecondary,
-                        letterSpacing: 0.5,
-                      ),
-                    ),
-                    Consumer<ProfileProvider>(
-                      builder: (context, profile, _) => Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Flexible(
-                            child: Text(
-                              '${profile.monitoringZone ?? "Select Zone"} • ${profile.monitoringZone != null ? "Active" : "Not Set"}',
-                              style: GoogleFonts.lexend(
-                                fontSize: 14,
-                                fontWeight: FontWeight.bold,
+                        Consumer<ProfileProvider>(
+                          builder: (context, profile, _) => Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  '${profile.monitoringZone ?? AppLocalizations.of(context)!.selectZone} • ${profile.monitoringZone != null ? AppLocalizations.of(context)!.activeZone : AppLocalizations.of(context)!.notSetZone}',
+                                  style: GoogleFonts.lexend(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.textPrimary,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                  maxLines: 1,
+                                ),
+                              ),
+                              const SizedBox(width: 2),
+                              const Icon(
+                                Icons.expand_more,
+                                size: 18,
                                 color: AppColors.textPrimary,
                               ),
-                              overflow: TextOverflow.ellipsis,
-                              maxLines: 1,
-                            ),
+                            ],
                           ),
-                          const SizedBox(width: 2),
-                          const Icon(
-                            Icons.expand_more,
-                            size: 18,
-                            color: AppColors.textPrimary,
-                          ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
-                  ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
           Row(
             children: [
@@ -482,7 +521,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 onTap: () {
                   // Notification action
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('No new notifications')),
+                    SnackBar(content: Text(AppLocalizations.of(context)!.noNewNotifications)),
                   );
                 },
                 child: Stack(
@@ -663,9 +702,42 @@ class _HomeScreenState extends State<HomeScreen> {
         statusProvider.isLoading(null, userId: userId),
         'You haven\'t submitted any reports yet',
       );
+    } else if (_selectedFilterIndex == 3) {
+      // Nearby — use same feed but prompt to see full screen
+      return Column(
+        children: [
+          GestureDetector(
+            onTap: () => context.push('/nearby-reports'),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.near_me, size: 16, color: AppColors.successGreen),
+                  const SizedBox(width: 6),
+                  Text(
+                    'Open Nearby Reports',
+                    style: GoogleFonts.lexend(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.successGreen,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  const Icon(Icons.arrow_forward_ios, size: 12, color: AppColors.successGreen),
+                ],
+              ),
+            ),
+          ),
+          _buildListFeed(
+            statusProvider.getReports(null),
+            statusProvider.isLoading(null),
+            'No nearby reports',
+          ),
+        ],
+      );
     } else {
       // Alerts (All)
-      // Only fetch pending + active + resolved for general feed
       return _buildListFeed(
         statusProvider.getReports(null),
         statusProvider.isLoading(null),
@@ -726,7 +798,7 @@ class _HomeScreenState extends State<HomeScreen> {
       itemCount: reports.length > 5
           ? 5
           : reports.length, // Show only top 5 on home
-      separatorBuilder: (_, _) => const SizedBox(height: 12),
+      separatorBuilder: (_, index) => const SizedBox(height: 12),
       itemBuilder: (context, index) {
         final report = reports[index];
         return AnimatedListItem(index: index, child: _buildReportItem(report));
@@ -737,17 +809,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildReportItem(VerificationReport report) {
     return GestureDetector(
       onTap: () {
-        final alertData = {
-          'title': report.title,
-          'time': report.time,
-          'location': report.location,
-          'icon': _getIconData(report.type),
-          'color': _getIconColor(report.type),
-          'severity': 'Normal', // Default if not in model
-          'status': report.status.displayName,
-          'description': 'Report by ${report.reporter} at ${report.location}',
-        };
-        context.push('/alerts/detail', extra: alertData);
+        context.push('/report-view', extra: report);
       },
       child: Container(
         padding: const EdgeInsets.all(12),
@@ -848,9 +910,9 @@ class _HomeScreenState extends State<HomeScreen> {
     switch (status) {
       case ReportStatus.pending:
         return Colors.orange;
-      case ReportStatus.acknowledged:
+      case ReportStatus.verified:
         return AppColors.successGreen;
-      case ReportStatus.resolved:
+      case ReportStatus.approved:
         return Colors.blue;
       case ReportStatus.rejected:
         return Colors.red;

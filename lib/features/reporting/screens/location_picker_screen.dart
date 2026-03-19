@@ -113,7 +113,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
         if (mounted) {
           setState(() {
             _isLoadingLocation = false;
-            _locationError = 'Location permission denied';
+            _locationError = AppLocalizations.of(context)!.locationPermissionDenied;
           });
         }
         return;
@@ -155,36 +155,36 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
         if (mounted) {
           setState(() {
             _isLoadingLocation = false;
-            _locationError = 'Unable to get location. Please enable GPS.';
+            _locationError = AppLocalizations.of(context)!.enableGpsMessage;
           });
         }
       }
-    } on Exception catch (e) {
+    } on Exception {
       if (mounted) {
         setState(() {
           _isLoadingLocation = false;
-          _locationError = 'Location error: ${e.toString()}';
+          _locationError = AppLocalizations.of(context)!.locationError;
         });
       }
     }
   }
 
-  String _getGpsStatus() {
-    if (_isLoadingLocation) return 'ACQUIRING...';
-    if (_locationError.isNotEmpty) return 'NO SIGNAL';
-    if (_currentPosition == null) return 'NO SIGNAL';
+  String _getGpsStatus(BuildContext context) {
+    if (_isLoadingLocation) return AppLocalizations.of(context)!.acquiringGps;
+    if (_locationError.isNotEmpty) return AppLocalizations.of(context)!.noSignalGps;
+    if (_currentPosition == null) return AppLocalizations.of(context)!.noSignalGps;
 
     final accuracy = _currentPosition!.accuracy;
-    if (accuracy <= 20) return 'GPS STRONG';
-    if (accuracy <= 50) return 'GPS GOOD';
-    return 'GPS WEAK';
+    if (accuracy <= 20) return AppLocalizations.of(context)!.gpsStrong;
+    if (accuracy <= 50) return AppLocalizations.of(context)!.gpsGood;
+    return AppLocalizations.of(context)!.gpsWeak;
   }
 
-  Color _getGpsStatusColor() {
-    final status = _getGpsStatus();
-    if (status == 'GPS STRONG') return Colors.green.shade700;
-    if (status == 'GPS GOOD') return Colors.orange.shade700;
-    if (status == 'ACQUIRING...') return Colors.blue.shade700;
+  Color _getGpsStatusColor(BuildContext context) {
+    final status = _getGpsStatus(context);
+    if (status == AppLocalizations.of(context)!.gpsStrong) return Colors.green.shade700;
+    if (status == AppLocalizations.of(context)!.gpsGood) return Colors.orange.shade700;
+    if (status == AppLocalizations.of(context)!.acquiringGps) return Colors.blue.shade700;
     return Colors.red.shade700;
   }
 
@@ -222,14 +222,14 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
       } else {
         setState(() {
           _isLoadingLocation = false;
-          _locationError = 'Could not find location on map';
+          _locationError = AppLocalizations.of(context)!.couldNotFindLocation;
         });
       }
-    } on Exception catch (e) {
+    } on Exception {
       if (mounted) {
         setState(() {
           _isLoadingLocation = false;
-          _locationError = 'Map update error: ${e.toString()}';
+          _locationError = AppLocalizations.of(context)!.mapUpdateError;
         });
       }
     }
@@ -303,7 +303,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
           onPressed: () => context.pop(),
         ),
         title: Text(
-          'Report Details',
+          AppLocalizations.of(context)!.reportDetailsTitle,
           style: GoogleFonts.lexend(
             fontWeight: FontWeight.bold,
             color: AppColors.textPrimary,
@@ -327,8 +327,8 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                 children: [
                   // Severity Section
                   _buildSectionTitle(
-                    'Severity Level',
-                    'Assess the intensity of the hazard.',
+                    AppLocalizations.of(context)!.severityLevelLabel,
+                    AppLocalizations.of(context)!.severityDesc,
                   ),
                   const SizedBox(height: 12),
                   Container(
@@ -438,35 +438,35 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                             },
                           ),
                         ),
-                        const Padding(
-                          padding: EdgeInsets.symmetric(horizontal: 10),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 10),
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               Text(
-                                'Low',
-                                style: TextStyle(
+                                AppLocalizations.of(context)!.severityLowShort,
+                                style: const TextStyle(
                                   fontSize: 11,
                                   color: Colors.grey,
                                 ),
                               ),
                               Text(
-                                'Med',
-                                style: TextStyle(
+                                AppLocalizations.of(context)!.severityMedShort,
+                                style: const TextStyle(
                                   fontSize: 11,
                                   color: Colors.grey,
                                 ),
                               ),
                               Text(
-                                'High',
-                                style: TextStyle(
+                                AppLocalizations.of(context)!.severityHighShort,
+                                style: const TextStyle(
                                   fontSize: 11,
                                   color: Colors.grey,
                                 ),
                               ),
                               Text(
-                                'Crit',
-                                style: TextStyle(
+                                AppLocalizations.of(context)!.severityCritShort,
+                                style: const TextStyle(
                                   fontSize: 11,
                                   color: Colors.grey,
                                 ),
@@ -484,14 +484,14 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      _buildSectionTitle('Incident Location', ''),
+                      _buildSectionTitle(AppLocalizations.of(context)!.incidentLocation, ''),
                       Container(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 8,
                           vertical: 4,
                         ),
                         decoration: BoxDecoration(
-                          color: _getGpsStatusColor().withValues(alpha: 0.1),
+                          color: _getGpsStatusColor(context).withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(20),
                         ),
                         child: Row(
@@ -501,15 +501,15 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                                   ? Icons.gps_not_fixed
                                   : Icons.gps_fixed,
                               size: 14,
-                              color: _getGpsStatusColor(),
+                              color: _getGpsStatusColor(context),
                             ),
                             const SizedBox(width: 4),
                             Text(
-                              _getGpsStatus(),
+                              _getGpsStatus(context),
                               style: GoogleFonts.lexend(
                                 fontSize: 10,
                                 fontWeight: FontWeight.bold,
-                                color: _getGpsStatusColor(),
+                                color: _getGpsStatusColor(context),
                               ),
                             ),
                           ],
@@ -556,7 +556,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                                               ),
                                               const SizedBox(height: 8),
                                               Text(
-                                                'Location unavailable',
+                                                AppLocalizations.of(context)!.locationUnavailable,
                                                 style: TextStyle(
                                                   color: Colors.grey.shade600,
                                                 ),
@@ -607,7 +607,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                                               ),
                                               const SizedBox(width: 4),
                                               Text(
-                                                'Refresh',
+                                                AppLocalizations.of(context)!.refresh,
                                                 style: GoogleFonts.lexend(
                                                   fontSize: 12,
                                                   fontWeight: FontWeight.w600,
@@ -649,7 +649,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                                         CrossAxisAlignment.start,
                                     children: [
                                       Text(
-                                        'COORDINATES',
+                                        AppLocalizations.of(context)!.coordinatesLabel,
                                         style: GoogleFonts.lexend(
                                           fontSize: 10,
                                           fontWeight: FontWeight.w600,
@@ -664,8 +664,8 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                                                 _currentPosition!.longitude,
                                               )
                                             : (_isLoadingLocation
-                                                  ? 'Getting location...'
-                                                  : 'No GPS data'),
+                                                  ? AppLocalizations.of(context)!.gettingLocation
+                                                  : AppLocalizations.of(context)!.noGpsData),
                                         style: GoogleFonts.robotoMono(
                                           fontSize: 12,
                                           color: AppColors.textPrimary,
@@ -678,7 +678,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                                       _showLocationDetailsDialog(context);
                                     },
                                     child: Text(
-                                      'View Details',
+                                      AppLocalizations.of(context)!.viewDetailsBtn,
                                       style: GoogleFonts.lexend(
                                         fontSize: 12,
                                         fontWeight: FontWeight.w600,
@@ -699,8 +699,8 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
 
                   // Ward & LGA Selection Section
                   _buildSectionTitle(
-                    'Ward & LGA Selection',
-                    'Select your ward from the dropdown',
+                    AppLocalizations.of(context)!.wardAndLgaSelection,
+                    AppLocalizations.of(context)!.selectWardDropdown,
                   ),
                   const SizedBox(height: 12),
                   Container(
@@ -738,7 +738,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                               const SizedBox(width: 12),
                               Expanded(
                                 child: Text(
-                                  'Select the LGA and Ward where the incident occurred',
+                                  AppLocalizations.of(context)!.selectLgaWardIncident,
                                   style: GoogleFonts.lexend(
                                     fontSize: 12,
                                     color: Colors.blue.shade900,
@@ -752,7 +752,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
 
                         // State Dropdown
                         Text(
-                          'State',
+                          AppLocalizations.of(context)!.stateLabel,
                           style: GoogleFonts.lexend(
                             fontSize: 13,
                             fontWeight: FontWeight.w600,
@@ -763,7 +763,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                         DropdownButtonFormField<String>(
                           initialValue: _selectedState,
                           decoration: InputDecoration(
-                            hintText: 'Select State',
+                            hintText: AppLocalizations.of(context)!.selectState,
                             filled: true,
                             fillColor: Colors.grey.shade50,
                             border: OutlineInputBorder(
@@ -829,7 +829,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
 
                         // LGA Dropdown
                         Text(
-                          'LGA (Local Government Area)',
+                          AppLocalizations.of(context)!.lgaLabel,
                           style: GoogleFonts.lexend(
                             fontSize: 13,
                             fontWeight: FontWeight.w600,
@@ -841,8 +841,8 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                           initialValue: _selectedLGA,
                           decoration: InputDecoration(
                             hintText: _selectedState == null
-                                ? 'Select State first'
-                                : 'Select LGA',
+                                ? AppLocalizations.of(context)!.selectStateFirst
+                                : AppLocalizations.of(context)!.selectLga,
                             filled: true,
                             fillColor: _selectedState == null
                                 ? Colors.grey.shade100
@@ -917,7 +917,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
 
                         // Ward Dropdown
                         Text(
-                          'Ward',
+                          AppLocalizations.of(context)!.wardLabel,
                           style: GoogleFonts.lexend(
                             fontSize: 13,
                             fontWeight: FontWeight.w600,
@@ -929,8 +929,8 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                           initialValue: _selectedWard,
                           decoration: InputDecoration(
                             hintText: _selectedLGA == null
-                                ? 'Select LGA first'
-                                : 'Select Ward',
+                                ? AppLocalizations.of(context)!.selectLgaFirst
+                                : AppLocalizations.of(context)!.selectWard,
                             filled: true,
                             fillColor: _selectedLGA == null
                                 ? Colors.grey.shade100
@@ -1166,17 +1166,17 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                                   : '',
                             );
                             return AlertDialog(
-                              title: const Text('Enter Location Manually'),
+                              title: Text(AppLocalizations.of(context)!.enterLocationManually),
                               content: TextField(
                                 controller: controller,
-                                decoration: const InputDecoration(
-                                  hintText: 'Address or Coordinates',
+                                decoration: InputDecoration(
+                                  hintText: AppLocalizations.of(context)!.addressOrCoordinates,
                                 ),
                               ),
                               actions: [
                                 TextButton(
                                   onPressed: () => Navigator.pop(context),
-                                  child: const Text('Cancel'),
+                                  child: Text(AppLocalizations.of(context)!.cancelBtn),
                                 ),
                                 TextButton(
                                   onPressed: () {
@@ -1196,22 +1196,22 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                                       ScaffoldMessenger.of(
                                         context,
                                       ).showSnackBar(
-                                        const SnackBar(
-                                          content: Text('Manual location set'),
+                                        SnackBar(
+                                          content: Text(AppLocalizations.of(context)!.manualLocationSet),
                                         ),
                                       );
                                     }
                                     Navigator.pop(context);
                                   },
-                                  child: const Text('Set'),
-                                ),
+                                    child: Text(AppLocalizations.of(context)!.setLocationBtn),
+                                  ),
                               ],
                             );
                           },
                         );
                       },
                       child: Text(
-                        'Location incorrect? Enter manually',
+                        AppLocalizations.of(context)!.locationIncorrectManual,
                         style: GoogleFonts.lexend(
                           fontSize: 14,
                           color: AppColors.textSecondary,
@@ -1241,9 +1241,9 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                       _selectedLGA == null ||
                       _selectedWard == null) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
+                      SnackBar(
                         content: Text(
-                          'Please select State, LGA, and Ward before continuing',
+                          AppLocalizations.of(context)!.pleaseSelectStateLgaWard,
                         ),
                         backgroundColor: Colors.red,
                         behavior: SnackBarBehavior.floating,
@@ -1269,7 +1269,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
 
                   context.push('/report/details');
                 },
-                text: 'Confirm & Continue',
+                text: AppLocalizations.of(context)!.confirmAndContinue,
                 icon: Icons.arrow_forward,
               ),
             ),
@@ -1348,7 +1348,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  'Location Details',
+                  AppLocalizations.of(context)!.locationDetailsTitle,
                   style: GoogleFonts.lexend(
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
@@ -1363,25 +1363,25 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
             const SizedBox(height: 20),
             _buildDetailRow(
               Icons.my_location,
-              'Latitude',
+              AppLocalizations.of(context)!.latitudeLabel,
               _currentPosition!.latitude.toStringAsFixed(6),
             ),
             const SizedBox(height: 12),
             _buildDetailRow(
               Icons.my_location,
-              'Longitude',
+              AppLocalizations.of(context)!.longitudeLabel,
               _currentPosition!.longitude.toStringAsFixed(6),
             ),
             const SizedBox(height: 12),
             _buildDetailRow(
               Icons.gps_fixed,
-              'Accuracy',
+              AppLocalizations.of(context)!.accuracyLabel,
               '${_currentPosition!.accuracy.toStringAsFixed(1)} meters',
             ),
             const SizedBox(height: 12),
             _buildDetailRow(
               Icons.height,
-              'Altitude',
+              AppLocalizations.of(context)!.altitudeLabel,
               '${_currentPosition!.altitude.toStringAsFixed(1)} m',
             ),
             const SizedBox(height: 24),
@@ -1389,7 +1389,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
               width: double.infinity,
               child: CustomButton(
                 onPressed: () => Navigator.pop(context),
-                text: 'Close',
+                text: AppLocalizations.of(context)!.closeBtn,
               ),
             ),
           ],

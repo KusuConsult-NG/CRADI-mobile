@@ -19,25 +19,25 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
   static const _statuses = [
     'all',
     'pending',
-    'escalated',
-    'validated',
+    'verified',
+    'approved',
     'rejected',
   ];
   static const _statusColors = {
     'pending': Colors.orange,
-    'escalated': Colors.deepOrange,
-    'validated': Colors.green,
+    'verified': Colors.deepOrange,
+    'approved': Colors.green,
     'rejected': Colors.red,
   };
 
-  Query<Map<String, dynamic>> get _query {
-    Query<Map<String, dynamic>> q = FirebaseFirestore.instance
+  late final Stream<QuerySnapshot<Map<String, dynamic>>> _reportsStream;
+
+  @override
+  void initState() {
+    super.initState();
+    _reportsStream = FirebaseFirestore.instance
         .collection('reports')
-        .orderBy('createdAt', descending: true);
-    if (_statusFilter != 'all') {
-      q = q.where('status', isEqualTo: _statusFilter);
-    }
-    return q;
+        .snapshots();
   }
 
   Future<void> _updateStatus(String reportId, String newStatus) async {
@@ -55,6 +55,159 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
         context,
       ).showSnackBar(SnackBar(content: Text('Report marked as $newStatus')));
     }
+  }
+
+  void _showReportDetails(BuildContext context, String id, Map<String, dynamic> data) {
+    final hazard = data['hazardType'] as String? ?? 'Unknown';
+    final severity = data['severity'] as String? ?? '';
+    final lga = data['lga'] as String? ?? '';
+    final ward = data['ward'] as String? ?? '';
+    final locationDetails = data['locationDetails'] as String? ?? '';
+    final description = data['description'] as String? ?? 'No description provided.';
+    final imageUrls = (data['imageUrls'] as List<dynamic>?)?.cast<String>() ?? [];
+    final status = data['status'] as String? ?? 'pending';
+    final createdAt = data['createdAt'];
+    String timeStr = '';
+    if (createdAt is Timestamp) {
+      final dt = createdAt.toDate();
+      timeStr = '${dt.day}/${dt.month}/${dt.year} ${dt.hour}:${dt.minute.toString().padLeft(2, '0')}';
+    }
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return DraggableScrollableSheet(
+          initialChildSize: 0.8,
+          minChildSize: 0.5,
+          maxChildSize: 0.95,
+          expand: false,
+          builder: (context, scrollController) {
+            return Column(
+              children: [
+                // Header
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
+                  ),
+                  child: Row(
+                    children: [
+                      Text('Report Details', style: GoogleFonts.lexend(fontSize: 18, fontWeight: FontWeight.bold)),
+                      const Spacer(),
+                      IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(context)),
+                    ],
+                  ),
+                ),
+                // Body
+                Expanded(
+                  child: ListView(
+                    controller: scrollController,
+                    padding: const EdgeInsets.all(16),
+                    children: [
+                      _detailRow('Hazard Type', hazard),
+                      _detailRow('Severity', severity),
+                      _detailRow('Status', status.capitalize(), _statusColors[status]),
+                      _detailRow('Date/Time', timeStr),
+                      _detailRow('LGA', lga),
+                      _detailRow('Ward', ward),
+                      _detailRow('Location Details', locationDetails),
+                      const SizedBox(height: 16),
+                      Text('Description', style: GoogleFonts.lexend(fontWeight: FontWeight.w600, color: Colors.grey.shade600)),
+                      const SizedBox(height: 4),
+                      Text(description, style: GoogleFonts.lexend(fontSize: 15)),
+                      const SizedBox(height: 16),
+                      if (imageUrls.isNotEmpty) ...[
+                        Text('Images', style: GoogleFonts.lexend(fontWeight: FontWeight.w600, color: Colors.grey.shade600)),
+                        const SizedBox(height: 8),
+                        SizedBox(
+                          height: 120,
+                          child: ListView.builder(
+                            scrollDirection: Axis.horizontal,
+                            itemCount: imageUrls.length,
+                            itemBuilder: (context, index) {
+                              return Padding(
+                                padding: const EdgeInsets.only(right: 8),
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: Image.network(
+                                    imageUrls[index],
+                                    width: 120,
+                                    height: 120,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (_, error, stackTrace) => Container(
+                                      width: 120,
+                                      height: 120,
+                                      color: Colors.grey.shade200,
+                                      child: const Icon(Icons.broken_image),
+                                    ),
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                      ],
+                    ],
+                  ),
+                ),
+                // Actions Footer
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: const BoxDecoration(
+                    color: Colors.white,
+                    boxShadow: [
+                      BoxShadow(color: Color.fromRGBO(0, 0, 0, 0.05), blurRadius: 10, offset: Offset(0, -5))
+                    ],
+                  ),
+                  child: SafeArea(
+                    child: Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      alignment: WrapAlignment.center,
+                      children: [
+                        if (status != 'approved')
+                          ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
+                            onPressed: () { _updateStatus(id, 'approved'); Navigator.pop(context); },
+                            icon: const Icon(Icons.check, size: 18),
+                            label: const Text('Approve'),
+                          ),
+                        if (status != 'rejected')
+                          ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+                            onPressed: () { _updateStatus(id, 'rejected'); Navigator.pop(context); },
+                            icon: const Icon(Icons.close, size: 18),
+                            label: const Text('Reject'),
+                          ),
+                        if (status != 'verified')
+                          ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange, foregroundColor: Colors.white),
+                            onPressed: () { _updateStatus(id, 'verified'); Navigator.pop(context); },
+                            icon: const Icon(Icons.verified, size: 18),
+                            label: const Text('Mark Verified'),
+                          ),
+                        if (status != 'pending')
+                          OutlinedButton.icon(
+                            onPressed: () { _updateStatus(id, 'pending'); Navigator.pop(context); },
+                            icon: const Icon(Icons.refresh, size: 18),
+                            label: const Text('Reset'),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
   }
 
   @override
@@ -105,12 +258,36 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
           // ── List ──
           Expanded(
             child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-              stream: _query.snapshots(),
+              stream: _reportsStream,
               builder: (context, snap) {
                 if (snap.connectionState == ConnectionState.waiting) {
                   return const Center(child: CircularProgressIndicator());
                 }
-                final docs = snap.data?.docs ?? [];
+                final allDocs = snap.data?.docs ?? [];
+                
+                // Client-side filtering
+                final docs = allDocs.where((d) {
+                  final data = d.data();
+                  if (_statusFilter != 'all') {
+                    final status = data['status'] as String? ?? 'pending';
+                    if (status != _statusFilter) return false;
+                  }
+                  return true;
+                }).toList();
+                
+                docs.sort((a, b) {
+                  final aCreatedAt = a.data()['createdAt'];
+                  final bCreatedAt = b.data()['createdAt'];
+
+                  DateTime parseDate(dynamic date) {
+                    if (date is Timestamp) return date.toDate();
+                    if (date is String) return DateTime.tryParse(date) ?? DateTime.fromMillisecondsSinceEpoch(0);
+                    return DateTime.fromMillisecondsSinceEpoch(0);
+                  }
+
+                  return parseDate(bCreatedAt).compareTo(parseDate(aCreatedAt));
+                });
+
                 if (docs.isEmpty) {
                   return Center(
                     child: Text(
@@ -147,6 +324,7 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
                         borderRadius: BorderRadius.circular(10),
                       ),
                       child: ListTile(
+                        onTap: () => _showReportDetails(context, id, d),
                         leading: Container(
                           width: 48,
                           height: 48,
@@ -201,20 +379,20 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
                         trailing: PopupMenuButton<String>(
                           onSelected: (action) => _updateStatus(id, action),
                           itemBuilder: (_) => [
-                            if (status != 'validated')
+                            if (status != 'approved')
                               const PopupMenuItem(
-                                value: 'validated',
-                                child: Text('✅ Validate'),
+                                value: 'approved',
+                                child: Text('✅ Approve'),
                               ),
                             if (status != 'rejected')
                               const PopupMenuItem(
                                 value: 'rejected',
                                 child: Text('❌ Reject'),
                               ),
-                            if (status != 'escalated')
+                            if (status != 'verified')
                               const PopupMenuItem(
-                                value: 'escalated',
-                                child: Text('⚠️ Escalate'),
+                                value: 'verified',
+                                child: Text('✔️ Mark Verified'),
                               ),
                             if (status != 'pending')
                               const PopupMenuItem(
@@ -251,6 +429,36 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
       ),
     ),
   );
+
+  Widget _detailRow(String label, String value, [Color? color]) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 120,
+            child: Text(
+              label,
+              style: GoogleFonts.lexend(
+                fontWeight: FontWeight.w600,
+                color: Colors.grey.shade600,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: GoogleFonts.lexend(
+                fontWeight: color != null ? FontWeight.bold : FontWeight.normal,
+                color: color ?? AppColors.textPrimary,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 extension _StringExt on String {

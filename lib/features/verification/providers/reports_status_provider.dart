@@ -122,16 +122,17 @@ class ReportsStatusProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> refreshReports({String? excludeUserId}) async {
+  Future<void> refreshReports({String? excludeUserId, String? userId}) async {
     await Future.wait([
-      fetchReports(status: null, excludeUserId: excludeUserId),
-      fetchReports(status: ReportStatus.pending, excludeUserId: excludeUserId),
+      fetchReports(status: null, excludeUserId: excludeUserId, userId: userId),
+      fetchReports(status: ReportStatus.pending, excludeUserId: excludeUserId, userId: userId),
       fetchReports(
-        status: ReportStatus.acknowledged,
+        status: ReportStatus.verified,
         excludeUserId: excludeUserId,
+        userId: userId,
       ),
-      fetchReports(status: ReportStatus.resolved, excludeUserId: excludeUserId),
-      fetchReports(status: ReportStatus.rejected, excludeUserId: excludeUserId),
+      fetchReports(status: ReportStatus.approved, excludeUserId: excludeUserId, userId: userId),
+      fetchReports(status: ReportStatus.rejected, excludeUserId: excludeUserId, userId: userId),
     ]);
   }
 
@@ -155,7 +156,8 @@ class ReportsStatusProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final queries = <QueryFilter>[FQuery.orderDesc('submittedAt')];
+      // Build equality/inequality filters BEFORE orderBy for Firestore best practice
+      final queries = <QueryFilter>[];
 
       if (status != null) {
         queries.add(FQuery.equal('status', status.name));
@@ -181,6 +183,28 @@ class ReportsStatusProvider extends ChangeNotifier {
         }
       }
 
+      // Add orderBy AFTER where clauses
+      queries.add(FQuery.orderDesc('submittedAt'));
+
+      developer.log(
+        'fetchReports key=$key, filters=${queries.length}, '
+        'status=${status?.name}, userId=$userId, '
+        'excludeUserId=$excludeUserId',
+        name: 'ReportsStatusProvider',
+      );
+
+      // Fetch total count for accurate dashboard stats when not loading more
+      if (!loadMore) {
+        _totalCounts[key] = await _firebase.countDocuments(
+          collectionId: AppConfig.reportsCollection,
+          queries: queries,
+        );
+        developer.log(
+          'Total count for key=$key: ${_totalCounts[key]}',
+          name: 'ReportsStatusProvider',
+        );
+      }
+
       final docs = await _firebase.listDocuments(
         collectionId: AppConfig.reportsCollection,
         queries: queries,
@@ -188,17 +212,39 @@ class ReportsStatusProvider extends ChangeNotifier {
         startAfter: loadMore ? _lastDocMap[key] : null,
       );
 
+      developer.log(
+        'fetchReports key=$key returned ${docs.length} docs',
+        name: 'ReportsStatusProvider',
+      );
+
       if (docs.length < 20) {
         _hasMoreMap[key] = false;
       }
 
-      final newReports = docs.map((data) {
+      final newReports = await Future.wait(docs.map((data) async {
         final reportStatus = _parseStatus(data['status']);
+        
+        String reporterName = 'Community Report';
+        if (data['userId'] != null) {
+          try {
+            final userDoc = await FirebaseFirestore.instance
+                .collection(AppConfig.usersCollection)
+                .doc(data['userId'])
+                .get();
+            if (userDoc.exists && userDoc.data() != null) {
+              final n = userDoc.data()!['fullName'] as String?;
+              if (n != null && n.trim().isNotEmpty) {
+                reporterName = n;
+              }
+            }
+          } on Exception catch (_) {}
+        }
+
         return VerificationReport(
           id: data['id'] as String? ?? data['\$id'] as String? ?? '',
           title: _formatTitle(data['hazardType'] ?? 'Unknown Hazard'),
           type: data['hazardType'] ?? 'Unknown',
-          reporter: 'Community Report',
+          reporter: reporterName,
           location: data['locationDetails'] ?? 'Unknown Location',
           time: _formatTimeAgo(data['submittedAt']),
           status: reportStatus,
@@ -206,7 +252,7 @@ class ReportsStatusProvider extends ChangeNotifier {
           iconColor: _getIconColor(data['severity']),
           bgIconColor: '${_getIconColor(data['severity'])}_50',
         );
-      }).toList();
+      }));
 
       if (loadMore) {
         _reportsMap[key] = [...(_reportsMap[key] ?? []), ...newReports];
@@ -219,8 +265,13 @@ class ReportsStatusProvider extends ChangeNotifier {
         _lastDocMap[key] = docs.last['\$snapshot'];
         developer.log('Pagination cursor updated: ${_lastDocMap[key] != null}');
       }
-    } on Exception catch (e) {
-      developer.log('Error fetching reports: $e');
+    } on Exception catch (e, stack) {
+      developer.log(
+        'Error fetching reports for key=$key: $e',
+        name: 'ReportsStatusProvider',
+        error: e,
+        stackTrace: stack,
+      );
     } finally {
       _loadingMap[key] = false;
       notifyListeners();
@@ -263,31 +314,31 @@ class ReportsStatusProvider extends ChangeNotifier {
       await _firebase.updateDocument(
         collectionId: AppConfig.reportsCollection,
         documentId: reportId,
-        data: {'status': 'acknowledged'},
+        data: {'status': 'verified'},
       );
       developer.log('Report verified: $reportId');
       notifyListeners();
       fetchReports(status: ReportStatus.pending);
-      fetchReports(status: ReportStatus.acknowledged);
+      fetchReports(status: ReportStatus.verified);
     } on Exception catch (e) {
       developer.log('Error verifying report: $e');
       rethrow;
     }
   }
 
-  Future<void> resolveReport(String reportId) async {
+  Future<void> approveReport(String reportId) async {
     try {
       await _firebase.updateDocument(
         collectionId: AppConfig.reportsCollection,
         documentId: reportId,
-        data: {'status': 'resolved'},
+        data: {'status': 'approved'},
       );
-      developer.log('Report resolved: $reportId');
+      developer.log('Report approved: $reportId');
       notifyListeners();
-      fetchReports(status: ReportStatus.acknowledged);
-      fetchReports(status: ReportStatus.resolved);
+      fetchReports(status: ReportStatus.verified);
+      fetchReports(status: ReportStatus.approved);
     } on Exception catch (e) {
-      developer.log('Error resolving report: $e');
+      developer.log('Error approving report: $e');
       rethrow;
     }
   }
@@ -402,10 +453,13 @@ class ReportsStatusProvider extends ChangeNotifier {
     switch (status?.toLowerCase()) {
       case 'pending':
         return ReportStatus.pending;
-      case 'acknowledged':
-        return ReportStatus.acknowledged;
-      case 'resolved':
-        return ReportStatus.resolved;
+      case 'verified':
+      case 'acknowledged': // legacy compat
+      case 'validated':    // legacy compat
+        return ReportStatus.verified;
+      case 'approved':
+      case 'resolved': // legacy compat
+        return ReportStatus.approved;
       case 'rejected':
         return ReportStatus.rejected;
       default:

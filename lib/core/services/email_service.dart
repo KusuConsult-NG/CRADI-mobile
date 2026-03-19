@@ -248,7 +248,7 @@ class EmailService {
       <ul style="color:#666; line-height:1.8;">
         <li>Report climate hazards in your area</li>
         <li>Track the status of your reports</li>
-        <li>Receive real-time alerts about validated hazards</li>
+        <li>Receive real-time alerts about verified hazards</li>
         <li>Access the knowledge base and safety resources</li>
         <li>Connect with emergency authorities</li>
       </ul>
@@ -303,9 +303,9 @@ class EmailService {
     required String status,
     required String message,
   }) {
-    final statusColor = status == 'Validated'
+    final statusColor = status == 'Verified'
         ? '#4caf50'
-        : status == 'Resolved'
+        : status == 'Approved'
         ? '#2196f3'
         : '#ff9800';
     return _shell('''

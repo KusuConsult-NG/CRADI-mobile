@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:climate_app/core/theme/app_colors.dart';
+import 'package:climate_app/core/utils/error_handler.dart';
 import 'package:climate_app/features/reporting/widgets/osm_location_picker.dart';
 import 'package:climate_app/features/reporting/providers/reporting_provider.dart';
 import 'package:flutter/material.dart';
@@ -10,6 +11,8 @@ import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import 'package:climate_app/shared/widgets/custom_button.dart';
 import 'package:climate_app/features/verification/providers/reports_status_provider.dart';
+import 'package:climate_app/features/auth/providers/auth_provider.dart';
+import 'package:climate_app/l10n/app_localizations.dart';
 
 class ReportReviewScreen extends StatefulWidget {
   const ReportReviewScreen({super.key});
@@ -40,7 +43,7 @@ class _ReportReviewScreenState extends State<ReportReviewScreen> {
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(result['message'] ?? 'Submission failed')),
+          SnackBar(content: Text(result['message'] ?? AppLocalizations.of(context)!.submissionFailed)),
         );
       }
     } on Exception catch (e) {
@@ -48,7 +51,7 @@ class _ReportReviewScreenState extends State<ReportReviewScreen> {
       setState(() => _isSubmitting = false);
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('Error: ${e.toString()}')));
+      ).showSnackBar(SnackBar(content: Text(ErrorHandler.handleError(e, context: 'Report Submission'))));
     }
   }
 
@@ -79,7 +82,7 @@ class _ReportReviewScreenState extends State<ReportReviewScreen> {
               ),
               const SizedBox(height: 24),
               Text(
-                isQueued ? 'Saved for Later' : 'Report Submitted!',
+                isQueued ? AppLocalizations.of(context)!.savedForLater : AppLocalizations.of(context)!.reportSubmittedTitle,
                 style: GoogleFonts.lexend(
                   fontSize: 24,
                   fontWeight: FontWeight.bold,
@@ -89,8 +92,8 @@ class _ReportReviewScreenState extends State<ReportReviewScreen> {
               const SizedBox(height: 8),
               Text(
                 isQueued
-                    ? 'You are offline. The report will be sent automatically when you are back online.'
-                    : 'Your report has been successfully sent to central command.',
+                    ? AppLocalizations.of(context)!.offlineReportMessage
+                    : AppLocalizations.of(context)!.onlineReportMessage,
                 textAlign: TextAlign.center,
                 style: GoogleFonts.lexend(
                   fontSize: 14,
@@ -109,7 +112,7 @@ class _ReportReviewScreenState extends State<ReportReviewScreen> {
                 child: Column(
                   children: [
                     Text(
-                      isQueued ? 'STATUS' : 'REPORT ID',
+                      isQueued ? AppLocalizations.of(context)!.statusLabel : AppLocalizations.of(context)!.reportIdLabel,
                       style: GoogleFonts.lexend(
                         fontSize: 10,
                         fontWeight: FontWeight.bold,
@@ -119,10 +122,10 @@ class _ReportReviewScreenState extends State<ReportReviewScreen> {
                     const SizedBox(height: 4),
                     Text(
                       isQueued
-                          ? 'QUEUED'
+                          ? AppLocalizations.of(context)!.queuedStatus
                           : (reportId != null
                                 ? '#${reportId.substring(0, 8)}...'
-                                : 'SENT'),
+                                : AppLocalizations.of(context)!.sentStatus),
                       style: GoogleFonts.robotoMono(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
@@ -138,10 +141,17 @@ class _ReportReviewScreenState extends State<ReportReviewScreen> {
                 child: CustomButton(
                   onPressed: () {
                     // Provider is already reset in submitReport
-                    context.read<ReportsStatusProvider>().refreshReports();
-                    context.go('/dashboard');
+                    final router = GoRouter.of(context);
+                    final reportsProvider = context.read<ReportsStatusProvider>();
+                    final auth = context.read<AuthProvider>();
+                    final isUser = auth.userRole == UserRole.user;
+                    Navigator.of(context).pop(); // Close dialog first!
+                    reportsProvider.refreshReports(
+                      userId: isUser ? auth.currentUser?.uid : null,
+                    );
+                    router.go('/dashboard');
                   },
-                  text: 'Return to Dashboard',
+                  text: AppLocalizations.of(context)!.returnToDashboard,
                   type: ButtonType.secondary,
                 ),
               ),
@@ -166,7 +176,7 @@ class _ReportReviewScreenState extends State<ReportReviewScreen> {
           onPressed: () => context.pop(),
         ),
         title: Text(
-          'Review Report',
+          AppLocalizations.of(context)!.reviewReportTitle,
           style: GoogleFonts.lexend(
             fontWeight: FontWeight.bold,
             color: AppColors.textPrimary,
@@ -189,7 +199,7 @@ class _ReportReviewScreenState extends State<ReportReviewScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Please review the details below to ensure accuracy before submitting to the central command.',
+                    AppLocalizations.of(context)!.reviewReportDesc,
                     style: GoogleFonts.lexend(
                       fontSize: 14,
                       color: Colors.grey.shade600,
@@ -200,8 +210,9 @@ class _ReportReviewScreenState extends State<ReportReviewScreen> {
 
                   // Hazard Details
                   _buildSectionHeader(
-                    'Hazard Details',
+                    AppLocalizations.of(context)!.hazardDetails,
                     onEdit: () => context.go('/report/severity'),
+                    context: context,
                   ),
                   Consumer<ReportingProvider>(
                     builder: (context, provider, _) {
@@ -213,8 +224,8 @@ class _ReportReviewScreenState extends State<ReportReviewScreen> {
                               icon: Icons.warning_amber_rounded,
                               iconColor: Colors.red,
                               iconBg: Colors.red.shade50,
-                              label: 'Hazard Type',
-                              value: provider.hazardType ?? 'Not Selected',
+                              label: AppLocalizations.of(context)!.hazardType,
+                              value: provider.hazardType ?? AppLocalizations.of(context)!.notSelected,
                             ),
                             Divider(
                               height: 1,
@@ -226,8 +237,8 @@ class _ReportReviewScreenState extends State<ReportReviewScreen> {
                               icon: Icons.warning,
                               iconColor: Colors.orange,
                               iconBg: Colors.orange.shade50,
-                              label: 'Severity Level',
-                              value: provider.severity ?? 'Not Selected',
+                              label: AppLocalizations.of(context)!.severityLevelLabel,
+                              value: provider.severity ?? AppLocalizations.of(context)!.notSelected,
                             ),
                           ],
                         ),
@@ -238,8 +249,9 @@ class _ReportReviewScreenState extends State<ReportReviewScreen> {
 
                   // Date & Time
                   _buildSectionHeader(
-                    'Date & Time',
+                    AppLocalizations.of(context)!.dateTimeLabel,
                     onEdit: () => context.go('/report/details'),
+                    context: context,
                   ),
                   Consumer<ReportingProvider>(
                     builder: (context, provider, _) {
@@ -255,10 +267,10 @@ class _ReportReviewScreenState extends State<ReportReviewScreen> {
                           icon: Icons.access_time,
                           iconColor: AppColors.primaryRed,
                           iconBg: AppColors.primaryRed.withValues(alpha: 0.1),
-                          label: 'When it occurred',
+                          label: AppLocalizations.of(context)!.whenItOccurred,
                           value: isToday
-                              ? 'Today at ${DateFormat('h:mm a').format(reportDate)}'
-                              : '${DateFormat('MMM dd, yyyy').format(reportDate)} at ${DateFormat('h:mm a').format(reportDate)}',
+                              ? '${AppLocalizations.of(context)!.todayAt} ${DateFormat('h:mm a').format(reportDate)}'
+                              : '${DateFormat('MMM dd, yyyy').format(reportDate)} ${AppLocalizations.of(context)!.atTime} ${DateFormat('h:mm a').format(reportDate)}',
                         ),
                       );
                     },
@@ -266,7 +278,7 @@ class _ReportReviewScreenState extends State<ReportReviewScreen> {
                   const SizedBox(height: 24),
 
                   // Location
-                  _buildSectionHeader('Location', onEdit: () => context.pop()),
+                  _buildSectionHeader(AppLocalizations.of(context)!.locationLabel, onEdit: () => context.pop(), context: context),
                   Consumer<ReportingProvider>(
                     builder: (context, provider, _) {
                       return Container(
@@ -309,7 +321,7 @@ class _ReportReviewScreenState extends State<ReportReviewScreen> {
                               ),
                             const SizedBox(height: 12),
                             Text(
-                              provider.locationDetails ?? 'Not Provided',
+                              provider.locationDetails ?? AppLocalizations.of(context)!.notProvided,
                               style: GoogleFonts.lexend(
                                 fontSize: 14,
                                 fontWeight: FontWeight.bold,
@@ -333,8 +345,9 @@ class _ReportReviewScreenState extends State<ReportReviewScreen> {
 
                   // Description
                   _buildSectionHeader(
-                    'Monitor Notes',
+                    AppLocalizations.of(context)!.monitorNotes,
                     onEdit: () => context.pop(),
+                    context: context,
                   ),
                   Consumer<ReportingProvider>(
                     builder: (context, provider, _) {
@@ -342,7 +355,7 @@ class _ReportReviewScreenState extends State<ReportReviewScreen> {
                         decoration: _cardDecoration(),
                         padding: const EdgeInsets.all(16),
                         child: Text(
-                          provider.description ?? 'No description provided',
+                          provider.description ?? AppLocalizations.of(context)!.noDescriptionProvided,
                           style: GoogleFonts.lexend(
                             fontSize: 14,
                             color: AppColors.textPrimary,
@@ -355,7 +368,7 @@ class _ReportReviewScreenState extends State<ReportReviewScreen> {
                   const SizedBox(height: 24),
 
                   // Evidence
-                  _buildSectionHeader('Evidence', onEdit: () => context.pop()),
+                  _buildSectionHeader(AppLocalizations.of(context)!.evidenceLabel, onEdit: () => context.pop(), context: context),
                   Consumer<ReportingProvider>(
                     builder: (context, provider, _) {
                       final photos = provider.photos;
@@ -391,18 +404,18 @@ class _ReportReviewScreenState extends State<ReportReviewScreen> {
                                   ),
                                   borderRadius: BorderRadius.circular(8),
                                 ),
-                                child: const Column(
+                                child: Column(
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
-                                    Icon(
+                                    const Icon(
                                       Icons.add_a_photo,
                                       size: 20,
                                       color: Colors.grey,
                                     ),
-                                    SizedBox(height: 4),
-                                    Text(
-                                      'Add',
-                                      style: TextStyle(
+                                    const SizedBox(height: 4),
+                                      Text(
+                                        AppLocalizations.of(context)!.addPhotoBtn,
+                                        style: const TextStyle(
                                         fontSize: 10,
                                         color: Colors.grey,
                                       ),
@@ -431,7 +444,7 @@ class _ReportReviewScreenState extends State<ReportReviewScreen> {
               child: CustomButton(
                 onPressed: _isSubmitting ? null : _submitReport,
                 isLoading: _isSubmitting,
-                text: 'Submit Report',
+                text: AppLocalizations.of(context)!.submitReportBtn,
                 icon: Icons.send,
               ),
             ),
@@ -456,7 +469,7 @@ class _ReportReviewScreenState extends State<ReportReviewScreen> {
     );
   }
 
-  Widget _buildSectionHeader(String title, {required VoidCallback onEdit}) {
+  Widget _buildSectionHeader(String title, {required VoidCallback onEdit, required BuildContext context}) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
       child: Row(
@@ -475,7 +488,7 @@ class _ReportReviewScreenState extends State<ReportReviewScreen> {
             child: Padding(
               padding: const EdgeInsets.all(4.0),
               child: Text(
-                'Edit',
+                AppLocalizations.of(context)!.editBtn,
                 style: GoogleFonts.lexend(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,

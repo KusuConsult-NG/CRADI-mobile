@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:climate_app/core/utils/error_handler.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:climate_app/core/constants/app_config.dart';
@@ -29,14 +30,15 @@ class _AdminKnowledgeScreenState extends State<AdminKnowledgeScreen> {
     'General',
   ];
 
-  Query<Map<String, dynamic>> get _query {
-    Query<Map<String, dynamic>> q = FirebaseFirestore.instance
+  late final Stream<QuerySnapshot<Map<String, dynamic>>> _knowledgeStream;
+
+  @override
+  void initState() {
+    super.initState();
+    _knowledgeStream = FirebaseFirestore.instance
         .collection(AppConfig.knowledgeBaseCollection)
-        .orderBy('updatedAt', descending: true);
-    if (_categoryFilter != 'All') {
-      q = q.where('hazardType', isEqualTo: _categoryFilter.toLowerCase());
-    }
-    return q;
+        .orderBy('updatedAt', descending: true)
+        .snapshots();
   }
 
   Future<void> _deleteGuide(String id) async {
@@ -146,7 +148,7 @@ class _AdminKnowledgeScreenState extends State<AdminKnowledgeScreen> {
           // ── Guides list ──
           Expanded(
             child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-              stream: _query.snapshots(),
+              stream: _knowledgeStream,
               builder: (context, snap) {
                 if (snap.connectionState == ConnectionState.waiting) {
                   return const Center(child: CircularProgressIndicator());
@@ -159,7 +161,18 @@ class _AdminKnowledgeScreenState extends State<AdminKnowledgeScreen> {
                     ),
                   );
                 }
-                final docs = snap.data?.docs ?? [];
+                final allDocs = snap.data?.docs ?? [];
+                
+                // Client-side filtering
+                final docs = allDocs.where((d) {
+                  final data = d.data();
+                  if (_categoryFilter != 'All') {
+                    final hazard = data['hazardType'] as String? ?? '';
+                    if (hazard != _categoryFilter.toLowerCase()) return false;
+                  }
+                  return true;
+                }).toList();
+
                 if (docs.isEmpty) {
                   return Center(
                     child: Column(
@@ -425,7 +438,7 @@ class _GuideFormSheetState extends State<_GuideFormSheet> {
     } on Exception catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+          SnackBar(content: Text(ErrorHandler.handleError(e, context: 'Knowledge Base')), backgroundColor: Colors.red),
         );
       }
     } finally {

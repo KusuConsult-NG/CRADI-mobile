@@ -23,6 +23,7 @@ class SecureStorageService {
   static const String _keyLastLoginAttempt = 'last_login_attempt';
   static const String _keyAccountLockedUntil = 'account_locked_until';
   static const String _keyBiometricEnabled = 'biometric_enabled';
+  static const String _keyRememberMe = 'remember_me';
 
   // Authentication token management
   Future<void> saveAuthToken(String token) async {
@@ -82,6 +83,15 @@ class SecureStorageService {
   }
 
   // Session management
+  Future<void> saveRememberMe(bool rememberMe) async {
+    await _storage.write(key: _keyRememberMe, value: rememberMe.toString());
+  }
+
+  Future<bool> getRememberMe() async {
+    final value = await _storage.read(key: _keyRememberMe);
+    return value == 'true';
+  }
+
   Future<void> saveSessionExpiry(DateTime expiry) async {
     await _storage.write(
       key: _keySessionExpiry,

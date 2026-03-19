@@ -13,6 +13,7 @@ class CustomButton extends StatefulWidget {
   final Color? backgroundColor;
   final Color? foregroundColor;
   final Color? borderColor;
+  final double fontSize;
 
   const CustomButton({
     super.key,
@@ -25,6 +26,7 @@ class CustomButton extends StatefulWidget {
     this.backgroundColor,
     this.foregroundColor,
     this.borderColor,
+    this.fontSize = 16.0,
   });
 
   @override
@@ -132,18 +134,24 @@ class _CustomButtonState extends State<CustomButton> {
         mainAxisSize: MainAxisSize.min,
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(widget.icon, size: 24),
+          Icon(widget.icon, size: 20),
           const SizedBox(width: 8),
           Text(
             widget.text,
-            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            style: TextStyle(
+              fontSize: widget.fontSize,
+              fontWeight: FontWeight.w600,
+            ),
           ),
         ],
       );
     }
     return Text(
       widget.text,
-      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+      style: TextStyle(
+        fontSize: widget.fontSize,
+        fontWeight: FontWeight.w600,
+      ),
     );
   }
 }

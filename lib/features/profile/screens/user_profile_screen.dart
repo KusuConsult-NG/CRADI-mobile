@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:climate_app/core/theme/app_colors.dart';
+import 'package:climate_app/core/utils/error_handler.dart';
 import 'package:climate_app/features/auth/providers/auth_provider.dart'
     as app_auth;
 import 'package:climate_app/features/profile/providers/profile_provider.dart';
@@ -56,7 +57,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Text('Upload failed: ${e.toString()}'),
+                content: Text(ErrorHandler.handleError(e, context: 'Profile Upload')),
                 backgroundColor: Colors.red,
               ),
             );
@@ -68,7 +69,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              'Error: ${e.toString().contains('camera') ? 'Camera not available on web. Please use gallery instead.' : 'Failed to pick image'}',
+              'Error: ${e.toString().contains('camera') ? 'Camera not available. Please use the gallery.' : 'Failed to pick image. Please try again.'}',
             ),
             backgroundColor: Colors.red,
           ),
@@ -343,7 +344,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                             setState(() => isVerifying = false);
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
-                                content: Text('Verification failed: $e'),
+                                content: Text(ErrorHandler.handleError(e, context: 'Account Verification')),
                                 backgroundColor: Colors.red,
                               ),
                             );
@@ -654,8 +655,8 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                         totalReports = snapshot.data!.length;
                         verifiedCount = snapshot.data!.where((doc) {
                           final status = doc['status'];
-                          return status == 'acknowledged' ||
-                              status == 'resolved';
+                          return status == 'verified' ||
+                              status == 'approved';
                         }).length;
                       }
 

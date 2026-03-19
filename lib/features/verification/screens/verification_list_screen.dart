@@ -1,4 +1,5 @@
 import 'package:climate_app/core/services/firebase_service.dart';
+import 'package:climate_app/core/utils/error_handler.dart';
 import 'package:climate_app/core/constants/app_config.dart';
 import 'package:climate_app/features/verification/screens/verification_detail_screen.dart';
 import 'package:climate_app/features/auth/providers/auth_provider.dart';
@@ -25,7 +26,7 @@ class VerificationListScreen extends StatelessWidget {
           }
 
           if (snapshot.hasError) {
-            return Center(child: Text('Error: ${snapshot.error}'));
+            return Center(child: Text(ErrorHandler.getUserMessage(snapshot.error)));
           }
 
           final reports = snapshot.data ?? [];

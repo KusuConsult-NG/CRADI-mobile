@@ -1,4 +1,5 @@
 import 'package:climate_app/core/theme/app_colors.dart';
+import 'package:climate_app/core/utils/error_handler.dart';
 import 'package:climate_app/features/auth/providers/auth_provider.dart';
 import 'package:climate_app/shared/widgets/custom_toast.dart';
 import 'package:flutter/material.dart';
@@ -65,7 +66,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
         setState(() {
           _isLoading = false;
         });
-        CustomToast.showError(context, 'Error: ${e.toString()}');
+        CustomToast.showError(context, ErrorHandler.handleError(e, context: 'Password Reset'));
       }
     }
   }

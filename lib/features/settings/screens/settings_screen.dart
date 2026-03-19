@@ -98,8 +98,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         await _checkBiometric();
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Biometric error: ${e.message ?? e.code}'),
+          const SnackBar(
+            content: Text('Biometric authentication failed. Please try again.'),
             backgroundColor: Colors.red,
           ),
         );
@@ -563,7 +563,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         if (context.mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
-                              content: Text('Logout failed: $e'),
+                              content: Text(ErrorHandler.handleError(e, context: 'Logout')),
                               backgroundColor: Colors.red,
                             ),
                           );

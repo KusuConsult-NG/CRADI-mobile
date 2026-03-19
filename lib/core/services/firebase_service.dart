@@ -438,6 +438,29 @@ class FirebaseService {
     }
   }
 
+  /// Count documents matching [queries].
+  Future<int> countDocuments({
+    required String collectionId,
+    List<QueryFilter>? queries,
+  }) async {
+    try {
+      Query<Map<String, dynamic>> query = _db.collection(collectionId);
+      if (queries != null) {
+        for (final filter in queries) {
+          query = filter.apply(query);
+        }
+      }
+      final snapshot = await query.count().get();
+      return snapshot.count ?? 0;
+    } on Exception catch (e) {
+      developer.log(
+        'countDocuments error: $e',
+        name: 'FirebaseService',
+      );
+      return 0;
+    }
+  }
+
   /// Update specific fields in a document (partial update).
   Future<Map<String, dynamic>> updateDocument({
     required String collectionId,

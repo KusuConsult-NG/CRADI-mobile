@@ -6,6 +6,7 @@ import 'package:climate_app/core/services/remote_config_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'dart:developer' as developer;
+import 'dart:math' as math;
 
 /// Service for managing peer verification workflow.
 /// Handles verification requests, escalation, and notification.
@@ -30,8 +31,42 @@ class PeerVerificationService {
     required String userId,
     required bool isConfirmed,
     String? comment,
+    double? userLatitude,
+    double? userLongitude,
   }) async {
     try {
+      // ── Guard 1: Self-verification ─────────────────────────────────
+      final reportDoc = await _firebase.getDocument(
+        collectionId: AppConfig.reportsCollection,
+        documentId: reportId,
+      );
+      final reporterId = reportDoc['userId'] as String? ??
+          reportDoc['reporterId'] as String? ??
+          '';
+      if (reporterId == userId) {
+        return {
+          'success': false,
+          'message': 'You cannot verify your own report.',
+        };
+      }
+
+      // ── Guard 2: Location proximity (2 km) ────────────────────────
+      if (userLatitude != null && userLongitude != null) {
+        final rLat = (reportDoc['latitude'] as num?)?.toDouble();
+        final rLng = (reportDoc['longitude'] as num?)?.toDouble();
+        if (rLat != null && rLng != null) {
+          final dist = _haversineKm(userLatitude, userLongitude, rLat, rLng);
+          if (dist > 2.0) {
+            return {
+              'success': false,
+              'message':
+                  'You must be within 2 km of the report location to verify. '
+                      'Current distance: ${dist.toStringAsFixed(1)} km.',
+            };
+          }
+        }
+      }
+
       // Firestore auto-generates a safe document ID
       final result = await _firebase.createDocument(
         collectionId: AppConfig.verificationsCollection,
@@ -115,7 +150,7 @@ class PeerVerificationService {
     }
   }
 
-  /// Validate a report and trigger alert distribution.
+  /// Mark a report as verified once peer threshold is reached.
   Future<void> _validateReport(
     String reportId, {
     required bool isAutoValidated,
@@ -125,19 +160,19 @@ class PeerVerificationService {
         collectionId: AppConfig.reportsCollection,
         documentId: reportId,
         data: {
-          'status': 'validated',
-          'validatedAt': FieldValue.serverTimestamp(),
+          'status': 'verified',
+          'verifiedAt': FieldValue.serverTimestamp(),
           'autoValidated': isAutoValidated,
         },
       );
 
       developer.log(
-        'Report validated: $reportId (auto: $isAutoValidated)',
+        'Report verified: $reportId (auto: $isAutoValidated)',
         name: 'PeerVerificationService',
       );
 
       await _triggerAlert(reportId);
-      await _notifyReporter(reportId, status: 'validated');
+      await _notifyReporter(reportId, status: 'verified');
     } on Exception catch (e) {
       developer.log(
         'Error validating report: $e',
@@ -273,7 +308,7 @@ class PeerVerificationService {
         collectionId: AppConfig.reportsCollection,
         documentId: reportId,
         data: {
-          'status': 'escalated',
+          'escalated': true,
           'escalatedAt': FieldValue.serverTimestamp(),
           'escalationReason': reason,
         },
@@ -350,7 +385,17 @@ class PeerVerificationService {
   }) async {
     try {
       if (isApproved) {
-        await _validateReport(reportId, isAutoValidated: false);
+        // Admin approval writes 'approved' status directly
+        await _firebase.updateDocument(
+          collectionId: AppConfig.reportsCollection,
+          documentId: reportId,
+          data: {
+            'status': 'approved',
+            'approvedAt': FieldValue.serverTimestamp(),
+          },
+        );
+        await _triggerAlert(reportId);
+        await _notifyReporter(reportId, status: 'approved');
         await _firebase.createDocument(
           collectionId: AppConfig.verificationsOverrideCollection,
           data: {
@@ -361,7 +406,7 @@ class PeerVerificationService {
             'timestamp': FieldValue.serverTimestamp(),
           },
         );
-        return {'success': true, 'message': 'Report approved and validated'};
+        return {'success': true, 'message': 'Report approved'};
       } else {
         await _firebase.updateDocument(
           collectionId: AppConfig.reportsCollection,
@@ -597,4 +642,25 @@ class PeerVerificationService {
       );
     }
   }
+
+  /// Haversine distance in kilometres.
+  static double _haversineKm(
+    double lat1,
+    double lng1,
+    double lat2,
+    double lng2,
+  ) {
+    const R = 6371.0;
+    final dLat = _deg2rad(lat2 - lat1);
+    final dLng = _deg2rad(lng2 - lng1);
+    final a = math.sin(dLat / 2) * math.sin(dLat / 2) +
+        math.cos(_deg2rad(lat1)) *
+            math.cos(_deg2rad(lat2)) *
+            math.sin(dLng / 2) *
+            math.sin(dLng / 2);
+    final c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a));
+    return R * c;
+  }
+
+  static double _deg2rad(double deg) => deg * (math.pi / 180);
 }

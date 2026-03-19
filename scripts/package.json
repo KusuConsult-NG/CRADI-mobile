@@ -6,6 +6,11 @@
         "migrate": "node add_database_attributes.js"
     },
     "dependencies": {
+        "firebase-admin": "^13.7.0",
         "node-appwrite": "^14.2.0"
-    }
+    },
+    "main": "add_database_attributes.js",
+    "keywords": [],
+    "author": "",
+    "license": "ISC"
 }

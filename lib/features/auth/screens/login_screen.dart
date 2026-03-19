@@ -27,6 +27,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final _rateLimiter = RateLimiter();
   bool _isLoading = false;
   bool _isPasswordVisible = false;
+  bool _rememberMe = false;
   String? _errorMessage;
   int _remainingAttempts = 5;
 
@@ -77,28 +78,11 @@ class _LoginScreenState extends State<LoginScreen> {
         final identifier = _identifierController.text.trim();
         final password = _passwordController.text;
 
-        // Check if input is email or phone
-        final isEmail = Validators.isValidEmail(identifier);
-
-        if (!isEmail) {
-          // Send OTP and route to verification
-          final success = await authProvider.sendOtpForPhone(identifier);
-
-          if (!mounted) return;
-          setState(() => _isLoading = false);
-
-          if (success) {
-            context.push(
-              '/verify-otp?phone=${Uri.encodeComponent(identifier)}',
-            );
-          }
-          return;
-        }
-
         // Direct email/password login
         final success = await authProvider.signInWithEmail(
           email: identifier,
           password: password,
+          rememberMe: _rememberMe,
         );
 
         if (!mounted) return;
@@ -299,21 +283,16 @@ class _LoginScreenState extends State<LoginScreen> {
                               ),
                             ),
 
-                          // Email/Phone field
+                          // Email field
                           CustomTextField(
-                            label: 'Email or Phone Number',
+                            label: 'Email Address',
                             controller: _identifierController,
                             keyboardType: TextInputType.emailAddress,
                             prefixIcon: const Icon(
-                              Icons.person_outline,
-                            ), // Generic icon
-                            hint: 'email@example.com or +234...',
-                            validator: (value) {
-                              if (value == null || value.isEmpty) {
-                                return 'Please enter your email or phone number';
-                              }
-                              return null; // We allow both, so no strict email validation here
-                            },
+                              Icons.email_outlined,
+                            ),
+                            hint: 'email@example.com',
+                            validator: Validators.validateEmail,
                             enabled: !_isLoading,
                           ),
 
@@ -336,11 +315,8 @@ class _LoginScreenState extends State<LoginScreen> {
                               },
                             ),
                             validator: (value) {
-                              final ident = _identifierController.text.trim();
-                              if (Validators.isValidEmail(ident)) {
-                                if (value == null || value.isEmpty) {
-                                  return 'Password is required for email login';
-                                }
+                              if (value == null || value.isEmpty) {
+                                return 'Password is required';
                               }
                               return null;
                             },
@@ -348,21 +324,45 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                           const SizedBox(height: 16),
 
-                          // Forgot Password
-                          Align(
-                            alignment: Alignment.centerRight,
-                            child: TextButton(
-                              onPressed: _isLoading
-                                  ? null
-                                  : () => context.push('/forgot-password'),
-                              child: const Text(
-                                'Forgot Password?',
-                                style: TextStyle(
-                                  fontSize: 16, // Increased
-                                  fontWeight: FontWeight.w600,
+                          // Remember me and Forgot Password
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Row(
+                                children: [
+                                  Checkbox(
+                                    value: _rememberMe,
+                                    activeColor: AppColors.primaryRed,
+                                    onChanged: _isLoading
+                                        ? null
+                                        : (value) {
+                                            setState(() {
+                                              _rememberMe = value ?? false;
+                                            });
+                                          },
+                                  ),
+                                  const Text(
+                                    'Remember Me',
+                                    style: TextStyle(
+                                      fontSize: 15, // Matched somewhat with other texts
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              TextButton(
+                                onPressed: _isLoading
+                                    ? null
+                                    : () => context.push('/forgot-password'),
+                                child: const Text(
+                                  'Forgot Password?',
+                                  style: TextStyle(
+                                    fontSize: 15, 
+                                    fontWeight: FontWeight.w600,
+                                  ),
                                 ),
                               ),
-                            ),
+                            ],
                           ),
                           const SizedBox(height: 24),
 

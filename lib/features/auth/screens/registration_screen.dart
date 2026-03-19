@@ -56,7 +56,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
 
   /// Set to false to hide Phone Auth until Termii is configured.
   /// Toggle back to true once TERMII_API_KEY is confirmed in --dart-define.
-  static const bool _phoneAuthEnabled = true;
+  static const bool _phoneAuthEnabled = false;
   static const String _ndpaPolicyText = '''
 Nigeria Data Protection Act (NDPA) — Data Processing Notice
 

@@ -19,6 +19,16 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
   String _searchQuery = '';
   final TextEditingController _searchCtrl = TextEditingController();
 
+  late final Stream<QuerySnapshot<Map<String, dynamic>>> _usersStream;
+
+  @override
+  void initState() {
+    super.initState();
+    _usersStream = FirebaseFirestore.instance
+        .collection('users')
+        .snapshots();
+  }
+
   @override
   void dispose() {
     _searchCtrl.dispose();
@@ -43,14 +53,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
     'techSupport': 'Tech Support',
   };
 
-  Query<Map<String, dynamic>> get _query {
-    Query<Map<String, dynamic>> q = FirebaseFirestore.instance
-        .collection('users')
-        .orderBy('createdAt', descending: true);
-    if (_roleFilter != 'all') q = q.where('role', isEqualTo: _roleFilter);
-    if (_pendingOnly) q = q.where('isApproved', isEqualTo: false);
-    return q;
-  }
+  // The stream is initialized once in initState because query doesn't depend on local filters
 
   Future<void> _setApproval(String uid, bool approved) async {
     await FirebaseFirestore.instance.collection('users').doc(uid).update({
@@ -235,41 +238,69 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
                         .toList(),
                   ),
                 ),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  dense: true,
-                  title: Text(
-                    'Pending approval only',
-                    style: GoogleFonts.lexend(fontSize: 13),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    dense: true,
+                    title: Text(
+                      _pendingOnly ? 'Showing Pending Approvals' : 'Showing Approved Users',
+                      style: GoogleFonts.lexend(fontSize: 13),
+                    ),
+                    value: _pendingOnly,
+                    activeThumbColor: AppColors.primaryRed,
+                    onChanged: (v) => setState(() => _pendingOnly = v),
                   ),
-                  value: _pendingOnly,
-                  activeThumbColor: AppColors.primaryRed,
-                  onChanged: (v) => setState(() => _pendingOnly = v),
-                ),
               ],
             ),
           ),
           // ── List ──
           Expanded(
             child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-              stream: _query.snapshots(),
+              stream: _usersStream,
               builder: (context, snap) {
                 if (snap.connectionState == ConnectionState.waiting) {
                   return const Center(child: CircularProgressIndicator());
                 }
                 final allDocs = snap.data?.docs ?? [];
-                // Apply in-memory search filter
-                final docs = _searchQuery.isEmpty
-                    ? allDocs
-                    : allDocs.where((d) {
-                        final data = d.data();
-                        final name = (data['name'] as String? ?? '')
-                            .toLowerCase();
-                        final email = (data['email'] as String? ?? '')
-                            .toLowerCase();
-                        return name.contains(_searchQuery) ||
-                            email.contains(_searchQuery);
-                      }).toList();
+                final docs = allDocs.where((d) {
+                  final data = d.data();
+                  // Apply role filter
+                  if (_roleFilter != 'all') {
+                    final role = data['role'] as String? ?? 'user';
+                    if (role != _roleFilter) return false;
+                  }
+                  // Apply pending only filter
+                  final isApproved = data['isApproved'] as bool? ?? false;
+                  if (_pendingOnly) {
+                    if (isApproved) return false;
+                  } else {
+                    if (!isApproved) return false;
+                  }
+                  
+                  // Apply search filter
+                  if (_searchQuery.isNotEmpty) {
+                    final name = (data['name'] as String? ?? '').toLowerCase();
+                    final email = (data['email'] as String? ?? '').toLowerCase();
+                    if (!name.contains(_searchQuery) && !email.contains(_searchQuery)) {
+                      return false;
+                    }
+                  }
+                  
+                  return true;
+                }).toList();
+                
+                docs.sort((a, b) {
+                  final aCreatedAt = a.data()['createdAt'];
+                  final bCreatedAt = b.data()['createdAt'];
+
+                  DateTime parseDate(dynamic date) {
+                    if (date is Timestamp) return date.toDate();
+                    if (date is String) return DateTime.tryParse(date) ?? DateTime.fromMillisecondsSinceEpoch(0);
+                    return DateTime.fromMillisecondsSinceEpoch(0);
+                  }
+
+                  return parseDate(bCreatedAt).compareTo(parseDate(aCreatedAt));
+                });
+
                 if (docs.isEmpty) {
                   return Center(
                     child: Text(

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:climate_app/core/theme/app_colors.dart';
+import 'package:climate_app/l10n/app_localizations.dart';
 
 /// Admin Dashboard — entry point for admin and techSupport roles.
 /// Shows live summary cards for pending users, open reports, and system health.
@@ -16,17 +17,23 @@ class AdminScreen extends StatelessWidget {
     if (where != null) {
       where.forEach((k, v) => q = q.where(k, isEqualTo: v));
     }
-    final snap = await q.count().get();
-    return snap.count ?? 0;
+    try {
+      final snap = await q.count().get().timeout(const Duration(seconds: 5));
+      return snap.count ?? 0;
+    } on Exception catch (_) {
+      return 0; // Return 0 if timeout or offline
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
         title: Text(
-          'Admin Portal',
+          l10n.adminPortal,
           style: GoogleFonts.lexend(fontWeight: FontWeight.bold),
         ),
         backgroundColor: AppColors.primaryRed,
@@ -36,7 +43,7 @@ class AdminScreen extends StatelessWidget {
         future: Future.wait([
           _count('users', where: {'isApproved': false}),
           _count('reports', where: {'status': 'pending'}),
-          _count('reports', where: {'status': 'escalated'}),
+          _count('reports', where: {'status': 'verified'}),
           _count('users'),
           _count('alerts', where: {'isActive': true}),
           _count('reports'),
@@ -53,7 +60,7 @@ class AdminScreen extends StatelessWidget {
                   children: [
                     Expanded(
                       child: Text(
-                        'System Overview',
+                        l10n.systemOverview,
                         style: GoogleFonts.lexend(
                           fontSize: 20,
                           fontWeight: FontWeight.bold,
@@ -75,7 +82,7 @@ class AdminScreen extends StatelessWidget {
 
                 // ── Quick Actions ──
                 Text(
-                  'Quick Actions',
+                  l10n.quickActions,
                   style: GoogleFonts.lexend(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
@@ -86,31 +93,31 @@ class AdminScreen extends StatelessWidget {
 
                 _ActionTile(
                   icon: Icons.supervised_user_circle_outlined,
-                  title: 'User Management',
-                  subtitle: 'Approve accounts, assign roles, deactivate users',
+                  title: l10n.userManagement,
+                  subtitle: l10n.userManagementDesc,
                   badge: counts[0] > 0 ? counts[0] : null,
                   onTap: () => context.push('/admin/users'),
                 ),
                 _ActionTile(
                   icon: Icons.assessment_outlined,
-                  title: 'Reports Overview',
-                  subtitle: 'View, validate, or reject reports across all LGAs',
+                  title: l10n.reportsOverview,
+                  subtitle: l10n.reportsOverviewDesc,
                   badge: counts[2] > 0 ? counts[2] : null,
                   badgeColor: Colors.orange,
                   onTap: () => context.push('/admin/reports'),
                 ),
                 _ActionTile(
                   icon: Icons.campaign_outlined,
-                  title: 'Alerts & Broadcast',
-                  subtitle: 'Send emergency alerts to users or specific areas',
+                  title: l10n.alertsBroadcast,
+                  subtitle: l10n.alertsBroadcastDesc,
                   badge: counts[4] > 0 ? counts[4] : null,
                   badgeColor: Colors.deepOrange,
                   onTap: () => context.push('/admin/alerts'),
                 ),
                 _ActionTile(
                   icon: Icons.menu_book_outlined,
-                  title: 'Knowledge Management',
-                  subtitle: 'Add, edit, or remove emergency knowledge guides',
+                  title: l10n.knowledgeManagement,
+                  subtitle: l10n.knowledgeManagementDesc,
                   onTap: () => context.push('/admin/knowledge'),
                 ),
 
@@ -118,7 +125,7 @@ class AdminScreen extends StatelessWidget {
 
                 // ── System Health ──
                 Text(
-                  'System Health',
+                  l10n.systemHealth,
                   style: GoogleFonts.lexend(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
@@ -143,6 +150,7 @@ class _SummaryGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return GridView.count(
       crossAxisCount: 2,
       shrinkWrap: true,
@@ -152,35 +160,46 @@ class _SummaryGrid extends StatelessWidget {
       childAspectRatio: 1.35,
       children: [
         _StatCard(
-          'Pending Approvals',
+          l10n.pendingApprovals,
           counts[0],
           Colors.orange,
           Icons.hourglass_top,
+          onTap: () => context.push('/admin/users'),
         ),
         _StatCard(
-          'Pending Reports',
+          l10n.pendingReports,
           counts[1],
           AppColors.primaryRed,
           Icons.report_outlined,
+          onTap: () => context.push('/admin/reports'),
         ),
         _StatCard(
-          'Escalated Reports',
+          l10n.verifiedReports,
           counts[2],
           Colors.deepOrange,
           Icons.warning_amber,
+          onTap: () => context.push('/admin/reports'),
         ),
-        _StatCard('Total Users', counts[3], Colors.teal, Icons.group_outlined),
         _StatCard(
-          'Active Alerts',
+          l10n.totalUsers, 
+          counts[3], 
+          Colors.teal, 
+          Icons.group_outlined,
+          onTap: () => context.push('/admin/users'),
+        ),
+        _StatCard(
+          l10n.activeAlertsAdmin,
           counts[4],
           Colors.red.shade800,
           Icons.campaign_outlined,
+          onTap: () => context.push('/admin/alerts'),
         ),
         _StatCard(
-          'Total Reports',
+          l10n.totalReports,
           counts[5],
           Colors.indigo,
           Icons.bar_chart_outlined,
+          onTap: () => context.push('/admin/reports'),
         ),
       ],
     );
@@ -192,40 +211,52 @@ class _StatCard extends StatelessWidget {
   final int count;
   final Color color;
   final IconData icon;
-  const _StatCard(this.label, this.count, this.color, this.icon);
+  final VoidCallback? onTap;
+
+  const _StatCard(
+    this.label,
+    this.count,
+    this.color,
+    this.icon, {
+    this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withValues(alpha: 0.25)),
-      ),
-      padding: const EdgeInsets.all(14),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, color: color, size: 26),
-          const Spacer(),
-          Text(
-            '$count',
-            style: GoogleFonts.lexend(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-              color: color,
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: color.withValues(alpha: 0.25)),
+        ),
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(icon, color: color, size: 26),
+            const Spacer(),
+            Text(
+              '$count',
+              style: GoogleFonts.lexend(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: color,
+              ),
             ),
-          ),
-          Text(
-            label,
-            style: GoogleFonts.lexend(
-              fontSize: 11,
-              color: AppColors.textSecondary,
+            Text(
+              label,
+              style: GoogleFonts.lexend(
+                fontSize: 11,
+                color: AppColors.textSecondary,
+              ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
             ),
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

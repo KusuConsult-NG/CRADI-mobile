@@ -2,6 +2,7 @@ import 'package:climate_app/core/theme/app_colors.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:climate_app/l10n/app_localizations.dart';
 import 'package:provider/provider.dart';
 import 'package:climate_app/features/reporting/providers/reporting_provider.dart';
 import 'package:climate_app/shared/widgets/custom_button.dart';
@@ -16,45 +17,54 @@ class HazardSelectionScreen extends StatefulWidget {
 class _HazardSelectionScreenState extends State<HazardSelectionScreen> {
   int? _selectedindex;
 
-  final List<Map<String, dynamic>> _hazards = [
-    {'name': 'Flooding', 'icon': Icons.flood, 'color': AppColors.hazardFlood},
-    {
-      'name': 'Extreme Temperatures',
-      'icon': Icons.thermostat,
-      'color': AppColors.hazardTemp,
-    },
-    {
-      'name': 'Drought',
-      'icon': Icons.wb_sunny_rounded,
-      'color': AppColors.hazardDrought,
-    },
-    {'name': 'Windstorms', 'icon': Icons.air, 'color': AppColors.hazardWind},
-    {
-      'name': 'Wildfires',
-      'icon': Icons.local_fire_department,
-      'color': AppColors.hazardFire,
-    },
-    {
-      'name': 'Erosion',
-      'icon': Icons.landslide,
-      'color': AppColors.hazardErosion,
-    },
-    {
-      'name': 'Pest Outbreak',
-      'icon': Icons.pest_control,
-      'color': AppColors.hazardPest,
-    },
-    {
-      'name': 'Crop Disease',
-      'icon': Icons.coronavirus_rounded,
-      'color': Colors.green,
-    },
-    {
-      'name': 'Conflict',
-      'icon': Icons.warning_amber_rounded,
-      'color': AppColors.primaryRed,
-    },
-  ];
+  List<Map<String, dynamic>> _getHazards(AppLocalizations l10n) {
+    return [
+      {'id': 'Flooding', 'name': l10n.flooding, 'icon': Icons.flood, 'color': AppColors.hazardFlood},
+      {
+        'id': 'Extreme Temperatures',
+        'name': l10n.extremeHeat,
+        'icon': Icons.thermostat,
+        'color': AppColors.hazardTemp,
+      },
+      {
+        'id': 'Drought',
+        'name': l10n.drought,
+        'icon': Icons.wb_sunny_rounded,
+        'color': AppColors.hazardDrought,
+      },
+      {'id': 'Windstorms', 'name': l10n.windstorms, 'icon': Icons.air, 'color': AppColors.hazardWind},
+      {
+        'id': 'Wildfires',
+        'name': l10n.wildfires,
+        'icon': Icons.local_fire_department,
+        'color': AppColors.hazardFire,
+      },
+      {
+        'id': 'Erosion',
+        'name': l10n.erosion,
+        'icon': Icons.landslide,
+        'color': AppColors.hazardErosion,
+      },
+      {
+        'id': 'Pest Outbreak',
+        'name': l10n.pestOutbreak,
+        'icon': Icons.pest_control,
+        'color': AppColors.hazardPest,
+      },
+      {
+        'id': 'Crop Disease',
+        'name': l10n.cropDisease,
+        'icon': Icons.coronavirus_rounded,
+        'color': Colors.green,
+      },
+      {
+        'id': 'Conflict',
+        'name': l10n.conflict,
+        'icon': Icons.warning_amber_rounded,
+        'color': AppColors.primaryRed,
+      },
+    ];
+  }
 
   @override
   void initState() {
@@ -67,6 +77,9 @@ class _HazardSelectionScreenState extends State<HazardSelectionScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    final hazards = _getHazards(l10n);
+
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
@@ -81,7 +94,7 @@ class _HazardSelectionScreenState extends State<HazardSelectionScreen> {
           },
         ),
         title: Text(
-          'Select Hazard',
+          l10n.selectHazard,
           style: GoogleFonts.lexend(
             fontWeight: FontWeight.bold,
             color: AppColors.textPrimary,
@@ -100,7 +113,7 @@ class _HazardSelectionScreenState extends State<HazardSelectionScreen> {
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
             child: Text(
-              'What type of incident are you reporting?',
+              l10n.whatIncident,
               textAlign: TextAlign.center,
               style: GoogleFonts.lexend(
                 fontSize: 16,
@@ -117,9 +130,9 @@ class _HazardSelectionScreenState extends State<HazardSelectionScreen> {
                 mainAxisSpacing: 16,
                 childAspectRatio: 1.0,
               ),
-              itemCount: _hazards.length,
+              itemCount: hazards.length,
               itemBuilder: (context, index) {
-                final hazard = _hazards[index];
+                final hazard = hazards[index];
                 final isSelected = _selectedindex == index;
                 return _buildHazardCard(hazard, index, isSelected);
               },
@@ -134,13 +147,12 @@ class _HazardSelectionScreenState extends State<HazardSelectionScreen> {
           child: CustomButton(
             onPressed: _selectedindex != null
                 ? () {
-                    final hazardName =
-                        _hazards[_selectedindex!]['name'] as String;
-                    context.read<ReportingProvider>().setHazardType(hazardName);
+                    final hazardId = hazards[_selectedindex!]['id'] as String;
+                    context.read<ReportingProvider>().setHazardType(hazardId);
                     context.push('/report/severity');
                   }
                 : null,
-            text: 'Continue',
+            text: l10n.continueButton,
           ),
         ),
       ),

@@ -9,11 +9,25 @@
                     "order": "ASCENDING"
                 },
                 {
+                    "fieldPath": "submittedAt",
+                    "order": "DESCENDING"
+                }
+            ]
+        },
+        {
+            "collectionGroup": "reports",
+            "queryScope": "COLLECTION",
+            "fields": [
+                {
+                    "fieldPath": "userId",
+                    "order": "ASCENDING"
+                },
+                {
                     "fieldPath": "status",
                     "order": "ASCENDING"
                 },
                 {
-                    "fieldPath": "createdAt",
+                    "fieldPath": "submittedAt",
                     "order": "DESCENDING"
                 }
             ]
@@ -27,7 +41,7 @@
                     "order": "ASCENDING"
                 },
                 {
-                    "fieldPath": "createdAt",
+                    "fieldPath": "submittedAt",
                     "order": "DESCENDING"
                 }
             ]
@@ -45,7 +59,7 @@
                     "order": "ASCENDING"
                 },
                 {
-                    "fieldPath": "createdAt",
+                    "fieldPath": "submittedAt",
                     "order": "DESCENDING"
                 }
             ]
@@ -63,7 +77,7 @@
                     "order": "ASCENDING"
                 },
                 {
-                    "fieldPath": "createdAt",
+                    "fieldPath": "submittedAt",
                     "order": "DESCENDING"
                 }
             ]
@@ -77,11 +91,11 @@
                     "order": "ASCENDING"
                 },
                 {
-                    "fieldPath": "excludeUserId",
+                    "fieldPath": "userId",
                     "order": "ASCENDING"
                 },
                 {
-                    "fieldPath": "createdAt",
+                    "fieldPath": "submittedAt",
                     "order": "DESCENDING"
                 }
             ]

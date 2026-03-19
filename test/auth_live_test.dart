@@ -6,6 +6,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/widgets.dart';
 
 void main() {
+  // This test requires live Firebase Auth+Firestore — skip by default
   testWidgets('Directly write to Firestore', (WidgetTester tester) async {
     WidgetsFlutterBinding.ensureInitialized();
     await Firebase.initializeApp();
@@ -42,5 +43,5 @@ void main() {
       print(e);
       print(stack);
     }
-  });
+  }, skip: true); // Requires live Firebase — run manually with emulator
 }

@@ -6,6 +6,8 @@ import 'package:mockito/mockito.dart';
 import 'package:provider/provider.dart';
 import 'package:climate_app/features/reporting/screens/hazard_selection_screen.dart';
 import 'package:climate_app/features/reporting/providers/reporting_provider.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:climate_app/l10n/app_localizations.dart';
 
 import 'hazard_selection_screen_test.mocks.dart';
 
@@ -39,7 +41,16 @@ void main() {
 
   Widget buildScreen() => ChangeNotifierProvider<ReportingProvider>.value(
     value: mockProvider,
-    child: MaterialApp.router(routerConfig: buildRouter()),
+    child: MaterialApp.router(
+      routerConfig: buildRouter(),
+      localizationsDelegates: const [
+        AppLocalizations.delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      supportedLocales: AppLocalizations.supportedLocales,
+    ),
   );
 
   group('HazardSelectionScreen Widget Tests', () {

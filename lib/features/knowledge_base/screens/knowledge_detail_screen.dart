@@ -83,11 +83,11 @@ class KnowledgeDetailScreen extends StatelessWidget {
                     const SnackBar(content: Text('No text to speak')),
                   );
                 }
-              } on Exception catch (e) {
+              } on Exception {
                 if (context.mounted) {
                   ScaffoldMessenger.of(
                     context,
-                  ).showSnackBar(SnackBar(content: Text('TTS Error: $e')));
+                  ).showSnackBar(const SnackBar(content: Text('Text-to-speech is unavailable. Please try again.')));
                 }
               }
             },

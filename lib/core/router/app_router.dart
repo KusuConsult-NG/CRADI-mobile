@@ -15,6 +15,10 @@ import 'package:climate_app/features/reporting/screens/hazard_selection_screen.d
 import 'package:climate_app/features/reporting/screens/location_picker_screen.dart';
 import 'package:climate_app/features/reporting/screens/report_details_screen.dart';
 import 'package:climate_app/features/reporting/screens/report_review_screen.dart';
+import 'package:climate_app/features/reporting/screens/report_view_screen.dart';
+import 'package:climate_app/features/reporting/screens/my_reports_screen.dart';
+import 'package:climate_app/features/reporting/screens/nearby_reports_screen.dart';
+import 'package:climate_app/features/verification/models/verification_report_model.dart';
 import 'package:climate_app/features/reporting/screens/severity_selection_screen.dart';
 import 'package:climate_app/features/profile/screens/user_profile_screen.dart';
 import 'package:climate_app/features/settings/screens/settings_screen.dart';
@@ -295,6 +299,22 @@ GoRouter createRouter(BuildContext context) {
             ],
           ),
           GoRoute(
+            path: '/my-reports',
+            pageBuilder: (context, state) => _buildTransitionPage(
+              context: context,
+              state: state,
+              child: const MyReportsScreen(),
+            ),
+          ),
+          GoRoute(
+            path: '/nearby-reports',
+            pageBuilder: (context, state) => _buildTransitionPage(
+              context: context,
+              state: state,
+              child: const NearbyReportsScreen(),
+            ),
+          ),
+          GoRoute(
             path: '/settings',
             pageBuilder: (context, state) => _buildTransitionPage(
               context: context,
@@ -372,10 +392,6 @@ GoRouter createRouter(BuildContext context) {
 
       // Profile & Settings
       GoRoute(
-        path: '/settings',
-        builder: (context, state) => const SettingsScreen(),
-      ),
-      GoRoute(
         path: '/profile',
         builder: (context, state) => const UserProfileScreen(),
       ),
@@ -396,6 +412,13 @@ GoRouter createRouter(BuildContext context) {
       GoRoute(
         path: '/reports-status',
         builder: (context, state) => const ReportsStatusScreen(),
+      ),
+      GoRoute(
+        path: '/report-view',
+        builder: (context, state) {
+          final report = state.extra as VerificationReport;
+          return ReportViewScreen(report: report);
+        },
       ),
       GoRoute(path: '/chat', builder: (context, state) => const ChatScreen()),
       GoRoute(
@@ -482,7 +505,7 @@ CustomTransitionPage<T> _buildTransitionPage<T>({
   required Widget child,
 }) {
   return CustomTransitionPage<T>(
-    key: state.pageKey,
+    key: ValueKey(state.matchedLocation),
     child: child,
     transitionsBuilder: _buildPageTransition,
     transitionDuration: const Duration(milliseconds: 300),
