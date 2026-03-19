@@ -92,7 +92,9 @@ class ProfileProvider extends ChangeNotifier {
           _state = await _storage.read('profile_state');
           _lga = await _storage.read('profile_lga');
           _ward = await _storage.read('profile_ward');
-          _monitoringZone = await _storage.read('monitoring_zone');
+          final storedZone = await _storage.read('monitoring_zone');
+          _monitoringZone =
+              (storedZone != null && storedZone.isNotEmpty) ? storedZone : null;
           final bioEnabled = await _storage.read('biometric_enabled');
           _biometricsEnabled = bioEnabled == 'true';
           // Notify immediately so the UI shows cached data, then continue
@@ -317,11 +319,12 @@ class ProfileProvider extends ChangeNotifier {
   }
 
   Future<void> updateMonitoringZone(String zone) async {
-    _monitoringZone = zone;
-    await _storage.write('monitoring_zone', zone);
-    await _updateLocalState({'monitoringZone': zone});
+    final effectiveZone = zone.isEmpty ? null : zone;
+    _monitoringZone = effectiveZone;
+    await _storage.write('monitoring_zone', effectiveZone ?? '');
+    await _updateLocalState({'monitoringZone': effectiveZone ?? ''});
     notifyListeners();
-    await _syncToFirestore({'monitoringZone': zone});
+    await _syncToFirestore({'monitoringZone': effectiveZone ?? ''});
   }
 
   Future<void> setBiometricsEnabled(bool enabled) async {

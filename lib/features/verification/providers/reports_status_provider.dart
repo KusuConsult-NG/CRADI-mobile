@@ -181,20 +181,20 @@ class ReportsStatusProvider extends ChangeNotifier {
         queries.add(FQuery.notEqual('userId', excludeUserId));
       }
 
-      // Monitoring Zone filter — only apply for State-level zones where
-      // the Firestore `state` field reliably matches.  Sub-zones like
-      // "Benue Zone A" don't map to real LGA names in report documents,
-      // so filtering by them returns zero results.  Skip those quietly.
+      // Monitoring Zone filter — apply for both State-level and LGA-level zones.
+      // Zone format: "Benue State" (state-level) or "Makurdi, Benue" (LGA-level)
       if (userId == null && _profileProvider?.monitoringZone != null) {
         final zone = _profileProvider!.monitoringZone!;
         if (zone.toLowerCase().contains('state')) {
+          // State-level: "Benue State" → filter by state == "Benue"
           queries.add(FQuery.equal('state', zone.replaceAll(' State', '')));
+        } else if (zone.contains(',')) {
+          // LGA-level: "Makurdi, Benue" → filter by lga == "Makurdi"
+          final lgaName = zone.split(',').first.trim();
+          queries.add(FQuery.equal('lga', lgaName));
         } else {
-          // Sub-zone names don't match Firestore LGA values — skip to
-          // avoid silently hiding all reports.
           developer.log(
-            'Skipping zone filter for sub-zone "$zone" '
-            '(no matching Firestore field)',
+            'Skipping zone filter for unrecognized zone "$zone"',
             name: 'ReportsStatusProvider',
           );
         }

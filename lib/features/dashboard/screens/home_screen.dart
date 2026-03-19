@@ -9,6 +9,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:climate_app/features/profile/providers/profile_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:climate_app/core/utils/error_handler.dart';
+import 'package:climate_app/core/data/mvp_locations_data.dart';
 
 import 'package:climate_app/features/knowledge_base/providers/news_provider.dart';
 import 'package:climate_app/features/verification/models/verification_report_model.dart';
@@ -1057,19 +1058,14 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _showZoneSelector(BuildContext context) {
-    final zones = [
-      'Benue State',
-      'Benue Zone A',
-      'Benue Zone B',
-      'Benue Zone C',
-      'Nasarawa State',
-      'Nasarawa Zone A',
-      'Nasarawa Zone B',
-      'Plateau State',
-      'Plateau Zone A',
-      'Plateau Zone B',
-      'Plateau Zone C',
-    ];
+    // Build zone list: state-level entries + individual LGAs
+    final zones = <String>[];
+    for (final state in MVPLocationsData.getAllStates()) {
+      zones.add('$state State'); // state-level
+      for (final lga in MVPLocationsData.getLGAsForState(state)) {
+        zones.add('$lga, $state'); // LGA-level
+      }
+    }
 
     showModalBottomSheet(
       context: context,
@@ -1100,12 +1096,71 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: SingleChildScrollView(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
-                    children: zones
-                        .map(
-                          (zone) => ListTile(
+                    children: [
+                      // Reset option
+                      ListTile(
+                        leading: const Icon(
+                          Icons.public,
+                          color: AppColors.primaryRed,
+                        ),
+                        title: Text(
+                          'All Zones (No Filter)',
+                          style: GoogleFonts.lexend(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.primaryRed,
+                          ),
+                        ),
+                        trailing: Consumer<ProfileProvider>(
+                          builder: (context, profile, _) =>
+                              profile.monitoringZone == null
+                              ? const Icon(
+                                  Icons.check,
+                                  color: AppColors.primaryRed,
+                                )
+                              : const SizedBox(),
+                        ),
+                        onTap: () async {
+                          final provider = context.read<ProfileProvider>();
+                          await provider.updateMonitoringZone('');
+                          if (context.mounted) {
+                            Navigator.pop(context);
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Showing all zones'),
+                                backgroundColor: AppColors.successGreen,
+                              ),
+                            );
+                          }
+                        },
+                      ),
+                      const Divider(),
+                      ...zones.map(
+                        (zone) {
+                          final isState = zone.contains('State');
+                          return ListTile(
+                            contentPadding: EdgeInsets.only(
+                              left: isState ? 16 : 40,
+                              right: 16,
+                            ),
+                            leading: isState
+                                ? const Icon(
+                                    Icons.location_city,
+                                    color: AppColors.textPrimary,
+                                    size: 20,
+                                  )
+                                : null,
                             title: Text(
                               zone,
-                              style: GoogleFonts.lexend(fontSize: 16),
+                              style: GoogleFonts.lexend(
+                                fontSize: isState ? 16 : 14,
+                                fontWeight: isState
+                                    ? FontWeight.bold
+                                    : FontWeight.w400,
+                                color: isState
+                                    ? AppColors.textPrimary
+                                    : AppColors.textSecondary,
+                              ),
                               overflow: TextOverflow.ellipsis,
                               maxLines: 1,
                             ),
@@ -1133,9 +1188,10 @@ class _HomeScreenState extends State<HomeScreen> {
                                 );
                               }
                             },
-                          ),
-                        )
-                        .toList(),
+                          );
+                        },
+                      ),
+                    ],
                   ),
                 ),
               ),
