@@ -61,3 +61,7 @@ ios/Runner/GoogleService-Info.plist
 # SMS Configuration (contains API keys - NEVER commit!)
 lib/core/config/sms_config.dart
 test_sms.dart
+
+# Build artifacts — never commit APKs/AABs to git
+*.apk
+*.aab
