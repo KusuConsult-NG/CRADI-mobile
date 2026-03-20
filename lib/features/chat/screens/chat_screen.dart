@@ -104,7 +104,7 @@ class _ChatViewState extends State<_ChatView> {
     return User(id: id);
   }
 
-  void _handleMessageSend(String text) async {
+  Future<void> _handleMessageSend(String text) async {
     if (text.trim().isEmpty) return;
     final user = widget.fbUser;
     final msgId = const Uuid().v4();

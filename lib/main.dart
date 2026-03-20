@@ -206,7 +206,7 @@ class _ClimateAppState extends State<ClimateApp> {
     return MaterialApp.router(
       title: 'EWER Mobile - Early Warning System',
       theme: AppTheme.lightTheme,
-      routerConfig: _router!,
+      routerConfig: _router,
       localizationsDelegates: const [
         AppLocalizations.delegate,
         GlobalMaterialLocalizations.delegate,

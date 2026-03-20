@@ -792,6 +792,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                         ),
                         const SizedBox(height: 8),
                         DropdownButtonFormField<String>(
+                          key: ValueKey('state_$_selectedState'),
                           initialValue: _selectedState,
                           decoration: InputDecoration(
                             hintText: AppLocalizations.of(context)!.selectState,
@@ -869,6 +870,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                         ),
                         const SizedBox(height: 8),
                         DropdownButtonFormField<String>(
+                          key: ValueKey('lga_${_selectedState}_$_selectedLGA'),
                           initialValue: _selectedLGA,
                           decoration: InputDecoration(
                             hintText: _selectedState == null
@@ -957,6 +959,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                         ),
                         const SizedBox(height: 8),
                         DropdownButtonFormField<String>(
+                          key: ValueKey('ward_${_selectedLGA}_$_selectedWard'),
                           initialValue: _selectedWard,
                           decoration: InputDecoration(
                             hintText: _selectedLGA == null
