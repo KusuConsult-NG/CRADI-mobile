@@ -295,7 +295,7 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
             children: [
               TextButton(
                 onPressed: () {
-                  context.push('/report/details');
+                  context.push('/report-view', extra: report);
                 },
                 child: Text(
                   AppLocalizations.of(context)!.viewDetails,
