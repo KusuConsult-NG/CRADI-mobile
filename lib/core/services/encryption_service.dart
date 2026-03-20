@@ -1,8 +1,8 @@
-import 'package:encrypt/encrypt.dart'
-    show Encrypter, AES, AESMode, Encrypted, IV, Key;
-import 'package:crypto/crypto.dart';
 import 'package:pointycastle/export.dart' as pc;
+import 'package:crypto/crypto.dart';
+
 import 'dart:convert';
+import 'dart:math';
 import 'dart:typed_data';
 import 'dart:developer' as developer;
 
@@ -34,8 +34,8 @@ class EncryptionService {
 
   /// Generate a secure random [length]-byte buffer.
   Uint8List _randomBytes(int length) {
-    final iv = IV.fromSecureRandom(length);
-    return iv.bytes;
+    final rng = Random.secure();
+    return Uint8List.fromList(List.generate(length, (_) => rng.nextInt(256)));
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -64,9 +64,10 @@ class EncryptionService {
     final output = Uint8List(gcm.getOutputSize(input.length));
     var outOff = 0;
     outOff += gcm.processBytes(input, 0, input.length, output, outOff);
-    gcm.doFinal(output, outOff);
+    outOff += gcm.doFinal(output, outOff);
 
-    return '${base64.encode(salt)}:${base64.encode(iv)}:${base64.encode(output)}';
+    final cipherBytes = output.sublist(0, outOff);
+    return '${base64.encode(salt)}:${base64.encode(iv)}:${base64.encode(cipherBytes)}';
   }
 
   /// Decrypt a string. Handles both GCM (3 segments) and legacy CBC (2 segments).
@@ -117,7 +118,7 @@ class EncryptionService {
         output,
         outOff,
       );
-      gcm.doFinal(output, outOff);
+      outOff += gcm.doFinal(output, outOff);
 
       return utf8.decode(output.sublist(0, outOff));
     } on Exception catch (e) {
@@ -127,11 +128,22 @@ class EncryptionService {
 
   String _decryptLegacyCbc(List<String> parts, String passphrase) {
     try {
-      final iv = IV.fromBase64(parts[0]);
-      final encrypted = Encrypted.fromBase64(parts[1]);
+      final iv = base64.decode(parts[0]);
+      final ciphertext = base64.decode(parts[1]);
       final keyBytes = _deriveLegacyKey(passphrase);
-      final encrypter = Encrypter(AES(Key(keyBytes), mode: AESMode.cbc));
-      return encrypter.decrypt(encrypted, iv: iv);
+
+      final cbc = pc.CBCBlockCipher(pc.AESEngine());
+      cbc.init(false, pc.ParametersWithIV(pc.KeyParameter(keyBytes), iv));
+
+      final output = Uint8List(ciphertext.length);
+      var offset = 0;
+      while (offset < ciphertext.length) {
+        offset += cbc.processBlock(ciphertext, offset, output, offset);
+      }
+
+      // Remove PKCS7 padding
+      final padLen = output.last;
+      return utf8.decode(output.sublist(0, output.length - padLen));
     } on Exception catch (e) {
       throw Exception('CBC decryption failed: $e');
     }
@@ -185,12 +197,13 @@ class EncryptionService {
     final output = Uint8List(gcm.getOutputSize(data.length));
     var outOff = 0;
     outOff += gcm.processBytes(data, 0, data.length, output, outOff);
-    gcm.doFinal(output, outOff);
+    outOff += gcm.doFinal(output, outOff);
 
-    final result = Uint8List(_saltLength + _ivLengthGcm + output.length);
+    final cipherBytes = output.sublist(0, outOff);
+    final result = Uint8List(_saltLength + _ivLengthGcm + cipherBytes.length);
     result.setRange(0, _saltLength, salt);
     result.setRange(_saltLength, _saltLength + _ivLengthGcm, iv);
-    result.setRange(_saltLength + _ivLengthGcm, result.length, output);
+    result.setRange(_saltLength + _ivLengthGcm, result.length, cipherBytes);
     return result;
   }
 
@@ -235,17 +248,28 @@ class EncryptionService {
       output,
       outOff,
     );
-    gcm.doFinal(output, outOff);
+    outOff += gcm.doFinal(output, outOff);
 
     return output.sublist(0, outOff);
   }
 
   Uint8List _decryptBytesLegacyCbc(Uint8List encryptedData, String passphrase) {
-    final iv = IV(encryptedData.sublist(0, 16));
-    final encrypted = Encrypted(encryptedData.sublist(16));
+    final iv = encryptedData.sublist(0, 16);
+    final ciphertext = encryptedData.sublist(16);
     final keyBytes = _deriveLegacyKey(passphrase);
-    final encrypter = Encrypter(AES(Key(keyBytes), mode: AESMode.cbc));
-    return Uint8List.fromList(encrypter.decryptBytes(encrypted, iv: iv));
+
+    final cbc = pc.CBCBlockCipher(pc.AESEngine());
+    cbc.init(false, pc.ParametersWithIV(pc.KeyParameter(keyBytes), iv));
+
+    final output = Uint8List(ciphertext.length);
+    var offset = 0;
+    while (offset < ciphertext.length) {
+      offset += cbc.processBlock(ciphertext, offset, output, offset);
+    }
+
+    // Remove PKCS7 padding
+    final padLen = output.last;
+    return output.sublist(0, output.length - padLen);
   }
 
   // ─────────────────────────────────────────────────────────────────────────
