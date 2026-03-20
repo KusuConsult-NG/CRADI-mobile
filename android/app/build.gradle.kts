@@ -27,10 +27,6 @@ android {
         isCoreLibraryDesugaringEnabled = true
     }
 
-    kotlinOptions {
-        jvmTarget = JavaVersion.VERSION_21.toString()
-    }
-
     defaultConfig {
         applicationId = "com.westgatestratagem.climate_app.climate_app"
         // You can update the following values to match your application needs.
@@ -40,7 +36,6 @@ android {
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }
-
 
     signingConfigs {
         create("release") {
@@ -68,6 +63,12 @@ android {
             // Disable minification for debug builds
             isMinifyEnabled = false
         }
+    }
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_21)
     }
 }
 
