@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:go_router/go_router.dart';
 import 'package:climate_app/core/router/app_router.dart';
 import 'package:climate_app/core/theme/app_theme.dart';
 import 'package:climate_app/features/auth/providers/auth_provider.dart';
@@ -127,6 +128,8 @@ class ClimateApp extends StatefulWidget {
 }
 
 class _ClimateAppState extends State<ClimateApp> {
+  GoRouter? _router;
+
   @override
   void initState() {
     super.initState();
@@ -162,9 +165,28 @@ class _ClimateAppState extends State<ClimateApp> {
         if (!mounted) return;
         try {
           final profileProvider = context.read<ProfileProvider>();
-          await NotificationService().initialize(
+          final notificationService = NotificationService();
+          // Inject the GoRouter so notification taps can navigate
+          if (_router != null) {
+            notificationService.router = _router;
+          }
+          await notificationService.initialize(
             profileProvider: profileProvider,
           );
+          // Handle notification that launched a terminated app
+          final initialMessage = await notificationService.getInitialMessage();
+          if (initialMessage != null && _router != null) {
+            final data = initialMessage.data;
+            if (data.isNotEmpty) {
+              final type = data['type'] ?? 'alert';
+              final id = data['id'] ?? data['reportId'] ?? '';
+              if (type == 'alert' && id.toString().isNotEmpty) {
+                _router!.go('/alert/$id');
+              } else if (type == 'report' && id.toString().isNotEmpty) {
+                _router!.go('/report/$id');
+              }
+            }
+          }
         } on Exception catch (e) {
           debugPrint('FCM initialization error: $e');
         }
@@ -177,10 +199,14 @@ class _ClimateAppState extends State<ClimateApp> {
 
   @override
   Widget build(BuildContext context) {
+    _router ??= createRouter(context);
+    // Keep NotificationService in sync if router was created after FCM init
+    NotificationService().router ??= _router;
+
     return MaterialApp.router(
       title: 'EWER Mobile - Early Warning System',
       theme: AppTheme.lightTheme,
-      routerConfig: createRouter(context),
+      routerConfig: _router!,
       localizationsDelegates: const [
         AppLocalizations.delegate,
         GlobalMaterialLocalizations.delegate,

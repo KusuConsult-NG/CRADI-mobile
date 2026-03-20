@@ -4,6 +4,8 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:climate_app/features/profile/providers/profile_provider.dart';
 import 'package:flutter/foundation.dart';
 import 'package:climate_app/core/services/hive_encryption_service.dart';
+import 'package:go_router/go_router.dart';
+import 'dart:convert';
 import 'dart:developer' as developer;
 
 /// Service for handling Firebase Cloud Messaging (FCM) push notifications
@@ -19,6 +21,12 @@ class NotificationService {
   bool _initialized = false;
   String? _fcmToken;
   ProfileProvider? _profileProvider;
+
+  /// Set this from main.dart so notification taps can navigate via GoRouter.
+  GoRouter? router;
+
+  /// Tracks currently subscribed topics so we can unsubscribe on zone change.
+  final Set<String> _subscribedTopics = {};
 
   static const String _notificationsBoxName = 'notifications_history';
   Box<Map>? _notificationsBox;
@@ -123,6 +131,10 @@ class NotificationService {
 
       _initialized = true;
       _updateUnreadCount();
+
+      // Subscribe to zone-based topics using monitoring zone
+      await _subscribeToZoneTopics();
+
       developer.log(
         'FCM initialized successfully',
         name: 'NotificationService',
@@ -299,9 +311,14 @@ class NotificationService {
       'Notification tapped: ${response.payload}',
       name: 'NotificationService',
     );
-    if (response.payload != null) {
-      // Assuming payload is a JSON string with type and id
-      _handleNotificationNavigation({'type': 'alert'}); // Default for now
+    if (response.payload != null && response.payload!.isNotEmpty) {
+      try {
+        final data = jsonDecode(response.payload!) as Map<String, dynamic>;
+        _handleNotificationNavigation(data);
+      } on FormatException {
+        // Payload is not JSON — treat as simple type
+        _handleNotificationNavigation({'type': 'alert'});
+      }
     }
   }
 
@@ -341,22 +358,91 @@ class NotificationService {
     );
   }
 
-  /// Handle notification navigation
+  /// Handle notification navigation using the injected [router].
   void _handleNotificationNavigation(Map<String, dynamic> data) {
     final type = data['type'] ?? 'alert';
-    // TODO: inject a GlobalKey<NavigatorState> to enable proper imperative
-    // navigation from this service. For now, log the intended destination.
-    // Routing is handled by the FCM deep-link routes in app_router.dart.
+    final id = data['id'] as String? ?? data['reportId'] as String? ?? '';
+
     developer.log(
-      'Notification nav intent: type=$type data=$data',
+      'Notification nav: type=$type id=$id',
       name: 'NotificationService',
     );
+
+    if (router == null) {
+      developer.log(
+        'GoRouter not set — cannot navigate',
+        name: 'NotificationService',
+      );
+      return;
+    }
+
+    switch (type) {
+      case 'report':
+      case 'verification':
+        if (id.isNotEmpty) {
+          router!.go('/report/$id');
+        } else {
+          router!.go('/reports-status');
+        }
+        break;
+      case 'alert':
+        if (id.isNotEmpty) {
+          router!.go('/alert/$id');
+        } else {
+          router!.go('/alerts');
+        }
+        break;
+      case 'chat':
+        router!.go('/chat');
+        break;
+      default:
+        router!.go('/notifications');
+    }
+  }
+
+  /// Subscribe to FCM topics based on the user's monitoring zone.
+  ///
+  /// Call this after initialization or when the user changes their zone.
+  Future<void> _subscribeToZoneTopics() async {
+    final zone = _profileProvider?.monitoringZone;
+    if (zone == null || zone.isEmpty) return;
+
+    // Always subscribe to the "all_alerts" global topic
+    await subscribeToTopic('all_alerts');
+
+    // Sanitize topic names: FCM allows [a-zA-Z0-9-_.~%]
+    String sanitize(String s) =>
+        s.replaceAll(RegExp(r'[^a-zA-Z0-9_]'), '_').toLowerCase();
+
+    if (zone.contains(', ')) {
+      // LGA format: "Makurdi, Benue"
+      final parts = zone.split(', ');
+      final lga = sanitize(parts[0]);
+      final state = sanitize(parts[1]);
+      await subscribeToTopic('state_$state');
+      await subscribeToTopic('lga_$lga');
+    } else if (zone.endsWith(' State')) {
+      // State format: "Benue State"
+      final state = sanitize(zone.replaceAll(' State', ''));
+      await subscribeToTopic('state_$state');
+    }
+  }
+
+  /// Re-subscribe after the user changes their monitoring zone.
+  Future<void> updateZoneSubscriptions() async {
+    // Unsubscribe from all previously subscribed topics
+    for (final topic in _subscribedTopics.toList()) {
+      await unsubscribeFromTopic(topic);
+    }
+    _subscribedTopics.clear();
+    await _subscribeToZoneTopics();
   }
 
   /// Subscribe to a topic
   Future<void> subscribeToTopic(String topic) async {
     try {
       await _fcm.subscribeToTopic(topic);
+      _subscribedTopics.add(topic);
       developer.log('Subscribed to topic: $topic', name: 'NotificationService');
     } on Exception catch (e) {
       developer.log(
