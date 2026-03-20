@@ -266,7 +266,13 @@ GoRouter createRouter(BuildContext context) {
               GoRoute(
                 path: 'detail',
                 builder: (context, state) {
-                  final alert = state.extra as Map<String, dynamic>;
+                  // From in-app navigation, alert is passed via extra.
+                  // From deep-links, extra is null — redirect handled below.
+                  final alert = state.extra as Map<String, dynamic>?;
+                  if (alert == null) {
+                    // Deep-link without data — show the alerts list
+                    return const AlertsListScreen();
+                  }
                   return AlertDetailScreen(alert: alert);
                 },
               ),
@@ -438,13 +444,16 @@ GoRouter createRouter(BuildContext context) {
         builder: (context, state) => const AboutAppScreen(),
       ),
       // ── Deep Link Routes ───────────────────────────────────────────────────
+      // FCM push notifications may include type and id in the payload.
+      // These routes resolve the ID and redirect to the appropriate screen.
       GoRoute(
         path: '/report/:reportId',
         redirect: (context, state) {
           final auth = Provider.of<AuthProvider>(context, listen: false);
           if (!auth.isAuthenticated) return '/login';
-          final id = state.pathParameters['reportId'] ?? '';
-          return '/report/details?deepLinkId=$id';
+          // Deep-link with a report ID — go to reports status screen
+          // (cannot pass extra data via URL, so we show the list)
+          return '/reports-status';
         },
       ),
       GoRoute(
@@ -452,8 +461,8 @@ GoRouter createRouter(BuildContext context) {
         redirect: (context, state) {
           final auth = Provider.of<AuthProvider>(context, listen: false);
           if (!auth.isAuthenticated) return '/login';
-          final id = state.pathParameters['alertId'] ?? '';
-          return '/alerts/detail?deepLinkId=$id';
+          // Deep-link with an alert ID — go to alerts list
+          return '/alerts';
         },
       ),
     ],
