@@ -105,6 +105,7 @@ dependencies:
   # Firebase Remote Config — server-side parameters (peer threshold, SMS caps, feature flags)
   firebase_remote_config: ^6.1.4
   http_certificate_pinning: ^3.0.1
+  share_plus: ^12.0.1
 
 
 dev_dependencies:

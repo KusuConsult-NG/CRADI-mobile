@@ -5,14 +5,77 @@ import 'package:provider/provider.dart';
 import 'package:climate_app/core/services/tts_service.dart';
 import 'package:climate_app/features/knowledge_base/providers/knowledge_provider.dart';
 import 'package:go_router/go_router.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
-class KnowledgeDetailScreen extends StatelessWidget {
+class KnowledgeDetailScreen extends StatefulWidget {
   final Map<String, dynamic> guide;
 
   const KnowledgeDetailScreen({super.key, required this.guide});
 
   @override
+  State<KnowledgeDetailScreen> createState() => _KnowledgeDetailScreenState();
+}
+
+class _KnowledgeDetailScreenState extends State<KnowledgeDetailScreen> {
+  bool _isBookmarked = false;
+  static const _bookmarksKey = 'bookmarked_guides';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadBookmarkState();
+  }
+
+  String get _guideId =>
+      widget.guide['id']?.toString() ??
+      widget.guide['title']?.toString() ??
+      '';
+
+  Future<void> _loadBookmarkState() async {
+    final prefs = await SharedPreferences.getInstance();
+    final bookmarks = prefs.getStringList(_bookmarksKey) ?? [];
+    if (mounted) {
+      setState(() => _isBookmarked = bookmarks.contains(_guideId));
+    }
+  }
+
+  Future<void> _toggleBookmark() async {
+    final prefs = await SharedPreferences.getInstance();
+    final bookmarks = prefs.getStringList(_bookmarksKey) ?? [];
+    if (_isBookmarked) {
+      bookmarks.remove(_guideId);
+    } else {
+      bookmarks.add(_guideId);
+    }
+    await prefs.setStringList(_bookmarksKey, bookmarks);
+    if (mounted) {
+      setState(() => _isBookmarked = !_isBookmarked);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            _isBookmarked ? 'Guide bookmarked' : 'Bookmark removed',
+          ),
+          duration: const Duration(seconds: 1),
+          backgroundColor: _isBookmarked
+              ? AppColors.successGreen
+              : AppColors.textSecondary,
+        ),
+      );
+    }
+  }
+
+  void _shareGuide() {
+    final title = widget.guide['title'] ?? 'CRADI Guide';
+    final description = widget.guide['description'] ?? '';
+    final content = widget.guide['content'] ?? '';
+    final shareText = '$title\n\n$description${content.isNotEmpty ? '\n\n$content' : ''}\n\nShared via CRADI Early Warning App';
+    SharePlus.instance.share(ShareParams(text: shareText));
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final guide = widget.guide;
     // Determine category icon and color
     IconData categoryIcon = Icons.info_outline;
     Color categoryColor = AppColors.primaryRed;
@@ -58,14 +121,14 @@ class KnowledgeDetailScreen extends StatelessWidget {
               Icons.share_outlined,
               color: AppColors.textPrimary,
             ),
-            onPressed: () {},
+            onPressed: _shareGuide,
           ),
           IconButton(
-            icon: const Icon(
-              Icons.bookmark_border,
-              color: AppColors.textPrimary,
+            icon: Icon(
+              _isBookmarked ? Icons.bookmark : Icons.bookmark_border,
+              color: _isBookmarked ? AppColors.primaryRed : AppColors.textPrimary,
             ),
-            onPressed: () {},
+            onPressed: _toggleBookmark,
           ),
           IconButton(
             icon: const Icon(

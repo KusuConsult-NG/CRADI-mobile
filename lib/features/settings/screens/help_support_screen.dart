@@ -3,9 +3,32 @@ import 'package:climate_app/shared/widgets/custom_button.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class HelpSupportScreen extends StatelessWidget {
   const HelpSupportScreen({super.key});
+
+  Future<void> _contactSupport(BuildContext context) async {
+    final uri = Uri(
+      scheme: 'mailto',
+      path: 'support@cradi.org',
+      queryParameters: {
+        'subject': 'CRADI App Support Request',
+        'body': 'Please describe your issue:\n\n',
+      },
+    );
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri);
+    } else {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No email app found. Contact support@cradi.org'),
+          ),
+        );
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -82,13 +105,8 @@ class HelpSupportScreen extends StatelessWidget {
             const SizedBox(height: 16),
             CustomButton(
               text: 'Contact Support',
-              onPressed: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Support contact feature coming soon'),
-                  ),
-                );
-              },
+              icon: Icons.email_outlined,
+              onPressed: () => _contactSupport(context),
             ),
           ],
         ),
