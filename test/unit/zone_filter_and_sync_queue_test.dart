@@ -1,3 +1,4 @@
+// ignore_for_file: use_null_aware_elements
 import 'package:flutter_test/flutter_test.dart';
 
 /// Light-weight tests for the monitoring zone filter logic.
@@ -8,10 +9,7 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   group('Monitoring Zone Filter Logic', () {
     // Reproduce the filter logic from reports_status_provider.dart
-    bool passesZoneFilter(
-      Map<String, dynamic> report,
-      String? monitoringZone,
-    ) {
+    bool passesZoneFilter(Map<String, dynamic> report, String? monitoringZone) {
       if (monitoringZone == null || monitoringZone.isEmpty) return true;
 
       if (monitoringZone.contains(', ')) {
@@ -86,15 +84,16 @@ void main() {
   group('Offline Sync Queue Data Structure', () {
     // Reproduce the addToSyncQueue wrapping logic
     Map<String, dynamic> wrapForQueue(Map<String, dynamic> input) {
-      final docId = input.remove('docId') as String? ??
+      final docId =
+          input.remove('docId') as String? ??
           DateTime.now().millisecondsSinceEpoch.toString();
       final collection = input.remove('collection') as String?;
       final collectionId = input.remove('collectionId') as String?;
 
       return {
         'docId': docId,
-        if (collection != null) 'collection': collection, // ignore: use_null_aware_elements
-        if (collectionId != null) 'collectionId': collectionId, // ignore: use_null_aware_elements
+        if (collection != null) 'collection': collection,
+        if (collectionId != null) 'collectionId': collectionId,
         'data': input,
         'timestamp': DateTime.now().toIso8601String(),
         'retryCount': 0,
@@ -155,10 +154,7 @@ void main() {
 
     test('getCollection checks both key names', () {
       expect(getCollection({'collection': 'reports'}), equals('reports'));
-      expect(
-        getCollection({'collectionId': 'reports'}),
-        equals('reports'),
-      );
+      expect(getCollection({'collectionId': 'reports'}), equals('reports'));
       expect(getCollection({}), isNull);
     });
 

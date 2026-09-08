@@ -11,7 +11,6 @@ import 'package:climate_app/core/constants/app_config.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'dart:developer' as developer;
 import 'package:provider/provider.dart';
-import 'package:climate_app/core/utils/string_extensions.dart';
 import 'package:uuid/uuid.dart';
 
 enum HazardType { flood, drought, temp, wind, erosion, fire, pest }
@@ -348,15 +347,11 @@ class ReportingProvider extends ChangeNotifier {
               'latitude': draft['latitude'],
               'longitude': draft['longitude'],
               'locationDetails': draft['locationDetails'],
-              'ward': (draft['ward'] ?? 'Unknown')
-                  .toString()
-                  .normalizeForBackend(),
-              'lga': (draft['lga'] ?? 'Makurdi')
-                  .toString()
-                  .normalizeForBackend(),
+              'ward': draft['ward'] ?? 'Unknown',
+              'lga': draft['lga'] ?? 'Makurdi',
               'state': MVPLocationsData.getStateForLGA(
                 (draft['lga'] ?? 'Makurdi').toString(),
-              ).normalizeForBackend(),
+              ),
               'description': draft['description'],
               'submittedAt': DateTime.now().toIso8601String(),
               'imageUrls': imageUrls,

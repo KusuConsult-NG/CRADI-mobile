@@ -178,9 +178,11 @@ class OfflineStorageService {
 
     // Pull out meta keys that syncPendingReports uses directly
     final docId = report.remove('docId') as String?;
-    final collection = (report.remove('collection') ??
-        report.remove('collectionId') ??
-        'reports') as String;
+    final collection =
+        (report.remove('collection') ??
+                report.remove('collectionId') ??
+                'reports')
+            as String;
 
     final queueItem = {
       'data': report, // actual Firestore payload
@@ -323,13 +325,23 @@ class OfflineStorageService {
 
       try {
         final data = Map<String, dynamic>.from(item['data'] as Map? ?? item);
-        final collection = (item['collection'] ?? item['collectionId'] ?? 'reports') as String;
+        final collection =
+            (item['collection'] ?? item['collectionId'] ?? 'reports') as String;
         // Remove queue-meta keys to avoid writing them into Firestore
-        data.removeWhere((k, _) => const {
-          'queueId', 'addedToQueueAt', 'retryCount', 'status',
-          'lastError', 'lastAttemptAt', 'syncedAt', 'collection',
-          'collectionId', 'docId',
-        }.contains(k));
+        data.removeWhere(
+          (k, _) => const {
+            'queueId',
+            'addedToQueueAt',
+            'retryCount',
+            'status',
+            'lastError',
+            'lastAttemptAt',
+            'syncedAt',
+            'collection',
+            'collectionId',
+            'docId',
+          }.contains(k),
+        );
 
         // If there's an existing doc ID, update; otherwise create a new doc.
         final docId = item['docId'] as String?;

@@ -46,18 +46,18 @@ void main() {
 
     // ReportsStatusProvider default stubs
     when(mockReportsProvider.hasListeners).thenReturn(false);
-    when(mockReportsProvider.refreshReports(userId: anyNamed('userId')))
-        .thenAnswer((_) async {});
     when(
-      mockReportsProvider.getReports(
-        any,
-        userId: anyNamed('userId'),
-      ),
+      mockReportsProvider.refreshReports(userId: anyNamed('userId')),
+    ).thenAnswer((_) async {});
+    when(
+      mockReportsProvider.getReports(any, userId: anyNamed('userId')),
     ).thenReturn([]);
-    when(mockReportsProvider.isLoading(any, userId: anyNamed('userId')))
-        .thenReturn(false);
-    when(mockReportsProvider.hasMore(any, userId: anyNamed('userId')))
-        .thenReturn(false);
+    when(
+      mockReportsProvider.isLoading(any, userId: anyNamed('userId')),
+    ).thenReturn(false);
+    when(
+      mockReportsProvider.hasMore(any, userId: anyNamed('userId')),
+    ).thenReturn(false);
     when(
       mockReportsProvider.fetchReports(
         status: anyNamed('status'),
@@ -77,10 +77,7 @@ void main() {
           path: '/',
           builder: (ctx, state) => const ReportsStatusScreen(),
         ),
-        GoRoute(
-          path: '/dashboard',
-          builder: (ctx, state) => const SizedBox(),
-        ),
+        GoRoute(path: '/dashboard', builder: (ctx, state) => const SizedBox()),
         GoRoute(
           path: '/report-view',
           builder: (ctx, state) {
@@ -96,9 +93,7 @@ void main() {
         ChangeNotifierProvider<ReportsStatusProvider>.value(
           value: mockReportsProvider,
         ),
-        ChangeNotifierProvider<AuthProvider>.value(
-          value: mockAuthProvider,
-        ),
+        ChangeNotifierProvider<AuthProvider>.value(value: mockAuthProvider),
       ],
       child: MaterialApp.router(
         routerConfig: router,
@@ -129,8 +124,7 @@ void main() {
       expect(find.text('Rejected'), findsOneWidget);
     });
 
-    testWidgets('should display empty state when no reports',
-        (tester) async {
+    testWidgets('should display empty state when no reports', (tester) async {
       await tester.pumpWidget(buildScreen());
       await tester.pumpAndSettle();
       expect(find.byIcon(Icons.inbox_outlined), findsOneWidget);
@@ -143,8 +137,9 @@ void main() {
       expect(find.byIcon(Icons.download), findsOneWidget);
     });
 
-    testWidgets('should display report card when reports exist',
-        (tester) async {
+    testWidgets('should display report card when reports exist', (
+      tester,
+    ) async {
       when(
         mockReportsProvider.getReports(
           ReportStatus.pending,
@@ -172,8 +167,9 @@ void main() {
       expect(find.text('Pending'), findsWidgets); // Tab + badge
     });
 
-    testWidgets('should display View Details button on report card',
-        (tester) async {
+    testWidgets('should display View Details button on report card', (
+      tester,
+    ) async {
       when(
         mockReportsProvider.getReports(
           ReportStatus.pending,
@@ -186,26 +182,29 @@ void main() {
       expect(find.text('View Details'), findsOneWidget);
     });
 
-    testWidgets('View Details should navigate to /report-view with report data',
-        (tester) async {
-      when(
-        mockReportsProvider.getReports(
-          ReportStatus.pending,
-          userId: anyNamed('userId'),
-        ),
-      ).thenReturn([testReport]);
+    testWidgets(
+      'View Details should navigate to /report-view with report data',
+      (tester) async {
+        when(
+          mockReportsProvider.getReports(
+            ReportStatus.pending,
+            userId: anyNamed('userId'),
+          ),
+        ).thenReturn([testReport]);
 
-      await tester.pumpWidget(buildScreen());
-      await tester.pumpAndSettle();
+        await tester.pumpWidget(buildScreen());
+        await tester.pumpAndSettle();
 
-      await tester.tap(find.text('View Details'));
-      await tester.pumpAndSettle();
+        await tester.tap(find.text('View Details'));
+        await tester.pumpAndSettle();
 
-      expect(lastPushedRoute, equals('/report-view'));
-    });
+        expect(lastPushedRoute, equals('/report-view'));
+      },
+    );
 
-    testWidgets('should not show Verify/Reject when user is report owner',
-        (tester) async {
+    testWidgets('should not show Verify/Reject when user is report owner', (
+      tester,
+    ) async {
       // Make reporterId match some known user ID
       final ownedReport = testReport.copyWith(reporterId: 'owner-uid');
 
@@ -238,8 +237,9 @@ void main() {
       // The important test is that View Details works (tested separately).
     });
 
-    testWidgets('should display Verify and Reject buttons for non-owner',
-        (tester) async {
+    testWidgets('should display Verify and Reject buttons for non-owner', (
+      tester,
+    ) async {
       // testReport has reporterId 'user-123', currentUser is null
       when(
         mockReportsProvider.getReports(
@@ -262,10 +262,12 @@ void main() {
       expect(find.byIcon(Icons.arrow_back_ios_new), findsOneWidget);
     });
 
-    testWidgets('should show loading indicator when isLoading and empty',
-        (tester) async {
-      when(mockReportsProvider.isLoading(any, userId: anyNamed('userId')))
-          .thenReturn(true);
+    testWidgets('should show loading indicator when isLoading and empty', (
+      tester,
+    ) async {
+      when(
+        mockReportsProvider.isLoading(any, userId: anyNamed('userId')),
+      ).thenReturn(true);
       when(
         mockReportsProvider.getReports(
           ReportStatus.pending,
@@ -279,8 +281,7 @@ void main() {
       expect(find.byType(CircularProgressIndicator), findsOneWidget);
     });
 
-    testWidgets('should display Refresh button on empty state',
-        (tester) async {
+    testWidgets('should display Refresh button on empty state', (tester) async {
       await tester.pumpWidget(buildScreen());
       await tester.pumpAndSettle();
       expect(find.text('Refresh'), findsOneWidget);

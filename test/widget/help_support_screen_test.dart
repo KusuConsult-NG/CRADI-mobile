@@ -9,14 +9,8 @@ void main() {
   Widget buildScreen() {
     final router = GoRouter(
       routes: [
-        GoRoute(
-          path: '/',
-          builder: (ctx, state) => const HelpSupportScreen(),
-        ),
-        GoRoute(
-          path: '/dashboard',
-          builder: (ctx, state) => const SizedBox(),
-        ),
+        GoRoute(path: '/', builder: (ctx, state) => const HelpSupportScreen()),
+        GoRoute(path: '/dashboard', builder: (ctx, state) => const SizedBox()),
       ],
     );
 
@@ -71,8 +65,9 @@ void main() {
       expect(find.text('Still need help?'), findsOneWidget);
     });
 
-    testWidgets('should display Contact Support button with email icon',
-        (tester) async {
+    testWidgets('should display Contact Support button with email icon', (
+      tester,
+    ) async {
       await tester.pumpWidget(buildScreen());
       await tester.pumpAndSettle();
       expect(find.text('Contact Support'), findsOneWidget);
@@ -83,10 +78,7 @@ void main() {
       await tester.pumpWidget(buildScreen());
       await tester.pumpAndSettle();
       // Scroll to make sure button is visible
-      await tester.scrollUntilVisible(
-        find.text('Contact Support'),
-        200,
-      );
+      await tester.scrollUntilVisible(find.text('Contact Support'), 200);
       // Tap the button — it calls url_launcher which may not open in test,
       // but it should not throw
       await tester.tap(find.text('Contact Support'));

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:developer' as developer;
 import 'package:climate_app/core/utils/error_handler.dart';
@@ -58,6 +59,10 @@ class AuthProvider extends ChangeNotifier {
   // from immediately re-locking the app via the biometric lock screen.
   bool _justLoggedIn = false;
 
+  // Real-time listener on the user's Firestore document so admin role
+  // changes (approval, role, disabled) take effect immediately.
+  StreamSubscription<dynamic>? _userDocSub;
+
   // Auth state subscription (initialized in constructor indirectly via late field).
   // This is safe: late fields are initialized on first access, which happens
   // immediately when the listener is needed.
@@ -92,7 +97,9 @@ class AuthProvider extends ChangeNotifier {
   /// React to Firebase auth state changes (replaces 2-min polling timer).
   Future<void> _onAuthStateChanged(User? user) async {
     if (user == null) {
-      // Signed out
+      // Signed out — cancel real-time listener
+      _userDocSub?.cancel();
+      _userDocSub = null;
       _currentUser = null;
       _isAuthenticated = false;
       _userRole = null;
@@ -137,18 +144,27 @@ class AuthProvider extends ChangeNotifier {
     }
     _justLoggedIn = false; // Reset flag regardless
 
-    // Load role from secure storage (fast path)
-    final userRoleStr = await _storage.getUserRole();
-    if (userRoleStr != null) {
-      _userRole = _parseUserRole(userRoleStr);
-    }
-
-    // Fetch Firestore user doc for approval/verification status
+    // Fetch Firestore user doc for role + approval/verification status.
+    // Always read from Firestore (source of truth) instead of relying
+    // solely on the secure-storage cache, which becomes stale when an
+    // admin changes a user's role remotely.
     try {
       final userDoc = await _firebase.getDocument(
         collectionId: AppConfig.usersCollection,
         documentId: user.uid,
       );
+
+      // ── Role: Firestore is authoritative ──
+      final firestoreRole = userDoc['role'] as String?;
+      if (firestoreRole != null) {
+        _userRole = _parseUserRole(firestoreRole);
+        await _storage.saveUserRole(firestoreRole);
+      } else {
+        // Fallback to cached role if Firestore field is missing
+        final cachedRole = await _storage.getUserRole();
+        _userRole = _parseUserRole(cachedRole);
+      }
+
       _isApproved = userDoc['isApproved'] as bool? ?? false;
       _isVerified = userDoc['isVerified'] as bool? ?? false;
 
@@ -171,11 +187,82 @@ class AuthProvider extends ChangeNotifier {
       }
     } on Exception catch (e) {
       developer.log('Error fetching Firestore user doc: $e');
+      // Fallback to cached role if Firestore fetch fails
+      final cachedRole = await _storage.getUserRole();
+      if (cachedRole != null) {
+        _userRole = _parseUserRole(cachedRole);
+      }
     }
+
+    // Start real-time listener so admin role changes take effect immediately
+    _startUserDocListener(user.uid);
 
     _phoneNumber = await _storage.getPhoneNumber();
     _isInitialized = true;
     notifyListeners();
+  }
+
+  /// Listen to the user's Firestore document in real-time.
+  /// When an admin changes the user's role, approval, or disabled status,
+  /// the change is picked up immediately without requiring re-login.
+  void _startUserDocListener(String uid) {
+    _userDocSub?.cancel();
+    _userDocSub = FirebaseFirestore.instance
+        .collection(AppConfig.usersCollection)
+        .doc(uid)
+        .snapshots()
+        .listen(
+          (snapshot) {
+            if (!snapshot.exists) return;
+            final data = snapshot.data()!;
+
+            // Update role
+            final newRoleStr = data['role'] as String?;
+            if (newRoleStr != null) {
+              final newRole = _parseUserRole(newRoleStr);
+              if (newRole != _userRole) {
+                developer.log(
+                  'Role changed via Firestore listener: $_userRole → $newRole',
+                  name: 'AuthProvider',
+                );
+                _userRole = newRole;
+                _storage.saveUserRole(newRoleStr);
+              }
+            }
+
+            // Update approval & verification
+            final newApproved = data['isApproved'] as bool? ?? false;
+            final newVerified = data['isVerified'] as bool? ?? false;
+            final newDisabled = data['isDisabled'] as bool? ?? false;
+
+            bool changed = false;
+            if (_isApproved != newApproved) {
+              _isApproved = newApproved;
+              changed = true;
+            }
+            if (_isVerified != newVerified) {
+              _isVerified = newVerified;
+              changed = true;
+            }
+
+            // If account was disabled, force logout
+            if (newDisabled) {
+              developer.log(
+                'Account disabled via admin — logging out',
+                name: 'AuthProvider',
+              );
+              logout();
+              return;
+            }
+
+            if (changed || newRoleStr != null) {
+              notifyListeners();
+            }
+          },
+          onError: (e) {
+            developer.log('User doc listener error: $e', name: 'AuthProvider');
+          },
+        );
   }
 
   /// Force reload of user data (e.g. after profile update).
@@ -1080,6 +1167,10 @@ class AuthProvider extends ChangeNotifier {
     try {
       _isLoading = true;
       notifyListeners();
+
+      // Cancel real-time Firestore listener
+      _userDocSub?.cancel();
+      _userDocSub = null;
 
       try {
         await _sessionManager.logout();

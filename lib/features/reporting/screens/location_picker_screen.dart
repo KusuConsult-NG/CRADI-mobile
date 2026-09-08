@@ -76,9 +76,11 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
   void _loadProfileLocation() {
     try {
       final profile = context.read<ProfileProvider>();
-      if (profile.state != null && profile.lga != null) {
+      // Prefer monitoring zone over profile state for report location
+      final preferredState = profile.monitoringZone ?? profile.state;
+      if (preferredState != null && profile.lga != null) {
         setState(() {
-          _selectedState = profile.state;
+          _selectedState = preferredState;
           _selectedLGA = profile.lga;
         });
 
@@ -93,6 +95,11 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
             reporting.setWard('Unknown');
           }
         }
+      } else if (preferredState != null) {
+        // Only state/zone known, no LGA
+        setState(() {
+          _selectedState = preferredState;
+        });
       }
     } on Exception {
       // ignore
@@ -825,13 +832,6 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                             ),
                           ),
                           items: MVPLocationsData.getAllStates()
-                              .where(
-                                (state) =>
-                                    state ==
-                                        context.read<ProfileProvider>().state ||
-                                    context.read<ProfileProvider>().state ==
-                                        null,
-                              )
                               .map(
                                 (state) => DropdownMenuItem(
                                   value: state,

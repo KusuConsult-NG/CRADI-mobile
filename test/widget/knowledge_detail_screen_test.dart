@@ -21,7 +21,8 @@ void main() {
     'title': 'Flood Safety Guide',
     'category': 'Safety',
     'description': 'How to stay safe during floods.',
-    'content': '**Preparation**\n\nAlways have an emergency kit ready.\n\nKnow your evacuation routes.',
+    'content':
+        '**Preparation**\n\nAlways have an emergency kit ready.\n\nKnow your evacuation routes.',
     'lastUpdated': 'March 2026',
     'imageUrl': '',
   };
@@ -78,8 +79,9 @@ void main() {
       expect(find.text('Flood Safety Guide'), findsOneWidget);
     });
 
-    testWidgets('should display app bar with Guide Detail title',
-        (tester) async {
+    testWidgets('should display app bar with Guide Detail title', (
+      tester,
+    ) async {
       await tester.pumpWidget(buildScreen());
       await tester.pumpAndSettle();
       expect(find.text('Guide Detail'), findsOneWidget);
@@ -109,12 +111,14 @@ void main() {
       expect(find.byIcon(Icons.share_outlined), findsOneWidget);
     });
 
-    testWidgets('should display bookmark button (outline when not bookmarked)',
-        (tester) async {
-      await tester.pumpWidget(buildScreen());
-      await tester.pumpAndSettle();
-      expect(find.byIcon(Icons.bookmark_border), findsOneWidget);
-    });
+    testWidgets(
+      'should display bookmark button (outline when not bookmarked)',
+      (tester) async {
+        await tester.pumpWidget(buildScreen());
+        await tester.pumpAndSettle();
+        expect(find.byIcon(Icons.bookmark_border), findsOneWidget);
+      },
+    );
 
     testWidgets('should display TTS button', (tester) async {
       await tester.pumpWidget(buildScreen());
@@ -153,7 +157,9 @@ void main() {
       expect(find.byIcon(Icons.bookmark), findsOneWidget);
 
       // Dismiss first SnackBar
-      ScaffoldMessenger.of(tester.element(find.byType(Scaffold).first)).clearSnackBars();
+      ScaffoldMessenger.of(
+        tester.element(find.byType(Scaffold).first),
+      ).clearSnackBars();
       await tester.pumpAndSettle();
 
       // Tap to un-bookmark
@@ -164,8 +170,9 @@ void main() {
       expect(find.text('Bookmark removed'), findsOneWidget);
     });
 
-    testWidgets('should render dynamic content when content is provided',
-        (tester) async {
+    testWidgets('should render dynamic content when content is provided', (
+      tester,
+    ) async {
       await tester.pumpWidget(buildScreen());
       await tester.pumpAndSettle();
 
@@ -175,38 +182,31 @@ void main() {
     });
 
     testWidgets(
-        'should show "coming soon" fallback when content is empty/null',
-        (tester) async {
-      final guideNoContent = {
-        ...testGuide,
-        'content': null,
-      };
-      await tester.pumpWidget(buildScreen(guide: guideNoContent));
-      await tester.pumpAndSettle();
-      expect(find.text('Detailed content coming soon.'), findsOneWidget);
-    });
+      'should show "coming soon" fallback when content is empty/null',
+      (tester) async {
+        final guideNoContent = {...testGuide, 'content': null};
+        await tester.pumpWidget(buildScreen(guide: guideNoContent));
+        await tester.pumpAndSettle();
+        expect(find.text('Detailed content coming soon.'), findsOneWidget);
+      },
+    );
 
     testWidgets('should display Related Topics section', (tester) async {
       await tester.pumpWidget(buildScreen());
       await tester.pumpAndSettle();
 
       // Scroll down to find Related Topics
-      await tester.scrollUntilVisible(
-        find.text('Related Topics'),
-        200,
-      );
+      await tester.scrollUntilVisible(find.text('Related Topics'), 200);
       expect(find.text('Related Topics'), findsOneWidget);
     });
 
-    testWidgets('should display related guide from same category',
-        (tester) async {
+    testWidgets('should display related guide from same category', (
+      tester,
+    ) async {
       await tester.pumpWidget(buildScreen());
       await tester.pumpAndSettle();
 
-      await tester.scrollUntilVisible(
-        find.text('Drought Preparedness'),
-        200,
-      );
+      await tester.scrollUntilVisible(find.text('Drought Preparedness'), 200);
       expect(find.text('Drought Preparedness'), findsOneWidget);
     });
 
@@ -216,8 +216,9 @@ void main() {
       expect(find.byIcon(Icons.arrow_back_ios_new), findsOneWidget);
     });
 
-    testWidgets('should show security icon for Safety category',
-        (tester) async {
+    testWidgets('should show security icon for Safety category', (
+      tester,
+    ) async {
       await tester.pumpWidget(buildScreen());
       await tester.pumpAndSettle();
       expect(find.byIcon(Icons.security), findsWidgets);

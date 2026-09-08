@@ -141,7 +141,10 @@ void main() {
 
     test('strength capped at 4', () {
       // Even very complex passwords should max at 4
-      expect(Validators.getPasswordStrength('MyStr0ng!Pass'), lessThanOrEqualTo(4));
+      expect(
+        Validators.getPasswordStrength('MyStr0ng!Pass'),
+        lessThanOrEqualTo(4),
+      );
     });
   });
 
@@ -159,17 +162,11 @@ void main() {
     });
 
     test('min length enforced', () {
-      expect(
-        Validators.validateText('ab', minLength: 5),
-        isNotNull,
-      );
+      expect(Validators.validateText('ab', minLength: 5), isNotNull);
     });
 
     test('max length enforced', () {
-      expect(
-        Validators.validateText('a' * 20, maxLength: 10),
-        isNotNull,
-      );
+      expect(Validators.validateText('a' * 20, maxLength: 10), isNotNull);
     });
 
     test('SQL injection detected', () {
@@ -189,10 +186,7 @@ void main() {
 
   group('Address Validation', () {
     test('valid address passes', () {
-      expect(
-        Validators.validateAddress('123 Main Street, Makurdi'),
-        isNull,
-      );
+      expect(Validators.validateAddress('123 Main Street, Makurdi'), isNull);
     });
 
     test('too short address fails', () {
@@ -218,10 +212,7 @@ void main() {
     });
 
     test('special chars rejected', () {
-      expect(
-        Validators.validateLocation('Test@#\$', 'Ward'),
-        isNotNull,
-      );
+      expect(Validators.validateLocation('Test@#\$', 'Ward'), isNotNull);
     });
   });
 
@@ -231,10 +222,7 @@ void main() {
     });
 
     test('null fails with field name', () {
-      expect(
-        Validators.validateRequired(null, 'Name'),
-        contains('Name'),
-      );
+      expect(Validators.validateRequired(null, 'Name'), contains('Name'));
     });
 
     test('empty string fails', () {

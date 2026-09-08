@@ -28,9 +28,7 @@ class _KnowledgeDetailScreenState extends State<KnowledgeDetailScreen> {
   }
 
   String get _guideId =>
-      widget.guide['id']?.toString() ??
-      widget.guide['title']?.toString() ??
-      '';
+      widget.guide['id']?.toString() ?? widget.guide['title']?.toString() ?? '';
 
   Future<void> _loadBookmarkState() async {
     final prefs = await SharedPreferences.getInstance();
@@ -69,7 +67,8 @@ class _KnowledgeDetailScreenState extends State<KnowledgeDetailScreen> {
     final title = widget.guide['title'] ?? 'CRADI Guide';
     final description = widget.guide['description'] ?? '';
     final content = widget.guide['content'] ?? '';
-    final shareText = '$title\n\n$description${content.isNotEmpty ? '\n\n$content' : ''}\n\nShared via CRADI Early Warning App';
+    final shareText =
+        '$title\n\n$description${content.isNotEmpty ? '\n\n$content' : ''}\n\nShared via CRADI Early Warning App';
     SharePlus.instance.share(ShareParams(text: shareText));
   }
 
@@ -126,7 +125,9 @@ class _KnowledgeDetailScreenState extends State<KnowledgeDetailScreen> {
           IconButton(
             icon: Icon(
               _isBookmarked ? Icons.bookmark : Icons.bookmark_border,
-              color: _isBookmarked ? AppColors.primaryRed : AppColors.textPrimary,
+              color: _isBookmarked
+                  ? AppColors.primaryRed
+                  : AppColors.textPrimary,
             ),
             onPressed: _toggleBookmark,
           ),

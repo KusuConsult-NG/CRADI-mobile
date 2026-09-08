@@ -93,8 +93,9 @@ class ProfileProvider extends ChangeNotifier {
           _lga = await _storage.read('profile_lga');
           _ward = await _storage.read('profile_ward');
           final storedZone = await _storage.read('monitoring_zone');
-          _monitoringZone =
-              (storedZone != null && storedZone.isNotEmpty) ? storedZone : null;
+          _monitoringZone = (storedZone != null && storedZone.isNotEmpty)
+              ? storedZone
+              : null;
           final bioEnabled = await _storage.read('biometric_enabled');
           _biometricsEnabled = bioEnabled == 'true';
           // Notify immediately so the UI shows cached data, then continue

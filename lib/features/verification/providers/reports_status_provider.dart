@@ -8,6 +8,7 @@ import 'dart:developer' as developer;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:climate_app/core/services/offline_storage_service.dart';
 import 'package:climate_app/features/profile/providers/profile_provider.dart';
+import 'package:climate_app/core/data/mvp_locations_data.dart';
 
 class ReportsStatusProvider extends ChangeNotifier {
   final FirebaseService _firebase = FirebaseService();
@@ -168,30 +169,33 @@ class ReportsStatusProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      // Build equality/inequality filters BEFORE orderBy for Firestore best practice
-      final queries = <QueryFilter>[];
-
+      // Build base filters (always needed)
+      final baseQueries = <QueryFilter>[];
       if (status != null) {
-        queries.add(FQuery.equal('status', status.name));
+        baseQueries.add(FQuery.equal('status', status.name));
       }
       if (userId != null) {
-        queries.add(FQuery.equal('userId', userId));
+        baseQueries.add(FQuery.equal('userId', userId));
       }
       if (excludeUserId != null) {
-        queries.add(FQuery.notEqual('userId', excludeUserId));
+        baseQueries.add(FQuery.notEqual('userId', excludeUserId));
       }
 
-      // Monitoring Zone filter — apply for both State-level and LGA-level zones.
-      // Zone format: "Benue State" (state-level) or "Makurdi, Benue" (LGA-level)
+      // Build zone filter (may require composite index)
+      final zoneQueries = <QueryFilter>[];
       if (userId == null && _profileProvider?.monitoringZone != null) {
         final zone = _profileProvider!.monitoringZone!;
-        if (zone.toLowerCase().contains('state')) {
-          // State-level: "Benue State" → filter by state == "Benue"
-          queries.add(FQuery.equal('state', zone.replaceAll(' State', '')));
+        if (zone.toLowerCase().contains('all zone')) {
+          // "All Zones" — no filter needed
+        } else if (zone.toLowerCase().contains('state')) {
+          zoneQueries.add(FQuery.equal('state', zone.replaceAll(' State', '')));
         } else if (zone.contains(',')) {
-          // LGA-level: "Makurdi, Benue" → filter by lga == "Makurdi"
           final lgaName = zone.split(',').first.trim();
-          queries.add(FQuery.equal('lga', lgaName));
+          zoneQueries.add(FQuery.equal('lga', lgaName));
+        } else if (MVPLocationsData.getAllStates().any(
+          (s) => s.toLowerCase() == zone.toLowerCase(),
+        )) {
+          zoneQueries.add(FQuery.equal('state', zone));
         } else {
           developer.log(
             'Skipping zone filter for unrecognized zone "$zone"',
@@ -200,34 +204,69 @@ class ReportsStatusProvider extends ChangeNotifier {
         }
       }
 
-      // Add orderBy AFTER where clauses
-      queries.add(FQuery.orderDesc('submittedAt'));
+      // Combine: base + zone + orderBy
+      final queries = <QueryFilter>[
+        ...baseQueries,
+        ...zoneQueries,
+        FQuery.orderDesc('submittedAt'),
+      ];
 
       developer.log(
         'fetchReports key=$key, filters=${queries.length}, '
         'status=${status?.name}, userId=$userId, '
-        'excludeUserId=$excludeUserId',
+        'zone=${zoneQueries.isNotEmpty ? "active" : "none"}',
         name: 'ReportsStatusProvider',
       );
 
-      // Fetch total count for accurate dashboard stats when not loading more
-      if (!loadMore) {
-        _totalCounts[key] = await _firebase.countDocuments(
+      // Try the primary query (with zone filter)
+      List<Map<String, dynamic>> docs;
+      try {
+        if (!loadMore) {
+          _totalCounts[key] = await _firebase.countDocuments(
+            collectionId: AppConfig.reportsCollection,
+            queries: queries,
+          );
+        }
+        docs = await _firebase.listDocuments(
           collectionId: AppConfig.reportsCollection,
           queries: queries,
+          limitCount: 20,
+          startAfter: loadMore ? _lastDocMap[key] : null,
         );
+      } on Exception catch (primaryError) {
+        // ── DEFENSIVE FALLBACK ──────────────────────────────────────
+        // If the zone-filtered query fails (usually a missing Firestore
+        // composite index), retry WITHOUT the zone filter so the user
+        // still sees reports rather than an empty screen.
         developer.log(
-          'Total count for key=$key: ${_totalCounts[key]}',
+          '⚠️ Primary query failed for key=$key: $primaryError\n'
+          '   Retrying without zone filter as fallback...',
+          name: 'ReportsStatusProvider',
+        );
+
+        final fallbackQueries = <QueryFilter>[
+          ...baseQueries,
+          FQuery.orderDesc('submittedAt'),
+        ];
+
+        if (!loadMore) {
+          _totalCounts[key] = await _firebase.countDocuments(
+            collectionId: AppConfig.reportsCollection,
+            queries: fallbackQueries,
+          );
+        }
+        docs = await _firebase.listDocuments(
+          collectionId: AppConfig.reportsCollection,
+          queries: fallbackQueries,
+          limitCount: 20,
+          startAfter: loadMore ? _lastDocMap[key] : null,
+        );
+
+        developer.log(
+          '✅ Fallback query returned ${docs.length} docs for key=$key',
           name: 'ReportsStatusProvider',
         );
       }
-
-      final docs = await _firebase.listDocuments(
-        collectionId: AppConfig.reportsCollection,
-        queries: queries,
-        limitCount: 20,
-        startAfter: loadMore ? _lastDocMap[key] : null,
-      );
 
       developer.log(
         'fetchReports key=$key returned ${docs.length} docs',
@@ -282,7 +321,6 @@ class ReportsStatusProvider extends ChangeNotifier {
       // Store pagination cursor
       if (docs.isNotEmpty) {
         _lastDocMap[key] = docs.last['\$snapshot'];
-        developer.log('Pagination cursor updated: ${_lastDocMap[key] != null}');
       }
     } on Exception catch (e, stack) {
       developer.log(

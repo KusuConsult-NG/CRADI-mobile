@@ -106,141 +106,141 @@ class _VerificationListScreenState extends State<VerificationListScreen> {
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _errorMessage != null
-              ? Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.error_outline, size: 48, color: Colors.red.shade300),
-                      const SizedBox(height: 12),
-                      Text(_errorMessage!, textAlign: TextAlign.center),
-                      const SizedBox(height: 16),
-                      ElevatedButton.icon(
-                        onPressed: _loadReports,
-                        icon: const Icon(Icons.refresh),
-                        label: const Text('Retry'),
-                      ),
-                    ],
+          ? Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.error_outline,
+                    size: 48,
+                    color: Colors.red.shade300,
                   ),
-                )
-              : _reports.isEmpty
-                  ? Center(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
+                  const SizedBox(height: 12),
+                  Text(_errorMessage!, textAlign: TextAlign.center),
+                  const SizedBox(height: 16),
+                  ElevatedButton.icon(
+                    onPressed: _loadReports,
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('Retry'),
+                  ),
+                ],
+              ),
+            )
+          : _reports.isEmpty
+          ? Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    Icons.check_circle_outline,
+                    size: 64,
+                    color: Colors.grey,
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'No reports pending verification',
+                    style: GoogleFonts.lexend(fontSize: 16, color: Colors.grey),
+                  ),
+                  const SizedBox(height: 16),
+                  TextButton.icon(
+                    onPressed: _loadReports,
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('Refresh'),
+                  ),
+                ],
+              ),
+            )
+          : RefreshIndicator(
+              onRefresh: _loadReports,
+              child: ListView.separated(
+                padding: const EdgeInsets.all(16),
+                itemCount: _reports.length,
+                separatorBuilder: (_, _) => const SizedBox(height: 8),
+                itemBuilder: (context, index) {
+                  final report = _reports[index];
+                  final hazard = report['hazardType'] ?? 'Unknown Hazard';
+                  final severity = report['severity'] as String?;
+                  final lga = report['lga'] ?? '';
+                  final state = report['state'] ?? '';
+                  final subtitle = [
+                    lga,
+                    state,
+                  ].where((s) => s.isNotEmpty).join(', ');
+
+                  return Card(
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      side: BorderSide(color: Colors.grey.shade200),
+                    ),
+                    child: ListTile(
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 8,
+                      ),
+                      leading: Container(
+                        width: 44,
+                        height: 44,
+                        decoration: BoxDecoration(
+                          color: _severityColor(
+                            severity,
+                          ).withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Icon(
+                          Icons.warning_amber_rounded,
+                          color: _severityColor(severity),
+                        ),
+                      ),
+                      title: Text(
+                        hazard,
+                        style: GoogleFonts.lexend(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 15,
+                        ),
+                      ),
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Icon(
-                            Icons.check_circle_outline,
-                            size: 64,
-                            color: Colors.grey,
-                          ),
-                          const SizedBox(height: 16),
-                          Text(
-                            'No reports pending verification',
-                            style: GoogleFonts.lexend(
-                              fontSize: 16,
-                              color: Colors.grey,
+                          if (subtitle.isNotEmpty)
+                            Text(
+                              subtitle,
+                              style: GoogleFonts.lexend(
+                                fontSize: 13,
+                                color: Colors.grey.shade600,
+                              ),
                             ),
-                          ),
-                          const SizedBox(height: 16),
-                          TextButton.icon(
-                            onPressed: _loadReports,
-                            icon: const Icon(Icons.refresh),
-                            label: const Text('Refresh'),
+                          const SizedBox(height: 4),
+                          Text(
+                            _severityLabel(severity),
+                            style: GoogleFonts.lexend(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                              color: _severityColor(severity),
+                            ),
                           ),
                         ],
                       ),
-                    )
-                  : RefreshIndicator(
-                      onRefresh: _loadReports,
-                      child: ListView.separated(
-                        padding: const EdgeInsets.all(16),
-                        itemCount: _reports.length,
-                        separatorBuilder: (_, _) => const SizedBox(height: 8),
-                        itemBuilder: (context, index) {
-                          final report = _reports[index];
-                          final hazard =
-                              report['hazardType'] ?? 'Unknown Hazard';
-                          final severity = report['severity'] as String?;
-                          final lga = report['lga'] ?? '';
-                          final state = report['state'] ?? '';
-                          final subtitle = [lga, state]
-                              .where((s) => s.isNotEmpty)
-                              .join(', ');
-
-                          return Card(
-                            elevation: 0,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                              side: BorderSide(color: Colors.grey.shade200),
-                            ),
-                            child: ListTile(
-                              contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 8,
-                              ),
-                              leading: Container(
-                                width: 44,
-                                height: 44,
-                                decoration: BoxDecoration(
-                                  color: _severityColor(severity)
-                                      .withValues(alpha: 0.15),
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                                child: Icon(
-                                  Icons.warning_amber_rounded,
-                                  color: _severityColor(severity),
-                                ),
-                              ),
-                              title: Text(
-                                hazard,
-                                style: GoogleFonts.lexend(
-                                  fontWeight: FontWeight.w600,
-                                  fontSize: 15,
-                                ),
-                              ),
-                              subtitle: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  if (subtitle.isNotEmpty)
-                                    Text(
-                                      subtitle,
-                                      style: GoogleFonts.lexend(
-                                        fontSize: 13,
-                                        color: Colors.grey.shade600,
-                                      ),
-                                    ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    _severityLabel(severity),
-                                    style: GoogleFonts.lexend(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w500,
-                                      color: _severityColor(severity),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              trailing: const Icon(
-                                Icons.arrow_forward_ios,
-                                size: 16,
-                                color: AppColors.primaryRed,
-                              ),
-                              onTap: () async {
-                                await Navigator.of(context).push(
-                                  MaterialPageRoute(
-                                    builder: (context) =>
-                                        VerificationDetailScreen(
-                                      report: report,
-                                    ),
-                                  ),
-                                );
-                                // Refresh after returning from detail screen
-                                _loadReports();
-                              },
-                            ),
-                          );
-                        },
+                      trailing: const Icon(
+                        Icons.arrow_forward_ios,
+                        size: 16,
+                        color: AppColors.primaryRed,
                       ),
+                      onTap: () async {
+                        await Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (context) =>
+                                VerificationDetailScreen(report: report),
+                          ),
+                        );
+                        // Refresh after returning from detail screen
+                        _loadReports();
+                      },
                     ),
+                  );
+                },
+              ),
+            ),
     );
   }
 }

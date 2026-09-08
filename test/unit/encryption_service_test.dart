@@ -42,10 +42,7 @@ void main() {
 
     test('wrong passphrase fails to decrypt', () {
       final cipher = svc.encryptString('secret', 'correct');
-      expect(
-        () => svc.decryptString(cipher, 'wrong'),
-        throwsException,
-      );
+      expect(() => svc.decryptString(cipher, 'wrong'), throwsException);
     });
 
     test('handles empty string', () {
@@ -79,7 +76,10 @@ void main() {
 
     test('handles nested JSON', () {
       final data = {
-        'user': {'name': 'Test', 'roles': ['admin', 'user']},
+        'user': {
+          'name': 'Test',
+          'roles': ['admin', 'user'],
+        },
         'score': 42.5,
       };
       final cipher = svc.encryptJson(data, 'nested');
@@ -153,10 +153,7 @@ void main() {
     });
 
     test('four segments throws', () {
-      expect(
-        () => svc.decryptString('a:b:c:d', 'key'),
-        throwsException,
-      );
+      expect(() => svc.decryptString('a:b:c:d', 'key'), throwsException);
     });
   });
 }

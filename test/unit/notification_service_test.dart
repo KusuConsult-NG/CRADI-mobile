@@ -34,7 +34,10 @@ void main() {
     });
 
     test('replaces spaces with underscore', () {
-      expect(sanitize('Federal Capital Territory'), equals('federal_capital_territory'));
+      expect(
+        sanitize('Federal Capital Territory'),
+        equals('federal_capital_territory'),
+      );
     });
 
     test('strips special characters', () {
@@ -124,17 +127,11 @@ void main() {
     });
 
     test('report with reportId routes to report detail', () {
-      expect(
-        routeForData({'type': 'report', 'reportId': 'r2'}),
-        '/report/r2',
-      );
+      expect(routeForData({'type': 'report', 'reportId': 'r2'}), '/report/r2');
     });
 
     test('verification type routes like report', () {
-      expect(
-        routeForData({'type': 'verification', 'id': 'v1'}),
-        '/report/v1',
-      );
+      expect(routeForData({'type': 'verification', 'id': 'v1'}), '/report/v1');
     });
 
     test('chat type routes to chat', () {

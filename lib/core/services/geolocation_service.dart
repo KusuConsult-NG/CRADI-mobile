@@ -1,6 +1,7 @@
 import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
 import 'dart:developer' as developer;
+import 'package:climate_app/core/data/mvp_locations_data.dart';
 
 /// Service for handling geolocation operations
 class GeolocationService {
@@ -71,7 +72,9 @@ class GeolocationService {
     return '${latitude.abs().toStringAsFixed(4)}° $latDirection | ${longitude.abs().toStringAsFixed(4)}° $lonDirection';
   }
 
-  /// Get location details using reverse geocoding
+  /// Get location details using reverse geocoding.
+  /// Validates LGA against MVP location data to avoid showing
+  /// non-LGA locality names (e.g., village names like "Bar Jirgi Summa").
   Future<Map<String, String>> getLocationDetails(
     double latitude,
     double longitude,
@@ -85,30 +88,84 @@ class GeolocationService {
       if (placemarks.isNotEmpty) {
         final place = placemarks.first;
 
-        // Extract locality (LGA) and sublocality (Ward)
-        final lga =
-            place.locality ?? place.subAdministrativeArea ?? 'Unknown LGA';
-        final ward = place.subLocality ?? place.thoroughfare ?? 'Unknown Ward';
+        // Detect state from administrativeArea
+        final rawState = place.administrativeArea ?? '';
+        // Normalize: "Plateau State" → "Plateau"
+        final stateName = rawState.replaceAll(' State', '').trim();
+
+        // Candidate LGA names from geocoding (in priority order)
+        final candidates = <String>[
+          if (place.subAdministrativeArea != null) place.subAdministrativeArea!,
+          if (place.locality != null) place.locality!,
+        ];
+
+        // Try to match against known MVP LGAs for this state
+        String resolvedLga = 'Select LGA';
+        if (stateName.isNotEmpty) {
+          final knownLGAs = MVPLocationsData.getLGAsForState(stateName);
+          if (knownLGAs.isNotEmpty) {
+            for (final candidate in candidates) {
+              final lowerCandidate = candidate.toLowerCase().trim();
+              // Exact match
+              final exactMatch = knownLGAs.cast<String?>().firstWhere(
+                (lga) => lga!.toLowerCase() == lowerCandidate,
+                orElse: () => null,
+              );
+              if (exactMatch != null) {
+                resolvedLga = exactMatch;
+                break;
+              }
+              // Partial match (candidate contains LGA name or vice versa)
+              final partialMatch = knownLGAs.cast<String?>().firstWhere(
+                (lga) =>
+                    lga!.toLowerCase().contains(lowerCandidate) ||
+                    lowerCandidate.contains(lga.toLowerCase()),
+                orElse: () => null,
+              );
+              if (partialMatch != null) {
+                resolvedLga = partialMatch;
+                break;
+              }
+            }
+          }
+        }
+
+        // If no MVP match, fall back to best available geocoded value
+        if (resolvedLga == 'Select LGA' && candidates.isNotEmpty) {
+          // Use subAdministrativeArea as it's more likely to be an LGA
+          resolvedLga = place.subAdministrativeArea ?? 'Select LGA';
+        }
+
+        final ward = place.subLocality ?? place.thoroughfare ?? 'Select Ward';
+
+        developer.log(
+          'Reverse geocode: state=$stateName, '
+          'candidates=$candidates, resolved LGA=$resolvedLga, ward=$ward',
+          name: 'GeolocationService',
+        );
 
         return {
-          'lga': lga,
+          'lga': resolvedLga,
           'ward': ward,
+          'state': stateName,
           'address':
               '${place.street ?? ''}, ${place.locality ?? ''}, ${place.administrativeArea ?? ''}',
         };
       }
 
       return {
-        'lga': 'Could not determine LGA',
-        'ward': 'Could not determine Ward',
+        'lga': 'Select LGA',
+        'ward': 'Select Ward',
+        'state': '',
         'address':
             'Lat: ${latitude.toStringAsFixed(4)}, Lon: ${longitude.toStringAsFixed(4)}',
       };
     } on Exception catch (e) {
       developer.log('Error in reverse geocoding: $e');
       return {
-        'lga': 'Unknown LGA',
-        'ward': 'Unknown Ward',
+        'lga': 'Select LGA',
+        'ward': 'Select Ward',
+        'state': '',
         'address':
             'Lat: ${latitude.toStringAsFixed(4)}, Lon: ${longitude.toStringAsFixed(4)}',
       };

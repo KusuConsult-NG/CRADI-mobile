@@ -40,19 +40,18 @@ class _HomeScreenState extends State<HomeScreen> {
 
     // Lazy Escalation Check
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      // Fetch reports for the current user to populate status widgets
+      // Fetch reports for all tabs on the home screen.
+      // Two separate fetches are needed because each tab reads from a
+      // different cache key:
+      //   - To Verify / Alerts / Nearby → keyed by (status, null)
+      //   - My Reports                  → keyed by (null, userId)
       final auth = context.read<AuthProvider>();
-      final isUser = auth.userRole == UserRole.user;
-      context.read<ReportsStatusProvider>().refreshReports(
-        userId: isUser ? auth.currentUser?.uid : null,
-      );
-      // Also fetch user-specific reports for the "My Reports" tab
-      // (admins fetch all reports above with userId: null, but the
-      // My Reports tab reads with userId: uid — a different cache key)
-      if (!isUser && auth.currentUser?.uid != null) {
-        context.read<ReportsStatusProvider>().refreshReports(
-          userId: auth.currentUser!.uid,
-        );
+      final statusProvider = context.read<ReportsStatusProvider>();
+      // 1. Zone-filtered reports for To Verify / Alerts / Nearby tabs
+      statusProvider.refreshReports();
+      // 2. User-specific reports for the "My Reports" tab
+      if (auth.currentUser?.uid != null) {
+        statusProvider.refreshReports(userId: auth.currentUser!.uid);
       }
 
       final role = auth.userRole;
@@ -112,12 +111,14 @@ class _HomeScreenState extends State<HomeScreen> {
             // Reload user profile data and stats
             if (context.mounted) {
               final auth = context.read<AuthProvider>();
-              final isUser = auth.userRole == UserRole.user;
+              final statusProvider = context.read<ReportsStatusProvider>();
               await Future.wait([
                 context.read<ProfileProvider>().loadProfile(),
-                context.read<ReportsStatusProvider>().refreshReports(
-                  userId: isUser ? auth.currentUser?.uid : null,
-                ),
+                // Zone-filtered reports for To Verify / Alerts / Nearby
+                statusProvider.refreshReports(),
+                // User-specific reports for My Reports tab
+                if (auth.currentUser?.uid != null)
+                  statusProvider.refreshReports(userId: auth.currentUser!.uid),
                 context.read<NewsProvider>().fetchNews(),
               ]);
             }
@@ -1135,62 +1136,60 @@ class _HomeScreenState extends State<HomeScreen> {
                         },
                       ),
                       const Divider(),
-                      ...zones.map(
-                        (zone) {
-                          final isState = zone.contains('State');
-                          return ListTile(
-                            contentPadding: EdgeInsets.only(
-                              left: isState ? 16 : 40,
-                              right: 16,
+                      ...zones.map((zone) {
+                        final isState = zone.contains('State');
+                        return ListTile(
+                          contentPadding: EdgeInsets.only(
+                            left: isState ? 16 : 40,
+                            right: 16,
+                          ),
+                          leading: isState
+                              ? const Icon(
+                                  Icons.location_city,
+                                  color: AppColors.textPrimary,
+                                  size: 20,
+                                )
+                              : null,
+                          title: Text(
+                            zone,
+                            style: GoogleFonts.lexend(
+                              fontSize: isState ? 16 : 14,
+                              fontWeight: isState
+                                  ? FontWeight.bold
+                                  : FontWeight.w400,
+                              color: isState
+                                  ? AppColors.textPrimary
+                                  : AppColors.textSecondary,
                             ),
-                            leading: isState
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
+                          ),
+                          trailing: Consumer<ProfileProvider>(
+                            builder: (context, profile, _) =>
+                                profile.monitoringZone == zone
                                 ? const Icon(
-                                    Icons.location_city,
-                                    color: AppColors.textPrimary,
-                                    size: 20,
+                                    Icons.check,
+                                    color: AppColors.primaryRed,
                                   )
-                                : null,
-                            title: Text(
-                              zone,
-                              style: GoogleFonts.lexend(
-                                fontSize: isState ? 16 : 14,
-                                fontWeight: isState
-                                    ? FontWeight.bold
-                                    : FontWeight.w400,
-                                color: isState
-                                    ? AppColors.textPrimary
-                                    : AppColors.textSecondary,
-                              ),
-                              overflow: TextOverflow.ellipsis,
-                              maxLines: 1,
-                            ),
-                            trailing: Consumer<ProfileProvider>(
-                              builder: (context, profile, _) =>
-                                  profile.monitoringZone == zone
-                                  ? const Icon(
-                                      Icons.check,
-                                      color: AppColors.primaryRed,
-                                    )
-                                  : const SizedBox(),
-                            ),
-                            onTap: () async {
-                              final provider = context.read<ProfileProvider>();
-                              await provider.updateMonitoringZone(zone);
-                              if (context.mounted) {
-                                Navigator.pop(context);
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text(
-                                      'Monitoring zone changed to $zone',
-                                    ),
-                                    backgroundColor: AppColors.successGreen,
+                                : const SizedBox(),
+                          ),
+                          onTap: () async {
+                            final provider = context.read<ProfileProvider>();
+                            await provider.updateMonitoringZone(zone);
+                            if (context.mounted) {
+                              Navigator.pop(context);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    'Monitoring zone changed to $zone',
                                   ),
-                                );
-                              }
-                            },
-                          );
-                        },
-                      ),
+                                  backgroundColor: AppColors.successGreen,
+                                ),
+                              );
+                            }
+                          },
+                        );
+                      }),
                     ],
                   ),
                 ),
