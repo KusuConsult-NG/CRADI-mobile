@@ -335,7 +335,7 @@ class _KnowledgeDetailScreenState extends State<KnowledgeDetailScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: sections.map((section) {
-        // Filter out "Copy code" artifacts often found in LLM-generated content
+        // Filter out stray markdown formatting artifacts
         if (section.trim().toLowerCase() == 'copy code') {
           return const SizedBox.shrink();
         }
