@@ -1,0 +1,214 @@
+# CRADI / EWER backend (Railway)
+
+Small Node 22 service that replaces the old Firebase Cloud Functions (and the
+legacy Appwrite functions). It runs next to Supabase (database, auth, storage)
+and sends push notifications through OneSignal and email through Resend.
+
+It does three things:
+
+| Part | What it does |
+| --- | --- |
+| **Outbox worker** | Polls `notification_outbox` (filled by database triggers) and sends pushes: verification requests, reporter status updates, approved-report broadcasts, admin alerts. |
+| **Escalation cron** | Every minute, reports still `pending` past `scheduled_escalations.escalate_at` are flagged as escalated and coordinators/staff are notified. |
+| **HTTP API** | `GET /health` and `POST /email` (authenticated transactional email). |
+
+Runtime dependency: `@supabase/supabase-js` only. OneSignal and Resend are called with `fetch`.
+
+## Layout
+
+```
+src/
+  index.js          wiring, loops, graceful shutdown
+  config.js         env parsing
+  server.js         node:http server (health, /email, CORS)
+  outbox.js         outbox handlers + dispatch
+  escalations.js    escalation cron
+  notifications.js  pure recipient-selection + message builders
+  onesignal.js      OneSignal REST client
+  repo.js           all Supabase queries
+  tags.js           OneSignal tag sanitisation (shared contract)
+  email/            templates + /email handler (auth, anti-abuse, rate limits)
+test/               node:test suites (no network)
+```
+
+## Environment variables
+
+| Variable | Required | Default | Notes |
+| --- | --- | --- | --- |
+| `SUPABASE_URL` | yes | | `https://<ref>.supabase.co` |
+| `SUPABASE_SERVICE_ROLE_KEY` | yes | | Service role key (bypasses RLS). Keep it only on Railway. |
+| `ONESIGNAL_APP_ID` | for push | | If unset, pushes are logged and skipped. |
+| `ONESIGNAL_REST_API_KEY` | for push | | App API key, sent as `Authorization: Key <key>`. |
+| `ONESIGNAL_ANDROID_CHANNEL_ID` | no | | Optional Android notification category id. |
+| `RESEND_API_KEY` | for email | | If unset, `POST /email` returns 503. |
+| `FROM_EMAIL` | no | `noreply@cradi.ng` | Must be on a domain verified in Resend. |
+| `FROM_NAME` | no | `EWER Alert System` | |
+| `PORT` | no | `8080` | Railway sets this. |
+| `WORKER_POLL_MS` | no | `5000` | Outbox poll interval (a full batch of 50 re-polls immediately). |
+| `ESCALATION_POLL_MS` | no | `60000` | Escalation check interval. |
+| `CORS_ORIGINS` | no | empty | Comma-separated browser origins for `/email`, or `*`. The mobile app needs none. |
+
+If a required variable is missing the service logs `config.missing_required`,
+does not start the worker or cron, and `/health` returns **503**, so a Railway
+deploy with a bad config fails its health check.
+
+## Run locally
+
+```bash
+cd backend
+cp .env.example .env      # fill in values
+npm install
+npm run dev               # node --watch, loads .env
+npm test                  # node:test, no network needed
+curl localhost:8080/health
+```
+
+## Deploy on Railway
+
+1. Railway: **New Project → Deploy from GitHub repo**, pick this repository.
+2. Service **Settings → Source → Root Directory = `backend`**. Railway then
+   uses `backend/railway.json` (Dockerfile build, `node src/index.js`,
+   health check `/health`, restart on failure).
+3. Service **Variables**: add the variables above (at least the two Supabase ones).
+4. **Settings → Networking → Generate Domain** to get a public URL for `/email`
+   (e.g. `https://cradi-backend.up.railway.app`). Put that URL in the Flutter app config.
+5. Several replicas are safe: outbox rows are claimed with `FOR UPDATE SKIP LOCKED`,
+   escalations use conditional updates, and every push has an idempotency key.
+   One replica is enough.
+
+## OneSignal setup
+
+1. Create a OneSignal app; configure Android (FCM v1 service-account JSON
+   **inside OneSignal only**; the app itself no longer uses Firebase) and iOS (APNs `.p8` key).
+2. **Settings → Keys & IDs**: copy the App ID and create an App API key →
+   `ONESIGNAL_APP_ID`, `ONESIGNAL_REST_API_KEY`.
+3. Optional: create an Android notification category (e.g. "Alerts", high
+   importance) and set `ONESIGNAL_ANDROID_CHANNEL_ID` to its id.
+
+### Contract with the Flutter app
+
+- **External ID**: after sign-in the app calls `OneSignal.login(<supabase user uuid>)`.
+  Direct pushes target `include_aliases.external_id = [uuid]`.
+- **Tags**: the app sets `role`, `lga`, `state`, `ward`, `monitoring_zone` from
+  the user's profile. Every value is sanitised with the same rule used here
+  (`src/tags.js`):
+
+  ```
+  value.toLowerCase().replace(/[^a-z0-9_]/g, '_')
+  ```
+
+  No trimming and no collapsing of repeated `_`. Examples:
+  `"Port Harcourt" → "port_harcourt"`, `"Obio/Akpor" → "obio_akpor"`.
+  Dart equivalent: `value.toLowerCase().replaceAll(RegExp(r'[^a-z0-9_]'), '_')`.
+- Approved-report broadcasts and LGA-targeted admin alerts use the filter
+  `tag lga = sanitize(report.lga / alert.target_lga)`. Alerts with
+  `target_lga = 'All'` go to the `Total Subscriptions` segment.
+- Push `data` payloads (use `type` to route taps in the app):
+
+  | type | fields |
+  | --- | --- |
+  | `verification_request` | `report_id`, `ward`, `lga` |
+  | `report_status` | `report_id`, `status` |
+  | `validated_alert` | `report_id`, `hazard_type`, `severity`, `lga`, `ward` |
+  | `admin_alert` | `alert_id`, `severity` |
+  | `escalation_auto` | `report_id`, `lga` |
+
+## Resend setup
+
+1. Add and verify the sending domain (e.g. `cradi.ng`) in Resend (SPF/DKIM DNS records).
+2. Create an API key with "sending access" → `RESEND_API_KEY`.
+3. `FROM_EMAIL` must be an address on the verified domain.
+
+Supabase Auth sends its own emails (confirmation, OTP, password recovery).
+Configure custom SMTP in Supabase (Resend offers SMTP) for those; this service no
+longer sends `verification` emails.
+
+## How the outbox works
+
+Database triggers (see `supabase/migrations/*_init.sql`) insert rows into
+`notification_outbox`:
+
+| event_type | payload | inserted when |
+| --- | --- | --- |
+| `report_created` | `{report_id}` | new report with status `pending` |
+| `report_status_changed` | `{report_id, old_status, new_status, reason}` | `reports.status` changes |
+| `alert_created` | `{alert_id}` | new active alert |
+
+The worker calls `rpc('claim_outbox_events', {p_limit: 50})`. That function
+atomically bumps `attempts` and moves `available_at` into the future
+(exponential backoff up to 60 min, max 8 attempts), so a crashed worker's
+events come back later on their own. For each event:
+
+- success → `processed_at = now()` (with an informational note in `last_error`
+  when there was nothing to do, e.g. "report not found");
+- failure → `last_error` is set and the row is retried after its backoff;
+- unknown `event_type` or invalid payload → marked processed with a note
+  (`unknown event`).
+
+Handlers:
+
+- **report_created**: approved, enabled `ewm` profiles in the same ward **and**
+  LGA as the report (excluding the reporter, max 50) get "📋 Verification Request".
+- **report_status_changed**: the reporter gets a status update (verified /
+  approved / rejected with reason / pending). On a transition **into**
+  `approved`, users tagged with the report's LGA get "🚨 {SEVERITY} Alert: {hazard}".
+- **alert_created**: title/message of the alert to everyone (`All`) or to the
+  LGA tag.
+
+Each OneSignal request carries an `idempotency_key` derived from the outbox id
+(or escalation id), so retries never double-notify.
+
+Stuck events: `select * from notification_outbox where processed_at is null and attempts >= 8;`
+
+## Escalation cron
+
+Every `ESCALATION_POLL_MS` it loads up to 100 `scheduled_escalations` with
+`status = 'pending' and escalate_at <= now()`:
+
+- report missing or no longer `pending` → escalation `skipped` with a reason;
+- otherwise the report gets `escalated = true, escalated_at, escalation_reason,
+  escalation_status = 'escalated'` (its `status` stays `pending`), approved
+  enabled `ldp_coordinator`/`ewr` in the report's LGA plus `project_staff`/`ewv`
+  anywhere (max 50 each, deduplicated) get "⏰ Unverified Report Escalated", and
+  the escalation is marked `processed`;
+- if the push fails the escalation stays `pending` (error noted in `reason`)
+  and is retried next tick.
+
+## HTTP API
+
+### `GET /health`
+
+`200 {ok: true, config: {supabase, onesignal, resend}, workers: {...}}`, or
+`503` with `ok: false` when required config is missing.
+
+### `POST /email`
+
+```
+Authorization: Bearer <Supabase access token>
+Content-Type: application/json
+
+{ "type": "welcome" | "hazardAlert" | "reportUpdate" | "passwordReset",
+  "to": "user@example.com",
+  "data": { ... } }
+```
+
+| type | data |
+| --- | --- |
+| `welcome` | `name`, `email`, `role?` |
+| `hazardAlert` | `hazardType`, `severity`, `location?`, `description`, `lga?`, `ward?`, `state?`, `timestamp?` |
+| `reportUpdate` | `reportId`, `status`, `message?`, `reporterName?` |
+| `passwordReset` | `resetLink` (must be `https://`) |
+
+Responses: `{success: true, messageId}` or `{success: false, error}`
+(`400` bad input, `401` bad token, `403` recipient not allowed, `429` rate limited,
+`502` provider failure, `503` not configured). Provider error details are only logged.
+
+Anti-abuse rules:
+
+- The token is checked with `supabase.auth.getUser(token)`.
+- `to` must be the caller's own email, unless the caller's profile is approved,
+  not disabled and has a staff role (`ewm`, `ewv`, `ewr`, `ldp_coordinator`,
+  `project_staff`, `admin`, `techSupport`). Disabled accounts are refused.
+- One email per recipient per minute, 20 emails per caller per hour
+  (in memory, per instance).
+- All template values are HTML-escaped.
