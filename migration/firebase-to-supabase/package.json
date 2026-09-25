@@ -1,0 +1,19 @@
+{
+  "name": "cradi-firebase-to-supabase",
+  "version": "1.0.0",
+  "private": true,
+  "description": "One-off data migration: CRADI/EWER Firebase (ewer-8f788) -> Supabase",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "node --test \"test/**/*.test.js\"",
+    "dry-run": "node src/migrate.js",
+    "apply": "node src/migrate.js --apply"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.49.0",
+    "firebase-admin": "^13.0.0"
+  }
+}
