@@ -280,25 +280,40 @@ class OfflineStorageService {
     }
   }
 
-  /// Sync all pending queue items to Firestore.
+  /// Maximum number of attempts for a queued item before it is skipped.
+  static const int maxSyncAttempts = 5;
+
+  /// In-flight sync, used as a re-entrancy guard so that concurrent triggers
+  /// (reconnect, dashboard open, manual sync) never process the queue twice.
+  Future<Map<String, int>>? _syncInFlight;
+
+  /// Sync all pending (and previously failed) queue items to Firestore.
   ///
-  /// Called automatically by [ConnectivityProvider.onReconnect] when the
-  /// device transitions from offline → online. Items that have failed
-  /// more than 5 times are permanently skipped.
-  Future<void> syncPendingReports() async {
+  /// This is the single implementation of queue syncing. Concurrent calls
+  /// share the same in-flight run. Items that have failed
+  /// [maxSyncAttempts] times are skipped.
+  ///
+  /// Returns a map with `synced` and `failed` counts.
+  Future<Map<String, int>> syncPendingReports() {
+    return _syncInFlight ??= _doSyncPendingReports().whenComplete(() {
+      _syncInFlight = null;
+    });
+  }
+
+  Future<Map<String, int>> _doSyncPendingReports() async {
     if (!isInitialized) {
       developer.log(
         'syncPendingReports: not initialized, skipping',
         name: 'OfflineStorageService',
       );
-      return;
+      return {'synced': 0, 'failed': 0};
     }
 
     final pending = _syncQueueBox!.values
         .where(
           (item) =>
-              item['status'] == 'pending' &&
-              ((item['retryCount'] as int?) ?? 0) < 5,
+              (item['status'] == 'pending' || item['status'] == 'failed') &&
+              ((item['retryCount'] as int?) ?? 0) < maxSyncAttempts,
         )
         .toList();
 
@@ -307,7 +322,7 @@ class OfflineStorageService {
         'syncPendingReports: no pending items',
         name: 'OfflineStorageService',
       );
-      return;
+      return {'synced': 0, 'failed': 0};
     }
 
     developer.log(
@@ -317,6 +332,7 @@ class OfflineStorageService {
 
     final firestore = FirebaseFirestore.instance;
     int successCount = 0;
+    int failCount = 0;
 
     for (final rawItem in pending) {
       final item = Map<String, dynamic>.from(rawItem);
@@ -324,37 +340,53 @@ class OfflineStorageService {
       if (queueId.isEmpty) continue;
 
       try {
-        final data = Map<String, dynamic>.from(item['data'] as Map? ?? item);
         final collection =
             (item['collection'] ?? item['collectionId'] ?? 'reports') as String;
-        // Remove queue-meta keys to avoid writing them into Firestore
-        data.removeWhere(
-          (k, _) => const {
-            'queueId',
-            'addedToQueueAt',
-            'retryCount',
-            'status',
-            'lastError',
-            'lastAttemptAt',
-            'syncedAt',
-            'collection',
-            'collectionId',
-            'docId',
-          }.contains(k),
-        );
+        final Map<String, dynamic> data;
+        if (item['data'] is Map) {
+          // Current format: the Firestore payload is wrapped under 'data'.
+          data = Map<String, dynamic>.from(item['data'] as Map);
+        } else {
+          // Legacy flat format: strip queue-meta keys (including the queue
+          // item's own 'status', which is not the report status).
+          data = Map<String, dynamic>.from(item)
+            ..removeWhere(
+              (k, _) => const {
+                'queueId',
+                'addedToQueueAt',
+                'retryCount',
+                'status',
+                'lastError',
+                'lastAttemptAt',
+                'syncedAt',
+                'collection',
+                'collectionId',
+                'docId',
+              }.contains(k),
+            );
+        }
+        data
+          ..remove('collection')
+          ..remove('collectionId')
+          ..remove('docId');
+        // Firestore rules require new reports to be created as 'pending'.
+        if (collection == 'reports') {
+          data['status'] ??= 'pending';
+        }
+        // Match FirebaseService.createDocument so synced docs sort/query
+        // alongside directly-created ones.
+        data['createdAt'] ??= FieldValue.serverTimestamp();
+        data['updatedAt'] = FieldValue.serverTimestamp();
+        data['syncedAt'] = FieldValue.serverTimestamp();
 
-        // If there's an existing doc ID, update; otherwise create a new doc.
+        // If there's an existing doc ID, upsert; otherwise create a new doc.
         final docId = item['docId'] as String?;
         if (docId != null && docId.isNotEmpty) {
           await firestore
               .collection(collection)
               .doc(docId)
-              .set(
-                data..['syncedAt'] = FieldValue.serverTimestamp(),
-                SetOptions(merge: true),
-              );
+              .set(data, SetOptions(merge: true));
         } else {
-          data['syncedAt'] = FieldValue.serverTimestamp();
           await firestore.collection(collection).add(data);
         }
 
@@ -362,6 +394,7 @@ class OfflineStorageService {
         successCount++;
       } on Exception catch (e) {
         await markAsFailed(queueId, e.toString());
+        failCount++;
         developer.log(
           'syncPendingReports: failed item $queueId: $e',
           name: 'OfflineStorageService',
@@ -376,6 +409,7 @@ class OfflineStorageService {
       'syncPendingReports: $successCount/${pending.length} synced successfully',
       name: 'OfflineStorageService',
     );
+    return {'synced': successCount, 'failed': failCount};
   }
 
   /// Clear synced items from queue (cleanup)
@@ -646,37 +680,39 @@ class OfflineStorageService {
     developer.log('Offline storage disposed', name: 'OfflineStorageService');
   }
 
-  /// Sanitizes maps before sending them to hive
-  Map<String, dynamic> _sanitizeForHive(Map<String, dynamic> data) {
+  /// Sanitizes maps before sending them to hive.
+  ///
+  /// Hive can only store primitives, lists and maps of those. Firestore types
+  /// are converted (Timestamp → ISO string, GeoPoint → lat/lng map,
+  /// DocumentReference → path) and anything else that Hive cannot serialize
+  /// (e.g. the `$snapshot` DocumentSnapshot attached by FirebaseService) is
+  /// dropped.
+  Map<String, dynamic> _sanitizeForHive(Map<dynamic, dynamic> data) {
     final Map<String, dynamic> sanitized = {};
     data.forEach((key, value) {
-      if (value is Timestamp) {
-        sanitized[key] = value.toDate().toIso8601String();
-      } else if (value is GeoPoint) {
-        sanitized[key] = {
-          'latitude': value.latitude,
-          'longitude': value.longitude,
-        };
-      } else if (value is DocumentReference) {
-        sanitized[key] = value.path;
-      } else if (value is Map<String, dynamic>) {
-        sanitized[key] = _sanitizeForHive(value);
-      } else if (value is List) {
-        sanitized[key] = value.map((e) {
-          if (e is Map<String, dynamic>) return _sanitizeForHive(e);
-          if (e is Timestamp) return e.toDate().toIso8601String();
-          if (e is GeoPoint) {
-            return {'latitude': e.latitude, 'longitude': e.longitude};
-          }
-          if (e is DocumentReference) return e.path;
-          return e;
-        }).toList();
-      } else if (value is DateTime) {
-        sanitized[key] = value.toIso8601String();
-      } else {
-        sanitized[key] = value;
-      }
+      final converted = _sanitizeValue(value);
+      if (converted != _unsupported) sanitized[key.toString()] = converted;
     });
     return sanitized;
+  }
+
+  static const Object _unsupported = Object();
+
+  Object? _sanitizeValue(Object? value) {
+    if (value == null || value is String || value is num || value is bool) {
+      return value;
+    }
+    if (value is Timestamp) return value.toDate().toIso8601String();
+    if (value is DateTime) return value.toIso8601String();
+    if (value is GeoPoint) {
+      return {'latitude': value.latitude, 'longitude': value.longitude};
+    }
+    if (value is DocumentReference) return value.path;
+    if (value is Map) return _sanitizeForHive(value);
+    if (value is List) {
+      return value.map(_sanitizeValue).where((e) => e != _unsupported).toList();
+    }
+    // DocumentSnapshot, FieldValue, etc. cannot be stored in Hive.
+    return _unsupported;
   }
 }

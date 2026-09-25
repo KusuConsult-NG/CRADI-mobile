@@ -18,6 +18,9 @@ class VerificationReport {
   final String? severity;
   final List<String> imageUrls;
   final int verificationCount;
+  final String? lga;
+  final String? ward;
+  final String? state;
 
   VerificationReport({
     required this.id,
@@ -37,6 +40,9 @@ class VerificationReport {
     this.severity,
     this.imageUrls = const [],
     this.verificationCount = 0,
+    this.lga,
+    this.ward,
+    this.state,
   });
 
   /// Whether this report is in an active state (visible in "Active" tab).
@@ -65,6 +71,9 @@ class VerificationReport {
     String? severity,
     List<String>? imageUrls,
     int? verificationCount,
+    String? lga,
+    String? ward,
+    String? state,
   }) {
     return VerificationReport(
       id: id ?? this.id,
@@ -84,6 +93,9 @@ class VerificationReport {
       severity: severity ?? this.severity,
       imageUrls: imageUrls ?? this.imageUrls,
       verificationCount: verificationCount ?? this.verificationCount,
+      lga: lga ?? this.lga,
+      ward: ward ?? this.ward,
+      state: state ?? this.state,
     );
   }
 
@@ -108,6 +120,9 @@ class VerificationReport {
       severity: data['severity'],
       imageUrls: List<String>.from(data['imageUrls'] ?? []),
       verificationCount: (data['verificationCount'] as num?)?.toInt() ?? 0,
+      lga: data['lga'] as String?,
+      ward: data['ward'] as String?,
+      state: data['state'] as String?,
     );
   }
 
@@ -130,6 +145,9 @@ class VerificationReport {
       'severity': severity,
       'imageUrls': imageUrls,
       'verificationCount': verificationCount,
+      'lga': lga,
+      'ward': ward,
+      'state': state,
     };
   }
 
@@ -141,10 +159,10 @@ class VerificationReport {
       case 'verified':
       // legacy compat:
       case 'acknowledged':
-      case 'validated':
         return ReportStatus.verified;
       case 'approved':
       // legacy compat:
+      case 'validated':
       case 'resolved':
         return ReportStatus.approved;
       case 'rejected':

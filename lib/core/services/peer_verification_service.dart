@@ -73,6 +73,9 @@ class PeerVerificationService {
         collectionId: AppConfig.verificationsCollection,
         data: {
           'reportId': reportId,
+          // Firestore rules require `verifierId`; `userId` kept for
+          // backwards compatibility with existing readers.
+          'verifierId': userId,
           'userId': userId,
           'isConfirmed': isConfirmed,
           'comment': comment ?? '',
@@ -131,13 +134,25 @@ class PeerVerificationService {
         data: {'verificationCount': verifications.length},
       );
 
+      // Only act on state transitions: once a report has left 'pending'
+      // (verified/approved/rejected) or has been escalated, further
+      // verifications must not re-send alerts/notifications.
+      final report = await _firebase.getDocument(
+        collectionId: AppConfig.reportsCollection,
+        documentId: reportId,
+      );
+      final status = (report['status'] as String?)?.toLowerCase() ?? 'pending';
+      final isPending = status == 'pending';
+      final alreadyEscalated = report['escalated'] == true;
+
       // Validate only if minimum confirmations reached (configurable via Firebase Remote Config)
-      if (confirmations >= RemoteConfigService().minimumPeerConfirmations) {
+      if (isPending &&
+          confirmations >= RemoteConfigService().minimumPeerConfirmations) {
         await _validateReport(reportId, isAutoValidated: true);
       }
 
       // Escalate if there are disputes
-      if (disputes > 0) {
+      if (isPending && !alreadyEscalated && disputes > 0) {
         await escalateToCoordinator(
           reportId: reportId,
           reason: 'Conflicting verifications',
@@ -157,15 +172,33 @@ class PeerVerificationService {
     required bool isAutoValidated,
   }) async {
     try {
-      await _firebase.updateDocument(
-        collectionId: AppConfig.reportsCollection,
-        documentId: reportId,
-        data: {
+      // Atomically transition pending → verified so that concurrent
+      // confirmations can't both trigger alerts.
+      final ref = FirebaseFirestore.instance
+          .collection(AppConfig.reportsCollection)
+          .doc(reportId);
+      final transitioned = await FirebaseFirestore.instance.runTransaction((
+        tx,
+      ) async {
+        final snap = await tx.get(ref);
+        final status =
+            (snap.data()?['status'] as String?)?.toLowerCase() ?? 'pending';
+        if (!snap.exists || status != 'pending') return false;
+        tx.update(ref, {
           'status': 'verified',
           'verifiedAt': FieldValue.serverTimestamp(),
           'autoValidated': isAutoValidated,
-        },
-      );
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+        return true;
+      });
+      if (!transitioned) {
+        developer.log(
+          'Report $reportId already processed; skipping alerts',
+          name: 'PeerVerificationService',
+        );
+        return;
+      }
 
       developer.log(
         'Report verified: $reportId (auto: $isAutoValidated)',
@@ -196,10 +229,11 @@ class PeerVerificationService {
           FQuery.equal('ward', ward),
           FQuery.equal('lga', lga),
           FQuery.equal('role', 'ewm'),
-          FQuery.notEqual('\$id', reporterId),
         ],
-        limitCount: 50, // Notify up to 50 ward peers
+        limitCount: 51, // Notify up to 50 ward peers (+ the reporter)
       );
+      // '$id' is not a stored field, so the reporter is filtered client-side.
+      peers.removeWhere((p) => p['\$id'] == reporterId);
 
       if (peers.isEmpty) {
         developer.log(
@@ -610,6 +644,9 @@ class PeerVerificationService {
       int escalatedCount = 0;
 
       for (final doc in reports) {
+        // Already escalated — don't re-notify coordinators every time.
+        if (doc['escalated'] == true) continue;
+
         final submittedAtStr = doc['submittedAt'];
         if (submittedAtStr == null) continue;
 

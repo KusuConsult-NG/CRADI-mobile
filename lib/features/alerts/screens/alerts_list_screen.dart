@@ -1,6 +1,7 @@
 import 'package:climate_app/features/verification/providers/reports_status_provider.dart';
 import 'package:climate_app/features/verification/models/verification_report_model.dart';
 import 'package:provider/provider.dart';
+import 'package:climate_app/features/auth/providers/auth_provider.dart';
 import 'package:climate_app/core/utils/error_handler.dart';
 import 'package:climate_app/core/theme/app_colors.dart';
 import 'package:flutter/material.dart';
@@ -395,7 +396,17 @@ class _AlertsListScreenState extends State<AlertsListScreen> {
     required VerificationReport report,
     required ReportsStatusProvider provider,
   }) {
-    final isPending = report.status == ReportStatus.pending;
+    final auth = context.read<AuthProvider>();
+    // Only verifiers (not the report owner) may confirm/decline.
+    final canVerify =
+        const {
+          UserRole.ewm,
+          UserRole.ewv,
+          UserRole.ewr,
+          UserRole.admin,
+        }.contains(auth.userRole) &&
+        report.reporterId != auth.currentUser?.uid;
+    final isPending = report.status == ReportStatus.pending && canVerify;
 
     return Container(
       clipBehavior: Clip.antiAlias,
@@ -508,7 +519,12 @@ class _AlertsListScreenState extends State<AlertsListScreen> {
                           if (mounted) {
                             CustomToast.showError(
                               context,
-                              ErrorHandler.handleError(e, context: 'Alert'),
+                              e is VerificationRefusedException
+                                  ? e.message
+                                  : ErrorHandler.handleError(
+                                      e,
+                                      context: 'Alert',
+                                    ),
                             );
                           }
                         }
@@ -537,7 +553,12 @@ class _AlertsListScreenState extends State<AlertsListScreen> {
                           if (mounted) {
                             CustomToast.showError(
                               context,
-                              ErrorHandler.handleError(e, context: 'Alert'),
+                              e is VerificationRefusedException
+                                  ? e.message
+                                  : ErrorHandler.handleError(
+                                      e,
+                                      context: 'Alert',
+                                    ),
                             );
                           }
                         }

@@ -144,10 +144,14 @@ class _ClimateAppState extends State<ClimateApp> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       try {
+        // Single auto-sync trigger: flushes both the failed-submission queue
+        // and offline drafts. ReportingProvider guards against re-entrancy.
+        final reporting = context.read<ReportingProvider>();
         context.read<ConnectivityProvider>().onReconnect = () async {
           debugPrint('🔄 Auto-sync triggered by connectivity restore');
+          if (!mounted) return;
           try {
-            await OfflineStorageService().syncPendingReports();
+            await reporting.syncPendingReports(context);
           } on Exception catch (e) {
             debugPrint('Auto-sync error: $e');
           }

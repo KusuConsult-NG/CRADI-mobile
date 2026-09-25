@@ -39,17 +39,18 @@ class _ReportDetailsScreenState extends State<ReportDetailsScreen> {
     try {
       _speechAvailable = await _speech.initialize(
         onError: (error) {
+          if (!mounted) return;
           setState(() => _isListening = false);
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Speech recognition error. Please try again.'),
-                backgroundColor: Colors.red,
-              ),
-            );
-          }
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Speech recognition error. Please try again.'),
+              backgroundColor: Colors.red,
+            ),
+          );
         },
         onStatus: (status) {
+          // May fire after dispose (stopping the recogniser), so guard.
+          if (!mounted) return;
           if (status == 'done' || status == 'notListening') {
             setState(() => _isListening = false);
           }
@@ -60,7 +61,7 @@ class _ReportDetailsScreenState extends State<ReportDetailsScreen> {
       if (_speechAvailable) {
         final locales = await _speech.locales();
         // Get current app locale
-        if (!mounted) return;
+        if (!mounted || locales.isEmpty) return;
         final selectedLanguage = context
             .read<LanguageProvider>()
             .selectedLanguage;
@@ -81,7 +82,8 @@ class _ReportDetailsScreenState extends State<ReportDetailsScreen> {
         setState(() => _currentLocale = matchingLocale.localeId);
       }
     } on Exception {
-      setState(() => _speechAvailable = false);
+      _speechAvailable = false;
+      if (mounted) setState(() {});
     }
   }
 
@@ -102,12 +104,14 @@ class _ReportDetailsScreenState extends State<ReportDetailsScreen> {
 
     if (_isListening) {
       await _speech.stop();
+      if (!mounted) return;
       setState(() => _isListening = false);
     } else {
       setState(() => _isListening = true);
 
       await _speech.listen(
         onResult: (result) {
+          if (!mounted) return;
           setState(() {
             _descController.text = result.recognizedWords;
             // Move cursor to end

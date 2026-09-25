@@ -194,7 +194,18 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
     VerificationReport report,
     ReportsStatusProvider provider,
   ) {
-    final currentUserId = context.read<AuthProvider>().currentUser?.uid;
+    final auth = context.read<AuthProvider>();
+    final currentUserId = auth.currentUser?.uid;
+    final role = auth.userRole;
+    // Peer verification is limited to verifier roles (see firestore.rules
+    // isVerifier); status management to staff.
+    final canVerify = const {
+      UserRole.ewm,
+      UserRole.ewv,
+      UserRole.ewr,
+      UserRole.admin,
+    }.contains(role);
+    final isStaff = role != null && role != UserRole.user;
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -306,7 +317,8 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
                 ),
               ),
               const Spacer(),
-              if (report.status == ReportStatus.pending &&
+              if (canVerify &&
+                  report.status == ReportStatus.pending &&
                   report.reporterId != currentUserId) ...[
                 ElevatedButton(
                   onPressed: () async {
@@ -329,7 +341,12 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
                       scaffoldMessenger.showSnackBar(
                         SnackBar(
                           content: Text(
-                            ErrorHandler.handleError(e, context: 'Report'),
+                            e is VerificationRefusedException
+                                ? e.message
+                                : ErrorHandler.handleError(
+                                    e,
+                                    context: 'Report',
+                                  ),
                           ),
                           backgroundColor: Colors.red,
                         ),
@@ -368,7 +385,12 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
                       scaffoldMessenger.showSnackBar(
                         SnackBar(
                           content: Text(
-                            ErrorHandler.handleError(e, context: 'Report'),
+                            e is VerificationRefusedException
+                                ? e.message
+                                : ErrorHandler.handleError(
+                                    e,
+                                    context: 'Report',
+                                  ),
                           ),
                           backgroundColor: Colors.red,
                         ),
@@ -385,7 +407,8 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
                   child: Text(AppLocalizations.of(context)!.reject),
                 ),
               ],
-              if (report.status == ReportStatus.verified &&
+              if (isStaff &&
+                  report.status == ReportStatus.verified &&
                   report.reporterId != currentUserId) ...[
                 ElevatedButton(
                   onPressed: () async {
@@ -408,7 +431,12 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
                       scaffoldMessenger.showSnackBar(
                         SnackBar(
                           content: Text(
-                            ErrorHandler.handleError(e, context: 'Report'),
+                            e is VerificationRefusedException
+                                ? e.message
+                                : ErrorHandler.handleError(
+                                    e,
+                                    context: 'Report',
+                                  ),
                           ),
                           backgroundColor: Colors.red,
                         ),
@@ -461,7 +489,8 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
                   ),
                 ),
               ],
-              if (report.status == ReportStatus.approved &&
+              if (isStaff &&
+                  report.status == ReportStatus.approved &&
                   report.reporterId != currentUserId) ...[
                 OutlinedButton(
                   onPressed: () {

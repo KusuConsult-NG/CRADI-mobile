@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:go_router/go_router.dart';
 import 'package:climate_app/core/theme/app_colors.dart';
 import 'package:climate_app/features/auth/providers/auth_provider.dart';
@@ -28,6 +29,9 @@ class _NearbyReportsScreenState extends State<NearbyReportsScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadNearby());
   }
 
+  /// Reports within this radius of the user's position count as nearby.
+  static const double _nearbyRadiusKm = 25;
+
   Future<void> _loadNearby() async {
     setState(() => _isLoading = true);
 
@@ -37,33 +41,95 @@ class _NearbyReportsScreenState extends State<NearbyReportsScreen> {
     // Fetch all reports
     final provider = context.read<ReportsStatusProvider>();
     await provider.fetchReports(status: null);
+    final userPosition = await _tryGetUserPosition();
+    if (!mounted) return;
     final allReports = provider.getReports(null);
 
-    // Filter: exclude user's own, then match by location area
-    final userLga = profile.lga?.toLowerCase();
-    final userState = profile.state?.toLowerCase();
-    final userZone = profile.monitoringZone?.toLowerCase();
+    // Resolve the user's area. Monitoring zones look like
+    // "Makurdi, Benue" (LGA, State) or "Benue State".
+    String? norm(String? v) {
+      final t = v?.trim().toLowerCase();
+      return (t == null || t.isEmpty) ? null : t;
+    }
 
-    final filtered = allReports.where((r) {
+    final zone = norm(profile.monitoringZone);
+    String? userLga = norm(profile.lga);
+    String? userState = norm(profile.state);
+    if (zone != null && !zone.contains('all zone')) {
+      if (zone.contains(',')) {
+        userLga ??= norm(zone.split(',').first);
+        userState ??= norm(zone.split(',').last.replaceAll(' state', ''));
+      } else {
+        userState ??= norm(zone.replaceAll(' state', ''));
+      }
+    }
+
+    final entries = <_NearbyEntry>[];
+    for (final r in allReports) {
       // Exclude own reports
-      if (r.reporterId == uid) return false;
+      if (uid != null && r.reporterId == uid) continue;
 
-      // Match by location text — check if the report location
-      // contains user's LGA, zone, or state
-      final loc = r.location.toLowerCase();
-      if (userLga != null && loc.contains(userLga)) return true;
-      if (userZone != null && loc.contains(userZone)) return true;
-      if (userState != null && loc.contains(userState)) return true;
+      // Distance, when both the user and the report have real coordinates
+      double? distanceKm;
+      final lat = r.latitude, lng = r.longitude;
+      if (userPosition != null &&
+          lat != null &&
+          lng != null &&
+          !(lat == 0 && lng == 0)) {
+        distanceKm =
+            Geolocator.distanceBetween(
+              userPosition.latitude,
+              userPosition.longitude,
+              lat,
+              lng,
+            ) /
+            1000;
+      }
 
-      return false;
-    }).toList();
+      final reportLga = norm(r.lga);
+      final reportState = norm(r.state);
+      final bool isNearby;
+      if (distanceKm != null && distanceKm <= _nearbyRadiusKm) {
+        isNearby = true;
+      } else if (userLga != null && reportLga != null) {
+        isNearby = reportLga == userLga;
+      } else if (userState != null && reportState != null) {
+        isNearby = reportState == userState;
+      } else {
+        isNearby = false;
+      }
 
-    // Build entries (compute distance if both have coordinates)
-    _nearbyReports = filtered.map((r) {
-      return _NearbyEntry(report: r, distanceKm: null);
-    }).toList();
+      if (isNearby) {
+        entries.add(_NearbyEntry(report: r, distanceKm: distanceKm));
+      }
+    }
 
+    // Closest first; reports without a distance keep their (recency) order.
+    final withDistance = entries.where((e) => e.distanceKm != null).toList()
+      ..sort((a, b) => a.distanceKm!.compareTo(b.distanceKm!));
+    _nearbyReports = [
+      ...withDistance,
+      ...entries.where((e) => e.distanceKm == null),
+    ];
     if (mounted) setState(() => _isLoading = false);
+  }
+
+  /// Best-effort user position without prompting for permission.
+  Future<Position?> _tryGetUserPosition() async {
+    try {
+      final permission = await Geolocator.checkPermission();
+      if (permission != LocationPermission.always &&
+          permission != LocationPermission.whileInUse) {
+        return null;
+      }
+      return await Geolocator.getLastKnownPosition() ??
+          await Geolocator.getCurrentPosition().timeout(
+            const Duration(seconds: 5),
+          );
+    } on Object catch (_) {
+      // Location unavailable (disabled, timeout, unsupported platform).
+      return null;
+    }
   }
 
   @override

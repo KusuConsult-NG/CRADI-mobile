@@ -112,7 +112,9 @@ class FraudDetectionService {
         queries: [
           FQuery.equal('userId', userId),
           FQuery.equal('success', false),
-          FQuery.greaterThan('timestamp', oneHourAgo.toIso8601String()),
+          // `timestamp` is written as a server Timestamp, so compare against
+          // a Timestamp (an ISO string never matches a Timestamp field).
+          FQuery.greaterThan('timestamp', Timestamp.fromDate(oneHourAgo)),
         ],
       );
       return attempts.length;

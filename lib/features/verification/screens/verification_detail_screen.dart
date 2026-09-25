@@ -60,7 +60,12 @@ class _VerificationDetailScreenState extends State<VerificationDetailScreen> {
           context.pop(); // Go back to list
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Verification failed: ${result['error']}')),
+            SnackBar(
+              content: Text(
+                'Verification failed: '
+                '${result['message'] ?? result['error'] ?? 'Unknown error'}',
+              ),
+            ),
           );
         }
       }

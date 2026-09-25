@@ -4,6 +4,8 @@ import 'package:climate_app/core/constants/app_config.dart';
 import 'package:climate_app/core/theme/app_colors.dart';
 import 'package:climate_app/features/verification/screens/verification_detail_screen.dart';
 import 'package:climate_app/features/auth/providers/auth_provider.dart';
+import 'package:climate_app/features/reporting/providers/reporting_provider.dart'
+    show normalizeSeverity;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
@@ -65,7 +67,8 @@ class _VerificationListScreenState extends State<VerificationListScreen> {
   }
 
   String _severityLabel(String? severity) {
-    switch (severity?.toLowerCase()) {
+    // Tolerate legacy labels such as 'High Severity'.
+    switch (normalizeSeverity(severity)) {
       case 'critical':
         return '🔴 Critical';
       case 'high':
@@ -80,7 +83,7 @@ class _VerificationListScreenState extends State<VerificationListScreen> {
   }
 
   Color _severityColor(String? severity) {
-    switch (severity?.toLowerCase()) {
+    switch (normalizeSeverity(severity)) {
       case 'critical':
         return Colors.red;
       case 'high':

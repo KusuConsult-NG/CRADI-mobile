@@ -63,42 +63,17 @@ class _HomeScreenState extends State<HomeScreen> {
         PeerVerificationService().checkAndEscalatePendingReports();
       }
 
-      // Setup connectivity listener for auto-sync
+      // Flush anything left offline once the (logged-in) dashboard opens.
+      // Reconnect-triggered sync is wired once in main.dart (onReconnect);
+      // ReportingProvider.syncPendingReports is re-entrancy guarded.
       try {
-        final connectivity = context.read<ConnectivityProvider>();
-        connectivity.addListener(_onConnectivityChange);
-
-        if (!connectivity.isOffline) {
+        if (!context.read<ConnectivityProvider>().isOffline) {
           context.read<ReportingProvider>().syncPendingReports(context);
         }
       } on Exception catch (e) {
         ErrorHandler.logError(e, context: 'HomeScreen.refresh');
       }
     });
-  }
-
-  late ConnectivityProvider _connectivityProvider;
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    _connectivityProvider = context.read<ConnectivityProvider>();
-  }
-
-  @override
-  void dispose() {
-    try {
-      _connectivityProvider.removeListener(_onConnectivityChange);
-    } on Exception catch (_) {}
-    super.dispose();
-  }
-
-  void _onConnectivityChange() {
-    if (!mounted) return;
-    final connectivity = context.read<ConnectivityProvider>();
-    if (!connectivity.isOffline) {
-      context.read<ReportingProvider>().syncPendingReports(context);
-    }
   }
 
   @override

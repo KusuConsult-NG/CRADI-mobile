@@ -240,6 +240,8 @@ void main() {
     testWidgets('should display Verify and Reject buttons for non-owner', (
       tester,
     ) async {
+      // Only verifier roles may verify.
+      when(mockAuthProvider.userRole).thenReturn(UserRole.ewm);
       // testReport has reporterId 'user-123', currentUser is null
       when(
         mockReportsProvider.getReports(
@@ -254,6 +256,24 @@ void main() {
       // reporterId 'user-123' != currentUserId null => show buttons
       expect(find.text('Verify'), findsOneWidget);
       expect(find.text('Reject'), findsOneWidget);
+    });
+
+    testWidgets('should not show Verify/Reject for non-verifier roles', (
+      tester,
+    ) async {
+      when(mockAuthProvider.userRole).thenReturn(UserRole.user);
+      when(
+        mockReportsProvider.getReports(
+          ReportStatus.pending,
+          userId: anyNamed('userId'),
+        ),
+      ).thenReturn([testReport]);
+
+      await tester.pumpWidget(buildScreen());
+      await tester.pumpAndSettle();
+
+      expect(find.text('Verify'), findsNothing);
+      expect(find.text('Reject'), findsNothing);
     });
 
     testWidgets('should display back arrow', (tester) async {

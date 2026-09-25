@@ -6,9 +6,22 @@ import 'package:climate_app/core/constants/app_config.dart';
 import 'dart:async';
 import 'dart:developer' as developer;
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:climate_app/core/services/offline_storage_service.dart';
 import 'package:climate_app/features/profile/providers/profile_provider.dart';
 import 'package:climate_app/core/data/mvp_locations_data.dart';
+import 'package:climate_app/features/reporting/providers/reporting_provider.dart'
+    show normalizeSeverity, isAlertSeverity;
+
+/// Thrown when a verification is refused by business rules (self-verification,
+/// distance, not signed in). [message] is safe to show to the user.
+class VerificationRefusedException implements Exception {
+  const VerificationRefusedException(this.message);
+  final String message;
+
+  @override
+  String toString() => message;
+}
 
 class ReportsStatusProvider extends ChangeNotifier {
   final FirebaseService _firebase = FirebaseService();
@@ -91,9 +104,7 @@ class ReportsStatusProvider extends ChangeNotifier {
       'latitude': latitude ?? 0.0,
       'longitude': longitude ?? 0.0,
       'imageUrls': [],
-      'isAlert':
-          severity.toLowerCase() == 'critical' ||
-          severity.toLowerCase() == 'high',
+      'isAlert': isAlertSeverity(severity),
       'verificationCount': 0,
     };
 
@@ -289,7 +300,10 @@ class ReportsStatusProvider extends ChangeNotifier {
                   .doc(data['userId'])
                   .get();
               if (userDoc.exists && userDoc.data() != null) {
-                final n = userDoc.data()!['fullName'] as String?;
+                // User docs store the display name in `name`
+                // (`fullName` kept as a legacy fallback).
+                final userData = userDoc.data()!;
+                final n = (userData['name'] ?? userData['fullName']) as String?;
                 if (n != null && n.trim().isNotEmpty) {
                   reporterName = n;
                 }
@@ -297,8 +311,12 @@ class ReportsStatusProvider extends ChangeNotifier {
             } on Exception catch (_) {}
           }
 
-          return VerificationReport(
-            id: data['id'] as String? ?? data['\$id'] as String? ?? '',
+          // fromMap populates reporterId, coordinates, description,
+          // severity, imageUrls, etc.; display fields are overridden below.
+          return VerificationReport.fromMap(
+            data,
+            data['id'] as String? ?? data['\$id'] as String? ?? '',
+          ).copyWith(
             title: _formatTitle(data['hazardType'] ?? 'Unknown Hazard'),
             type: data['hazardType'] ?? 'Unknown',
             reporter: reporterName,
@@ -308,6 +326,7 @@ class ReportsStatusProvider extends ChangeNotifier {
             iconName: _getIconName(data['hazardType']),
             iconColor: _getIconColor(data['severity']),
             bgIconColor: '${_getIconColor(data['severity'])}_50',
+            severity: normalizeSeverity(data['severity']),
           );
         }),
       );
@@ -342,8 +361,10 @@ class ReportsStatusProvider extends ChangeNotifier {
         limitCount: 100, // Safety cap — no unbounded reads
       );
       return docs.map((data) {
-        return VerificationReport(
-          id: data['\$id'] as String? ?? '',
+        return VerificationReport.fromMap(
+          data,
+          data['\$id'] as String? ?? '',
+        ).copyWith(
           title: _formatTitle(data['hazardType'] ?? 'Unknown'),
           type: data['hazardType'] ?? 'Unknown',
           reporter: 'Community Report',
@@ -361,13 +382,42 @@ class ReportsStatusProvider extends ChangeNotifier {
     }
   }
 
+  /// Submits a verification as the signed-in user. Throws with the service's
+  /// message when the verification is refused (e.g. self-verification or
+  /// too far from the report).
+  Future<void> _submitVerificationAsCurrentUser(
+    String reportId, {
+    required bool isConfirmed,
+    String? userId,
+  }) async {
+    final uid = userId ?? FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) {
+      throw const VerificationRefusedException(
+        'You must be signed in to verify reports.',
+      );
+    }
+    final result = await PeerVerificationService().submitVerification(
+      reportId: reportId,
+      userId: uid,
+      isConfirmed: isConfirmed,
+    );
+    if (result['success'] != true) {
+      throw VerificationRefusedException(
+        (result['message'] ?? result['error'] ?? 'Verification failed')
+            .toString(),
+      );
+    }
+  }
+
   Future<void> verifyReport(String reportId, {String? userId}) async {
     try {
-      await PeerVerificationService().submitVerification(
-        reportId: reportId,
-        userId: userId ?? 'system_admin',
+      await _submitVerificationAsCurrentUser(
+        reportId,
         isConfirmed: true,
+        userId: userId,
       );
+      // Staff verification from this screen marks the report verified
+      // (only reached when the verification above was accepted).
       await _firebase.updateDocument(
         collectionId: AppConfig.reportsCollection,
         documentId: reportId,
@@ -402,10 +452,10 @@ class ReportsStatusProvider extends ChangeNotifier {
 
   Future<void> rejectReport(String reportId, {String? userId}) async {
     try {
-      await PeerVerificationService().submitVerification(
-        reportId: reportId,
-        userId: userId ?? 'system_admin',
+      await _submitVerificationAsCurrentUser(
+        reportId,
         isConfirmed: false,
+        userId: userId,
       );
       await _firebase.updateDocument(
         collectionId: AppConfig.reportsCollection,
@@ -491,15 +541,16 @@ class ReportsStatusProvider extends ChangeNotifier {
     }
   }
 
-  String _getIconColor(String? severity) {
-    switch (severity?.toLowerCase()) {
-      case 'low severity':
+  String _getIconColor(Object? severity) {
+    // Tolerates canonical ('high') and legacy ('High Severity') values.
+    switch (normalizeSeverity(severity)) {
+      case 'low':
         return 'green';
-      case 'medium severity':
+      case 'medium':
         return 'orange';
-      case 'high severity':
+      case 'high':
         return 'orange';
-      case 'critical severity':
+      case 'critical':
         return 'red';
       default:
         return 'orange';
@@ -512,9 +563,9 @@ class ReportsStatusProvider extends ChangeNotifier {
         return ReportStatus.pending;
       case 'verified':
       case 'acknowledged': // legacy compat
-      case 'validated': // legacy compat
         return ReportStatus.verified;
       case 'approved':
+      case 'validated': // legacy compat
       case 'resolved': // legacy compat
         return ReportStatus.approved;
       case 'rejected':

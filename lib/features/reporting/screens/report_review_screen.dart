@@ -36,11 +36,12 @@ class _ReportReviewScreenState extends State<ReportReviewScreen> {
 
       setState(() => _isSubmitting = false);
 
-      if (result['success'] == true) {
-        _showSuccessDialog(
-          result['queued'] == true,
-          reportId: result['reportId'],
-        );
+      // Saved offline as a draft, or queued after a failed online submission:
+      // either way the report is stored locally and will sync later.
+      final savedForLater =
+          result['offline'] == true || result['queued'] == true;
+      if (result['success'] == true || savedForLater) {
+        _showSuccessDialog(savedForLater, reportId: result['reportId']);
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(

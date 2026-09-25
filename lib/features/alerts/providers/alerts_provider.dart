@@ -33,8 +33,15 @@ class AlertsProvider extends ChangeNotifier {
         limitCount: 20,
       );
 
-      await _offlineStorage.cacheAlerts(documents);
       _alerts = documents;
+
+      // Caching is best-effort: a cache failure (e.g. HiveError, which is an
+      // Error rather than an Exception) must never prevent alerts loading.
+      try {
+        await _offlineStorage.cacheAlerts(documents);
+      } on Object catch (e) {
+        ErrorHandler.logError(e, context: 'AlertsProvider.cacheAlerts');
+      }
 
       developer.log(
         'Fetched ${_alerts.length} alerts and cached',
@@ -44,7 +51,12 @@ class AlertsProvider extends ChangeNotifier {
       ErrorHandler.logError(e, context: 'AlertsProvider.fetchAlerts');
       _error = 'Failed to load alerts';
 
-      final cached = _offlineStorage.getCachedAlerts();
+      List<Map<String, dynamic>> cached = const [];
+      try {
+        cached = _offlineStorage.getCachedAlerts();
+      } on Object catch (_) {
+        // Cache unavailable (not initialized or unreadable); ignore.
+      }
       if (cached.isNotEmpty) {
         _alerts = cached;
         _error = null;

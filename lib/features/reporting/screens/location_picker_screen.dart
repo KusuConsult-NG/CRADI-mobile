@@ -26,7 +26,9 @@ class LocationPickerScreen extends StatefulWidget {
 
 class _LocationPickerScreenState extends State<LocationPickerScreen> {
   final MapController _mapController = MapController();
-  double _severityValue = 3.0; // Default High
+  // Slider position (1-4). Initialised from the severity chosen on the
+  // previous screen so the user's choice is not overwritten.
+  double _severityValue = 3.0;
   final GeolocationService _geoService = GeolocationService();
   Position? _currentPosition;
   bool _isLoadingLocation = true;
@@ -43,21 +45,25 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
   final Map<int, Map<String, dynamic>> _severityLevels = {
     1: {
       'label': 'Low Severity',
+      'value': 'low',
       'color': const Color(0xFF13ec5b),
       'desc': 'Minor issue. No immediate threat.',
     },
     2: {
       'label': 'Medium Severity',
+      'value': 'medium',
       'color': const Color(0xFFfacc15),
       'desc': 'Moderate issue. Monitor situation.',
     },
     3: {
       'label': 'High Severity',
+      'value': 'high',
       'color': const Color(0xFFf97316),
       'desc': 'Significant threat to property or health. Response required.',
     },
     4: {
       'label': 'Critical Severity',
+      'value': 'critical',
       'color': const Color(0xFFef4444),
       'desc': 'Life-threatening situation. Immediate action required.',
     },
@@ -66,6 +72,15 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
   @override
   void initState() {
     super.initState();
+    // Keep the severity chosen on the SeveritySelectionScreen.
+    final chosen = normalizeSeverity(
+      context.read<ReportingProvider>().severity,
+    );
+    if (chosen != null) {
+      _severityValue =
+          (SeverityLevel.values.indexWhere((l) => l.name == chosen) + 1)
+              .toDouble();
+    }
     // Delay location fetch to ensure context is ready for Dialogs (PermissionService)
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _fetchCurrentLocation();
@@ -107,6 +122,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
   }
 
   Future<void> _fetchCurrentLocation() async {
+    if (!mounted) return;
     setState(() {
       _isLoadingLocation = true;
       _locationError = '';
@@ -115,6 +131,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
     try {
       // Request permission with rationale first
       final hasPermission = await PermissionService().requestLocation(context);
+      if (!mounted) return;
 
       if (!hasPermission) {
         if (mounted) {
@@ -129,6 +146,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
       }
 
       final position = await _geoService.getCurrentPosition();
+      if (!mounted) return;
 
       if (position != null) {
         setState(() {
@@ -141,6 +159,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
           position.latitude,
           position.longitude,
         );
+        if (!mounted) return;
 
         setState(() {
           _lga = details['lga'] ?? 'Unknown LGA';
@@ -216,6 +235,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
       final position = await _geoService.getCoordinatesFromAddress(
         locationString,
       );
+      if (!mounted) return;
       if (position != null) {
         setState(() {
           _currentPosition = position;
@@ -229,15 +249,13 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
         );
 
         // Update provider
-        if (mounted) {
-          context.read<ReportingProvider>().setLocation(
-            position.latitude,
-            position.longitude,
-          );
-          context.read<ReportingProvider>().setLocationDetails(
-            '${position.latitude},${position.longitude}',
-          );
-        }
+        context.read<ReportingProvider>().setLocation(
+          position.latitude,
+          position.longitude,
+        );
+        context.read<ReportingProvider>().setLocationDetails(
+          '${position.latitude},${position.longitude}',
+        );
       } else {
         setState(() {
           _isLoadingLocation = false;
@@ -448,11 +466,9 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                             onChanged: (value) {
                               setState(() => _severityValue = value);
                               // Update Provider
-                              final severityLabel =
-                                  _severityLevels[value.toInt()]!['label']
-                                      as String;
                               context.read<ReportingProvider>().setSeverity(
-                                severityLabel,
+                                _severityLevels[value.toInt()]!['value']
+                                    as String,
                               );
                             },
                           ),
@@ -1226,14 +1242,14 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                                       context
                                           .read<ReportingProvider>()
                                           .setLocationDetails(controller.text);
-                                      // Also verify severity if not set
-                                      final severityLabel =
-                                          _severityLevels[_severityValue
-                                                  .toInt()]!['label']
-                                              as String;
+                                      // Also make sure severity is set
                                       context
                                           .read<ReportingProvider>()
-                                          .setSeverity(severityLabel);
+                                          .setSeverity(
+                                            _severityLevels[_severityValue
+                                                    .toInt()]!['value']
+                                                as String,
+                                          );
 
                                       ScaffoldMessenger.of(
                                         context,
@@ -1305,10 +1321,9 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                   }
 
                   // Sync Severity
-                  final severityLabel =
-                      _severityLevels[_severityValue.toInt()]!['label']
-                          as String;
-                  context.read<ReportingProvider>().setSeverity(severityLabel);
+                  context.read<ReportingProvider>().setSeverity(
+                    _severityLevels[_severityValue.toInt()]!['value'] as String,
+                  );
 
                   // Sync Location (already set via dropdowns)
                   // Also sync GPS coordinates if available

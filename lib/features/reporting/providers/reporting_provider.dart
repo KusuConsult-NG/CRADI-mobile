@@ -17,6 +17,31 @@ enum HazardType { flood, drought, temp, wind, erosion, fire, pest }
 
 enum SeverityLevel { low, medium, high, critical }
 
+/// Normalizes any stored/legacy severity value (e.g. 'High Severity', 'HIGH',
+/// 'critical') to the canonical lowercase value: 'low' | 'medium' | 'high' |
+/// 'critical'. Returns null when the value is missing or unrecognised.
+String? normalizeSeverity(Object? raw) {
+  if (raw == null) return null;
+  final value = raw.toString().trim().toLowerCase().replaceAll(
+    RegExp(r'\s*severity$'),
+    '',
+  );
+  for (final level in SeverityLevel.values) {
+    if (value == level.name) return level.name;
+  }
+  if (value == 'moderate') return SeverityLevel.medium.name;
+  if (value == 'severe' || value == 'extreme') {
+    return SeverityLevel.critical.name;
+  }
+  return null;
+}
+
+/// Whether a severity (canonical or legacy label) should raise an alert.
+bool isAlertSeverity(Object? raw) {
+  final s = normalizeSeverity(raw);
+  return s == SeverityLevel.high.name || s == SeverityLevel.critical.name;
+}
+
 class ReportingProvider extends ChangeNotifier {
   ReportingProvider();
 
@@ -54,7 +79,7 @@ class ReportingProvider extends ChangeNotifier {
   }
 
   void setSeverity(String level) {
-    _severity = level;
+    _severity = normalizeSeverity(level) ?? level;
     notifyListeners();
   }
 
@@ -200,7 +225,7 @@ class ReportingProvider extends ChangeNotifier {
       final reportData = {
         'userId': firebaseUser.uid,
         'hazardType': _hazardType,
-        'severity': _severity,
+        'severity': normalizeSeverity(_severity) ?? _severity,
         'latitude': _latitude,
         'longitude': _longitude,
         'locationDetails': _locationDetails,
@@ -213,7 +238,7 @@ class ReportingProvider extends ChangeNotifier {
         'submittedAt': DateTime.now().toIso8601String(),
         'imageUrls': imageUrls,
         'status': 'pending',
-        'isAlert': _severity == 'critical' || _severity == 'high',
+        'isAlert': isAlertSeverity(_severity),
         'verificationCount': 0,
       };
 
@@ -262,10 +287,10 @@ class ReportingProvider extends ChangeNotifier {
         reset();
         _isLoading = false;
         notifyListeners();
+        developer.log('Submission failed, queued for sync: $e');
         return {
           'success': false,
-          'message':
-              '⚠️ Submission failed: ${e.toString()}. Added to sync queue.',
+          'message': 'Could not reach the server. Saved and will sync later.',
           'queued': true,
         };
       }
@@ -280,8 +305,19 @@ class ReportingProvider extends ChangeNotifier {
     }
   }
 
+  Future<Map<String, dynamic>>? _syncInFlight;
+
   /// Sync pending drafts and failed submissions to Firestore.
-  Future<Map<String, dynamic>> syncPendingReports(BuildContext context) async {
+  ///
+  /// This is the single entry point for offline sync. Concurrent calls share
+  /// the same in-flight run so items are never uploaded twice.
+  Future<Map<String, dynamic>> syncPendingReports(BuildContext context) {
+    return _syncInFlight ??= _doSyncPendingReports().whenComplete(() {
+      _syncInFlight = null;
+    });
+  }
+
+  Future<Map<String, dynamic>> _doSyncPendingReports() async {
     _isLoading = true;
     notifyListeners();
     int successCount = 0, failCount = 0;
@@ -291,29 +327,12 @@ class ReportingProvider extends ChangeNotifier {
       final firebaseUser = FirebaseAuth.instance.currentUser;
       if (firebaseUser == null) throw Exception('User not logged in');
 
-      // Process sync queue (failed submissions)
-      final queue = offlineService.getSyncQueue();
-      for (final item in queue) {
-        if (item['status'] == 'synced') continue;
-        try {
-          final docId = item['docId'] as String?;
-          await _firebase.createDocument(
-            collectionId: AppConfig.reportsCollection,
-            documentId: docId,
-            data: {...item, 'status': 'pending'}
-              ..remove('docId')
-              ..remove('queueId')
-              ..remove('addedToQueueAt')
-              ..remove('retryCount')
-              ..remove('lastError'),
-          );
-          await offlineService.markAsSynced(item['queueId']);
-          successCount++;
-        } on Exception catch (e) {
-          await offlineService.markAsFailed(item['queueId'], e.toString());
-          failCount++;
-        }
-      }
+      // Process sync queue (failed submissions) — single implementation
+      // lives in OfflineStorageService (keeps status 'pending', retries
+      // failed items up to a cap).
+      final queueResult = await offlineService.syncPendingReports();
+      successCount += queueResult['synced'] ?? 0;
+      failCount += queueResult['failed'] ?? 0;
 
       // Process drafts
       final drafts = offlineService.getAllDrafts();
@@ -343,7 +362,8 @@ class ReportingProvider extends ChangeNotifier {
             data: {
               'userId': firebaseUser.uid,
               'hazardType': draft['hazardType'],
-              'severity': draft['severity'],
+              'severity':
+                  normalizeSeverity(draft['severity']) ?? draft['severity'],
               'latitude': draft['latitude'],
               'longitude': draft['longitude'],
               'locationDetails': draft['locationDetails'],
@@ -356,9 +376,7 @@ class ReportingProvider extends ChangeNotifier {
               'submittedAt': DateTime.now().toIso8601String(),
               'imageUrls': imageUrls,
               'status': 'pending',
-              'isAlert':
-                  draft['severity'] == 'critical' ||
-                  draft['severity'] == 'high',
+              'isAlert': isAlertSeverity(draft['severity']),
               'verificationCount': 0,
             },
           );
