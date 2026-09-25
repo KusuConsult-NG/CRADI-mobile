@@ -169,68 +169,71 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
 
     final result = await showDialog<Map<String, String?>>(
       context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setState) {
-          return AlertDialog(
-            title: Text(
-              'Edit Profile',
-              style: GoogleFonts.lexend(fontWeight: FontWeight.bold),
-            ),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  CustomTextField(
-                    controller: nameController,
-                    label: 'Full Name',
-                  ),
-                  const SizedBox(height: 16),
-                  CustomTextField(
-                    controller: emailController,
-                    label: 'Email Address',
-                    keyboardType: TextInputType.emailAddress,
-                  ),
-                  const SizedBox(height: 16),
-                  LocationSelectorWidget(
-                    initialState: selectedState,
-                    initialLGA: selectedLGA,
-                    initialWard: selectedWard,
-                    onLocationChanged: (state, lga, ward) {
-                      // No need to call setState here as the widget handles its own state
-                      // But we need to update our local variables to pass back on save
-                      selectedState = state;
-                      selectedLGA = lga;
-                      selectedWard = ward;
-                    },
-                  ),
-                ],
+      builder: (context) => _DisposeControllersOnUnmount(
+        controllers: [nameController, emailController],
+        child: StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: Text(
+                'Edit Profile',
+                style: GoogleFonts.lexend(fontWeight: FontWeight.bold),
               ),
-            ),
-            actions: [
-              SizedBox(
-                width: 100,
-                child: CustomButton(
-                  text: 'Cancel',
-                  type: ButtonType.ghost,
-                  onPressed: () => Navigator.pop(context),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CustomTextField(
+                      controller: nameController,
+                      label: 'Full Name',
+                    ),
+                    const SizedBox(height: 16),
+                    CustomTextField(
+                      controller: emailController,
+                      label: 'Email Address',
+                      keyboardType: TextInputType.emailAddress,
+                    ),
+                    const SizedBox(height: 16),
+                    LocationSelectorWidget(
+                      initialState: selectedState,
+                      initialLGA: selectedLGA,
+                      initialWard: selectedWard,
+                      onLocationChanged: (state, lga, ward) {
+                        // No need to call setState here as the widget handles its own state
+                        // But we need to update our local variables to pass back on save
+                        selectedState = state;
+                        selectedLGA = lga;
+                        selectedWard = ward;
+                      },
+                    ),
+                  ],
                 ),
               ),
-              SizedBox(
-                width: 100,
-                child: CustomButton(
-                  text: 'Save',
-                  onPressed: () => Navigator.pop(context, {
-                    'name': nameController.text,
-                    'email': emailController.text,
-                    'state': selectedState,
-                    'lga': selectedLGA,
-                    'ward': selectedWard,
-                  }),
+              actions: [
+                SizedBox(
+                  width: 100,
+                  child: CustomButton(
+                    text: 'Cancel',
+                    type: ButtonType.ghost,
+                    onPressed: () => Navigator.pop(context),
+                  ),
                 ),
-              ),
-            ],
-          );
-        },
+                SizedBox(
+                  width: 100,
+                  child: CustomButton(
+                    text: 'Save',
+                    onPressed: () => Navigator.pop(context, {
+                      'name': nameController.text,
+                      'email': emailController.text,
+                      'state': selectedState,
+                      'lga': selectedLGA,
+                      'ward': selectedWard,
+                    }),
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
       ),
     );
 
@@ -238,8 +241,9 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
       if (result['name'] != null && result['name']!.isNotEmpty) {
         await profileProvider.updateName(result['name']!);
       }
+      String? emailMessage;
       if (result['email'] != null) {
-        await profileProvider.updateEmail(result['email']!);
+        emailMessage = await profileProvider.updateEmail(result['email']!);
       }
       // Update location
       await profileProvider.updateLocation(
@@ -250,9 +254,9 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Profile updated successfully!'),
-            backgroundColor: Colors.green,
+          SnackBar(
+            content: Text(emailMessage ?? 'Profile updated successfully!'),
+            backgroundColor: emailMessage == null ? Colors.green : null,
           ),
         );
       }
@@ -266,129 +270,134 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     await showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setState) {
-          return AlertDialog(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-            ),
-            title: Text(
-              'Verify Account',
-              style: GoogleFonts.lexend(fontWeight: FontWeight.bold),
-            ),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  'Enter the Access Code sent to your email to verify your account.',
-                  style: GoogleFonts.lexend(
-                    fontSize: 14,
-                    color: AppColors.textSecondary,
+      builder: (context) => _DisposeControllersOnUnmount(
+        controllers: [codeController],
+        child: StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              title: Text(
+                'Verify Account',
+                style: GoogleFonts.lexend(fontWeight: FontWeight.bold),
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'Enter the Access Code sent to your email to verify your account.',
+                    style: GoogleFonts.lexend(
+                      fontSize: 14,
+                      color: AppColors.textSecondary,
+                    ),
                   ),
+                  const SizedBox(height: 16),
+                  CustomTextField(
+                    controller: codeController,
+                    label: 'Access Code',
+                    hint: 'e.g., ABC-123',
+                    enabled: !isVerifying,
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: isVerifying ? null : () => Navigator.pop(context),
+                  child: Text(AppLocalizations.of(context)!.cancel),
                 ),
-                const SizedBox(height: 16),
-                CustomTextField(
-                  controller: codeController,
-                  label: 'Access Code',
-                  hint: 'e.g., ABC-123',
-                  enabled: !isVerifying,
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primaryRed,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  onPressed: isVerifying
+                      ? null
+                      : () async {
+                          final code = codeController.text.trim();
+                          if (code.isEmpty) return;
+
+                          setState(() => isVerifying = true);
+
+                          // Simulate verification logic
+                          // In a real app, you'd call a provider method here
+                          // For MVP Generator Flow:
+                          try {
+                            final authProvider = context
+                                .read<app_auth.AuthProvider>();
+                            if (authProvider.currentUser == null) {
+                              throw Exception("User not found");
+                            }
+
+                            await authProvider.verifyOtpAndLogin(code);
+
+                            if (context.mounted) {
+                              Navigator.pop(context);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                    'Account verified successfully!',
+                                  ),
+                                  backgroundColor: Colors.green,
+                                ),
+                              );
+                              // Trigger refresh
+                              context
+                                  .read<app_auth.AuthProvider>()
+                                  .validateSession();
+                            }
+                          } on Exception catch (e) {
+                            if (context.mounted) {
+                              setState(() => isVerifying = false);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    ErrorHandler.handleError(
+                                      e,
+                                      context: 'Account Verification',
+                                    ),
+                                  ),
+                                  backgroundColor: Colors.red,
+                                ),
+                              );
+                            }
+                          }
+                        },
+                  child: isVerifying
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Text('Verify'),
                 ),
               ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: isVerifying ? null : () => Navigator.pop(context),
-                child: Text(AppLocalizations.of(context)!.cancel),
+              // Added UI Hint / Fallback for Flawless SMS / Email Delivery Assumption
+              contentPadding: const EdgeInsets.only(
+                left: 24,
+                right: 24,
+                top: 20,
+                bottom: 0,
               ),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primaryRed,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
-                onPressed: isVerifying
-                    ? null
-                    : () async {
-                        final code = codeController.text.trim();
-                        if (code.isEmpty) return;
-
-                        setState(() => isVerifying = true);
-
-                        // Simulate verification logic
-                        // In a real app, you'd call a provider method here
-                        // For MVP Generator Flow:
-                        try {
-                          final authProvider = context
-                              .read<app_auth.AuthProvider>();
-                          if (authProvider.currentUser == null) {
-                            throw Exception("User not found");
-                          }
-
-                          await authProvider.verifyOtpAndLogin(code);
-
-                          if (context.mounted) {
-                            Navigator.pop(context);
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Account verified successfully!'),
-                                backgroundColor: Colors.green,
-                              ),
-                            );
-                            // Trigger refresh
-                            context
-                                .read<app_auth.AuthProvider>()
-                                .validateSession();
-                          }
-                        } on Exception catch (e) {
-                          if (context.mounted) {
-                            setState(() => isVerifying = false);
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  ErrorHandler.handleError(
-                                    e,
-                                    context: 'Account Verification',
-                                  ),
-                                ),
-                                backgroundColor: Colors.red,
-                              ),
-                            );
-                          }
-                        }
-                      },
-                child: isVerifying
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
-                        ),
-                      )
-                    : const Text('Verify'),
+              actionsPadding: const EdgeInsets.only(
+                left: 24,
+                right: 24,
+                top: 16,
+                bottom: 16,
               ),
-            ],
-            // Added UI Hint / Fallback for Flawless SMS / Email Delivery Assumption
-            contentPadding: const EdgeInsets.only(
-              left: 24,
-              right: 24,
-              top: 20,
-              bottom: 0,
-            ),
-            actionsPadding: const EdgeInsets.only(
-              left: 24,
-              right: 24,
-              top: 16,
-              bottom: 16,
-            ),
-            insetPadding: const EdgeInsets.symmetric(
-              horizontal: 24,
-              vertical: 24,
-            ),
-          );
-        },
+              insetPadding: const EdgeInsets.symmetric(
+                horizontal: 24,
+                vertical: 24,
+              ),
+            );
+          },
+        ),
       ),
     );
   }
@@ -1155,4 +1164,34 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
       ],
     );
   }
+}
+
+/// Disposes [controllers] when the wrapped dialog route is removed from the
+/// tree (i.e. after its exit animation), so they are never used after disposal.
+class _DisposeControllersOnUnmount extends StatefulWidget {
+  const _DisposeControllersOnUnmount({
+    required this.controllers,
+    required this.child,
+  });
+
+  final List<TextEditingController> controllers;
+  final Widget child;
+
+  @override
+  State<_DisposeControllersOnUnmount> createState() =>
+      _DisposeControllersOnUnmountState();
+}
+
+class _DisposeControllersOnUnmountState
+    extends State<_DisposeControllersOnUnmount> {
+  @override
+  void dispose() {
+    for (final c in widget.controllers) {
+      c.dispose();
+    }
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
 }

@@ -237,12 +237,55 @@ class ProfileProvider extends ChangeNotifier {
     await _syncToFirestore({'name': name});
   }
 
-  Future<void> updateEmail(String email) async {
-    _email = email;
-    await _storage.write('profile_email', email);
-    await _updateLocalState({'email': email});
-    notifyListeners();
-    await _syncToFirestore({'email': email});
+  /// Request an email change.
+  ///
+  /// The sign-in email lives in Firebase Auth, so this sends a verification
+  /// link to [email] via `verifyBeforeUpdateEmail`. The change only takes
+  /// effect once the user clicks that link; the local profile and Firestore
+  /// doc keep the current email until then (AuthProvider syncs the Firestore
+  /// doc on the next sign-in after verification).
+  ///
+  /// Returns a user-facing message describing the outcome, or `null` when
+  /// [email] is unchanged. Never throws.
+  Future<String?> updateEmail(String email) async {
+    final newEmail = email.trim();
+    final user = FirebaseAuth.instance.currentUser;
+    if (newEmail.isEmpty ||
+        newEmail.toLowerCase() == (user?.email ?? _email).toLowerCase()) {
+      return null;
+    }
+    if (user == null) {
+      return 'You must be signed in to change your email.';
+    }
+
+    try {
+      await user.verifyBeforeUpdateEmail(newEmail);
+      developer.log(
+        'Email change verification sent to $newEmail',
+        name: 'ProfileProvider',
+      );
+      return 'A verification link has been sent to $newEmail. Your email '
+          'will change after you click the link.';
+    } on FirebaseAuthException catch (e) {
+      developer.log(
+        'updateEmail error: ${e.code} ${e.message}',
+        name: 'ProfileProvider',
+      );
+      switch (e.code) {
+        case 'requires-recent-login':
+          return 'For security, please log out and sign in again before '
+              'changing your email.';
+        case 'invalid-email':
+          return 'Please enter a valid email address.';
+        case 'email-already-in-use':
+          return 'That email is already in use by another account.';
+        default:
+          return 'Could not update email. Please try again.';
+      }
+    } on Exception catch (e) {
+      developer.log('updateEmail error: $e', name: 'ProfileProvider');
+      return 'Could not update email. Please try again.';
+    }
   }
 
   Future<void> updatePhone(String phone) async {

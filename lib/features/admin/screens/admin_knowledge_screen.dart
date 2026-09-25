@@ -67,10 +67,23 @@ class _AdminKnowledgeScreenState extends State<AdminKnowledgeScreen> {
       ),
     );
     if (confirmed == true) {
-      await FirebaseFirestore.instance
-          .collection(AppConfig.knowledgeBaseCollection)
-          .doc(id)
-          .delete();
+      try {
+        await FirebaseFirestore.instance
+            .collection(AppConfig.knowledgeBaseCollection)
+            .doc(id)
+            .delete();
+      } on FirebaseException catch (e) {
+        developer.log('Guide delete failed: $e', name: 'AdminKnowledgeScreen');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Could not delete guide.'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        return;
+      }
       developer.log('Guide deleted: $id', name: 'AdminKnowledgeScreen');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

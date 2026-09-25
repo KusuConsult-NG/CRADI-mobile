@@ -13,17 +13,14 @@ class EmergencyContactsProvider extends ChangeNotifier {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) return [];
 
+      // Only the signed-in user's own contacts. Sorted client-side so no
+      // composite (userId, name) index is required.
       final docs = await _firebase.listDocuments(
         collectionId: AppConfig.contactsCollection,
-        queries: [FQuery.orderAsc('name')],
+        queries: [FQuery.equal('userId', user.uid)],
       );
 
-      return docs
-          .map(
-            (data) =>
-                EmergencyContact.fromFirestore(data, data['\$id'] as String),
-          )
-          .toList();
+      return _toSortedContacts(docs);
     } on Exception catch (e) {
       developer.log('Error getting contacts: $e');
       return [];
@@ -96,43 +93,39 @@ class EmergencyContactsProvider extends ChangeNotifier {
     }
   }
 
-  /// Real-time stream via Firestore snapshots (replaces polling loop).
+  /// Real-time stream of the signed-in user's contacts.
   Stream<List<EmergencyContact>> getContactsStream() {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return Stream.value(const []);
     return _firebase
         .subscribeToCollection(
           collectionId: AppConfig.contactsCollection,
-          queries: [FQuery.orderAsc('name')],
+          queries: [FQuery.equal('userId', user.uid)],
         )
-        .map(
-          (docs) => docs
-              .map(
-                (data) => EmergencyContact.fromFirestore(
-                  data,
-                  data['\$id'] as String,
-                ),
-              )
-              .toList(),
-        );
+        .map(_toSortedContacts);
   }
 
   Stream<List<EmergencyContact>> getContactsByCategory(String category) {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return Stream.value(const []);
     return _firebase
         .subscribeToCollection(
           collectionId: AppConfig.contactsCollection,
           queries: [
+            FQuery.equal('userId', user.uid),
             FQuery.equal('category', category),
-            FQuery.orderAsc('name'),
           ],
         )
+        .map(_toSortedContacts);
+  }
+
+  List<EmergencyContact> _toSortedContacts(List<Map<String, dynamic>> docs) {
+    return docs
         .map(
-          (docs) => docs
-              .map(
-                (data) => EmergencyContact.fromFirestore(
-                  data,
-                  data['\$id'] as String,
-                ),
-              )
-              .toList(),
-        );
+          (data) =>
+              EmergencyContact.fromFirestore(data, data['\$id'] as String),
+        )
+        .toList()
+      ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
   }
 }

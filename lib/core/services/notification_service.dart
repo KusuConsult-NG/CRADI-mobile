@@ -28,6 +28,16 @@ class NotificationService {
   /// Tracks currently subscribed topics so we can unsubscribe on zone change.
   final Set<String> _subscribedTopics = {};
 
+  /// In-flight initialization, so concurrent callers share one run.
+  Future<void>? _initFuture;
+
+  /// Whether a user is currently signed in (set by [onUserSignedIn]).
+  bool _userSignedIn = false;
+
+  /// The monitoring zone the current topic subscriptions were made for.
+  String? _zone;
+  String? _subscribedZone;
+
   static const String _notificationsBoxName = 'notifications_history';
   Box<Map>? _notificationsBox;
 
@@ -42,9 +52,20 @@ class NotificationService {
   /// [profileProvider] should be the app-level Provider instance so that
   /// the FCM token is saved to the correct user profile in Firestore.
   Future<void> initialize({ProfileProvider? profileProvider}) async {
+    if (profileProvider != null && profileProvider != _profileProvider) {
+      _profileProvider?.removeListener(_onProfileChanged);
+      _profileProvider = profileProvider;
+      _profileProvider!.addListener(_onProfileChanged);
+    }
     if (_initialized) return;
-    _profileProvider = profileProvider;
+    _initFuture ??= _initialize().whenComplete(() {
+      // Allow a retry if initialization did not complete (e.g. error).
+      if (!_initialized) _initFuture = null;
+    });
+    return _initFuture;
+  }
 
+  Future<void> _initialize() async {
     try {
       // Get encryption cipher for secure notification storage
       final cipher = await HiveEncryptionService().getCipher();
@@ -133,7 +154,13 @@ class NotificationService {
       _updateUnreadCount();
 
       // Subscribe to zone-based topics using monitoring zone
-      await _subscribeToZoneTopics();
+      if (_userSignedIn) {
+        // A user signed in while we were initializing — persist their token
+        // and subscribe to their zone topics now.
+        await _syncSignedInUser();
+      } else {
+        await _subscribeToZoneTopics();
+      }
 
       developer.log(
         'FCM initialized successfully',
@@ -166,7 +193,8 @@ class NotificationService {
       await showLocalNotification(
         title: message.notification!.title ?? 'New Alert',
         body: message.notification!.body ?? '',
-        payload: message.data.toString(),
+        // Must be JSON: _onNotificationTapped jsonDecodes the payload.
+        payload: jsonEncode(message.data),
       );
     }
   }
@@ -400,11 +428,76 @@ class NotificationService {
     }
   }
 
+  /// Call after a user signs in (from AuthProvider). [initialize] normally
+  /// runs at app start before anyone is signed in, so the FCM token could not
+  /// be saved to a user doc and no zone topics were subscribed.
+  ///
+  /// [monitoringZone] is the zone from the user's Firestore doc, used until
+  /// the ProfileProvider has loaded.
+  Future<void> onUserSignedIn({String? monitoringZone}) async {
+    _userSignedIn = true;
+    final profileZone = _profileProvider?.monitoringZone;
+    _zone = (profileZone != null && profileZone.isNotEmpty)
+        ? profileZone
+        : monitoringZone;
+    // If not yet initialized, initialize() will call _syncSignedInUser()
+    // once it finishes.
+    if (!_initialized) return;
+    await _syncSignedInUser();
+  }
+
+  /// Call after the user signs out: drop zone topic subscriptions so the
+  /// device stops receiving that user's zone alerts.
+  Future<void> onUserSignedOut() async {
+    if (!_userSignedIn && _subscribedTopics.isEmpty) return;
+    _userSignedIn = false;
+    _zone = null;
+    if (!_initialized) return;
+    await _unsubscribeAll();
+  }
+
+  Future<void> _syncSignedInUser() async {
+    try {
+      final token = await _fcm.getToken();
+      if (token != null) {
+        _fcmToken = token;
+        if (_profileProvider != null) {
+          await _profileProvider!.updateFCMToken(token);
+        } else {
+          developer.log(
+            'Warning: no ProfileProvider — FCM token not persisted',
+            name: 'NotificationService',
+          );
+        }
+      }
+    } on Exception catch (e) {
+      developer.log(
+        'Error saving FCM token after sign-in: $e',
+        name: 'NotificationService',
+      );
+    }
+    if (_subscribedZone != _zone || _subscribedTopics.isEmpty) {
+      await updateZoneSubscriptions();
+    }
+  }
+
+  /// Re-subscribe when the ProfileProvider's monitoring zone changes
+  /// (e.g. the user picks a new zone on the dashboard).
+  void _onProfileChanged() {
+    final provider = _profileProvider;
+    if (provider == null || !_userSignedIn || provider.isLoading) return;
+    final zone = provider.monitoringZone;
+    if (zone == _zone) return;
+    _zone = zone;
+    if (_initialized) updateZoneSubscriptions();
+  }
+
   /// Subscribe to FCM topics based on the user's monitoring zone.
   ///
   /// Call this after initialization or when the user changes their zone.
   Future<void> _subscribeToZoneTopics() async {
-    final zone = _profileProvider?.monitoringZone;
+    final zone = _zone ?? _profileProvider?.monitoringZone;
+    _subscribedZone = zone;
     if (zone == null || zone.isEmpty) return;
 
     // Always subscribe to the "all_alerts" global topic
@@ -430,12 +523,17 @@ class NotificationService {
 
   /// Re-subscribe after the user changes their monitoring zone.
   Future<void> updateZoneSubscriptions() async {
+    await _unsubscribeAll();
+    await _subscribeToZoneTopics();
+  }
+
+  Future<void> _unsubscribeAll() async {
     // Unsubscribe from all previously subscribed topics
     for (final topic in _subscribedTopics.toList()) {
       await unsubscribeFromTopic(topic);
     }
     _subscribedTopics.clear();
-    await _subscribeToZoneTopics();
+    _subscribedZone = null;
   }
 
   /// Subscribe to a topic

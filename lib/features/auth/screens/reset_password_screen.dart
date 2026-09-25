@@ -7,14 +7,23 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
+/// Password reset screen.
+///
+/// * Opened from a Firebase password-reset action link (with `oobCode`):
+///   collects a new password and completes the reset via
+///   [AuthProvider.confirmPasswordReset].
+/// * Opened without a code (e.g. an expired/legacy link): collects the
+///   user's email and sends a fresh reset link. No signed-in user is needed.
 class ResetPasswordScreen extends StatefulWidget {
   final String userId;
   final String secret;
+  final String oobCode;
 
   const ResetPasswordScreen({
     super.key,
     required this.userId,
     required this.secret,
+    this.oobCode = '',
   });
 
   @override
@@ -22,6 +31,7 @@ class ResetPasswordScreen extends StatefulWidget {
 }
 
 class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
+  final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
@@ -29,10 +39,22 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
   bool _isSuccess = false;
   bool _obscurePassword = true;
 
+  /// True when opened from a reset link carrying a Firebase action code.
+  bool get _hasResetCode => widget.oobCode.isNotEmpty;
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    _confirmPasswordController.dispose();
+    super.dispose();
+  }
+
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
 
-    if (_passwordController.text != _confirmPasswordController.text) {
+    if (_hasResetCode &&
+        _passwordController.text != _confirmPasswordController.text) {
       CustomToast.showError(context, 'Passwords do not match');
       return;
     }
@@ -42,24 +64,27 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
     });
 
     try {
-      // Firebase password resets are handled via a secure link sent by Firebase.
-      // Once the user clicks the link and resets their password on Firebase's page,
-      // they can sign in with the new password.
-      // This fallback form re-sends the reset email if the user arrives without a valid link.
       final authProvider = context.read<AuthProvider>();
-      final user = authProvider.currentUser;
-      if (user?.email != null) {
-        await authProvider.sendPasswordResetEmail(user!.email!);
-        if (mounted) {
-          setState(() {
-            _isSuccess = true;
-            _isLoading = false;
-          });
-        }
-      } else {
-        throw Exception(
-          'No email associated with this session. Please use Forgot Password from the login screen.',
+      if (_hasResetCode) {
+        await authProvider.confirmPasswordReset(
+          code: widget.oobCode,
+          newPassword: _passwordController.text,
         );
+      } else {
+        await authProvider.sendPasswordResetEmail(_emailController.text.trim());
+      }
+      if (mounted) {
+        setState(() {
+          _isSuccess = true;
+          _isLoading = false;
+        });
+      }
+    } on AuthException catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+        CustomToast.showError(context, e.userMessage);
       }
     } on Exception catch (e) {
       if (mounted) {
@@ -117,7 +142,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
           ),
           const SizedBox(height: 32),
           Text(
-            'Create New Password',
+            _hasResetCode ? 'Create New Password' : 'Reset Password',
             style: GoogleFonts.lexend(
               fontSize: 28,
               fontWeight: FontWeight.bold,
@@ -127,7 +152,10 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
           ),
           const SizedBox(height: 12),
           Text(
-            'Enter a new secure password for your account.',
+            _hasResetCode
+                ? 'Enter a new secure password for your account.'
+                : 'This reset link is missing or invalid. Enter your email '
+                      'address to receive a new password reset link.',
             style: GoogleFonts.lexend(
               fontSize: 16,
               color: Colors.grey.shade600,
@@ -135,57 +163,81 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 48),
-          TextFormField(
-            controller: _passwordController,
-            obscureText: _obscurePassword,
-            decoration: InputDecoration(
-              labelText: 'New Password',
-              hintText: 'Enter new password',
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              prefixIcon: const Icon(Icons.lock_outline),
-              suffixIcon: IconButton(
-                icon: Icon(
-                  _obscurePassword ? Icons.visibility_off : Icons.visibility,
-                  color: Colors.grey,
+          if (!_hasResetCode)
+            TextFormField(
+              controller: _emailController,
+              keyboardType: TextInputType.emailAddress,
+              decoration: InputDecoration(
+                labelText: 'Email Address',
+                hintText: 'Enter your email',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
                 ),
-                onPressed: () {
-                  setState(() {
-                    _obscurePassword = !_obscurePassword;
-                  });
-                },
+                prefixIcon: const Icon(Icons.email_outlined),
               ),
+              validator: (value) {
+                if (value == null || value.trim().isEmpty) {
+                  return 'Please enter your email';
+                }
+                if (!value.contains('@')) {
+                  return 'Please enter a valid email';
+                }
+                return null;
+              },
             ),
-            validator: (value) {
-              if (value == null || value.isEmpty) {
-                return 'Please enter a password';
-              }
-              if (value.length < 8) {
-                return 'Password must be at least 8 characters';
-              }
-              return null;
-            },
-          ),
-          const SizedBox(height: 16),
-          TextFormField(
-            controller: _confirmPasswordController,
-            obscureText: _obscurePassword,
-            decoration: InputDecoration(
-              labelText: 'Confirm Password',
-              hintText: 'Config new password',
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
+          if (_hasResetCode) ...[
+            TextFormField(
+              controller: _passwordController,
+              obscureText: _obscurePassword,
+              decoration: InputDecoration(
+                labelText: 'New Password',
+                hintText: 'Enter new password',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                prefixIcon: const Icon(Icons.lock_outline),
+                suffixIcon: IconButton(
+                  icon: Icon(
+                    _obscurePassword ? Icons.visibility_off : Icons.visibility,
+                    color: Colors.grey,
+                  ),
+                  onPressed: () {
+                    setState(() {
+                      _obscurePassword = !_obscurePassword;
+                    });
+                  },
+                ),
               ),
-              prefixIcon: const Icon(Icons.lock_outline),
+              validator: (value) {
+                if (value == null || value.isEmpty) {
+                  return 'Please enter a password';
+                }
+                if (value.length < 8) {
+                  return 'Password must be at least 8 characters';
+                }
+                return null;
+              },
             ),
-            validator: (value) {
-              if (value == null || value.isEmpty) {
-                return 'Please confirm your password';
-              }
-              return null;
-            },
-          ),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _confirmPasswordController,
+              obscureText: _obscurePassword,
+              decoration: InputDecoration(
+                labelText: 'Confirm Password',
+                hintText: 'Confirm new password',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                prefixIcon: const Icon(Icons.lock_outline),
+              ),
+              validator: (value) {
+                if (value == null || value.isEmpty) {
+                  return 'Please confirm your password';
+                }
+                return null;
+              },
+            ),
+          ],
           const Spacer(),
           ElevatedButton(
             onPressed: _isLoading ? null : _submit,
@@ -207,9 +259,12 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                       strokeWidth: 2,
                     ),
                   )
-                : const Text(
-                    'Reset Passsword',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                : Text(
+                    _hasResetCode ? 'Reset Password' : 'Send Reset Link',
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
           ),
           const SizedBox(height: 20),
@@ -237,7 +292,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
         ),
         const SizedBox(height: 32),
         Text(
-          'Password Reset!',
+          _hasResetCode ? 'Password Reset!' : 'Check Your Email',
           style: GoogleFonts.lexend(
             fontSize: 24,
             fontWeight: FontWeight.bold,
@@ -246,7 +301,9 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
         ),
         const SizedBox(height: 16),
         Text(
-          'Your password has been reset successfully. You can now login with your new password.',
+          _hasResetCode
+              ? 'Your password has been reset successfully. You can now login with your new password.'
+              : 'If an account exists for ${_emailController.text.trim()}, a password reset link has been sent. Follow the link to set a new password.',
           style: GoogleFonts.lexend(
             fontSize: 16,
             color: Colors.grey.shade600,

@@ -116,9 +116,20 @@ class _AdminAlertsScreenState extends State<AdminAlertsScreen> {
   }
 
   Future<void> _dismissAlert(String id) async {
-    await FirebaseFirestore.instance.collection('alerts').doc(id).update({
-      'isActive': false,
-    });
+    try {
+      await FirebaseFirestore.instance.collection('alerts').doc(id).update({
+        'isActive': false,
+      });
+    } on FirebaseException catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Could not dismiss alert.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   @override
@@ -368,6 +379,18 @@ class _AdminAlertsScreenState extends State<AdminAlertsScreen> {
             builder: (context, snap) {
               if (snap.connectionState == ConnectionState.waiting) {
                 return const Center(child: CircularProgressIndicator());
+              }
+              if (snap.hasError) {
+                return Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Text(
+                      'Could not load alerts. You may not have permission to view them.',
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.lexend(color: Colors.red),
+                    ),
+                  ),
+                );
               }
               final docs = snap.data?.docs ?? [];
               if (docs.isEmpty) {

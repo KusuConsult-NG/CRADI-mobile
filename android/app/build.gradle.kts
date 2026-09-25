@@ -38,11 +38,15 @@ android {
     }
 
     signingConfigs {
-        create("release") {
-            keyAlias = keystoreProperties["keyAlias"] as String
-            keyPassword = keystoreProperties["keyPassword"] as String
-            storeFile = file(keystoreProperties["storeFile"] as String)
-            storePassword = keystoreProperties["storePassword"] as String
+        // Only define the release signing config when key.properties exists,
+        // so debug builds (and CI without the keystore) still configure.
+        if (keystorePropertiesFile.exists()) {
+            create("release") {
+                keyAlias = keystoreProperties["keyAlias"] as String
+                keyPassword = keystoreProperties["keyPassword"] as String
+                storeFile = file(keystoreProperties["storeFile"] as String)
+                storePassword = keystoreProperties["storePassword"] as String
+            }
         }
     }
 
@@ -56,8 +60,13 @@ android {
                 "proguard-rules.pro"
             )
             
-            // Release signing config
-            signingConfig = signingConfigs.getByName("release")
+            // Release signing config; falls back to debug signing when
+            // key.properties is absent (local/CI builds without the keystore).
+            signingConfig = if (keystorePropertiesFile.exists()) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
         }
         debug {
             // Disable minification for debug builds

@@ -29,12 +29,18 @@ class NewsService {
 
         return items.map((item) {
           final fields = item['fields'] ?? {};
+          final sources = fields['source'];
+          final firstSource = sources is List && sources.isNotEmpty
+              ? sources.first
+              : null;
           return {
             'id': item['id'],
             'title': fields['title'] ?? 'No Title',
             'url': item['href'],
             'date': fields['date']?['created'] ?? '',
-            'source': (fields['source'] as List?)?.first['name'] ?? 'ReliefWeb',
+            'source': firstSource is Map
+                ? (firstSource['name'] ?? 'ReliefWeb')
+                : 'ReliefWeb',
           };
         }).toList();
       } else {

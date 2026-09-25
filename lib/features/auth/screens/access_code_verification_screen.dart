@@ -46,7 +46,7 @@ class _AccessCodeVerificationScreenState
         context.go('/dashboard');
       } else {
         Fluttertoast.showToast(
-          msg: 'Not verified yet. Please click the link in your email.',
+          msg: 'Not verified yet. Please enter the code sent to your email.',
           backgroundColor: Colors.orange,
         );
       }
@@ -78,9 +78,10 @@ class _AccessCodeVerificationScreenState
       await context.read<AuthProvider>().resendVerificationLink();
       if (mounted) {
         Fluttertoast.showToast(
-          msg: 'Verification link resent successfully!',
+          msg: 'Verification code sent!',
           backgroundColor: Colors.green,
         );
+        _openCodeEntry();
       }
     } on AuthException catch (e) {
       if (mounted) {
@@ -98,6 +99,20 @@ class _AccessCodeVerificationScreenState
         setState(() => _resending = false);
       }
     }
+  }
+
+  /// Open the OTP entry screen for the signed-in user's email. It verifies
+  /// the code via AuthProvider.verifyOtpAndLogin and goes to /dashboard.
+  void _openCodeEntry() {
+    final email = context.read<AuthProvider>().currentUser?.email;
+    if (email == null || email.isEmpty) {
+      Fluttertoast.showToast(
+        msg: 'No email found for this account. Please log in again.',
+        backgroundColor: Colors.red,
+      );
+      return;
+    }
+    context.push('/verify-otp?phone=${Uri.encodeComponent(email)}');
   }
 
   Future<void> _handleLogout() async {
@@ -151,7 +166,7 @@ class _AccessCodeVerificationScreenState
               ),
               const SizedBox(height: 16),
               Text(
-                'We have sent a verification link to ${email ?? "your email"}.\nPlease click the link to activate your account.',
+                'We have sent a 6-digit verification code to ${email ?? "your email"}.\nEnter the code to activate your account.',
                 style: GoogleFonts.lexend(
                   fontSize: 16,
                   color: AppColors.textSecondary,
@@ -160,10 +175,13 @@ class _AccessCodeVerificationScreenState
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 40),
+              CustomButton(text: 'Enter Code', onPressed: _openCodeEntry),
+              const SizedBox(height: 16),
               CustomButton(
                 text: 'I have verified my account',
                 onPressed: _handleVerify, // Force enabled for debug
                 isLoading: _isLoading,
+                type: ButtonType.secondary,
               ),
               const SizedBox(height: 16),
               TextButton(

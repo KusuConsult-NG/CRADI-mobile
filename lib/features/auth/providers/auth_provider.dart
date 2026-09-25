@@ -7,6 +7,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:climate_app/core/services/firebase_service.dart';
+import 'package:climate_app/core/services/notification_service.dart';
 import 'package:climate_app/core/services/secure_storage_service.dart';
 import 'package:climate_app/core/services/session_manager.dart';
 import 'package:climate_app/core/services/rate_limiter.dart';
@@ -103,6 +104,10 @@ class AuthProvider extends ChangeNotifier {
       _currentUser = null;
       _isAuthenticated = false;
       _userRole = null;
+      // Load onboarding status here too, otherwise logged-out users are sent
+      // back to /onboarding on every cold start.
+      await _loadOnboardingStatus();
+      unawaited(NotificationService().onUserSignedOut());
       _isInitialized = true;
       notifyListeners();
       return;
@@ -127,9 +132,7 @@ class AuthProvider extends ChangeNotifier {
     }
 
     // Load onboarding status
-    final prefs = await SharedPreferences.getInstance();
-    _hasCompletedOnboarding =
-        prefs.getBool('has_completed_onboarding') ?? false;
+    await _loadOnboardingStatus();
 
     // Check biometric lock — but only on cold-start/app-resume.
     // If the user JUST logged in manually (_justLoggedIn == true), skip locking
@@ -148,11 +151,13 @@ class AuthProvider extends ChangeNotifier {
     // Always read from Firestore (source of truth) instead of relying
     // solely on the secure-storage cache, which becomes stale when an
     // admin changes a user's role remotely.
+    String? monitoringZone;
     try {
       final userDoc = await _firebase.getDocument(
         collectionId: AppConfig.usersCollection,
         documentId: user.uid,
       );
+      monitoringZone = userDoc['monitoringZone'] as String?;
 
       // ── Role: Firestore is authoritative ──
       final firestoreRole = userDoc['role'] as String?;
@@ -185,6 +190,25 @@ class AuthProvider extends ChangeNotifier {
           developer.log('Failed to sync verification: $e');
         }
       }
+
+      // Self-heal: an email change confirmed via verifyBeforeUpdateEmail
+      // updates Firebase Auth only — mirror it into the Firestore doc.
+      final authEmail = user.email;
+      final docEmail = userDoc['email'] as String?;
+      if (authEmail != null &&
+          authEmail.isNotEmpty &&
+          docEmail != null &&
+          authEmail.toLowerCase() != docEmail.toLowerCase()) {
+        try {
+          await _firebase.updateDocument(
+            collectionId: AppConfig.usersCollection,
+            documentId: user.uid,
+            data: {'email': authEmail},
+          );
+        } on Exception catch (e) {
+          developer.log('Failed to sync email: $e');
+        }
+      }
     } on Exception catch (e) {
       developer.log('Error fetching Firestore user doc: $e');
       // Fallback to cached role if Firestore fetch fails
@@ -197,9 +221,27 @@ class AuthProvider extends ChangeNotifier {
     // Start real-time listener so admin role changes take effect immediately
     _startUserDocListener(user.uid);
 
+    // NotificationService.initialize() runs at app start, usually before
+    // anyone is signed in, so persist the FCM token and (re)subscribe to
+    // zone topics now that we have a user. Fire-and-forget: must not block
+    // auth initialization.
+    unawaited(
+      NotificationService().onUserSignedIn(monitoringZone: monitoringZone),
+    );
+
     _phoneNumber = await _storage.getPhoneNumber();
     _isInitialized = true;
     notifyListeners();
+  }
+
+  Future<void> _loadOnboardingStatus() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      _hasCompletedOnboarding =
+          prefs.getBool('has_completed_onboarding') ?? false;
+    } on Exception catch (e) {
+      developer.log('Failed to load onboarding status: $e');
+    }
   }
 
   /// Listen to the user's Firestore document in real-time.
@@ -1013,6 +1055,41 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
+  /// Complete a password reset using the `oobCode` from a Firebase
+  /// password-reset action link. Does not require a signed-in user.
+  Future<void> confirmPasswordReset({
+    required String code,
+    required String newPassword,
+  }) async {
+    try {
+      _isLoading = true;
+      notifyListeners();
+      await FirebaseAuth.instance.confirmPasswordReset(
+        code: code,
+        newPassword: newPassword,
+      );
+    } on FirebaseAuthException catch (e) {
+      ErrorHandler.logError(e, context: 'AuthProvider.confirmPasswordReset');
+      switch (e.code) {
+        case 'expired-action-code':
+        case 'invalid-action-code':
+          throw AuthException(
+            'This reset link is invalid or has expired. Please request a new one.',
+          );
+        case 'weak-password':
+          throw AuthException('Password is too weak. Please choose another.');
+        default:
+          throw AuthException('Failed to reset password. Please try again.');
+      }
+    } on Exception catch (e) {
+      ErrorHandler.logError(e, context: 'AuthProvider.confirmPasswordReset');
+      throw AuthException('Failed to reset password. Please try again.');
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
   // ─────────────────────────── Biometrics ──────────────────────────────────
 
   Future<bool> authenticateWithBiometrics() async {
@@ -1320,6 +1397,7 @@ class AuthProvider extends ChangeNotifier {
   @override
   void dispose() {
     _authSub.cancel();
+    _userDocSub?.cancel();
     _sessionManager.dispose();
     super.dispose();
   }

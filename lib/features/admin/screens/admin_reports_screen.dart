@@ -41,14 +41,27 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
   }
 
   Future<void> _updateStatus(String reportId, String newStatus) async {
-    await FirebaseFirestore.instance
-        .collection('reports')
-        .doc(reportId)
-        .update({
-          'status': newStatus,
-          'updatedAt': FieldValue.serverTimestamp(),
-          'updatedBy': 'admin',
-        });
+    try {
+      await FirebaseFirestore.instance
+          .collection('reports')
+          .doc(reportId)
+          .update({
+            'status': newStatus,
+            'updatedAt': FieldValue.serverTimestamp(),
+            'updatedBy': 'admin',
+          });
+    } on FirebaseException catch (e) {
+      developer.log('Status update failed: $e', name: 'AdminReportsScreen');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Could not update report status.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      return;
+    }
     developer.log('Report $reportId → $newStatus', name: 'AdminReportsScreen');
     if (mounted) {
       ScaffoldMessenger.of(
@@ -325,6 +338,18 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
               builder: (context, snap) {
                 if (snap.connectionState == ConnectionState.waiting) {
                   return const Center(child: CircularProgressIndicator());
+                }
+                if (snap.hasError) {
+                  return Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Text(
+                        'Could not load reports. You may not have permission to view them.',
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.lexend(color: Colors.red),
+                      ),
+                    ),
+                  );
                 }
                 final allDocs = snap.data?.docs ?? [];
 

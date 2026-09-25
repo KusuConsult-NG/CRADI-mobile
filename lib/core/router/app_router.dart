@@ -103,6 +103,10 @@ GoRouter createRouter(BuildContext context) {
         '/pending-approval',
         '/verify-email',
         '/verify-otp',
+        // Must be public: the offline check above sends logged-out users here,
+        // and redirecting them on to /login would bounce straight back to
+        // /offline (GoRouter "redirect loop" on cold start without network).
+        '/offline',
         '/',
       ];
 
@@ -199,7 +203,13 @@ GoRouter createRouter(BuildContext context) {
         builder: (context, state) {
           final userId = state.uri.queryParameters['userId'] ?? '';
           final secret = state.uri.queryParameters['secret'] ?? '';
-          return ResetPasswordScreen(userId: userId, secret: secret);
+          // Firebase password-reset action links carry the code as `oobCode`.
+          final oobCode = state.uri.queryParameters['oobCode'] ?? '';
+          return ResetPasswordScreen(
+            userId: userId,
+            secret: secret,
+            oobCode: oobCode,
+          );
         },
       ),
       GoRoute(
@@ -388,8 +398,12 @@ GoRouter createRouter(BuildContext context) {
           ),
           GoRoute(
             path: 'detail',
+            // Deep links / state restoration arrive without `extra`.
+            redirect: (context, state) =>
+                state.extra is Map<String, dynamic> ? null : '/knowledge-base',
             builder: (context, state) {
-              final guide = state.extra as Map<String, dynamic>;
+              final guide = state.extra as Map<String, dynamic>?;
+              if (guide == null) return const KnowledgeBaseScreen();
               return KnowledgeDetailScreen(guide: guide);
             },
           ),
@@ -421,8 +435,12 @@ GoRouter createRouter(BuildContext context) {
       ),
       GoRoute(
         path: '/report-view',
+        // Deep links / state restoration arrive without `extra`.
+        redirect: (context, state) =>
+            state.extra is VerificationReport ? null : '/reports-status',
         builder: (context, state) {
-          final report = state.extra as VerificationReport;
+          final report = state.extra as VerificationReport?;
+          if (report == null) return const ReportsStatusScreen();
           return ReportViewScreen(report: report);
         },
       ),

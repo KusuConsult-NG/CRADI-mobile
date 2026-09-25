@@ -39,6 +39,8 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
     'ewm',
     'ewv',
     'ewr',
+    'ldp_coordinator',
+    'project_staff',
     'admin',
     'techSupport',
   ];
@@ -47,16 +49,38 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
     'ewm': 'EW Monitor',
     'ewv': 'EW Verifier',
     'ewr': 'EW Responder',
+    'ldp_coordinator': 'LDP Coordinator',
+    'project_staff': 'Project Staff',
     'admin': 'Admin',
     'techSupport': 'Tech Support',
   };
 
   // The stream is initialized once in initState because query doesn't depend on local filters
 
+  void _showWriteError(Object e) {
+    developer.log('User update failed: $e', name: 'AdminUsersScreen');
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          e is FirebaseException && e.code == 'permission-denied'
+              ? 'You do not have permission to change this user.'
+              : 'Update failed. Please try again.',
+        ),
+        backgroundColor: Colors.red,
+      ),
+    );
+  }
+
   Future<void> _setApproval(String uid, bool approved) async {
-    await FirebaseFirestore.instance.collection('users').doc(uid).update({
-      'isApproved': approved,
-    });
+    try {
+      await FirebaseFirestore.instance.collection('users').doc(uid).update({
+        'isApproved': approved,
+      });
+    } on FirebaseException catch (e) {
+      _showWriteError(e);
+      return;
+    }
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -111,10 +135,15 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
             onPressed: () async {
               Navigator.pop(ctx);
               if (selected != null && selected != currentRole) {
-                await FirebaseFirestore.instance
-                    .collection('users')
-                    .doc(uid)
-                    .update({'role': selected});
+                try {
+                  await FirebaseFirestore.instance
+                      .collection('users')
+                      .doc(uid)
+                      .update({'role': selected});
+                } on FirebaseException catch (e) {
+                  _showWriteError(e);
+                  return;
+                }
                 developer.log(
                   'Role changed: $uid → $selected',
                   name: 'AdminUsersScreen',
@@ -138,9 +167,14 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
   }
 
   Future<void> _setDisabled(String uid, bool disabled) async {
-    await FirebaseFirestore.instance.collection('users').doc(uid).update({
-      'isDisabled': disabled,
-    });
+    try {
+      await FirebaseFirestore.instance.collection('users').doc(uid).update({
+        'isDisabled': disabled,
+      });
+    } on FirebaseException catch (e) {
+      _showWriteError(e);
+      return;
+    }
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -259,6 +293,18 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
               builder: (context, snap) {
                 if (snap.connectionState == ConnectionState.waiting) {
                   return const Center(child: CircularProgressIndicator());
+                }
+                if (snap.hasError) {
+                  return Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Text(
+                        'Could not load users. You may not have permission to view them.',
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.lexend(color: Colors.red),
+                      ),
+                    ),
+                  );
                 }
                 final allDocs = snap.data?.docs ?? [];
                 final docs = allDocs.where((d) {

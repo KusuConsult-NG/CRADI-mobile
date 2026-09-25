@@ -204,6 +204,26 @@ class AuthorityContactsData {
     return authorities;
   }
 
+  /// Normalizes a severity value to 'low' | 'medium' | 'high' | 'critical'.
+  ///
+  /// Accepts the canonical lowercase values as well as legacy display labels
+  /// such as 'High Severity' or 'Critical Severity'. Unknown values map to
+  /// 'low'.
+  static String normalizeSeverity(String severity) {
+    final s = severity.trim().toLowerCase().replaceAll(
+      RegExp(r'\s*severity$'),
+      '',
+    );
+    switch (s) {
+      case 'critical':
+      case 'high':
+      case 'medium':
+        return s;
+      default:
+        return 'low';
+    }
+  }
+
   /// Get phone numbers for alert distribution
   static List<String> getAlertPhoneNumbers({
     required String lga,
@@ -211,14 +231,15 @@ class AuthorityContactsData {
     required String severity,
   }) {
     final authorities = getAuthoritiesForLGA(lga, state);
+    final level = normalizeSeverity(severity);
 
     // For critical alerts: notify everyone
-    if (severity.toLowerCase() == 'critical') {
+    if (level == 'critical') {
       return authorities.map((auth) => auth.phone).toList();
     }
 
     // For high alerts: notify priority 1 & 2
-    if (severity.toLowerCase() == 'high') {
+    if (level == 'high') {
       return authorities
           .where((auth) => auth.priority <= 2)
           .map((auth) => auth.phone)
