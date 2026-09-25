@@ -1,0 +1,4 @@
+# Minimal Supabase CLI config. Link to the hosted project with:
+#   supabase link --project-ref <project-ref>
+#   supabase db push
+project_id = "cradi-ewer"
