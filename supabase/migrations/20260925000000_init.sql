@@ -120,7 +120,9 @@ $$;
 create or replace function public.guard_profile_update()
 returns trigger language plpgsql as $$
 begin
-  if auth.uid() is not null and not public.is_admin() then
+  -- pg_trigger_depth() > 1: nested write from one of our own trusted triggers
+  -- (e.g. auth.users → profiles sync), not a direct client update.
+  if auth.uid() is not null and pg_trigger_depth() = 1 and not public.is_admin() then
     if new.role is distinct from old.role
        or new.is_approved is distinct from old.is_approved
        or new.is_disabled is distinct from old.is_disabled
@@ -314,7 +316,7 @@ create trigger reports_before_insert before insert on public.reports
 create or replace function public.guard_report_update()
 returns trigger language plpgsql as $$
 begin
-  if auth.uid() is not null and not public.is_staff() then
+  if auth.uid() is not null and pg_trigger_depth() = 1 and not public.is_staff() then
     if new.status is distinct from old.status
        or new.verification_count is distinct from old.verification_count
        or new.escalated is distinct from old.escalated
