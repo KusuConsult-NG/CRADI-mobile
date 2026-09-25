@@ -94,21 +94,22 @@ service cloud.firestore {
       // All valid app roles are permitted at creation time. Role elevation
       // (e.g., promoting a user to admin) must go through the update path,
       // which requires isAdmin() for sensitive fields.
+      // Field roles may be requested at sign-up (they stay inert until an admin
+      // approves the account); privileged roles can only be granted by an admin.
       allow create: if isAuthenticated() && request.auth.uid == uid
         && request.resource.data.role in [
           'user', 'ewm', 'ewv', 'ewr',
-          'ldp_coordinator', 'project_staff',
-          'techSupport', 'admin'
-        ];
+          'ldp_coordinator', 'project_staff'
+        ]
+        && request.resource.data.get('isApproved', false) == false
+        && request.resource.data.get('isDisabled', false) == false;
 
       // Users can update their own non-sensitive fields.
       // Admins can update anything, including role.
       allow update: if isAdmin()
-        || (isOwner(uid) && (
-          // Only allow specific field updates for non-admins
-          !request.resource.data.diff(resource.data).affectedKeys()
-            .hasAny(['role', 'isApproved'])
-        ));
+        || (isOwner(uid)
+          && !request.resource.data.diff(resource.data).affectedKeys()
+            .hasAny(['role', 'isApproved', 'isDisabled']));
 
       allow delete: if isAdmin();
     }

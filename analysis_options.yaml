@@ -29,7 +29,6 @@ linter:
     - use_rethrow_when_possible
     
     # Documentation
-    - package_api_docs
     
     # Null safety
     - unnecessary_null_checks
