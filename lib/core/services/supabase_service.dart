@@ -178,6 +178,9 @@ class SupabaseService {
           b = b.gt(f.column, v!);
         case FilterOp.lt:
           b = b.lt(f.column, v!);
+        case FilterOp.inList:
+          // PostgREST `in.(…)`; an empty list matches nothing.
+          b = b.inFilter(f.column, v is List ? v : [v]);
         case FilterOp.contains:
           b = b.contains(f.column, v is List ? v : [v]);
       }

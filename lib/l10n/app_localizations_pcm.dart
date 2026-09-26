@@ -114,7 +114,7 @@ class AppLocalizationsPcm extends AppLocalizations {
   String get lowMinorImpact => 'Low - E no too bad';
 
   @override
-  String get mediumNoticeableImpact => 'Medium - E dey show small';
+  String get mediumNoticeableImpact => 'Medium - You go fit notice am';
 
   @override
   String get highSignificantDamage => 'High - E don scatter plenty tins';
@@ -707,7 +707,7 @@ class AppLocalizationsPcm extends AppLocalizations {
   String get hazardDrought => 'Drought';
 
   @override
-  String get hazardWindstorms => 'Strong Breeze';
+  String get hazardWindstorms => 'Heavy Wind';
 
   @override
   String get hazardWildfires => 'Bush Fire';
@@ -716,7 +716,7 @@ class AppLocalizationsPcm extends AppLocalizations {
   String get hazardErosion => 'Erosion';
 
   @override
-  String get hazardPestOutbreak => 'Pests Don Scatter';
+  String get hazardPestOutbreak => 'Pest Don Plenty';
 
   @override
   String get hazardCropDisease => 'Crop Sickness';
@@ -737,7 +737,7 @@ class AppLocalizationsPcm extends AppLocalizations {
   String get hazardTitleDrought => 'Drought Warning';
 
   @override
-  String get hazardTitleWindstorms => 'Strong Breeze Alert';
+  String get hazardTitleWindstorms => 'Heavy Wind Alert';
 
   @override
   String get hazardTitleWildfires => 'Bush Fire Report';
@@ -746,7 +746,7 @@ class AppLocalizationsPcm extends AppLocalizations {
   String get hazardTitleErosion => 'Erosion Report';
 
   @override
-  String get hazardTitlePestOutbreak => 'Pests Don Scatter';
+  String get hazardTitlePestOutbreak => 'Pest Don Plenty';
 
   @override
   String get hazardTitleCropDisease => 'Crop Sickness';
@@ -3185,7 +3185,7 @@ class AppLocalizationsPcm extends AppLocalizations {
 
   @override
   String get onboardingWelcomeBody =>
-      'Early Warning and Emergency Response system wey be for your community';
+      'Early Warning and Emergency Response system for your community';
 
   @override
   String get onboardingMonitorTitle => 'Dey Watch Hazards As E Dey Happen';

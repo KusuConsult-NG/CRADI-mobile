@@ -175,6 +175,37 @@ KnowledgeCategory? knowledgeCategoryFor(Object? value) {
   return null;
 }
 
+/// Every `knowledge_base.hazard_type` spelling that belongs to [category]
+/// (a label, hazard type or alias), for a server-side `hazard_type in (…)`
+/// filter.
+///
+/// Stored rows are not normalised, so the list carries the hazard type, the
+/// label and every alias, each in the spelling defined here, all lower case
+/// and Title Case. Returns an empty list for 'All' / null / an unknown
+/// category (meaning: do not filter on the server).
+List<String> knowledgeCategoryQueryValues(String? category) {
+  if (category == null || category == allKnowledgeCategories) return const [];
+  final target = knowledgeCategoryFor(category);
+  final seeds = target == null
+      ? <String>[category]
+      : <String>[target.hazardType, target.label, ...target.aliases];
+  final values = <String>{};
+  for (final seed in seeds) {
+    final text = seed.trim();
+    if (text.isEmpty) continue;
+    values
+      ..add(text)
+      ..add(text.toLowerCase())
+      ..add(_titleCase(text));
+  }
+  return List<String>.unmodifiable(values);
+}
+
+String _titleCase(String text) => text
+    .split(' ')
+    .map((w) => w.isEmpty ? w : '${w[0].toUpperCase()}${w.substring(1)}')
+    .join(' ');
+
 /// Whether [guide] belongs to [category] (a label or hazard type). 'All'
 /// (or null) matches everything.
 bool guideMatchesCategory(Map<String, dynamic> guide, String? category) {

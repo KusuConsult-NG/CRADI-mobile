@@ -117,7 +117,7 @@ class AppLocalizationsYo extends AppLocalizations {
   String get mediumNoticeableImpact => 'Àárín - Ipa tó hàn gbangba';
 
   @override
-  String get highSignificantDamage => 'Ga - Ìbàjẹ́ ńlá';
+  String get highSignificantDamage => 'Gíga - Ìbàjẹ́ ńlá';
 
   @override
   String get criticalLifeThreatening => 'Ewu Ńlá - Ó léwu fún ẹ̀mí';
@@ -177,7 +177,7 @@ class AppLocalizationsYo extends AppLocalizations {
   String get syncing => 'Ó ń múdọ́gba...';
 
   @override
-  String get offline => 'Kò sí lórí ayélujára';
+  String get offline => 'Láìsí Ayélujára';
 
   @override
   String get offlineModeReady => 'Ipò Àìsí-Ayélujára Ti Ṣetán: ';
@@ -406,10 +406,10 @@ class AppLocalizationsYo extends AppLocalizations {
   String get severityMedShort => 'Àárín';
 
   @override
-  String get severityHighShort => 'Ga';
+  String get severityHighShort => 'Gíga';
 
   @override
-  String get severityCritShort => 'Pàtàkì';
+  String get severityCritShort => 'Léwu';
 
   @override
   String get dateTimeLabel => 'Ọjọ́ & Àkókò';
@@ -1290,10 +1290,10 @@ class AppLocalizationsYo extends AppLocalizations {
   String get severityMedium => 'Àárín';
 
   @override
-  String get severityHigh => 'Ga';
+  String get severityHigh => 'Gíga';
 
   @override
-  String get severityCritical => 'Pàtàkì Gan-an';
+  String get severityCritical => 'Léwu Gan-an';
 
   @override
   String get alertSeverityUnspecified => 'A kò sọ bí ó ti le tó';

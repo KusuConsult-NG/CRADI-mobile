@@ -204,7 +204,7 @@ class AppLocalizationsHa extends AppLocalizations {
   String get syncStatus => 'MATSAYIN DAIDAITAWA';
 
   @override
-  String get onlineJustNow => 'A Yanar Gizo • Yanzu';
+  String get onlineJustNow => 'Kan Layi • Yanzu';
 
   @override
   String get active => 'mai aiki';
@@ -462,7 +462,7 @@ class AppLocalizationsHa extends AppLocalizations {
   String get gpsGood => 'GPS MAI KYAU';
 
   @override
-  String get gpsWeak => 'RASHIN ƘARFIN GPS';
+  String get gpsWeak => 'GPS MARAR ƘARFI';
 
   @override
   String get couldNotFindLocation => 'An kasa samun wuri a kan taswira';
@@ -551,10 +551,10 @@ class AppLocalizationsHa extends AppLocalizations {
   String get locationDetailsTitle => 'Bayanan Wuri';
 
   @override
-  String get latitudeLabel => 'Layin Faɗi';
+  String get latitudeLabel => 'Layin Kwance';
 
   @override
-  String get longitudeLabel => 'Layin Tsawo';
+  String get longitudeLabel => 'Layin Tsaye';
 
   @override
   String get accuracyLabel => 'Daidaito';
@@ -1068,7 +1068,7 @@ class AppLocalizationsHa extends AppLocalizations {
   String get biometricTypeIris => 'Ƙwayar Ido';
 
   @override
-  String get biometricTypeGeneric => 'Tantance Jiki';
+  String get biometricTypeGeneric => 'Tantancewar Jiki';
 
   @override
   String get authErrorEmailRegistered =>

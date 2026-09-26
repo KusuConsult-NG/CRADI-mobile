@@ -7,7 +7,11 @@ import 'dart:developer' as developer;
 import 'package:climate_app/core/l10n/l10n.dart';
 
 /// Loads the knowledge_base rows (app-shaped maps, newest first).
-typedef GuideRowsFetcher = Future<List<Map<String, dynamic>>> Function();
+///
+/// [category] is a category label / hazard type, or null (and
+/// [allKnowledgeCategories]) for the unfiltered list.
+typedef GuideRowsFetcher =
+    Future<List<Map<String, dynamic>>> Function({String? category});
 
 /// Guides are admin-managed in the `knowledge_base` table. The last
 /// successful unfiltered list is cached on the device (Hive) and served,
@@ -25,11 +29,28 @@ class KnowledgeProvider extends ChangeNotifier {
   final Future<void> Function(List<Map<String, dynamic>> guides) _writeCache;
   final List<Map<String, dynamic>>? Function() _readCache;
 
-  static Future<List<Map<String, dynamic>>> _fetchFromSupabase() {
+  /// How many guides a single fetch loads. The knowledge base is a
+  /// hand-curated admin table (tens of guides), so one page is enough and
+  /// the reader screens stay a plain list; the ceiling is generous so the
+  /// unfiltered 'All' list does not silently truncate as it grows.
+  static const int fetchLimit = 500;
+
+  static Future<List<Map<String, dynamic>>> _fetchFromSupabase({
+    String? category,
+  }) {
+    // Server-side category filter: `hazard_type in (…)` over every spelling
+    // of the category (hazard type, label and aliases, in each case), so a
+    // category tab sees every one of its guides and not just the ones in
+    // the newest [fetchLimit] rows. Unknown / 'All' categories fall back to
+    // the unfiltered list.
+    final values = knowledgeCategoryQueryValues(category);
     return SupabaseService().listDocuments(
       collectionId: AppConfig.knowledgeBaseCollection,
-      queries: <QueryFilter>[FQuery.orderDesc('updatedAt')],
-      limitCount: 100,
+      queries: <QueryFilter>[
+        if (values.isNotEmpty) FQuery.isIn('hazardType', values),
+        FQuery.orderDesc('updatedAt'),
+      ],
+      limitCount: fetchLimit,
     );
   }
 
@@ -72,10 +93,11 @@ class KnowledgeProvider extends ChangeNotifier {
 
   /// Loads the guides of [category] (default: all).
   ///
-  /// Category tabs are filtered on the device with [guideMatchesCategory]
-  /// (hazard type, label and aliases, any case), exactly like the offline
-  /// fallback: rows stored with a variant spelling (e.g. 'Flooding') would
-  /// be missed by an exact `hazard_type` filter on the server.
+  /// A category tab is filtered on the server by `hazard_type in (…)` over
+  /// every spelling of the category (see [knowledgeCategoryQueryValues]), so
+  /// a row stored as e.g. 'Flooding' is still found. The result is narrowed
+  /// once more with [guideMatchesCategory], which is also what the offline
+  /// cache (always the unfiltered list) is filtered with.
   Future<void> fetchGuides({String? category}) async {
     final key = _key(category);
     final requestId = (_requestIds[key] ?? 0) + 1;
@@ -87,7 +109,7 @@ class KnowledgeProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final docs = await _fetchRows();
+      final docs = await _fetchRows(category: key);
       if (!isLatest()) return;
       final result = docs.map(_fromRow).toList();
       // Only the unfiltered list is cached (so the offline fallback can

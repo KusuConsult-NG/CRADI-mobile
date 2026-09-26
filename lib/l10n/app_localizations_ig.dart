@@ -409,7 +409,7 @@ class AppLocalizationsIg extends AppLocalizations {
   String get severityHighShort => 'Elu';
 
   @override
-  String get severityCritShort => 'Oke';
+  String get severityCritShort => 'Egwu';
 
   @override
   String get dateTimeLabel => 'Ụbọchị & Oge';
@@ -1452,7 +1452,7 @@ class AppLocalizationsIg extends AppLocalizations {
   String get myReportsTabActive => 'Na-arụ Ọrụ';
 
   @override
-  String get myReportsTabHistory => 'Akụkọ Mgbe Ochie';
+  String get myReportsTabHistory => 'Gara Aga';
 
   @override
   String get myReportsSignIn => 'Biko banye ka ị hụ akụkọ gị.';

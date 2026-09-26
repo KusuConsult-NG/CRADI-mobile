@@ -5,5 +5,8 @@
 library;
 
 // Bumped for the Supabase / OneSignal migration (processors changed).
-// TODO(legal): confirm the storage region wording (privacyNoticeText) before release.
+// Storage region: the notice deliberately says data "may be transferred to and
+// stored on servers outside Nigeria" rather than naming a region, so it stays
+// accurate if the Supabase project moves. Naming a region would mean bumping
+// this version and re-consenting every user.
 const String kNdpaPolicyVersion = '1.1.0';

@@ -102,7 +102,7 @@ class SupabaseSchema {
     },
     'authorities': {
       'id', 'name', 'organization', 'phone', 'coverage_lga', //
-      'created_at', 'updated_at',
+      'coverage_state', 'created_at', 'updated_at',
     },
     'trusted_devices': {
       'id', 'user_id', 'device_fingerprint', 'device_name', 'trusted', //
@@ -230,7 +230,7 @@ DateTime? parseTimestamp(Object? value) {
 
 /// [neq] follows SQL (`NULL <> x` is not true, so NULL rows are excluded);
 /// [distinctFrom] is `IS DISTINCT FROM` (NULL rows are included).
-enum FilterOp { eq, neq, distinctFrom, gt, lt, contains }
+enum FilterOp { eq, neq, distinctFrom, gt, lt, contains, inList }
 
 /// A single column predicate, already resolved to a column name.
 class ColumnFilter {
@@ -255,6 +255,10 @@ class ColumnFilter {
         return actual != null && _compare(actual, value) > 0;
       case FilterOp.lt:
         return actual != null && _compare(actual, value) < 0;
+      case FilterOp.inList:
+        final inValue = value;
+        final List<Object?> options = inValue is List ? inValue : [inValue];
+        return options.any((o) => _compare(actual, o) == 0);
       case FilterOp.contains:
         if (actual is List) {
           final v = value;
@@ -427,6 +431,11 @@ class FQuery {
       WhereFilter(field, FilterOp.lt, value);
   static WhereFilter contains(String field, Object? value) =>
       WhereFilter(field, FilterOp.contains, value);
+
+  /// `field IN (values)`: matches rows whose field equals any of [values].
+  /// An empty list matches nothing.
+  static WhereFilter isIn(String field, List<Object?> values) =>
+      WhereFilter(field, FilterOp.inList, List<Object?>.unmodifiable(values));
   static OrderByFilter orderDesc(String field) =>
       OrderByFilter(field, descending: true);
   static OrderByFilter orderAsc(String field) => OrderByFilter(field);

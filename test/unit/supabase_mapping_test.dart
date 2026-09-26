@@ -182,6 +182,49 @@ void main() {
     });
   });
 
+  group('FQuery.isIn', () {
+    test('resolves to an in-list filter on the mapped column', () {
+      final plan = QueryPlan.build('knowledge_base', [
+        FQuery.isIn('hazardType', const ['flood', 'Flood', 'flooding']),
+      ]);
+      expect(plan.table, 'knowledge_base');
+      expect(plan.filters, hasLength(1));
+      final f = plan.filters.single;
+      expect(f.column, 'hazard_type');
+      expect(f.op, FilterOp.inList);
+      expect(f.value, ['flood', 'Flood', 'flooding']);
+    });
+
+    test('matches a row whose value is any of the options, case sensitive', () {
+      final f = QueryPlan.build('knowledge_base', [
+        FQuery.isIn('hazardType', const ['flood', 'Flooding']),
+      ]).filters.single;
+      expect(f.matches({'hazard_type': 'flood'}), isTrue);
+      expect(f.matches({'hazard_type': 'Flooding'}), isTrue);
+      expect(f.matches({'hazard_type': 'FLOODING'}), isFalse);
+      expect(f.matches({'hazard_type': 'fire'}), isFalse);
+      expect(f.matches(const {}), isFalse);
+    });
+
+    test('an empty list matches nothing', () {
+      final f = QueryPlan.build('knowledge_base', [
+        FQuery.isIn('hazardType', const []),
+      ]).filters.single;
+      expect(f.matches({'hazard_type': 'flood'}), isFalse);
+    });
+
+    test('is never a stream server filter, and blocks a server limit', () {
+      final plan = QueryPlan.build('knowledge_base', [
+        FQuery.isIn('hazardType', const ['flood']),
+        FQuery.orderDesc('updatedAt'),
+        FQuery.limit(50),
+      ]);
+      expect(plan.streamServerFilter, isNull);
+      expect(plan.streamServerLimit, isNull);
+      expect(plan.limit, 50);
+    });
+  });
+
   group('parseTimestamp', () {
     test('parses ISO strings to local time and tolerates junk', () {
       final t = parseTimestamp('2026-09-25T10:30:00+00:00');

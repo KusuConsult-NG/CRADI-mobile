@@ -44,7 +44,7 @@ void main() {
 
     test('online: rows are shown and the unfiltered list is cached', () async {
       final p = provider(
-        () async => [
+        ({String? category}) async => [
           row('1', 'flood', imageUrl: 'https://cdn.example.org/a.jpg'),
           row('2', 'fire'),
         ],
@@ -58,7 +58,7 @@ void main() {
     });
 
     test('no stock image is substituted for a guide without one', () async {
-      final p = provider(() async => [row('1', 'flood', imageUrl: '')]);
+      final p = provider(({String? category}) async => [row('1', 'flood', imageUrl: '')]);
       await p.fetchGuides();
       final guide = p.guides.single;
       expect(guide['imageUrl'], isNull);
@@ -71,7 +71,7 @@ void main() {
 
     test('an empty table is an empty list, and is cached', () async {
       cache = [row('old', 'flood')];
-      final p = provider(() async => []);
+      final p = provider(({String? category}) async => []);
       await p.fetchGuides();
       expect(p.error, isNull);
       expect(p.guides, isEmpty);
@@ -80,10 +80,48 @@ void main() {
     });
 
     test('category lists are not cached', () async {
-      final p = provider(() async => [row('1', 'flood')]);
+      final p = provider(({String? category}) async => [row('1', 'flood')]);
       await p.fetchGuides(category: 'Flood');
       expect(p.guidesFor('Flood'), hasLength(1));
       expect(cacheWrites, 0);
+    });
+
+    test('a category tab is filtered on the server by every spelling', () async {
+      final asked = <String?>[];
+      final p = provider(({String? category}) async {
+        asked.add(category);
+        return [row('1', 'flood')];
+      });
+
+      await p.fetchGuides();
+      await p.fetchGuides(category: 'flood');
+      await p.fetchGuides(category: 'Flood');
+      // The normalised category label reaches the fetcher, so the query is
+      // the same however the tab names the category.
+      expect(asked, [allKnowledgeCategories, 'Flood', 'Flood']);
+
+      final values = knowledgeCategoryQueryValues('Flood');
+      expect(values, containsAll(['flood', 'Flood', 'flooding', 'Flooding']));
+      expect(values, isNot(contains('fire')));
+      // Every stored spelling the offline filter accepts is queried for.
+      for (final v in values) {
+        expect(
+          guideMatchesCategory({'hazardType': v}, 'Flood'),
+          isTrue,
+          reason: v,
+        );
+      }
+    });
+
+    test('knowledgeCategoryQueryValues: no server filter for All or an '
+        'unknown category', () {
+      expect(knowledgeCategoryQueryValues(null), isEmpty);
+      expect(knowledgeCategoryQueryValues(allKnowledgeCategories), isEmpty);
+      expect(knowledgeCategoryQueryValues('Tsunami'), ['Tsunami', 'tsunami']);
+      expect(
+        knowledgeCategoryQueryValues('Extreme Heat'),
+        containsAll(['extreme_heat', 'Extreme Heat', 'heatwave', 'Heatwave']),
+      );
     });
 
     test('online category tabs match hazard type, label and aliases like '
@@ -95,7 +133,7 @@ void main() {
         row('4', 'fire'),
         {...row('5', 'FLOODS'), 'category': 'floods'},
       ];
-      final p = provider(() async => rows);
+      final p = provider(({String? category}) async => rows);
       await p.fetchGuides(category: 'Flood');
       expect(p.guidesFor('Flood').map((g) => g['id']), ['1', '2', '3', '5']);
       await p.fetchGuides(category: 'fire');
@@ -103,7 +141,7 @@ void main() {
 
       // Same result as the offline (cached) filter.
       await p.fetchGuides();
-      final offline = provider(() async => throw Exception('offline'));
+      final offline = provider(({String? category}) async => throw Exception('offline'));
       await offline.fetchGuides(category: 'Flood');
       expect(
         offline.guidesFor('Flood').map((g) => g['id']),
@@ -116,7 +154,7 @@ void main() {
       final first = Completer<List<Map<String, dynamic>>>();
       final second = Completer<List<Map<String, dynamic>>>();
       final pending = [first, second];
-      final p = provider(() => pending.removeAt(0).future);
+      final p = provider(({String? category}) => pending.removeAt(0).future);
 
       final a = p.fetchGuides(category: 'Flood');
       final b = p.fetchGuides(category: 'Flood');
@@ -141,7 +179,7 @@ void main() {
         final first = Completer<List<Map<String, dynamic>>>();
         final second = Completer<List<Map<String, dynamic>>>();
         final pending = [first, second];
-        final p = provider(() => pending.removeAt(0).future);
+        final p = provider(({String? category}) => pending.removeAt(0).future);
 
         final a = p.fetchGuides();
         final b = p.fetchGuides();
@@ -162,7 +200,7 @@ void main() {
         {...row('1', 'flood'), 'id': '1', 'isOffline': false},
         {...row('2', 'fire'), 'id': '2', 'isOffline': false},
       ];
-      final p = provider(() async => throw Exception('offline'));
+      final p = provider(({String? category}) async => throw Exception('offline'));
       await p.fetchGuides();
       expect(p.error, isNull);
       expect(p.guides.map((g) => g['id']), ['1', '2']);
@@ -175,14 +213,14 @@ void main() {
 
     test('fetch error with an empty cache: empty list, no error', () async {
       cache = [];
-      final p = provider(() async => throw Exception('offline'));
+      final p = provider(({String? category}) async => throw Exception('offline'));
       await p.fetchGuides();
       expect(p.error, isNull);
       expect(p.guides, isEmpty);
     });
 
     test('fetch error and no cache: load error, nothing bundled', () async {
-      final p = provider(() async => throw Exception('offline'));
+      final p = provider(({String? category}) async => throw Exception('offline'));
       await p.fetchGuides();
       expect(p.guides, isEmpty);
       expect(p.error, isNotNull);
@@ -191,7 +229,7 @@ void main() {
 
     test('an unreadable cache counts as no cache', () async {
       final p = KnowledgeProvider(
-        fetchRows: () async => throw Exception('offline'),
+        fetchRows: ({String? category}) async => throw Exception('offline'),
         writeCache: (_) async {},
         readCache: () => throw Exception('Hive not initialized'),
       );
