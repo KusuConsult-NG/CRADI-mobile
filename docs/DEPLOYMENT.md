@@ -324,6 +324,30 @@ directory `backend`**.
    One replica is enough. Several are safe (outbox rows are claimed with
    `FOR UPDATE SKIP LOCKED`, every push carries an idempotency key).
 
+### The worker must stay running
+
+This service is not a website that can sleep between visitors. It polls for new
+reports every `WORKER_POLL_MS` (5 s) and for overdue escalations every
+`ESCALATION_POLL_MS` (60 s). If the container is suspended, evicted, or stopped
+because a trial credit ran out, the system fails **silently and in the worst
+direction**: the app keeps accepting reports and the admin panel keeps working,
+but no verification request, approval broadcast, authority SMS or escalation
+ever goes out. Nobody sees an error — the queue simply grows.
+
+Two consequences worth planning for:
+
+* **Check the plan, not just the deploy.** A free or trial tier that sleeps idle
+  services, or that expires after a credit, will stop the worker without
+  stopping anything else. Confirm the service is set to run continuously.
+* **Watch `/health` from outside Railway.** Point any uptime monitor at
+  `GET /health` (the free tier of any of them is enough) and alert on a non-200
+  or on `workers.*.stale = true`. That turns a silent failure into a message.
+
+Nothing is lost while the worker is down — `notification_outbox` rows stay
+queued and are delivered when it comes back, subject to their retry backoff
+(8 attempts). But an early-warning notification delivered hours late is not an
+early warning. Treat a stopped worker as an outage.
+
 ---
 
 ## 5. Railway — admin panel service
