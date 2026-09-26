@@ -10,6 +10,7 @@ import { sanitizeTag } from './tags.js';
 import { notifyEscalationRecipients } from './escalations.js';
 import {
   DISPUTE_REASON,
+  disputeReasonFor,
   adminAlertNotification,
   disputeEscalationNotification,
   alertTarget,
@@ -50,7 +51,8 @@ export function createHandlers({ repo, push, authoritySms = null, logger = defau
     },
 
     async report_status_changed(event) {
-      const { report_id: reportId, old_status: oldStatus, new_status: newStatus, reason } = event.payload ?? {};
+      // payload.reason (rejection reason) is intentionally not pushed; see notifications.js.
+      const { report_id: reportId, old_status: oldStatus, new_status: newStatus } = event.payload ?? {};
       if (!reportId || !newStatus) throw new PermanentEventError('invalid payload: report_id/new_status missing');
       const report = await repo.getReport(reportId);
       if (!report) return 'report not found';
@@ -59,7 +61,7 @@ export function createHandlers({ repo, push, authoritySms = null, logger = defau
       if (report.status !== newStatus) return `stale: report now ${report.status}`;
 
       if (report.user_id) {
-        await push.sendToUsers([report.user_id], reporterStatusNotification(report, newStatus, reason), {
+        await push.sendToUsers([report.user_id], reporterStatusNotification(report, newStatus), {
           key: `outbox:${event.id}:reporter`,
         });
       }
@@ -97,12 +99,14 @@ export function createHandlers({ repo, push, authoritySms = null, logger = defau
       if (!report) return 'report not found';
       if (report.status !== 'pending') return `report no longer pending (${report.status})`;
 
-      // A retry of this handler finds the report already escalated by it; carry
-      // on so the (idempotent) push is re-attempted. Any other escalated report
-      // (timeout, or an earlier dispute) has already been notified.
-      const resuming = (event.attempts ?? 1) > 1 && report.escalated && report.escalation_reason === DISPUTE_REASON;
+      // A retry of this handler finds the report already escalated by this very
+      // event (its id is in escalation_reason); carry on so the (idempotent)
+      // push is re-attempted. Any other escalation (timeout, or another dispute
+      // event) has already been notified.
+      const ownReason = disputeReasonFor(event.id);
+      const resuming = report.escalated && report.escalation_reason === ownReason;
       if (report.escalated && !resuming) return 'report already escalated';
-      if (!report.escalated && !(await repo.markReportEscalated(report.id, DISPUTE_REASON))) {
+      if (!report.escalated && !(await repo.markReportEscalated(report.id, ownReason))) {
         return 'report already escalated';
       }
       // Stop the timeout cron from escalating (and notifying) it a second time.

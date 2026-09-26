@@ -68,7 +68,11 @@ unit-tested in [`test/transform.test.js`](test/transform.test.js).
 6. In Supabase Auth, **enable the Phone provider** (with an SMS provider) so migrated phone users
    can sign in with OTP. **Configure custom SMTP** before `--send-password-resets`, because the built-in
    mailer allows only a few emails per hour. Add your reset landing page to *Redirect URLs*.
-7. Ideally, **freeze writes to Firebase** during the final run: ship the Supabase app build, or put the
+7. **Disable new sign-ups in Supabase** (Authentication → Sign In / Providers → turn off
+   "Allow new users to sign up") for the whole migration window, and re-enable them after cut-over.
+   Otherwise someone can register a migrated user's email or phone first; the script refuses to link
+   such accounts (see *Users*) and stops, and you have to resolve each conflict by hand.
+8. Ideally, **freeze writes to Firebase** during the final run: ship the Supabase app build, or put the
    old app into maintenance. Otherwise, re-run the script right before cut-over to pick up late changes.
 
 ## Steps
@@ -134,10 +138,18 @@ then **updates the profile** with the real values: role, is_approved, is_disable
 biometrics_enabled, monitoring_zone, profile_image_url, registration_code, last_login_at,
 created_at and legacy_firebase_uid.
 Users whose Firestore `isDisabled` is true (or who are disabled in Firebase Auth) are also **banned**
-(`ban_duration: '876000h'`).
+(`ban_duration: '876000h'`); every other migrated user has any ban **lifted** (`ban_duration: 'none'`),
+so the Auth ban always matches `is_disabled`.
 
-If an email or phone number is already registered in Supabase (a re-run, or a tester account),
-the script reuses that user. If two Firebase accounts share an email, both map to one Supabase
+Every account the script creates carries `app_metadata.migrated_from_firebase = true` (plus
+`firebase_uid`). If an email or phone number is already registered in Supabase, the script only
+reuses that account when it carries this marker (a re-run with a lost state file) **or** the matched
+email/phone is **confirmed** and the account was **created before the migration started** (the
+first `--apply` run recorded in the state file). Anything else — e.g. an unconfirmed sign-up, or
+one made during the migration window — could be someone claiming a migrated user's address, so the
+run **stops before creating any user** and lists each conflict for a manual decision (delete the
+Supabase account if it is not the same person, or have the owner confirm it, then re-run). A dry
+run with Supabase configured lists the same conflicts as `CONFLICT` warnings. If two Firebase accounts share an email, both map to one Supabase
 user; the first profile is kept and the other is listed as a warning. Firebase accounts with no
 email and no phone are skipped.
 
@@ -165,8 +177,10 @@ email and no phone are skipped.
 3. **Report finalize.** Two things can change a report during import. The verifications trigger
    recomputes `verification_count` and can move a report to `verified`. The reports insert trigger
    rewrites `escalation_scheduled_at` and `escalation_status`. After verifications are imported, each
-   report's workflow columns (status, verification_count, verified_at, auto_validated,
-   approved/rejected/escalated fields) are set back to the Firestore values with plain `UPDATE`s.
+   report's workflow columns (status, verified_at, auto_validated, approved/rejected/escalated
+   fields) are set back to the Firestore values with plain `UPDATE`s. `verification_count` is not
+   taken from Firestore: it is then recounted from the imported confirmed verifications, the same
+   way the database triggers maintain it.
 4. After **each** writing step (reports, alerts, verifications, report finalize) and once more at the
    end (in a `finally` block, so this also runs after a failure):
    - every not-yet-processed `notification_outbox` row with `id > baseline` **whose payload

@@ -67,11 +67,11 @@ test('report_status_changed -> approved notifies reporter and broadcasts to lga 
   assert.equal(push.calls[1].kind, 'tag');
   assert.equal(push.calls[1].tagKey, 'lga');
   assert.equal(push.calls[1].tagValue, 'port_harcourt');
-  assert.equal(push.calls[1].n.title, '🚨 CRITICAL Alert: Flood');
-  assert.equal(push.calls[1].n.data.type, 'validated_alert');
+  assert.equal(push.calls[1].n.title, '🚨 Verified Hazard Alert');
+  assert.deepEqual(push.calls[1].n.data, { type: 'validated_alert', report_id: 'r1' });
 });
 
-test('report_status_changed -> rejected includes reason, no broadcast', async () => {
+test('report_status_changed -> rejected omits the reason from the push, no broadcast', async () => {
   const { repo, push, handlers } = setup({
     reports: [{ ...report, status: 'rejected' }],
     events: [
@@ -84,7 +84,9 @@ test('report_status_changed -> rejected includes reason, no broadcast', async ()
   });
   await runOutboxBatch({ repo, handlers, logger });
   assert.equal(push.calls.length, 1);
-  assert.match(push.calls[0].n.body, /Reason: Duplicate report/);
+  assert.equal(push.calls[0].n.body, '❌ Your report was rejected — open the app for details.');
+  assert.doesNotMatch(JSON.stringify(push.calls[0].n), /Duplicate/);
+  assert.deepEqual(push.calls[0].n.data, { type: 'report_status', report_id: 'r1', status: 'rejected' });
 });
 
 test('report_status_changed is skipped when the report has since changed status', async () => {

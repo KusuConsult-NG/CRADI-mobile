@@ -3,7 +3,12 @@ import assert from 'node:assert/strict';
 import {
   alertTarget,
   escalationQueries,
+  adminAlertNotification,
+  clampText,
+  disputeEscalationNotification,
+  escalationNotification,
   reporterStatusMessage,
+  reporterStatusNotification,
   selectRecipientIds,
   shouldBroadcastApproval,
   validatedAlertNotification,
@@ -45,8 +50,7 @@ test('selectRecipientIds dedupes, drops excluded, unapproved and disabled', () =
 test('reporter status messages', () => {
   assert.match(reporterStatusMessage('verified'), /verified/);
   assert.match(reporterStatusMessage('approved'), /approved/);
-  assert.equal(reporterStatusMessage('rejected', 'Duplicate'), '❌ Your report was not validated. Reason: Duplicate');
-  assert.equal(reporterStatusMessage('rejected'), '❌ Your report was not validated.');
+  assert.equal(reporterStatusMessage('rejected'), '❌ Your report was rejected — open the app for details.');
   assert.match(reporterStatusMessage('pending'), /awaiting/);
 });
 
@@ -61,12 +65,55 @@ test('broadcast only on transition into approved', () => {
 test('notification texts', () => {
   const v = verificationRequestNotification(report);
   assert.equal(v.title, '📋 Verification Request');
-  assert.equal(v.body, 'A hazard report in Ward 1, Ikeja needs your verification.');
-  assert.deepEqual({ type: v.data.type, report_id: v.data.report_id }, { type: 'verification_request', report_id: 'r1' });
+  assert.equal(v.body, 'A report in your area needs verification. Open the app for details.');
+  assert.deepEqual(v.data, { type: 'verification_request', report_id: 'r1' });
 
   const a = validatedAlertNotification(report);
-  assert.equal(a.title, '🚨 HIGH Alert: Flood');
-  assert.equal(a.data.type, 'validated_alert');
+  assert.equal(a.title, '🚨 Verified Hazard Alert');
+  assert.deepEqual(a.data, { type: 'validated_alert', report_id: 'r1' });
+});
+
+test('report pushes carry no location names, hazard text, description or reasons', () => {
+  const sensitive = {
+    ...report,
+    ward: 'Secret Ward',
+    lga: 'Secret LGA',
+    hazard_type: 'Other: armed men at Mr X house',
+    description: 'private details',
+    rejection_reason: 'reporter lied',
+  };
+  const all = [
+    verificationRequestNotification(sensitive),
+    reporterStatusNotification(sensitive, 'rejected', 'reporter lied'),
+    reporterStatusNotification(sensitive, 'weird<status>'),
+    validatedAlertNotification(sensitive),
+    escalationNotification(sensitive),
+    disputeEscalationNotification(sensitive),
+  ];
+  for (const n of all) {
+    const text = JSON.stringify(n);
+    for (const secret of ['Secret', 'armed', 'private', 'lied', 'Other', 'weird']) {
+      assert.doesNotMatch(text, new RegExp(secret), `${n.data.type} leaks ${secret}`);
+    }
+    assert.equal(n.data.report_id, 'r1');
+  }
+});
+
+test('admin alerts are sent but normalised and capped', () => {
+  const n = adminAlertNotification({
+    id: 'a1',
+    title: `  Flood\n\twarning ${'x'.repeat(200)}`,
+    message: 'm'.repeat(1000),
+    severity: 'critical',
+  });
+  assert.ok(n.title.length <= 80);
+  assert.ok(n.title.startsWith('Flood warning x'));
+  assert.ok(n.title.endsWith('…'));
+  assert.equal(n.body.length, 240);
+  assert.deepEqual(n.data, { type: 'admin_alert', alert_id: 'a1', severity: 'critical' });
+  assert.equal(adminAlertNotification({ id: 'a2', title: 'T', message: '', severity: 'bogus' }).body, 'T');
+  assert.equal(adminAlertNotification({ id: 'a2', title: 'T', severity: 'bogus' }).data.severity, null);
+  assert.equal(clampText('abc', 5), 'abc');
 });
 
 test('alertTarget: All -> everyone, otherwise sanitised lga tag', () => {

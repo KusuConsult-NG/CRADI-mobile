@@ -115,12 +115,31 @@ curl localhost:8080/health
 
   | type | fields |
   | --- | --- |
-  | `verification_request` | `report_id`, `ward`, `lga` |
+  | `verification_request` | `report_id` |
   | `report_status` | `report_id`, `status` |
-  | `validated_alert` | `report_id`, `hazard_type`, `severity`, `lga`, `ward` |
+  | `validated_alert` | `report_id` |
   | `admin_alert` | `alert_id`, `severity` |
-  | `escalation_auto` | `report_id`, `lga` |
-  | `escalation` | `report_id`, `lga` (report disputed by a peer) |
+  | `escalation_auto` | `report_id` |
+  | `escalation` | `report_id` (report disputed by a peer) |
+
+### Push privacy and Identity Verification
+
+Without OneSignal **Identity Verification**, any device can call
+`OneSignal.login(<someone else's uuid>)` or set any `lga` tag and receive that
+user's / area's pushes. Push titles, bodies and `data` are therefore generic:
+they carry only the event `type` and ids (`report_id` / `alert_id`, plus the
+report `status` enum) — never ward / LGA names, hazard free text, report
+descriptions or rejection reasons. The app loads the details after sign-in,
+through RLS. Admin alerts (`alert_created`) are intentionally public
+broadcasts: their title/message are sent, but whitespace-normalised and capped
+(80 / 240 characters).
+
+**Production:** enable Identity Verification in the OneSignal dashboard
+(Settings → Keys & IDs → Identity Verification). **Follow-up required:** once
+enabled, the app must pass a server-issued JWT for the external id on
+`OneSignal.login` (a small endpoint here, signed with the OneSignal identity
+key, would issue it for the caller's Supabase session). Until then, keep push
+content generic as above.
 
 ## Resend setup
 
@@ -158,22 +177,35 @@ events come back later on their own. For each event:
 Handlers:
 
 - **report_created**: approved, enabled `ewm` profiles in the same ward **and**
-  LGA as the report (excluding the reporter, max 50) get "📋 Verification Request".
+  LGA as the report (excluding the reporter, max 50) get "📋 Verification Request"
+  ("A report in your area needs verification").
 - **report_status_changed**: the reporter gets a status update (verified /
-  approved / rejected with reason / pending). On a transition **into**
-  `approved`, users tagged with the report's LGA get "🚨 {SEVERITY} Alert: {hazard}".
+  approved / rejected / pending; the rejection reason is *not* pushed — "open
+  the app for details"). On a transition **into** `approved`, users tagged with
+  the report's LGA get a generic "🚨 Verified Hazard Alert".
   On that same transition, local authorities are texted (see *Authority SMS*).
 - **report_disputed**: if the report is still `pending` and not yet escalated,
   it is escalated (`escalated = true, escalated_at, escalation_reason =
-  'Disputed by a peer monitor', escalation_status = 'escalated'`), its pending
+  'Disputed by a peer monitor [event <outbox id>]', escalation_status =
+  'escalated'`), its pending
   `scheduled_escalations` row is marked `processed`, and the same recipients as
   the timeout escalation get "⚠️ Disputed Report Escalated" (`type: escalation`).
   Otherwise the event is processed with a note (`report already escalated`,
   `report no longer pending (…)`). A retry after a failed push re-sends the
-  (idempotent) push. The escalation cron skips reports already escalated for
+  (idempotent) push only when `escalation_reason` names *this* event, so a
+  second dispute event never re-notifies an escalation made by the first. The escalation cron skips reports already escalated for
   another reason.
 - **alert_created**: title/message of the alert to everyone (`All`) or to the
   LGA tag.
+
+Blocked / deleted users: recipient lookups only select approved profiles with
+`is_disabled = false`, and a deleted user's profile (and reports) are gone, so
+they are not targeted. There is no user-disable hook in the worker: the
+reporter's own status update is still sent to `report.user_id` if that account
+was blocked after reporting (the body is generic). Blocking also bans the Auth
+account; the device keeps its OneSignal external id until the app signs out
+(which calls `OneSignal.logout()`), so a blocked device may still receive LGA /
+"All" broadcasts until then — another reason pushes stay generic.
 
 Each OneSignal request carries an `idempotency_key` (a UUID v4-formatted SHA-256
 hash of the outbox id or escalation id), so retries never double-notify.

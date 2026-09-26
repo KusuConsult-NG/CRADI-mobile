@@ -14,6 +14,7 @@ import {
 import { IN_CHUNK, must, selectAll } from './db.js';
 import { BACKEND_STOPPED_FLAG, applyPreflight, suppressSideEffects } from './sideEffects.js';
 import { MigrationState } from './state.js';
+import { migrationAppMetadata, migrationStart, reuseRefusal } from './authLink.js';
 import {
   isUuid, isPhoneEmail, rewriteUrl, storageTargetFor, FIREBASE_STORAGE_PREFIXES,
   transformUser, transformReport, transformVerification, transformVerificationOverride,
@@ -309,10 +310,24 @@ async function main() {
           if (owner.has(key)) report.warn('profiles', uid, `same email/phone as Firebase user ${owner.get(key)}; would be merged into that account`);
           else owner.set(key, uid);
         }
+        if (sb) {
+          // Preview the existing-account conflicts that would stop --apply.
+          const index = await indexSupabaseUsers(sb);
+          const startIso = migrationStart(state.data.runs, now);
+          for (const [uid, t] of plans) {
+            if (t.skip || state.data.users[uid]) continue;
+            const { auth } = t.row;
+            const existing = auth.email ? index.byEmail.get(auth.email) : index.byPhone.get(auth.phone.replace(/^\+/, ''));
+            const reason = existing && reuseRefusal(existing, { kind: auth.email ? 'email' : 'phone', startIso });
+            if (reason) report.warn('profiles', uid, `CONFLICT (would stop --apply): ${reason}`);
+          }
+        }
       }
       const pending = [...plans].filter(([uid, t]) => !t.skip && !state.data.users[uid]);
       console.log(`Auth users: ${r.ready - pending.length} already migrated, ${pending.length} to create/link.`);
-      if (APPLY && pending.length) await createAuthUsers(sb, state, report, pending);
+      if (APPLY && pending.length) {
+        await createAuthUsers(sb, state, report, pending, migrationStart(state.data.runs, now));
+      }
     }
 
     // ── 2. Storage ──────────────────────────────────────────────────────────
@@ -439,34 +454,72 @@ async function indexSupabaseUsers(sb) {
   for (let page = 1; ; page++) {
     const data = must(await sb.auth.admin.listUsers({ page, perPage: 1000 }), 'list Supabase users');
     for (const u of data.users) {
-      if (u.email) byEmail.set(u.email.toLowerCase(), u.id);
-      if (u.phone) byPhone.set(u.phone.replace(/^\+/, ''), u.id);
+      if (u.email) byEmail.set(u.email.toLowerCase(), u);
+      if (u.phone) byPhone.set(u.phone.replace(/^\+/, ''), u);
     }
     if (data.users.length < 1000) break;
   }
   return { byEmail, byPhone };
 }
 
-async function createAuthUsers(sb, state, report, pending) {
+class AuthConflictError extends Error {}
+
+function conflictError(conflicts) {
+  const lines = conflicts.map((c) => `  - Firebase ${c.uid} (${c.identifier}): ${c.reason}`);
+  return new AuthConflictError(
+    `${conflicts.length} Firebase user(s) match an existing Supabase Auth account that is not safe to reuse:\n`
+      + `${lines.join('\n')}\n`
+      + 'Nothing was linked for these users. Decide for each one manually (e.g. delete the Supabase account if it '
+      + 'is not the same person, or confirm its email/phone), then re-run. Keep sign-ups disabled during the migration.',
+  );
+}
+
+async function createAuthUsers(sb, state, report, pending, startIso) {
   let index = await indexSupabaseUsers(sb);
+  const identifier = (auth) => auth.email ?? auth.phone;
+  const kindOf = (auth) => (auth.email ? 'email' : 'phone');
   const lookup = (auth) => (auth.email ? index.byEmail.get(auth.email) : index.byPhone.get(auth.phone.replace(/^\+/, '')));
   const claimed = new Map(Object.entries(state.data.users).map(([uid, id]) => [id, uid]));
+
+  // Refuse up front (before creating anything) when an existing account is not
+  // provably the same person: see src/authLink.js.
+  const conflicts = [];
+  for (const [uid, t] of pending) {
+    const existing = lookup(t.row.auth);
+    if (!existing) continue;
+    const reason = reuseRefusal(existing, { kind: kindOf(t.row.auth), startIso });
+    if (reason) conflicts.push({ uid, identifier: identifier(t.row.auth), reason });
+  }
+  if (conflicts.length) throw conflictError(conflicts);
+
   let created = 0;
   let linked = 0;
+  const lateConflicts = [];
 
   await mapLimit(pending, 4, async ([uid, t]) => {
     const { auth } = t.row;
-    let id = lookup(auth);
-    if (id) {
+    let existing = lookup(auth);
+    let id = null;
+    if (existing) {
+      id = existing.id;
       linked += 1;
-      report.warn('profiles', uid, 'Supabase user with this email/phone already existed; reused');
+      report.warn('profiles', uid, 'Supabase user with this email/phone already existed (confirmed, pre-migration or created by this script); reused');
     } else {
-      const { data, error } = await sb.auth.admin.createUser({ ...auth, password: randomBytes(24).toString('base64url') });
+      const { data, error } = await sb.auth.admin.createUser({
+        ...auth,
+        app_metadata: migrationAppMetadata(uid),
+        password: randomBytes(24).toString('base64url'),
+      });
       if (error) {
         if (/exists|already/i.test(`${error.code} ${error.message}`)) {
           index = await indexSupabaseUsers(sb);
-          id = lookup(auth);
-          if (id) { linked += 1; report.warn('profiles', uid, 'Supabase user already existed; reused'); }
+          existing = lookup(auth);
+          const reason = existing ? reuseRefusal(existing, { kind: kindOf(auth), startIso }) : null;
+          if (existing && reason) {
+            lateConflicts.push({ uid, identifier: identifier(auth), reason });
+            return;
+          }
+          if (existing) { id = existing.id; linked += 1; report.warn('profiles', uid, 'Supabase user already existed; reused'); }
         }
         if (!id) { report.skip('profiles', uid, `createUser failed: ${error.message}`); return; }
       } else {
@@ -483,6 +536,7 @@ async function createAuthUsers(sb, state, report, pending) {
     state.save();
   });
   console.log(`Auth users: created ${created}, linked to existing ${linked}.`);
+  if (lateConflicts.length) throw conflictError(lateConflicts);
 }
 
 async function patchProfiles(sb, state, report, plans) {
@@ -498,18 +552,22 @@ async function patchProfiles(sb, state, report, plans) {
   }
   let written = 0;
   let banned = 0;
+  let unbanned = 0;
   await mapLimit(jobs, 8, async ({ uid, id, profile }) => {
     const { error } = await sb.from('profiles').update(profile).eq('id', id);
     if (error) { report.skip('profiles', uid, `profile update failed: ${error.message}`); return; }
     written += 1;
-    if (profile.is_disabled) {
-      const { error: banError } = await sb.auth.admin.updateUserById(id, { ban_duration: BAN_FOREVER });
-      if (banError) report.warn('profiles', uid, `ban failed: ${banError.message}`);
-      else banned += 1;
-    }
+    // Keep the Auth ban in step with is_disabled both ways (a re-run after the
+    // user was re-enabled in Firestore, or a reused account, lifts the ban).
+    const { error: banError } = await sb.auth.admin.updateUserById(id, {
+      ban_duration: profile.is_disabled ? BAN_FOREVER : 'none',
+    });
+    if (banError) report.warn('profiles', uid, `${profile.is_disabled ? 'ban' : 'unban'} failed: ${banError.message}`);
+    else if (profile.is_disabled) banned += 1;
+    else unbanned += 1;
   });
   report.t('profiles').written = written;
-  console.log(`Profiles updated: ${written}; disabled users banned: ${banned}.`);
+  console.log(`Profiles updated: ${written}; disabled users banned: ${banned}; bans cleared on ${unbanned} enabled user(s).`);
 }
 
 // ── Reports finalize ─────────────────────────────────────────────────────────
@@ -519,8 +577,11 @@ async function patchProfiles(sb, state, report, plans) {
 //                           the INSERT … ON CONFLICT path, so an upsert cannot
 //                           restore them — hence plain UPDATEs here)
 //   verifications_after_insert  verification_count, status, verified_at, auto_validated
+// verification_count is deliberately not restored: it is recounted from the
+// imported verifications afterwards (recountVerifications), so it always
+// matches the rows that exist.
 const FINAL_REPORT_COLUMNS = [
-  'status', 'verification_count', 'verified_at', 'auto_validated', 'approved_at', 'rejected_at',
+  'status', 'verified_at', 'auto_validated', 'approved_at', 'rejected_at',
   'rejection_reason', 'escalated', 'escalated_at', 'escalation_reason', 'escalation_scheduled_at',
   'escalation_status',
 ];
@@ -536,7 +597,27 @@ async function finalizeReports(sb, report, entries, touched) {
     else done += 1;
     touched.add(e.row.id);
   });
-  console.log(`Finalized status/verification_count/escalation fields on ${done} report(s).`);
+  console.log(`Finalized status/escalation fields on ${done} report(s).`);
+  await recountVerifications(sb, report, present);
+}
+
+/** Sets verification_count = number of confirmed verifications, as the DB triggers maintain it. */
+async function recountVerifications(sb, report, entries) {
+  const ids = entries.map((e) => e.row.id);
+  const counts = new Map(ids.map((id) => [id, 0]));
+  for (let i = 0; i < ids.length; i += IN_CHUNK) {
+    const rows = await selectAll(sb, 'verifications', 'id, report_id',
+      (q) => q.in('report_id', ids.slice(i, i + IN_CHUNK)).eq('is_confirmed', true));
+    for (const r of rows) counts.set(r.report_id, (counts.get(r.report_id) ?? 0) + 1);
+  }
+  const bySource = new Map(entries.map((e) => [e.row.id, e.sourceId]));
+  let done = 0;
+  await mapLimit([...counts], 8, async ([id, count]) => {
+    const { error } = await sb.from('reports').update({ verification_count: count }).eq('id', id);
+    if (error) report.warn('reports', bySource.get(id), `verification recount failed: ${error.message}`);
+    else done += 1;
+  });
+  console.log(`Recounted verification_count on ${done} report(s).`);
 }
 
 // ── Storage ──────────────────────────────────────────────────────────────────

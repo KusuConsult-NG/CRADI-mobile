@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { runEscalations } from '../src/escalations.js';
 import { createHandlers, runOutboxBatch } from '../src/outbox.js';
-import { DISPUTE_REASON } from '../src/notifications.js';
+import { DISPUTE_REASON, disputeReasonFor } from '../src/notifications.js';
 import { fakePush, fakeRepo, logger, profile } from './helpers.js';
 
 const base = { id: 'r1', user_id: 'reporter', ward: 'Ward 1', lga: 'Ikeja', hazard_type: 'Flood', severity: 'high', status: 'pending', escalated: false };
@@ -30,7 +30,7 @@ test('report_disputed escalates a pending report, finishes its scheduled escalat
   assert.equal(r.status, 'pending');
   assert.equal(r.escalated, true);
   assert.equal(r.escalation_status, 'escalated');
-  assert.equal(r.escalation_reason, 'Disputed by a peer monitor');
+  assert.equal(r.escalation_reason, 'Disputed by a peer monitor [event 1]');
   assert.equal(repo.state.escalations[0].status, 'processed');
   assert.equal(repo.state.escalations[0].reason, DISPUTE_REASON);
 
@@ -87,12 +87,26 @@ test('report_disputed without report_id is a permanent failure', async () => {
 
 test('timeout cron skips a report already escalated by a dispute', async () => {
   const repo = fakeRepo({
-    reports: [{ ...base, escalated: true, escalation_reason: DISPUTE_REASON }],
+    reports: [{ ...base, escalated: true, escalation_reason: disputeReasonFor(4) }],
     escalations: [{ id: 'e1', report_id: 'r1', status: 'pending' }],
     profiles: staff,
   });
   const push = fakePush();
   assert.deepEqual(await runEscalations({ repo, push, logger }), { processed: 0, skipped: 1, failed: 0 });
-  assert.equal(repo.state.escalations[0].reason, `Already escalated: ${DISPUTE_REASON}`);
+  assert.equal(repo.state.escalations[0].reason, `Already escalated: ${disputeReasonFor(4)}`);
+  assert.equal(push.calls.length, 0);
+});
+
+test('report_disputed: a retried second dispute event does not re-notify a report escalated by the first', async () => {
+  // Event 1 escalated the report (and notified). Event 2 is being retried
+  // (attempts > 1) and must not treat event 1's escalation as its own.
+  const repo = fakeRepo({
+    reports: [{ ...base, escalated: true, escalation_reason: disputeReasonFor(1) }],
+    profiles: staff,
+    events: [{ ...disputed(2), attempts: 1 }],
+  });
+  const push = fakePush();
+  await runOutboxBatch({ repo, handlers: createHandlers({ repo, push, logger }), logger });
+  assert.equal(repo.state.events[0].last_error, 'report already escalated');
   assert.equal(push.calls.length, 0);
 });
