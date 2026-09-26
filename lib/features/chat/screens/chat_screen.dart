@@ -3,7 +3,9 @@ import 'dart:async';
 import 'package:climate_app/core/theme/app_colors.dart';
 import 'package:climate_app/core/services/supabase_service.dart';
 import 'package:climate_app/core/constants/app_config.dart';
+import 'package:climate_app/core/utils/error_handler.dart';
 import 'package:climate_app/features/chat/providers/chat_provider.dart';
+import 'package:climate_app/features/profile/providers/profile_provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as sb;
 import 'package:flutter/material.dart';
 import 'package:flutter_chat_core/flutter_chat_core.dart';
@@ -168,7 +170,7 @@ class _ChatViewState extends State<_ChatView> {
         data: {
           'chatId': _chatId,
           'senderId': user.id,
-          'senderName': _displayName(user, 'User'),
+          'senderName': _currentName(user),
           'message': text.trim(),
           'type': 'text',
           'read': false,
@@ -183,9 +185,13 @@ class _ChatViewState extends State<_ChatView> {
         // Already replaced by a stream emission.
       }
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Failed to send: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Message not sent. ${ErrorHandler.getUserMessage(e)}',
+            ),
+          ),
+        );
       }
     }
   }
@@ -224,6 +230,18 @@ class _ChatViewState extends State<_ChatView> {
       onMessageSend: _handleMessageSend,
       theme: ChatTheme.fromThemeData(Theme.of(context)),
     );
+  }
+
+  /// The current profile name (it may have been edited since sign-up),
+  /// falling back to the sign-up metadata.
+  String _currentName(sb.User user) {
+    String? name;
+    try {
+      name = context.read<ProfileProvider>().name.trim();
+    } on ProviderNotFoundException catch (_) {}
+    // 'User' is ProfileProvider's placeholder before the profile loaded.
+    if (name != null && name.isNotEmpty && name != 'User') return name;
+    return _displayName(user, 'User');
   }
 
   static String _displayName(sb.User user, String fallback) {

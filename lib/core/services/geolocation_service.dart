@@ -39,6 +39,21 @@ class GeolocationService {
   /// fallback to a stale position); null when the last call got a fresh fix.
   String? lastErrorMessage;
 
+  /// A fix older than this is not "current" (e.g. a cached OS position).
+  static const Duration maxFixAge = Duration(minutes: 2);
+
+  /// True when the position returned by the last [getCurrentPosition] /
+  /// [fetchPositionWithFallback] call is not a fresh GPS fix (the service
+  /// fell back to the last known position, or the fix is stale). Such a
+  /// position must be treated as approximate.
+  bool lastPositionApproximate = false;
+
+  /// Whether [position] is older than [maxFixAge] relative to [now].
+  static bool isStaleFix(Position position, {DateTime? now}) {
+    final age = (now ?? DateTime.now()).difference(position.timestamp);
+    return age > maxFixAge;
+  }
+
   /// Get current position.
   ///
   /// Waits at most [positionTimeLimit] for a fix, then falls back to the
@@ -46,6 +61,7 @@ class GeolocationService {
   /// set) when neither is available.
   Future<Position?> getCurrentPosition() async {
     lastErrorMessage = null;
+    lastPositionApproximate = false;
     try {
       // Check if location service is enabled
       final serviceEnabled = await isLocationServiceEnabled();
@@ -87,6 +103,7 @@ class GeolocationService {
     required Future<Position?> Function() lastKnown,
   }) async {
     lastErrorMessage = null;
+    lastPositionApproximate = false;
     Object? failure;
     try {
       final position = await current().timeout(
@@ -95,6 +112,7 @@ class GeolocationService {
       developer.log(
         'Got position: ${position.latitude}, ${position.longitude}',
       );
+      lastPositionApproximate = isStaleFix(position);
       return position;
     } on Exception catch (e) {
       failure = e;
@@ -106,6 +124,7 @@ class GeolocationService {
       if (last != null) {
         lastErrorMessage =
             'Could not get a fresh GPS fix; using your last known location.';
+        lastPositionApproximate = true;
         return last;
       }
     } on Exception catch (e) {

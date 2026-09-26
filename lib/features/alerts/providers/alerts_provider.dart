@@ -28,33 +28,19 @@ class AlertsProvider extends ChangeNotifier {
 
   /// Whether [alert] targets [lga] (alerts for 'All' reach everyone).
   ///
-  /// Alerts carry only `target_lga` (an LGA name), so matching is by exact
-  /// (case-insensitive) name. A few names exist in more than one state
-  /// (e.g. Obi, Bassa, Surulere); when an alert also carries a
-  /// `target_state` and the user's [state] is known, the state must match
-  /// too, otherwise such an alert reaches every LGA with that name.
-  static bool targetsLga(
-    Map<String, dynamic> alert,
-    String? lga, {
-    String? state,
-  }) {
+  /// Alerts carry only `target_lga` (an LGA name; the table has no state
+  /// column), so matching is by exact (case-insensitive) name.
+  static bool targetsLga(Map<String, dynamic> alert, String? lga) {
     String norm(Object? v) => (v ?? '').toString().trim().toLowerCase();
     final target = norm(alert['targetLga'] ?? alert['target_lga'] ?? 'All');
     if (target.isEmpty || target == 'all') return true;
     final mine = norm(lga);
-    if (mine.isEmpty || mine != target) return false;
-    final targetState = norm(alert['targetState'] ?? alert['target_state']);
-    final myState = norm(state);
-    if (targetState.isEmpty || targetState == 'all' || myState.isEmpty) {
-      return true;
-    }
-    return targetState == myState;
+    return mine.isNotEmpty && mine == target;
   }
 
-  /// Active alerts addressed to [lga] (in [state], when known) or to
-  /// everyone.
-  List<Map<String, dynamic>> alertsForLga(String? lga, {String? state}) =>
-      _alerts.where((a) => targetsLga(a, lga, state: state)).toList();
+  /// Active alerts addressed to [lga] or to everyone.
+  List<Map<String, dynamic>> alertsForLga(String? lga) =>
+      _alerts.where((a) => targetsLga(a, lga)).toList();
 
   Future<void> fetchAlerts() async {
     // Alerts are only readable when signed in: a fetch before sign-in would

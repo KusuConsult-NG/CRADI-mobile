@@ -29,9 +29,7 @@ Future<bool> dialNumber(String phone) async {
 /// their own emergency contacts. It never sends anything on its own, so it
 /// never claims an alert was sent.
 Future<void> showSosSheet(BuildContext context) {
-  final contactsFuture = context
-      .read<EmergencyContactsProvider>()
-      .getContacts();
+  final provider = context.read<EmergencyContactsProvider>();
   return showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
@@ -71,50 +69,7 @@ Future<void> showSosSheet(BuildContext context) {
               phone: kNationalEmergencyNumber,
               hostContext: context,
             ),
-            FutureBuilder<List<EmergencyContact>>(
-              future: contactsFuture,
-              builder: (_, snapshot) {
-                if (snapshot.connectionState != ConnectionState.done) {
-                  return const Padding(
-                    padding: EdgeInsets.all(12),
-                    child: Center(child: CircularProgressIndicator()),
-                  );
-                }
-                final contacts = (snapshot.data ?? const <EmergencyContact>[])
-                    .where((c) => c.phone.trim().isNotEmpty)
-                    .take(5)
-                    .toList();
-                if (contacts.isEmpty) {
-                  return Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Text(
-                      'No personal emergency contacts saved yet. '
-                      'Add them under Emergency Contacts.',
-                      textAlign: TextAlign.center,
-                      style: GoogleFonts.lexend(
-                        fontSize: 12,
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                  );
-                }
-                return Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    for (final c in contacts)
-                      _CallTile(
-                        icon: Icons.person,
-                        title: 'Call ${c.name}',
-                        subtitle: c.role.isNotEmpty
-                            ? '${c.role} · ${c.phone}'
-                            : c.phone,
-                        phone: c.phone,
-                        hostContext: context,
-                      ),
-                  ],
-                );
-              },
-            ),
+            SosContactsList(load: provider.fetchContacts, hostContext: context),
             const SizedBox(height: 8),
             TextButton(
               onPressed: () => Navigator.pop(sheetContext),
@@ -125,6 +80,102 @@ Future<void> showSosSheet(BuildContext context) {
       ),
     ),
   );
+}
+
+/// The user's own emergency contacts in the SOS sheet. A failed load
+/// (e.g. offline) is shown as such, with a retry, instead of as "no
+/// contacts".
+class SosContactsList extends StatefulWidget {
+  const SosContactsList({
+    super.key,
+    required this.load,
+    required this.hostContext,
+  });
+
+  /// Loads the contacts; throws when they could not be loaded.
+  final Future<List<EmergencyContact>> Function() load;
+
+  /// The screen's context (see [_CallTile.hostContext]).
+  final BuildContext hostContext;
+
+  @override
+  State<SosContactsList> createState() => _SosContactsListState();
+}
+
+class _SosContactsListState extends State<SosContactsList> {
+  late Future<List<EmergencyContact>> _future = widget.load();
+
+  void _retry() {
+    final future = widget.load();
+    setState(() {
+      _future = future;
+    });
+  }
+
+  Widget _message(String text) => Padding(
+    padding: const EdgeInsets.all(12),
+    child: Text(
+      text,
+      textAlign: TextAlign.center,
+      style: GoogleFonts.lexend(fontSize: 12, color: AppColors.textSecondary),
+    ),
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<List<EmergencyContact>>(
+      future: _future,
+      builder: (_, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const Padding(
+            padding: EdgeInsets.all(12),
+            child: Center(child: CircularProgressIndicator()),
+          );
+        }
+        if (snapshot.hasError) {
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _message(
+                "Couldn't load your contacts. Check your connection and "
+                'try again.',
+              ),
+              TextButton.icon(
+                onPressed: _retry,
+                icon: const Icon(Icons.refresh),
+                label: const Text('Retry'),
+              ),
+            ],
+          );
+        }
+        final contacts = (snapshot.data ?? const <EmergencyContact>[])
+            .where((c) => c.phone.trim().isNotEmpty)
+            .take(5)
+            .toList();
+        if (contacts.isEmpty) {
+          return _message(
+            'No personal emergency contacts saved yet. '
+            'Add them under Emergency Contacts.',
+          );
+        }
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (final c in contacts)
+              _CallTile(
+                icon: Icons.person,
+                title: 'Call ${c.name}',
+                subtitle: c.role.isNotEmpty
+                    ? '${c.role} · ${c.phone}'
+                    : c.phone,
+                phone: c.phone,
+                hostContext: widget.hostContext,
+              ),
+          ],
+        );
+      },
+    );
+  }
 }
 
 class _CallTile extends StatelessWidget {

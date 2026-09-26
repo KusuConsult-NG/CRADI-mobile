@@ -104,7 +104,12 @@ class NotificationService {
         if (SettingsProvider().pushNotifications) {
           // Not awaited: the permission dialog can stay open indefinitely
           // and must not hold back initialization or identifying the user.
-          unawaited(_requestPermission());
+          // No "open Settings" fallback dialog here: that would nag on
+          // every cold start once the user denied the OS prompt.
+          unawaited(requestPushPermission(fallbackToSettings: false));
+          // Undo an earlier opt-out (e.g. setting toggled off then on
+          // while push was unavailable).
+          unawaited(setPushSubscribed(true));
         } else {
           unawaited(setPushSubscribed(false));
         }
@@ -130,9 +135,15 @@ class NotificationService {
     }
   }
 
-  Future<void> _requestPermission() async {
+  /// Asks for the OS notification permission. [fallbackToSettings] offers
+  /// to open the system settings when it was denied before; only use it for
+  /// an explicit user action (the Settings toggle), not at startup.
+  Future<void> requestPushPermission({required bool fallbackToSettings}) async {
+    if (!_pushEnabled) return;
     try {
-      final granted = await OneSignal.Notifications.requestPermission(true);
+      final granted = await OneSignal.Notifications.requestPermission(
+        fallbackToSettings,
+      );
       if (!granted) {
         developer.log(
           'User declined notification permissions',

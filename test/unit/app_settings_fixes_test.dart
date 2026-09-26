@@ -229,20 +229,10 @@ void main() {
     });
   });
 
-  group('AlertsProvider.targetsLga with state', () {
-    final alert = {'target_lga': 'Obi', 'target_state': 'Benue'};
-
-    test('same LGA name in another state is excluded', () {
-      expect(AlertsProvider.targetsLga(alert, 'Obi', state: 'Benue'), true);
-      expect(AlertsProvider.targetsLga(alert, 'Obi', state: 'Nasarawa'), false);
-    });
-
-    test('falls back to the LGA name when a state is missing', () {
-      expect(AlertsProvider.targetsLga(alert, 'Obi'), true);
-      expect(
-        AlertsProvider.targetsLga({'target_lga': 'Obi'}, 'Obi', state: 'X'),
-        true,
-      );
+  group('AlertsProvider.targetsLga', () {
+    test('matches by LGA name only (alerts have no state column)', () {
+      expect(AlertsProvider.targetsLga({'target_lga': 'Obi'}, 'obi'), true);
+      expect(AlertsProvider.targetsLga({'target_lga': 'Obi'}, 'Bassa'), false);
     });
   });
 

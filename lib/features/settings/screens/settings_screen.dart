@@ -70,7 +70,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
     bool value,
   ) async {
     await settings.setPushNotifications(value);
-    final ok = await NotificationService().setPushSubscribed(value);
+    final service = NotificationService();
+    if (value) {
+      // Explicit user action: may offer to open the system settings when
+      // the permission was denied before.
+      await service.requestPushPermission(fallbackToSettings: true);
+    }
+    final ok = await service.setPushSubscribed(value);
     if (!ok && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -86,7 +92,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _toggleBiometric(bool value) async {
     try {
       final authProvider = context.read<AuthProvider>();
+      final profileProvider = context.read<ProfileProvider>();
       await authProvider.setBiometricEnabled(value);
+      // Keep the profile screen's biometric switch in sync.
+      await profileProvider.refreshBiometricsEnabled();
 
       if (mounted) {
         setState(() => _biometricEnabled = value);

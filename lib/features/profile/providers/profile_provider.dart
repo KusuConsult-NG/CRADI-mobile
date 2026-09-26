@@ -2,6 +2,7 @@ import 'package:climate_app/core/services/secure_storage_service.dart';
 import 'package:climate_app/core/services/supabase_service.dart';
 import 'package:climate_app/core/services/offline_storage_service.dart';
 import 'package:climate_app/core/constants/app_config.dart';
+import 'package:climate_app/core/utils/input_sanitizer.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as sb;
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -264,11 +265,19 @@ class ProfileProvider extends ChangeNotifier {
     }
   }
 
+  /// Message shown when a profile edit could not be saved while offline.
+  static const String offlineNotSavedMessage =
+      "You're offline — changes not saved.";
+
   /// Push profile changes to the `profiles` row.
-  Future<void> _syncToServer(Map<String, dynamic> data) async {
+  ///
+  /// Returns null when the server accepted the change, otherwise a
+  /// user-facing message (offline, signed out, server error). There is no
+  /// retry queue for profile edits, so callers must report the failure.
+  Future<String?> _syncToServer(Map<String, dynamic> data) async {
     try {
       final user = _db.getCurrentUser();
-      if (user == null) return;
+      if (user == null) return 'You must be signed in to update your profile.';
 
       final connectivityResults = await _connectivity.checkConnectivity();
       final hasConnection = connectivityResults.any(
@@ -276,8 +285,8 @@ class ProfileProvider extends ChangeNotifier {
       );
 
       if (!hasConnection) {
-        developer.log('Offline - profile update will be cached locally');
-        return;
+        developer.log('Offline - profile update not saved');
+        return offlineNotSavedMessage;
       }
 
       await _db.updateDocument(
@@ -287,23 +296,42 @@ class ProfileProvider extends ChangeNotifier {
       );
 
       developer.log('Profile synced', name: 'ProfileProvider');
+      return null;
     } on Exception catch (e) {
       developer.log('Error syncing profile: $e', name: 'ProfileProvider');
+      return 'Could not save your changes. Please check your connection '
+          'and try again.';
     }
   }
 
   Future<void> _updateLocalState(Map<String, dynamic> updates) async {
     _userProfile ??= {};
     _userProfile!.addAll(updates);
-    await _offlineStorage.cacheUserProfile(_userProfile!);
+    // Best effort: the change is already saved on the server.
+    try {
+      await _offlineStorage.cacheUserProfile(_userProfile!);
+    } on Object catch (e) {
+      developer.log('Could not cache profile: $e', name: 'ProfileProvider');
+    }
   }
 
-  Future<void> updateName(String name) async {
-    _name = name;
-    await _storage.write('profile_name', name);
-    await _updateLocalState({'name': name});
+  /// Cleans a display name for storage; returns '' when nothing is left.
+  static String cleanName(String name) =>
+      InputSanitizer.cleanForStorage(name).trim();
+
+  /// Updates the display name. Returns null when saved, otherwise a
+  /// user-facing message (the local name is then left unchanged).
+  Future<String?> updateName(String name) async {
+    final cleaned = cleanName(name);
+    if (cleaned.isEmpty) return 'Please enter your name.';
+    if (cleaned == _name) return null;
+    final error = await _syncToServer({'name': cleaned});
+    if (error != null) return error;
+    _name = cleaned;
+    await _storage.write('profile_name', cleaned);
+    await _updateLocalState({'name': cleaned});
     notifyListeners();
-    await _syncToServer({'name': name});
+    return null;
   }
 
   /// Request an email change.
@@ -357,23 +385,34 @@ class ProfileProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> updatePhone(String phone) async {
+  /// Updates the phone number. Returns null when saved, otherwise a
+  /// user-facing message (the local value is then left unchanged).
+  Future<String?> updatePhone(String phone) async {
+    final error = await _syncToServer({'phone': phone});
+    if (error != null) return error;
     _phone = phone;
     await _storage.write('profile_phone', phone);
     await _updateLocalState({'phone': phone});
     notifyListeners();
-    await _syncToServer({'phone': phone});
+    return null;
   }
 
-  Future<void> updateProfileImage(String imagePath) async {
+  /// Updates the profile image URL. Returns null when saved, otherwise a
+  /// user-facing message (the local value is then left unchanged).
+  Future<String?> updateProfileImage(String imagePath) async {
+    final error = await _syncToServer({'profileImageUrl': imagePath});
+    if (error != null) return error;
     _profileImagePath = imagePath;
     await _storage.write('profile_image', imagePath);
     await _updateLocalState({'profileImageUrl': imagePath});
     notifyListeners();
-    await _syncToServer({'profileImageUrl': imagePath});
+    return null;
   }
 
   /// Upload profile image to the `profile-images` bucket and store its URL.
+  ///
+  /// Throws a [ProfileSaveException] (with a user-facing message) when the
+  /// device is offline or the profile row could not be updated.
   Future<void> uploadProfileImage(XFile imageFile) async {
     try {
       _isLoading = true;
@@ -382,6 +421,11 @@ class ProfileProvider extends ChangeNotifier {
       final user = _db.getCurrentUser();
       if (user == null) {
         throw Exception('User must be logged in to upload profile image');
+      }
+
+      final connectivityResults = await _connectivity.checkConnectivity();
+      if (!connectivityResults.any((r) => r != ConnectivityResult.none)) {
+        throw const ProfileSaveException(offlineNotSavedMessage);
       }
 
       final file = File(imageFile.path);
@@ -402,10 +446,11 @@ class ProfileProvider extends ChangeNotifier {
         contentType: 'image/jpeg',
       );
 
+      final error = await _syncToServer({'profileImageUrl': fileUrl});
+      if (error != null) throw ProfileSaveException(error);
       _profileImagePath = fileUrl;
       await _storage.write('profile_image', fileUrl);
       await _updateLocalState({'profileImageUrl': fileUrl});
-      await _syncToServer({'profileImageUrl': fileUrl});
 
       developer.log('Profile image uploaded: $fileUrl');
     } on Exception catch (e) {
@@ -473,7 +518,11 @@ class ProfileProvider extends ChangeNotifier {
   void Function(String? zone)? onMonitoringZoneChanged;
 
   /// Sets the monitoring zone; an empty [zone] means "all zones" (null).
-  Future<void> updateMonitoringZone(String zone) async {
+  ///
+  /// The zone is applied on this device right away (it filters local
+  /// lists). Returns null when it was also saved to the account, otherwise
+  /// a user-facing message.
+  Future<String?> updateMonitoringZone(String zone) async {
     final trimmed = zone.trim();
     final String? effectiveZone = trimmed.isEmpty ? null : trimmed;
     final changed = effectiveZone != _monitoringZone;
@@ -483,7 +532,7 @@ class ProfileProvider extends ChangeNotifier {
     await _updateLocalState({'monitoringZone': effectiveZone ?? ''});
     notifyListeners();
     if (changed) onMonitoringZoneChanged?.call(effectiveZone);
-    await _syncToServer({'monitoringZone': effectiveZone ?? ''});
+    return _syncToServer({'monitoringZone': effectiveZone ?? ''});
   }
 
   /// Re-reads the device's biometric lock flag for display. The flag is
@@ -497,4 +546,14 @@ class ProfileProvider extends ChangeNotifier {
     final n = user.userMetadata?['name'];
     return (n is String && n.trim().isNotEmpty) ? n : 'User';
   }
+}
+
+/// A profile edit that was not saved to the server; [message] is
+/// user-facing.
+class ProfileSaveException implements Exception {
+  const ProfileSaveException(this.message);
+  final String message;
+
+  @override
+  String toString() => message;
 }

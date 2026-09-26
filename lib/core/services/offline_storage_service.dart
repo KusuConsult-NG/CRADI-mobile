@@ -771,15 +771,16 @@ class OfflineStorageService {
     );
   }
 
-  /// Get cached guides
+  /// Get cached guides.
+  ///
+  /// Served regardless of age and never deleted on read: this is the
+  /// offline fallback, and guides rarely change, so an old copy is far
+  /// better than none. The cache is refreshed whenever the guides are
+  /// fetched online (see KnowledgeProvider.fetchGuides).
   List<Map<String, dynamic>> getCachedGuides() {
     _ensureInitialized();
     final cached = _contentCacheBox!.get('guides');
     if (cached != null && cached['data'] is List) {
-      if (_isCacheStale(cached)) {
-        _contentCacheBox!.delete('guides');
-        return [];
-      }
       return (cached['data'] as List)
           .map((e) => Map<String, dynamic>.from(e))
           .toList();

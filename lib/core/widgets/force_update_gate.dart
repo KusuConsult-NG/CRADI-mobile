@@ -1,6 +1,9 @@
+import 'package:climate_app/core/constants/app_config.dart';
 import 'package:climate_app/core/services/remote_config_service.dart';
 import 'package:climate_app/core/theme/app_colors.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 /// Replaces the whole app with an "update required" screen while this
 /// build is older than the server's `app_min_version` (app_settings).
@@ -14,6 +17,30 @@ class ForceUpdateGate extends StatelessWidget {
 
   /// Defaults to the app-wide [RemoteConfigService].
   final RemoteConfigService? config;
+
+  /// Store page for this platform, or null when there is none (iOS has no
+  /// App Store id yet).
+  static Uri? storeUri() => defaultTargetPlatform == TargetPlatform.android
+      ? Uri.parse(AppConfig.playStoreUrl)
+      : null;
+
+  Future<void> _openStore(BuildContext context, Uri uri) async {
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    var opened = false;
+    try {
+      opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } on Exception catch (_) {}
+    if (!opened) {
+      messenger?.showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Could not open the store. Please update the app '
+            'from your app store.',
+          ),
+        ),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -51,6 +78,17 @@ class ForceUpdateGate extends StatelessWidget {
                       textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 24),
+                    if (storeUri() case final uri?) ...[
+                      ElevatedButton(
+                        onPressed: () => _openStore(context, uri),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primaryRed,
+                          foregroundColor: Colors.white,
+                        ),
+                        child: const Text('Update'),
+                      ),
+                      const SizedBox(height: 12),
+                    ],
                     OutlinedButton(
                       onPressed: () => cfg.refresh(force: true),
                       child: const Text('Check again'),

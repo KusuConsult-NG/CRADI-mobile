@@ -20,8 +20,15 @@ export 'package:climate_app/core/services/offline_storage_service.dart'
 /// Thrown when a verification is refused by business rules (self-verification,
 /// distance, not signed in). [message] is safe to show to the user.
 class VerificationRefusedException implements Exception {
-  const VerificationRefusedException(this.message);
+  const VerificationRefusedException(
+    this.message, {
+    this.noLongerPending = false,
+  });
   final String message;
+
+  /// The report is no longer pending (already verified / rejected), so
+  /// voting on it is pointless.
+  final bool noLongerPending;
 
   @override
   String toString() => message;
@@ -743,6 +750,7 @@ class ReportsStatusProvider extends ChangeNotifier {
       throw VerificationRefusedException(
         (result['message'] ?? result['error'] ?? 'Verification failed')
             .toString(),
+        noLongerPending: result['noLongerPending'] == true,
       );
     }
     _votedReportIds = {..._votedReportIds, reportId};

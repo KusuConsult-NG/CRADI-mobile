@@ -1179,13 +1179,20 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                         onTap: () async {
                           final provider = context.read<ProfileProvider>();
-                          await provider.updateMonitoringZone('');
+                          final error = await provider.updateMonitoringZone('');
                           if (context.mounted) {
                             Navigator.pop(context);
                             ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Showing all zones'),
-                                backgroundColor: AppColors.successGreen,
+                              SnackBar(
+                                content: Text(
+                                  error == null
+                                      ? 'Showing all zones'
+                                      : 'Showing all zones on this device. '
+                                            '$error',
+                                ),
+                                backgroundColor: error == null
+                                    ? AppColors.successGreen
+                                    : null,
                               ),
                             );
                           }
@@ -1231,15 +1238,22 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                           onTap: () async {
                             final provider = context.read<ProfileProvider>();
-                            await provider.updateMonitoringZone(zone);
+                            final error = await provider.updateMonitoringZone(
+                              zone,
+                            );
                             if (context.mounted) {
                               Navigator.pop(context);
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
                                   content: Text(
-                                    'Monitoring zone changed to $zone',
+                                    error == null
+                                        ? 'Monitoring zone changed to $zone'
+                                        : 'Showing $zone on this device. '
+                                              '$error',
                                   ),
-                                  backgroundColor: AppColors.successGreen,
+                                  backgroundColor: error == null
+                                      ? AppColors.successGreen
+                                      : null,
                                 ),
                               );
                             }

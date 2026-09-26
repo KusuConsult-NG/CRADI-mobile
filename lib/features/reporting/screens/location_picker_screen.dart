@@ -17,7 +17,9 @@ import 'package:climate_app/features/profile/providers/profile_provider.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:climate_app/l10n/app_localizations.dart';
 
-enum _PositionSource { gps, manual, geocoded }
+/// Where the picker's position came from. Only [gps] is a precise, fresh
+/// fix; [lastKnown] is a fallback / stale device position.
+enum _PositionSource { gps, lastKnown, manual, geocoded }
 
 class LocationPickerScreen extends StatefulWidget {
   const LocationPickerScreen({super.key});
@@ -38,6 +40,10 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
   /// fix; a geocoded area centre must never replace a GPS fix or a point the
   /// user tapped.
   _PositionSource? _positionSource;
+
+  /// Incremented per [_updateMapToSelectedLocation] call so a slow geocode
+  /// response for an older selection is dropped.
+  int _geocodeRequestId = 0;
 
   /// FlutterMap asserts if the controller is used before the map rendered.
   bool _mapReady = false;
@@ -157,6 +163,9 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
       _locationError = '';
     });
 
+    // Lets us detect a point tapped while this request is in flight.
+    final positionAtStart = _currentPosition;
+
     try {
       // Request permission with rationale first
       final hasPermission = await PermissionService().requestLocation(context);
@@ -178,12 +187,33 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
       if (!mounted) return;
 
       if (position != null) {
+        // The user tapped a point while we were waiting for a fix: their
+        // explicit choice wins over the device position. (An explicit
+        // "use my location" after a tap still replaces the old tap.)
+        if (_positionSource == _PositionSource.manual &&
+            !identical(_currentPosition, positionAtStart)) {
+          setState(() => _isLoadingLocation = false);
+          return;
+        }
+        // A last-known / stale fix is not a precise GPS position.
+        final source = _geoService.lastPositionApproximate
+            ? _PositionSource.lastKnown
+            : _PositionSource.gps;
         setState(() {
           _currentPosition = position;
-          _positionSource = _PositionSource.gps;
+          _positionSource = source;
           _isLoadingLocation = false;
         });
         _moveCamera(LatLng(position.latitude, position.longitude));
+        // Set coordinates immediately to prevent null values.
+        context.read<ReportingProvider>()
+          ..setLocation(
+            position.latitude,
+            position.longitude,
+            approximate: source != _PositionSource.gps,
+          )
+          ..setLocationDetails('${position.latitude},${position.longitude}');
+
         // e.g. fell back to the last known position after a timeout.
         final notice = _geoService.lastErrorMessage;
         if (notice != null) {
@@ -192,31 +222,19 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
           ).showSnackBar(SnackBar(content: Text(notice)));
         }
 
-        // Get location details
+        // Get location details (display only).
         final details = await _geoService.getLocationDetails(
           position.latitude,
           position.longitude,
         );
         if (!mounted) return;
+        // The position may have been replaced (tap / selection) meanwhile.
+        if (!identical(_currentPosition, position)) return;
 
         setState(() {
           _lga = details['lga'] ?? 'Unknown LGA';
           _ward = details['ward'] ?? 'Unknown Ward';
         });
-
-        // Update reporting provider with coordinates AND location string
-        if (mounted) {
-          // Set coordinates immediately to prevent null values
-          context.read<ReportingProvider>().setLocation(
-            position.latitude,
-            position.longitude,
-          );
-
-          // Also set location details as string
-          context.read<ReportingProvider>().setLocationDetails(
-            '${position.latitude},${position.longitude}',
-          );
-        }
       } else {
         if (mounted) {
           setState(() {
@@ -289,10 +307,12 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
   /// camera moves. Without one, the geocoded area centre is used as an
   /// *approximate* position.
   Future<void> _updateMapToSelectedLocation(String locationString) async {
-    final keepPosition =
+    final requestId = ++_geocodeRequestId;
+    bool keepPosition() =>
         _positionSource == _PositionSource.gps ||
         _positionSource == _PositionSource.manual;
-    if (!keepPosition) {
+    final keepAtStart = keepPosition();
+    if (!keepAtStart) {
       setState(() {
         _isLoadingLocation = true;
       });
@@ -303,7 +323,11 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
         locationString,
       );
       if (!mounted) return;
-      if (keepPosition) {
+      // A newer selection superseded this request.
+      if (requestId != _geocodeRequestId) return;
+      // Re-read: a GPS fix or a tap may have arrived while geocoding.
+      if (keepPosition()) {
+        if (!keepAtStart) setState(() => _isLoadingLocation = false);
         // Precise coordinates stay untouched; just preview the area.
         if (position != null) {
           _moveCamera(LatLng(position.latitude, position.longitude));
@@ -332,7 +356,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
         });
       }
     } on Exception {
-      if (mounted && !keepPosition) {
+      if (mounted && requestId == _geocodeRequestId && !keepPosition()) {
         setState(() {
           _isLoadingLocation = false;
           _locationError = AppLocalizations.of(context)!.mapUpdateError;

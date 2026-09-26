@@ -27,6 +27,19 @@ class AppConfig {
   static bool get isSupabaseConfigured =>
       supabaseUrl.isNotEmpty && supabaseAnonKey.isNotEmpty;
 
+  // ─────────────────────── Store listing ───────────────────────────────────
+
+  /// Android applicationId (android/app/build.gradle.kts). Keep in sync.
+  static const String androidApplicationId =
+      'com.westgatestratagem.climate_app.climate_app';
+
+  /// Google Play listing opened by the force-update screen.
+  static const String playStoreUrl =
+      'https://play.google.com/store/apps/details?id=$androidApplicationId';
+
+  // No App Store id exists yet, so there is no iOS store link: the
+  // force-update screen hides its "Update" button on iOS.
+
   // ─────────────────────── Table names ─────────────────────────────────────
 
   static const String usersCollection = 'profiles';

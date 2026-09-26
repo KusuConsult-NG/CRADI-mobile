@@ -7,22 +7,31 @@ import 'dart:developer' as developer;
 class EmergencyContactsProvider extends ChangeNotifier {
   final SupabaseService _db = SupabaseService();
 
+  /// The signed-in user's contacts; [] on error. Use [fetchContacts] when a
+  /// load failure must be told apart from "no contacts".
   Future<List<EmergencyContact>> getContacts() async {
     try {
-      final user = _db.getCurrentUser();
-      if (user == null) return [];
-
-      // Only the signed-in user's own contacts (RLS enforces this too).
-      final docs = await _db.listDocuments(
-        collectionId: AppConfig.contactsCollection,
-        queries: [FQuery.equal('userId', user.id)],
-      );
-
-      return _toSortedContacts(docs);
+      return await fetchContacts();
     } on Exception catch (e) {
       developer.log('Error getting contacts: $e');
       return [];
     }
+  }
+
+  /// Like [getContacts] but throws when the contacts could not be loaded
+  /// (e.g. offline). Returns [] only when there really are none (or no one
+  /// is signed in).
+  Future<List<EmergencyContact>> fetchContacts() async {
+    final user = _db.getCurrentUser();
+    if (user == null) return [];
+
+    // Only the signed-in user's own contacts (RLS enforces this too).
+    final docs = await _db.listDocuments(
+      collectionId: AppConfig.contactsCollection,
+      queries: [FQuery.equal('userId', user.id)],
+    );
+
+    return _toSortedContacts(docs);
   }
 
   Future<void> addContact(EmergencyContact contact) async {

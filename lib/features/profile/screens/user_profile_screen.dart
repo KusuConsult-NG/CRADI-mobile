@@ -63,6 +63,12 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
               ),
             );
           }
+        } on ProfileSaveException catch (e) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text(e.message), backgroundColor: Colors.red),
+            );
+          }
         } on Exception catch (e) {
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
@@ -248,8 +254,9 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     );
 
     if (result != null && mounted) {
-      if (result['name'] != null && result['name']!.isNotEmpty) {
-        await profileProvider.updateName(result['name']!);
+      String? nameMessage;
+      if (result['name'] != null) {
+        nameMessage = await profileProvider.updateName(result['name']!);
       }
       String? emailMessage;
       if (result['email'] != null) {
@@ -263,7 +270,12 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
       );
 
       if (mounted) {
-        final message = [?emailMessage, ?locationMessage].join('\n');
+        // A set: offline, name and location report the same problem.
+        final message = <String>{
+          ?nameMessage,
+          ?emailMessage,
+          ?locationMessage,
+        }.join('\n');
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(

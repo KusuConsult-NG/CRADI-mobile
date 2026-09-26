@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:climate_app/core/theme/app_colors.dart';
 import 'package:climate_app/core/utils/error_handler.dart';
 import 'package:climate_app/features/auth/providers/auth_provider.dart';
@@ -22,6 +24,18 @@ class ReportVoteActions extends StatefulWidget {
 
 class _ReportVoteActionsState extends State<ReportVoteActions> {
   bool _submitting = false;
+
+  /// Set when the server said the report is no longer pending: the
+  /// [VerificationReport] passed in is stale, so hide the buttons.
+  bool _noLongerPending = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // hasVotedOn needs the user's votes; they may not be loaded yet when
+    // this screen is opened straight from a push notification.
+    unawaited(context.read<ReportsStatusProvider>().loadMyVotes());
+  }
 
   static bool canVote(
     AuthProvider auth,
@@ -67,6 +81,9 @@ class _ReportVoteActionsState extends State<ReportVoteActions> {
         ),
       );
     } on VerificationRefusedException catch (e) {
+      if (e.noLongerPending && mounted) {
+        setState(() => _noLongerPending = true);
+      }
       messenger.showSnackBar(
         SnackBar(content: Text(e.message), backgroundColor: Colors.red),
       );
@@ -86,7 +103,7 @@ class _ReportVoteActionsState extends State<ReportVoteActions> {
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
     final reports = context.watch<ReportsStatusProvider>();
-    if (!canVote(auth, reports, widget.report)) {
+    if (_noLongerPending || !canVote(auth, reports, widget.report)) {
       return const SizedBox.shrink();
     }
     return Container(

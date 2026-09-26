@@ -6,6 +6,7 @@ import 'package:climate_app/features/verification/models/verification_report_mod
 import 'package:climate_app/features/verification/providers/reports_status_provider.dart';
 import 'package:climate_app/features/verification/widgets/report_vote_actions.dart';
 import 'package:climate_app/l10n/app_localizations.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mockito/mockito.dart';
@@ -182,6 +183,33 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Already voted'), findsOneWidget);
     });
+
+    testWidgets('loads the user\'s votes when shown', (tester) async {
+      await tester.pumpWidget(build(report()));
+      verify(reports.loadMyVotes()).called(1);
+    });
+
+    testWidgets('hides the buttons once the report is no longer pending', (
+      tester,
+    ) async {
+      when(
+        reports.verifyReport(
+          any,
+          userId: anyNamed('userId'),
+          comment: anyNamed('comment'),
+        ),
+      ).thenThrow(
+        const VerificationRefusedException(
+          'Already decided',
+          noLongerPending: true,
+        ),
+      );
+      await tester.pumpWidget(build(report()));
+      await tester.tap(find.text('Confirm'));
+      await tester.pumpAndSettle();
+      expect(find.text('Already decided'), findsOneWidget);
+      expect(find.text('Confirm'), findsNothing);
+    });
   });
 
   group('ForceUpdateGate', () {
@@ -202,6 +230,36 @@ void main() {
       await tester.pump();
       expect(find.text('app body'), findsNothing);
       expect(find.text('Update required'), findsOneWidget);
+    });
+
+    testWidgets('offers a store link on Android only', (tester) async {
+      RemoteConfigService()
+        ..debugSetCurrentVersion('1.0.0')
+        ..debugSetValues({'app_min_version': '9.0.0'});
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      try {
+        await tester.pumpWidget(
+          const MaterialApp(home: ForceUpdateGate(child: Text('app body'))),
+        );
+        expect(find.text('Update'), findsOneWidget);
+        expect(
+          ForceUpdateGate.storeUri().toString(),
+          'https://play.google.com/store/apps/details?id='
+          'com.westgatestratagem.climate_app.climate_app',
+        );
+
+        // No App Store id exists: no button on iOS.
+        debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+        await tester.pumpWidget(
+          const MaterialApp(
+            home: ForceUpdateGate(key: ValueKey('ios'), child: Text('x')),
+          ),
+        );
+        expect(find.text('Update'), findsNothing);
+        expect(find.text('Check again'), findsOneWidget);
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+      }
     });
   });
 }

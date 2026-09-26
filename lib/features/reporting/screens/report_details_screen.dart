@@ -2,6 +2,7 @@ import 'package:climate_app/core/theme/app_colors.dart';
 import 'package:climate_app/core/providers/language_provider.dart';
 import 'package:climate_app/features/reporting/providers/reporting_provider.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
@@ -117,7 +118,12 @@ class _ReportDetailsScreenState extends State<ReportDetailsScreen> {
         onResult: (result) {
           if (!mounted) return;
           setState(() {
-            _descController.text = result.recognizedWords;
+            // Programmatic text bypasses the input formatter: cap it too.
+            final words = result.recognizedWords;
+            const max = ReportingProvider.maxDescriptionLength;
+            _descController.text = words.length > max
+                ? words.substring(0, max)
+                : words;
             // Move cursor to end
             _descController.selection = TextSelection.fromPosition(
               TextPosition(offset: _descController.text.length),
@@ -300,6 +306,13 @@ class _ReportDetailsScreenState extends State<ReportDetailsScreen> {
                       TextField(
                         controller: _descController,
                         maxLines: 6,
+                        // Stop typing at the limit instead of silently
+                        // truncating the text on submit.
+                        inputFormatters: [
+                          LengthLimitingTextInputFormatter(
+                            ReportingProvider.maxDescriptionLength,
+                          ),
+                        ],
                         style: GoogleFonts.lexend(
                           fontSize: 16,
                           color: AppColors.textPrimary,
