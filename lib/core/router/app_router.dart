@@ -1,3 +1,4 @@
+import 'package:climate_app/core/services/remote_config_service.dart';
 import 'package:climate_app/features/alerts/screens/alerts_list_screen.dart';
 import 'package:climate_app/features/auth/screens/landing_screen.dart';
 
@@ -170,6 +171,16 @@ GoRouter createRouter(BuildContext context) {
             },
             routes: [
               GoRoute(
+                path: 'manage',
+                // Compose / dismiss broadcasts: every role the alerts
+                // insert / update policies allow, not only admins.
+                redirect: (context, state) => _requireRole(
+                  context,
+                  AuthProvider.alertManagerRoles.toList(),
+                ),
+                builder: (context, state) => const AdminAlertsScreen(),
+              ),
+              GoRoute(
                 path: 'detail',
                 // In-app navigation passes the alert via extra; deep links /
                 // state restoration arrive without it.
@@ -340,7 +351,13 @@ GoRouter createRouter(BuildContext context) {
           return ReportViewScreen(report: report);
         },
       ),
-      GoRoute(path: '/chat', builder: (context, state) => const ChatScreen()),
+      GoRoute(
+        path: '/chat',
+        // Peer chat can be switched off remotely (feature flag).
+        redirect: (context, state) =>
+            RemoteConfigService().featureFlagPeerChat ? null : '/dashboard',
+        builder: (context, state) => const ChatScreen(),
+      ),
       GoRoute(
         path: '/offline',
         builder: (context, state) => const OfflineHomeScreen(),

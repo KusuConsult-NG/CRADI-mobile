@@ -2,6 +2,7 @@ import 'package:climate_app/core/constants/hazards.dart';
 import 'package:climate_app/core/services/supabase_service.dart'
     show parseTimestamp;
 import 'package:climate_app/features/verification/providers/reports_status_provider.dart';
+import 'package:climate_app/features/verification/widgets/dispute_comment_dialog.dart';
 import 'package:climate_app/core/theme/app_colors.dart';
 import 'package:climate_app/core/utils/error_handler.dart';
 import 'package:climate_app/shared/widgets/custom_button.dart';
@@ -23,8 +24,21 @@ class VerificationDetailScreen extends StatefulWidget {
       _VerificationDetailScreenState();
 }
 
+/// Label and colour of the status badge for a report [status] value.
+@visibleForTesting
+(String, Color) statusBadgeFor(String status) => switch (status) {
+  'verified' || 'acknowledged' => ('VERIFIED', Colors.green.shade700),
+  'approved' || 'validated' || 'resolved' => ('APPROVED', Colors.blue),
+  'rejected' => ('REJECTED', Colors.red),
+  _ => ('PENDING VERIFICATION', Colors.orange.shade800),
+};
+
 class _VerificationDetailScreenState extends State<VerificationDetailScreen> {
   bool _isLoading = false;
+
+  /// Set once voting is no longer possible (already voted, or the report
+  /// left 'pending'): the buttons are disabled.
+  bool _votingClosed = false;
   final TextEditingController _commentController = TextEditingController();
 
   @override
@@ -34,21 +48,28 @@ class _VerificationDetailScreenState extends State<VerificationDetailScreen> {
   }
 
   Future<void> _submitVerification(bool isConfirmed) async {
+    final reportId = (widget.report['\$id'] ?? widget.report['id'])?.toString();
+    if (reportId == null || reportId.isEmpty) return;
+    // A dispute must say what is wrong with the report.
+    var comment = _commentController.text.trim();
+    if (!isConfirmed && comment.isEmpty) {
+      final entered = await showDisputeCommentDialog(context);
+      if (entered == null || !mounted) return;
+      comment = entered;
+      _commentController.text = entered;
+    }
     setState(() => _isLoading = true);
     final messenger = ScaffoldMessenger.of(context);
     final provider = context.read<ReportsStatusProvider>();
-    final reportId = (widget.report['\$id'] ?? widget.report['id'])?.toString();
-    if (reportId == null || reportId.isEmpty) {
-      setState(() => _isLoading = false);
-      return;
-    }
-    final comment = _commentController.text.trim();
 
     try {
       // Goes through the provider so the "already voted" cache and the
       // loaded lists are updated.
       if (isConfirmed) {
-        await provider.verifyReport(reportId, comment: comment);
+        await provider.verifyReport(
+          reportId,
+          comment: comment.isEmpty ? null : comment,
+        );
       } else {
         await provider.disputeReport(reportId, comment: comment);
       }
@@ -67,8 +88,14 @@ class _VerificationDetailScreenState extends State<VerificationDetailScreen> {
       context.pop(); // Go back to list
     } on VerificationRefusedException catch (e) {
       if (!mounted) return;
-      setState(() => _isLoading = false);
+      final closed = e.alreadyVoted || e.noLongerPending;
+      setState(() {
+        _isLoading = false;
+        if (closed) _votingClosed = true;
+      });
       messenger.showSnackBar(SnackBar(content: Text(e.message)));
+      // Nothing left to do here: back to the (refreshed) list.
+      if (closed && context.canPop()) context.pop();
     } on Exception catch (e) {
       if (!mounted) return;
       setState(() => _isLoading = false);
@@ -88,6 +115,9 @@ class _VerificationDetailScreenState extends State<VerificationDetailScreen> {
     final formattedDate = date == null
         ? 'Unknown time'
         : DateFormat('MMM d, y • h:mm a').format(date);
+    final status = (report['status'] ?? 'pending').toString().toLowerCase();
+    final (badgeLabel, badgeColor) = statusBadgeFor(status);
+    final canVote = status == 'pending' && !_votingClosed;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -103,20 +133,20 @@ class _VerificationDetailScreenState extends State<VerificationDetailScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Status Badge
+            // Status Badge (the report's actual status)
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
-                color: Colors.orange.withValues(alpha: 0.1),
+                color: badgeColor.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: Colors.orange),
+                border: Border.all(color: badgeColor),
               ),
               child: Text(
-                'PENDING VERIFICATION',
+                badgeLabel,
                 style: GoogleFonts.lexend(
                   fontSize: 12,
                   fontWeight: FontWeight.bold,
-                  color: Colors.orange.shade800,
+                  color: badgeColor,
                 ),
               ),
             ),
@@ -258,8 +288,9 @@ class _VerificationDetailScreenState extends State<VerificationDetailScreen> {
             const SizedBox(height: 16),
             TextField(
               controller: _commentController,
+              enabled: canVote,
               decoration: const InputDecoration(
-                labelText: 'Optional Comment',
+                labelText: 'Comment (required to dispute)',
                 border: OutlineInputBorder(),
                 hintText: 'Add details about what you see...',
               ),
@@ -273,7 +304,7 @@ class _VerificationDetailScreenState extends State<VerificationDetailScreen> {
                 Expanded(
                   child: CustomButton(
                     text: 'Dispute',
-                    onPressed: _isLoading
+                    onPressed: _isLoading || !canVote
                         ? null
                         : () => _submitVerification(false),
                     backgroundColor: Colors.white,
@@ -286,7 +317,7 @@ class _VerificationDetailScreenState extends State<VerificationDetailScreen> {
                 Expanded(
                   child: CustomButton(
                     text: 'I Can Confirm',
-                    onPressed: _isLoading
+                    onPressed: _isLoading || !canVote
                         ? null
                         : () => _submitVerification(true),
                     backgroundColor: Colors.green,

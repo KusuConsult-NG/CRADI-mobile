@@ -32,6 +32,18 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     });
   }
 
+  /// Marks [notif] read, then opens what it is about (the push text is
+  /// generic; the details are shown in the app).
+  Future<void> _open(Map<String, dynamic> notif, {required bool isRead}) async {
+    if (!isRead) {
+      await _notificationService.markAsRead(notif['id'] as String);
+      await _loadNotifications();
+    }
+    if (!mounted) return;
+    final route = notificationRouteFor(notif);
+    if (route != null) context.go(route);
+  }
+
   Future<void> _markAllAsRead() async {
     await _notificationService.markAllAsRead();
     await _loadNotifications();
@@ -157,12 +169,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                   return Padding(
                     padding: const EdgeInsets.only(bottom: 12),
                     child: InkWell(
-                      onTap: () async {
-                        if (!isRead) {
-                          await _notificationService.markAsRead(notif['id']);
-                          _loadNotifications();
-                        }
-                      },
+                      onTap: () => _open(notif, isRead: isRead),
                       child: AppCard(
                         padding: const EdgeInsets.all(16),
                         child: Row(
@@ -240,4 +247,17 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     if (difference.inHours < 24) return '${difference.inHours}h ago';
     return '${time.day}/${time.month}';
   }
+}
+
+/// Route a history entry opens, or null when it has no target beyond this
+/// screen.
+@visibleForTesting
+String? notificationRouteFor(Map<String, dynamic> notif) {
+  final raw = notif['data'];
+  final data = raw is Map
+      ? raw.map((k, v) => MapEntry(k.toString(), v))
+      : <String, dynamic>{};
+  if (data.isEmpty) return null;
+  final route = NotificationService.routeForData(data);
+  return route == '/notifications' ? null : route;
 }

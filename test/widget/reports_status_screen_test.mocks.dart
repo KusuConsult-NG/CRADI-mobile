@@ -46,6 +46,14 @@ class MockReportsStatusProvider extends _i1.Mock
           as bool);
 
   @override
+  int get userDataGeneration =>
+      (super.noSuchMethod(
+            Invocation.getter(#userDataGeneration),
+            returnValue: 0,
+          )
+          as int);
+
+  @override
   bool get hasListeners =>
       (super.noSuchMethod(Invocation.getter(#hasListeners), returnValue: false)
           as bool);
@@ -316,15 +324,6 @@ class MockReportsStatusProvider extends _i1.Mock
               [reportId],
               {#userId: userId, #comment: comment},
             ),
-            returnValue: _i5.Future<void>.value(),
-            returnValueForMissingStub: _i5.Future<void>.value(),
-          )
-          as _i5.Future<void>);
-
-  @override
-  _i5.Future<void> rejectReport(String? reportId, {String? userId}) =>
-      (super.noSuchMethod(
-            Invocation.method(#rejectReport, [reportId], {#userId: userId}),
             returnValue: _i5.Future<void>.value(),
             returnValueForMissingStub: _i5.Future<void>.value(),
           )

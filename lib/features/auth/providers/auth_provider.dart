@@ -159,6 +159,29 @@ class AuthProvider extends ChangeNotifier {
     UserRole.admin,
   };
 
+  /// Roles that may read the peer votes (and dispute comments) on reports
+  /// (`verifications_select`).
+  static const Set<UserRole> verificationReaderRoles = {
+    UserRole.ewm,
+    UserRole.ewv,
+    UserRole.ewr,
+    UserRole.ldpCoordinator,
+    UserRole.projectStaff,
+    UserRole.admin,
+    UserRole.techSupport,
+  };
+
+  /// Roles that may broadcast / dismiss alerts (`alerts_insert` /
+  /// `alerts_update`).
+  static const Set<UserRole> alertManagerRoles = {
+    UserRole.ewv,
+    UserRole.ewr,
+    UserRole.ldpCoordinator,
+    UserRole.projectStaff,
+    UserRole.admin,
+    UserRole.techSupport,
+  };
+
   bool get isAuthenticated => _isAuthenticated;
 
   /// The effective role, matching the database's `app_role()`: the stored
@@ -284,7 +307,9 @@ class AuthProvider extends ChangeNotifier {
     // enabled, otherwise sign out.
     _sessionManager.onSessionExpired = () async {
       if (!_isAuthenticated) return;
-      final bioEnabled = await _storage.isBiometricEnabled();
+      final bioEnabled = await _storage.isBiometricEnabled(
+        forUserId: _currentUser?.id,
+      );
       if (bioEnabled) {
         _isLocked = true;
         notifyListeners();
@@ -427,7 +452,11 @@ class AuthProvider extends ChangeNotifier {
 
     // Biometric lock only on cold start / resume with a persisted session,
     // not right after an explicit sign-in.
-    final bioEnabled = await _storage.isBiometricEnabled();
+    // The lock belongs to the account that enabled it: a flag left by
+    // another account on this device is cleared.
+    await _storage.bindBiometricOwner(user.id);
+    if (stale()) return;
+    final bioEnabled = await _storage.isBiometricEnabled(forUserId: user.id);
     if (stale()) return;
     if (bioEnabled && !_justLoggedIn) {
       _isLocked = true;
@@ -1309,7 +1338,9 @@ class AuthProvider extends ChangeNotifier {
   /// their password).
   Future<bool> authenticateWithBiometrics() async {
     try {
-      final isBiometricEnabled = await _storage.isBiometricEnabled();
+      final isBiometricEnabled = await _storage.isBiometricEnabled(
+        forUserId: _db.currentUserId,
+      );
       if (!isBiometricEnabled) return false;
 
       final authenticated = await _biometricService.authenticateForLogin();
@@ -1345,8 +1376,8 @@ class AuthProvider extends ChangeNotifier {
       );
       if (!canAuth) throw AuthException('Biometric authentication failed');
     }
-    await _storage.setBiometricEnabled(enabled);
     final user = _db.getCurrentUser();
+    await _storage.setBiometricEnabled(enabled, userId: user?.id);
     if (user != null) {
       try {
         await _db.updateDocument(
@@ -1361,7 +1392,11 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<bool> isBiometricEnabled() => _storage.isBiometricEnabled();
+  /// Whether the signed-in account enabled the biometric lock on this
+  /// device.
+  Future<bool> isBiometricEnabled() => _storage.isBiometricEnabled(
+    forUserId: _currentUser?.id ?? _db.currentUserId,
+  );
   Future<bool> isBiometricAvailable() =>
       _biometricService.isBiometricAvailable();
 
@@ -1428,7 +1463,9 @@ class AuthProvider extends ChangeNotifier {
       // Revokes the refresh token and clears the persisted session.
       await _db.logout();
 
-      await _storage.clearAll(keepPreferences: true);
+      // The biometric lock is per account: it must not carry over to the
+      // next account signing in on this device.
+      await _storage.clearAll();
 
       _resetUserState();
       _isLoading = false;

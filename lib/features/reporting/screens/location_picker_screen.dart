@@ -1350,6 +1350,8 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                               ),
                               content: TextField(
                                 controller: controller,
+                                maxLength:
+                                    ReportingProvider.maxLocationDetailsLength,
                                 decoration: InputDecoration(
                                   hintText: AppLocalizations.of(
                                     context,

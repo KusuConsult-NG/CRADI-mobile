@@ -234,6 +234,38 @@ class PeerVerificationService {
     }
   }
 
+  /// The peer votes on [reportId] (confirmations and disputes with their
+  /// comments), newest first. Readable by ewm, ewv, ewr, ldp_coordinator,
+  /// project_staff, admin and techSupport (`verifications_select`).
+  ///
+  /// The verifier's name is embedded from `profiles` where the caller may
+  /// read that profile; otherwise it is null (never looked up separately).
+  Future<List<ReportVerification>> getVerifications(String reportId) async {
+    const table = AppConfig.verificationsCollection;
+    List<Map<String, dynamic>> rows;
+    try {
+      rows = await _db.client
+          .from(table)
+          .select('*, verifier:profiles!verifier_id(name)')
+          .eq('report_id', reportId)
+          .order('submitted_at', ascending: false)
+          .limit(200);
+    } on Exception catch (e) {
+      // Embedding can fail (e.g. relationship not exposed): plain rows.
+      developer.log(
+        'Verifier embed failed, loading plain rows: $e',
+        name: 'PeerVerificationService',
+      );
+      rows = await _db.client
+          .from(table)
+          .select()
+          .eq('report_id', reportId)
+          .order('submitted_at', ascending: false)
+          .limit(200);
+    }
+    return rows.map(ReportVerification.fromRow).toList();
+  }
+
   /// Haversine distance in kilometres.
   static double _haversineKm(
     double lat1,
@@ -255,4 +287,35 @@ class PeerVerificationService {
   }
 
   static double _deg2rad(double deg) => deg * (math.pi / 180);
+}
+
+/// One peer vote on a report.
+class ReportVerification {
+  const ReportVerification({
+    required this.verifierId,
+    required this.isConfirmed,
+    this.comment = '',
+    this.verifierName,
+    this.submittedAt,
+  });
+
+  /// Builds a vote from a raw `verifications` row (optionally with an
+  /// embedded `verifier: {name}`).
+  factory ReportVerification.fromRow(Map<String, dynamic> row) {
+    final verifier = row['verifier'];
+    final name = verifier is Map ? verifier['name']?.toString().trim() : null;
+    return ReportVerification(
+      verifierId: row['verifier_id']?.toString() ?? '',
+      isConfirmed: row['is_confirmed'] == true,
+      comment: row['comment']?.toString().trim() ?? '',
+      verifierName: (name == null || name.isEmpty) ? null : name,
+      submittedAt: parseTimestamp(row['submitted_at'] ?? row['created_at']),
+    );
+  }
+
+  final String verifierId;
+  final bool isConfirmed;
+  final String comment;
+  final String? verifierName;
+  final DateTime? submittedAt;
 }

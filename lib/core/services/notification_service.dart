@@ -219,6 +219,7 @@ class NotificationService {
     // Let OneSignal display it; just record it in the history.
     unawaited(
       _saveNotification(
+        notificationId: n.notificationId,
         title: n.title ?? 'New Alert',
         body: n.body ?? '',
         data: n.additionalData,
@@ -233,12 +234,14 @@ class NotificationService {
       'Notification clicked: ${n.title} $data',
       name: 'NotificationService',
     );
+    // A push received in the foreground is already in the history: mark
+    // that entry read instead of recording a copy.
     unawaited(
-      _saveNotification(
+      recordOpenedNotification(
+        notificationId: n.notificationId,
         title: n.title ?? 'New Alert',
         body: n.body ?? '',
         data: data,
-        isRead: true,
       ),
     );
     if (_router == null) {
@@ -258,7 +261,6 @@ class NotificationService {
   /// `report_id` / `alert_id`). `validated_alert` carries the validated
   /// report's `report_id` and opens that report. Older camelCase keys and
   /// types are still understood.
-  @visibleForTesting
   static String routeForData(Map<String, dynamic> data) {
     String pick(List<String> keys) {
       for (final k in keys) {
@@ -514,7 +516,50 @@ class NotificationService {
     }
   }
 
+  /// Records a tapped push: marks its history entry (matched by the
+  /// OneSignal [notificationId]) read, or adds it as read when it is not in
+  /// the history yet (e.g. received while the app was in the background).
+  @visibleForTesting
+  Future<void> recordOpenedNotification({
+    required String? notificationId,
+    required String title,
+    required String body,
+    Map<String, dynamic>? data,
+  }) async {
+    final box = _notificationsBox;
+    if (box == null) return;
+    if (notificationId != null &&
+        notificationId.isNotEmpty &&
+        box.containsKey(notificationId)) {
+      await markAsRead(notificationId);
+      return;
+    }
+    await _saveNotification(
+      notificationId: notificationId,
+      title: title,
+      body: body,
+      data: data,
+      isRead: true,
+    );
+  }
+
+  /// Adds a push to the history, keyed by its OneSignal [notificationId]
+  /// when known (so the same push is never recorded twice).
+  @visibleForTesting
+  Future<void> saveNotificationForTesting({
+    String? notificationId,
+    required String title,
+    required String body,
+    Map<String, dynamic>? data,
+  }) => _saveNotification(
+    notificationId: notificationId,
+    title: title,
+    body: body,
+    data: data,
+  );
+
   Future<void> _saveNotification({
+    String? notificationId,
     required String title,
     required String body,
     Map<String, dynamic>? data,
@@ -522,7 +567,11 @@ class NotificationService {
   }) async {
     if (_notificationsBox == null) return;
 
-    final id = DateTime.now().millisecondsSinceEpoch.toString();
+    final id = (notificationId != null && notificationId.isNotEmpty)
+        ? notificationId
+        : DateTime.now().millisecondsSinceEpoch.toString();
+    // Already recorded (the same push delivered twice): keep that entry.
+    if (_notificationsBox!.containsKey(id)) return;
     final notification = {
       'id': id,
       'title': title,

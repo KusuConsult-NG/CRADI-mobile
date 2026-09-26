@@ -7,7 +7,7 @@ import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart'
-    show AuthRetryableFetchException, PostgrestException;
+    show AuthRetryableFetchException, PostgrestException, StorageException;
 
 import 'package:climate_app/core/services/hive_encryption_service.dart';
 import 'package:climate_app/core/services/supabase_service.dart';
@@ -49,9 +49,23 @@ bool isTransientNetworkError(Object error) =>
     error is http.ClientException ||
     error is AuthRetryableFetchException;
 
-/// True when the server rejected the payload and retrying cannot succeed.
-bool isPermanentSyncError(Object error) =>
-    error is PostgrestException && _permanentPostgresCodes.contains(error.code);
+/// True when the server rejected the payload and retrying cannot succeed:
+/// a permanent Postgres error, a storage upload refused with a 4xx status
+/// (e.g. file too large, wrong type, not permitted — but not a timeout,
+/// conflict or rate limit), or an image that can't be processed.
+bool isPermanentSyncError(Object error) {
+  if (error is PostgrestException) {
+    return _permanentPostgresCodes.contains(error.code);
+  }
+  if (error is StorageException) {
+    final status = int.tryParse(error.statusCode ?? '');
+    return status != null &&
+        status >= 400 &&
+        status < 500 &&
+        !const {408, 409, 429}.contains(status);
+  }
+  return error is ImageEncodingException;
+}
 
 /// Service for storing draft reports offline using Hive
 /// Allows users to create reports without internet and sync later
@@ -374,7 +388,7 @@ class OfflineStorageService {
 
   /// Whether a sync failure should consume one of the item's retries.
   static bool failureCountsAsRetry(Object error) =>
-      !isTransientNetworkError(error);
+      !isTransientNetworkError(error) && !SupabaseService.isRateLimited(error);
 
   /// Mark queue item as failed.
   ///

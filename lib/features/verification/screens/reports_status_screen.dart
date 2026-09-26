@@ -11,6 +11,8 @@ import 'package:share_plus/share_plus.dart';
 import 'package:climate_app/core/utils/error_handler.dart';
 import 'package:climate_app/features/verification/models/verification_report_model.dart';
 import 'package:climate_app/features/verification/providers/reports_status_provider.dart';
+import 'package:climate_app/features/verification/widgets/dispute_comment_dialog.dart';
+import 'package:climate_app/features/verification/widgets/report_staff_actions.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -252,7 +254,8 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
     final currentUserId = auth.currentUser?.id;
     // Mirrors the database rules: peer votes by approved verifier roles
     // (EWMs only in their own ward, never on their own report); approve /
-    // reject / reopen by ewv, ewr, ldp_coordinator, project_staff, admin.
+    // reject / reopen by ewv, ewr, ldp_coordinator, project_staff, admin
+    // (admins also on their own reports — see canManageReportStatus).
     final canVerify =
         auth.canVoteOn(
           reporterId: report.reporterId,
@@ -399,11 +402,7 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
                       ),
                       // A peer "no" vote: it does not reject the report.
                       OutlinedButton(
-                        onPressed: () => _runAction(
-                          () => provider.disputeReport(report.id),
-                          'Dispute recorded. Staff will review the report.',
-                          successColor: Colors.orange,
-                        ),
+                        onPressed: () => _disputeWithComment(report, provider),
                         style: OutlinedButton.styleFrom(
                           side: const BorderSide(color: Colors.orange),
                           foregroundColor: Colors.orange.shade800,
@@ -414,9 +413,7 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
                         child: const Text('Dispute'),
                       ),
                     ],
-                    if (isStaff &&
-                        report.status == ReportStatus.verified &&
-                        report.reporterId != currentUserId)
+                    if (isStaff && report.status == ReportStatus.verified)
                       ElevatedButton(
                         onPressed: () => _runAction(
                           () => provider.approveReport(report.id),
@@ -441,8 +438,7 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
                       ),
                     if (isStaff &&
                         (report.status == ReportStatus.pending ||
-                            report.status == ReportStatus.verified) &&
-                        report.reporterId != currentUserId)
+                            report.status == ReportStatus.verified))
                       OutlinedButton(
                         onPressed: () => _confirmStaffReject(report, provider),
                         style: OutlinedButton.styleFrom(
@@ -461,9 +457,7 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
                           style: GoogleFonts.lexend(fontSize: 13),
                         ),
                       ),
-                    if (isStaff &&
-                        report.status != ReportStatus.pending &&
-                        report.reporterId != currentUserId)
+                    if (isStaff && report.status != ReportStatus.pending)
                       OutlinedButton(
                         onPressed: () => _runAction(
                           () => provider.moveBackToPending(report.id),
@@ -516,15 +510,25 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
     } on Exception catch (e) {
       messenger.showSnackBar(
         SnackBar(
-          content: Text(
-            e is VerificationRefusedException
-                ? e.message
-                : ErrorHandler.handleError(e, context: 'Report'),
-          ),
+          content: Text(reportActionErrorMessage(e)),
           backgroundColor: Colors.red,
         ),
       );
     }
+  }
+
+  /// Peer dispute: asks for the required comment, then records the vote.
+  Future<void> _disputeWithComment(
+    VerificationReport report,
+    ReportsStatusProvider provider,
+  ) async {
+    final comment = await showDisputeCommentDialog(context);
+    if (comment == null || !mounted) return;
+    await _runAction(
+      () => provider.disputeReport(report.id, comment: comment),
+      'Dispute recorded. Staff will review the report.',
+      successColor: Colors.orange,
+    );
   }
 
   /// Senior-staff rejection: asks for a reason, then sets the report to
@@ -533,42 +537,7 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
     VerificationReport report,
     ReportsStatusProvider provider,
   ) async {
-    final reasonController = TextEditingController();
-    final reason = await showDialog<String>(
-      context: context,
-      builder: (c) => AlertDialog(
-        title: Text(
-          'Reject report?',
-          style: GoogleFonts.lexend(fontWeight: FontWeight.bold),
-        ),
-        content: TextField(
-          controller: reasonController,
-          autofocus: true,
-          maxLines: 3,
-          decoration: const InputDecoration(
-            labelText: 'Reason (required)',
-            border: OutlineInputBorder(),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(c),
-            child: Text(AppLocalizations.of(context)!.cancel),
-          ),
-          TextButton(
-            onPressed: () {
-              final text = reasonController.text.trim();
-              if (text.isNotEmpty) Navigator.pop(c, text);
-            },
-            child: Text(
-              AppLocalizations.of(context)!.reject,
-              style: const TextStyle(color: Colors.red),
-            ),
-          ),
-        ],
-      ),
-    );
-    reasonController.dispose();
+    final reason = await showRejectReasonDialog(context);
     if (reason == null || !mounted) return;
     await _runAction(
       () => provider.staffRejectReport(report.id, reason: reason),

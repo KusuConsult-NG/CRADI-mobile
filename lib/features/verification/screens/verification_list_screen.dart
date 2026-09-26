@@ -49,7 +49,9 @@ class _VerificationListScreenState extends State<VerificationListScreen> {
         FQuery.orderDesc('submittedAt'),
       ];
       if (currentUserId != null) {
-        queries.add(FQuery.notEqual('userId', currentUserId));
+        // Not neq: that would also drop reports of deleted reporters
+        // (user_id NULL).
+        queries.add(FQuery.distinctFrom('userId', currentUserId));
       }
 
       // Own votes (one query, cached) so already-voted reports are hidden.

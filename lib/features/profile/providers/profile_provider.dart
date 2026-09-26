@@ -106,7 +106,7 @@ class ProfileProvider extends ChangeNotifier {
           final lga = await _storage.read('profile_lga');
           final ward = await _storage.read('profile_ward');
           final storedZone = await _storage.read('monitoring_zone');
-          final bioEnabled = await _storage.isBiometricEnabled();
+          final bioEnabled = await _storage.isBiometricEnabled(forUserId: uid);
           if (stale()) return;
           _name = (cachedName != null && cachedName.isNotEmpty)
               ? cachedName
@@ -152,7 +152,9 @@ class ProfileProvider extends ChangeNotifier {
             // device lock is per device and is read from local storage,
             // never overwritten from the server (a device without
             // biometrics would lock the user out).
-            _biometricsEnabled = await _storage.isBiometricEnabled();
+            _biometricsEnabled = await _storage.isBiometricEnabled(
+              forUserId: uid,
+            );
             if (stale()) return;
 
             // The row is the truth: '' (the column default) means "all
@@ -444,6 +446,7 @@ class ProfileProvider extends ChangeNotifier {
         storagePath: storagePath,
         file: file,
         contentType: 'image/jpeg',
+        upsert: true,
       );
 
       final error = await _syncToServer({'profileImageUrl': fileUrl});
@@ -538,7 +541,9 @@ class ProfileProvider extends ChangeNotifier {
   /// Re-reads the device's biometric lock flag for display. The flag is
   /// written only by AuthProvider.setBiometricEnabled.
   Future<void> refreshBiometricsEnabled() async {
-    _biometricsEnabled = await _storage.isBiometricEnabled();
+    _biometricsEnabled = await _storage.isBiometricEnabled(
+      forUserId: _db.currentUserId,
+    );
     notifyListeners();
   }
 

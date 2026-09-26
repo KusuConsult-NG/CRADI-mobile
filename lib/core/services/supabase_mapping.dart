@@ -224,7 +224,9 @@ DateTime? parseTimestamp(Object? value) {
 
 // ───────────────────────────── Query DSL ─────────────────────────────────────
 
-enum FilterOp { eq, neq, gt, lt, contains }
+/// [neq] follows SQL (`NULL <> x` is not true, so NULL rows are excluded);
+/// [distinctFrom] is `IS DISTINCT FROM` (NULL rows are included).
+enum FilterOp { eq, neq, distinctFrom, gt, lt, contains }
 
 /// A single column predicate, already resolved to a column name.
 class ColumnFilter {
@@ -243,6 +245,8 @@ class ColumnFilter {
       case FilterOp.neq:
         // SQL semantics: NULL <> x is not true.
         return actual != null && _compare(actual, value) != 0;
+      case FilterOp.distinctFrom:
+        return _compare(actual, value) != 0;
       case FilterOp.gt:
         return actual != null && _compare(actual, value) > 0;
       case FilterOp.lt:
@@ -408,6 +412,11 @@ class FQuery {
       WhereFilter(field, FilterOp.eq, value);
   static WhereFilter notEqual(String field, Object? value) =>
       WhereFilter(field, FilterOp.neq, value);
+
+  /// `field IS DISTINCT FROM value`: unlike [notEqual], rows where the
+  /// field is NULL match too (e.g. reports whose reporter was deleted).
+  static WhereFilter distinctFrom(String field, Object? value) =>
+      WhereFilter(field, FilterOp.distinctFrom, value);
   static WhereFilter greaterThan(String field, Object? value) =>
       WhereFilter(field, FilterOp.gt, value);
   static WhereFilter lessThan(String field, Object? value) =>

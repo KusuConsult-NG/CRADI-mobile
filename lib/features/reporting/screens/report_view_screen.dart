@@ -1,17 +1,57 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 import 'package:climate_app/core/constants/hazards.dart';
 import 'package:climate_app/core/theme/app_colors.dart';
 import 'package:climate_app/features/verification/models/verification_report_model.dart';
+import 'package:climate_app/features/verification/providers/reports_status_provider.dart';
+import 'package:climate_app/features/verification/widgets/report_staff_actions.dart';
+import 'package:climate_app/features/verification/widgets/report_verifications_section.dart';
 import 'package:climate_app/features/verification/widgets/report_vote_actions.dart';
 
-/// Read-only screen that displays full report details.
+/// Screen that displays full report details, with the actions the
+/// signed-in user may take on it (peer vote, staff approve / reject /
+/// reopen), the peer votes (for roles that may read them) and, for a
+/// rejected report, the staff's reason.
 /// Receives a [VerificationReport] via GoRouter `extra` parameter.
-class ReportViewScreen extends StatelessWidget {
+class ReportViewScreen extends StatefulWidget {
   final VerificationReport report;
 
   const ReportViewScreen({super.key, required this.report});
+
+  @override
+  State<ReportViewScreen> createState() => _ReportViewScreenState();
+}
+
+class _ReportViewScreenState extends State<ReportViewScreen> {
+  late VerificationReport report = widget.report;
+
+  /// Bumped after every reload so the peer votes are re-read too.
+  int _reloads = 0;
+
+  @override
+  void didUpdateWidget(covariant ReportViewScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.report != widget.report) report = widget.report;
+  }
+
+  /// Re-fetches the report after an action changed it.
+  Future<void> _reload() async {
+    try {
+      final fresh = await context.read<ReportsStatusProvider>().fetchReportById(
+        report.id,
+      );
+      if (!mounted) return;
+      setState(() {
+        if (fresh != null) report = fresh;
+        _reloads++;
+      });
+    } on Exception catch (_) {
+      if (mounted) setState(() => _reloads++);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -53,8 +93,23 @@ class ReportViewScreen extends StatelessWidget {
             _buildHeaderCard(),
             const SizedBox(height: 16),
 
+            // ── Rejection reason (shown to the reporter too) ──────────
+            if (report.status == ReportStatus.rejected) ...[
+              _buildRejectionCard(),
+              const SizedBox(height: 16),
+            ],
+
             // ── Peer vote (verification_request pushes open this screen) ──
-            ReportVoteActions(report: report),
+            ReportVoteActions(report: report, onVoted: _reload),
+
+            // ── Staff approve / reject / reopen ───────────────────────
+            ReportStaffActions(report: report, onChanged: _reload),
+
+            // ── Confirmations / disputes with comments (staff) ────────
+            ReportVerificationsSection(
+              reportId: report.id,
+              refreshToken: _reloads,
+            ),
 
             // ── Details Section ───────────────────────────────────────
             _buildSectionCard(
@@ -230,6 +285,55 @@ class ReportViewScreen extends StatelessWidget {
                 fontWeight: FontWeight.w600,
                 color: statusColor,
               ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Rejection reason ────────────────────────────────────────────────────
+
+  Widget _buildRejectionCard() {
+    final at = report.rejectedAt;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.red.shade50,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.red.shade100),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.info_outline, color: Colors.red.shade700),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  at == null
+                      ? 'Report rejected'
+                      : 'Report rejected on '
+                            '${DateFormat('MMM d, y').format(at)}',
+                  style: GoogleFonts.lexend(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.red.shade800,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  report.rejectionReason ?? 'No reason was given.',
+                  style: GoogleFonts.lexend(
+                    fontSize: 13,
+                    color: AppColors.textPrimary,
+                    height: 1.5,
+                  ),
+                ),
+              ],
             ),
           ),
         ],

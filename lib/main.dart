@@ -198,6 +198,13 @@ class _ClimateAppState extends State<ClimateApp> {
       ..addSignOutListener(_onSignedOut!);
     profile.onMonitoringZoneChanged = (_) =>
         unawaited(reports.refreshReports());
+    // Reports uploaded by an offline sync appear in the lists right away
+    // (staff lists and the user's own list).
+    context.read<ReportingProvider>().onReportsSynced = () {
+      final uid = _auth?.currentUser?.id;
+      unawaited(reports.refreshReports());
+      if (uid != null) unawaited(reports.refreshReports(userId: uid));
+    };
   }
 
   void _wireAutoSync() {

@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:climate_app/core/services/remote_config_service.dart';
 import 'package:climate_app/core/theme/app_colors.dart';
 import 'package:climate_app/core/utils/error_handler.dart';
 import 'package:climate_app/features/auth/providers/auth_provider.dart'
@@ -182,6 +183,13 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     String? selectedState = profileProvider.state;
     String? selectedLGA = profileProvider.lga;
     String? selectedWard = profileProvider.ward;
+    // Approved staff are scoped by area; only an admin may move them
+    // (the database refuses the change).
+    final auth = context.read<app_auth.AuthProvider>();
+    final locationLocked =
+        auth.isApproved == true &&
+        auth.rawUserRole != null &&
+        auth.rawUserRole != app_auth.UserRole.user;
 
     final result = await showDialog<Map<String, String?>>(
       context: context,
@@ -209,18 +217,35 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                       keyboardType: TextInputType.emailAddress,
                     ),
                     const SizedBox(height: 16),
-                    LocationSelectorWidget(
-                      initialState: selectedState,
-                      initialLGA: selectedLGA,
-                      initialWard: selectedWard,
-                      onLocationChanged: (state, lga, ward) {
-                        // No need to call setState here as the widget handles its own state
-                        // But we need to update our local variables to pass back on save
-                        selectedState = state;
-                        selectedLGA = lga;
-                        selectedWard = ward;
-                      },
-                    ),
+                    if (locationLocked)
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(Icons.lock_outline),
+                        title: Text(
+                          [selectedWard, selectedLGA, selectedState]
+                              .whereType<String>()
+                              .where((v) => v.isNotEmpty)
+                              .join(', '),
+                          style: GoogleFonts.lexend(fontSize: 14),
+                        ),
+                        subtitle: Text(
+                          'Ask an admin to change your area',
+                          style: GoogleFonts.lexend(fontSize: 12),
+                        ),
+                      )
+                    else
+                      LocationSelectorWidget(
+                        initialState: selectedState,
+                        initialLGA: selectedLGA,
+                        initialWard: selectedWard,
+                        onLocationChanged: (state, lga, ward) {
+                          // No need to call setState here as the widget handles its own state
+                          // But we need to update our local variables to pass back on save
+                          selectedState = state;
+                          selectedLGA = lga;
+                          selectedWard = ward;
+                        },
+                      ),
                   ],
                 ),
               ),
@@ -262,12 +287,14 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
       if (result['email'] != null) {
         emailMessage = await profileProvider.updateEmail(result['email']!);
       }
-      // Update location (may be refused for approved staff accounts)
-      final locationMessage = await profileProvider.updateLocation(
-        result['state'],
-        result['lga'],
-        result['ward'],
-      );
+      // Update location (approved staff cannot change their own area).
+      final locationMessage = locationLocked
+          ? null
+          : await profileProvider.updateLocation(
+              result['state'],
+              result['lga'],
+              result['ward'],
+            );
 
       if (mounted) {
         // A set: offline, name and location report the same problem.
@@ -888,12 +915,14 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                     'My Reports',
                     onTap: () => context.push('/my-reports'),
                   ),
-                  const SizedBox(height: 8),
-                  _buildSettingsTile(
-                    Icons.chat_bubble_outline,
-                    'Support Chat',
-                    onTap: () => context.push('/chat'),
-                  ),
+                  if (RemoteConfigService().featureFlagPeerChat) ...[
+                    const SizedBox(height: 8),
+                    _buildSettingsTile(
+                      Icons.chat_bubble_outline,
+                      'Support Chat',
+                      onTap: () => context.push('/chat'),
+                    ),
+                  ],
                   const SizedBox(height: 8),
                   _buildSettingsTile(
                     Icons.help,

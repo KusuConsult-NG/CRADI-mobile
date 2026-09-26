@@ -1,5 +1,6 @@
 import 'package:climate_app/features/verification/providers/reports_status_provider.dart';
 import 'package:climate_app/features/verification/models/verification_report_model.dart';
+import 'package:climate_app/features/verification/widgets/dispute_comment_dialog.dart';
 import 'package:provider/provider.dart';
 import 'package:climate_app/features/auth/providers/auth_provider.dart';
 import 'package:climate_app/core/utils/error_handler.dart';
@@ -152,6 +153,19 @@ class _AlertsListScreenState extends State<AlertsListScreen>
         ),
         centerTitle: true,
         actions: [
+          // Broadcasting is open to every role alerts_insert allows.
+          if (!onReportsTab &&
+              AuthProvider.alertManagerRoles.contains(
+                context.watch<AuthProvider>().userRole,
+              ))
+            IconButton(
+              tooltip: 'Broadcast an alert',
+              icon: const Icon(
+                Icons.campaign_outlined,
+                color: AppColors.primaryRed,
+              ),
+              onPressed: () => context.push('/alerts/manage'),
+            ),
           if (onReportsTab)
             PopupMenuButton<String>(
               tooltip: 'Filter by severity',
@@ -846,8 +860,13 @@ class _AlertsListScreenState extends State<AlertsListScreen>
                   Expanded(
                     child: CustomButton(
                       onPressed: () async {
+                        final comment = await showDisputeCommentDialog(context);
+                        if (comment == null || !mounted) return;
                         try {
-                          await provider.rejectReport(report.id);
+                          await provider.disputeReport(
+                            report.id,
+                            comment: comment,
+                          );
                           if (mounted) {
                             CustomToast.showSuccess(
                               context,

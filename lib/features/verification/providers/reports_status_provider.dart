@@ -13,6 +13,7 @@ import 'package:climate_app/features/reporting/providers/reporting_provider.dart
     show normalizeSeverity;
 import 'package:climate_app/core/constants/hazards.dart';
 import 'package:climate_app/core/utils/error_handler.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' show PostgrestException;
 
 export 'package:climate_app/core/services/offline_storage_service.dart'
     show OfflineQueuedException;
@@ -23,8 +24,12 @@ class VerificationRefusedException implements Exception {
   const VerificationRefusedException(
     this.message, {
     this.noLongerPending = false,
+    this.alreadyVoted = false,
   });
   final String message;
+
+  /// The user has already voted on this report.
+  final bool alreadyVoted;
 
   /// The report is no longer pending (already verified / rejected), so
   /// voting on it is pointless.
@@ -32,6 +37,33 @@ class VerificationRefusedException implements Exception {
 
   @override
   String toString() => message;
+}
+
+/// User-facing message for a failed report action (vote, approve, reject,
+/// reopen): the database's curated refusals are shown as such, everything
+/// else goes through [ErrorHandler].
+String reportActionErrorMessage(Object error, {String context = 'Report'}) {
+  if (error is VerificationRefusedException) return error.message;
+  if (error is DocumentNotFoundException) {
+    return 'You do not have permission to change this report, '
+        'or it no longer exists.';
+  }
+  if (error is PostgrestException) {
+    switch (error.code) {
+      case '22023':
+        return 'This report is already pending.';
+      case 'P0002':
+        return 'This report no longer exists.';
+      case '42501':
+      case 'PGRST301':
+        // Trigger refusals carry a readable reason; RLS denials do not.
+        final msg = error.message;
+        return msg.isNotEmpty && !msg.toLowerCase().contains('row-level')
+            ? msg
+            : 'You do not have permission to change this report.';
+    }
+  }
+  return ErrorHandler.handleError(error, context: context);
 }
 
 /// Page size used for report lists.
@@ -92,10 +124,6 @@ class ReportsStatusProvider extends ChangeNotifier {
   Set<String> _votedReportIds = {};
   String? _votesUserId;
   Future<void>? _votesInFlight;
-
-  /// Reporter names looked up from `profiles` for rows without a stored
-  /// reporter name, cached per user id (one lookup per reporter).
-  final Map<String, Future<String?>> _reporterNames = {};
 
   /// Incremented by [clearUserData]; responses started before it are
   /// dropped.
@@ -173,7 +201,6 @@ class ReportsStatusProvider extends ChangeNotifier {
     _votedReportIds = {};
     _votesUserId = null;
     _votesInFlight = null;
-    _reporterNames.clear();
     notifyListeners();
   }
 
@@ -494,7 +521,9 @@ class ReportsStatusProvider extends ChangeNotifier {
         baseQueries.add(FQuery.equal('userId', userId));
       }
       if (excludeUserId != null) {
-        baseQueries.add(FQuery.notEqual('userId', excludeUserId));
+        // IS DISTINCT FROM: reports of deleted reporters (user_id NULL)
+        // are still listed.
+        baseQueries.add(FQuery.distinctFrom('userId', excludeUserId));
       }
 
       final zoneQueries = userId == null ? _zoneQueries() : <QueryFilter>[];
@@ -607,38 +636,17 @@ class ReportsStatusProvider extends ChangeNotifier {
     return [for (final e in filter.entries) FQuery.equal(e.key, e.value)];
   }
 
-  /// Name from the reporter's profile (readable by staff), cached per user.
-  Future<String?> _lookupReporterName(String userId) {
-    return _reporterNames[userId] ??= () async {
-      try {
-        final userDoc = await _db.getDocument(
-          collectionId: AppConfig.usersCollection,
-          documentId: userId,
-        );
-        final n = userDoc['name'] as String?;
-        return (n != null && n.trim().isNotEmpty) ? n : null;
-      } on Exception catch (_) {
-        // Do not cache failures (offline, transient errors).
-        _reporterNames.remove(userId);
-        return null;
-      }
-    }();
-  }
-
   /// Maps a `reports` document to a display-ready [VerificationReport].
   Future<VerificationReport> _toReport(Map<String, dynamic> data) async {
     final reportStatus = _parseStatus(data['status']);
 
-    // reporter_name is filled in by the database on insert; fall
-    // back to the profile (readable by staff) for older rows.
-    String reporterName = 'Community Report';
-    final storedName = data['reporterName'] as String?;
-    if (storedName != null && storedName.trim().isNotEmpty) {
-      reporterName = storedName;
-    } else if (data['userId'] is String) {
-      reporterName =
-          await _lookupReporterName(data['userId'] as String) ?? reporterName;
-    }
+    // reporter_name is set by the database on insert (from the reporter's
+    // profile). Other users' profiles are not generally readable, so it is
+    // never looked up client-side.
+    final storedName = (data['reporterName'] as String?)?.trim();
+    final reporterName = (storedName != null && storedName.isNotEmpty)
+        ? storedName
+        : 'Community Report';
 
     // fromMap populates reporterId, coordinates, description,
     // severity, imageUrls, etc.; display fields are overridden below.
@@ -751,6 +759,7 @@ class ReportsStatusProvider extends ChangeNotifier {
         (result['message'] ?? result['error'] ?? 'Verification failed')
             .toString(),
         noLongerPending: result['noLongerPending'] == true,
+        alreadyVoted: result['alreadyVoted'] == true,
       );
     }
     _votedReportIds = {..._votedReportIds, reportId};
@@ -781,18 +790,24 @@ class ReportsStatusProvider extends ChangeNotifier {
   }
 
   /// Casts a disputing peer vote. This does NOT reject the report; only
-  /// senior staff can do that (see [staffRejectReport]).
+  /// senior staff can do that (see [staffRejectReport]). A [comment]
+  /// explaining the dispute is required, so staff can act on it.
   Future<void> disputeReport(
     String reportId, {
     String? userId,
     String? comment,
   }) async {
+    if (comment == null || comment.trim().isEmpty) {
+      throw const VerificationRefusedException(
+        'Please explain why you dispute this report.',
+      );
+    }
     try {
       await _submitVerificationAsCurrentUser(
         reportId,
         isConfirmed: false,
         userId: userId,
-        comment: comment,
+        comment: comment.trim(),
       );
       developer.log('Report dispute recorded: $reportId');
       unawaited(refreshLoadedLists());
@@ -801,10 +816,6 @@ class ReportsStatusProvider extends ChangeNotifier {
       rethrow;
     }
   }
-
-  /// Legacy name for [disputeReport] (a peer "reject" vote).
-  Future<void> rejectReport(String reportId, {String? userId}) =>
-      disputeReport(reportId, userId: userId);
 
   /// Senior staff approval (the database audits the decision).
   Future<void> approveReport(String reportId) async {

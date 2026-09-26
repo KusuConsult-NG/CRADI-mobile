@@ -23,6 +23,11 @@ class SecureStorageService {
   static const String _keyLastLoginAttempt = 'last_login_attempt';
   static const String _keyAccountLockedUntil = 'account_locked_until';
   static const String _keyBiometricEnabled = 'biometric_enabled';
+
+  /// User id of the account that enabled the biometric lock: the lock is
+  /// per account, so it never carries over to another account signing in
+  /// on a shared device.
+  static const String _keyBiometricOwner = 'biometric_owner';
   static const String _keyRememberMe = 'remember_me';
 
   // Authentication token management
@@ -152,13 +157,39 @@ class SecureStorageService {
   }
 
   // Biometric settings
-  Future<void> setBiometricEnabled(bool enabled) async {
+  /// Enables / disables the biometric lock for [userId] (the owner is
+  /// recorded when enabling).
+  Future<void> setBiometricEnabled(bool enabled, {String? userId}) async {
     await _storage.write(key: _keyBiometricEnabled, value: enabled.toString());
+    if (enabled && userId != null) {
+      await _storage.write(key: _keyBiometricOwner, value: userId);
+    } else if (!enabled) {
+      await _storage.delete(key: _keyBiometricOwner);
+    }
   }
 
-  Future<bool> isBiometricEnabled() async {
+  /// Whether the biometric lock is enabled. With [forUserId], only when it
+  /// was enabled by that account (flags written by older builds have no
+  /// owner and count for whoever is signed in; see [bindBiometricOwner]).
+  Future<bool> isBiometricEnabled({String? forUserId}) async {
     final enabledStr = await _storage.read(key: _keyBiometricEnabled);
-    return enabledStr == 'true';
+    if (enabledStr != 'true') return false;
+    if (forUserId == null) return true;
+    final owner = await _storage.read(key: _keyBiometricOwner);
+    return owner == null || owner == forUserId;
+  }
+
+  /// Ties the biometric flag to [userId]: an ownerless (legacy) flag is
+  /// bound to it, and a flag enabled by another account is cleared.
+  Future<void> bindBiometricOwner(String userId) async {
+    final enabledStr = await _storage.read(key: _keyBiometricEnabled);
+    if (enabledStr != 'true') return;
+    final owner = await _storage.read(key: _keyBiometricOwner);
+    if (owner == null) {
+      await _storage.write(key: _keyBiometricOwner, value: userId);
+    } else if (owner != userId) {
+      await setBiometricEnabled(false);
+    }
   }
 
   // Generic secure storage
@@ -218,7 +249,9 @@ class SecureStorageService {
 
     final keepPhone = keepPreferences && await isBiometricEnabled();
     if (!keepAuth && !keepPhone) keys.add(_keyPhoneNumber);
-    if (!keepPreferences) keys.add(_keyBiometricEnabled);
+    if (!keepPreferences) {
+      keys.addAll([_keyBiometricEnabled, _keyBiometricOwner]);
+    }
 
     for (final key in keys) {
       await _storage.delete(key: key);

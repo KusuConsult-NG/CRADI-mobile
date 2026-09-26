@@ -68,11 +68,37 @@ class _OfflineHomeScreenState extends State<OfflineHomeScreen> {
     await reporting.syncPendingReports(context);
   }
 
-  Future<void> _onFailedItemAction(String action, String queueId) async {
+  /// Discarding deletes the report for good: ask first.
+  Future<bool> _confirmDiscard() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('Discard report?'),
+        content: const Text(
+          'This report has not been sent and will be deleted from this '
+          'device.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(c, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(c, true),
+            child: const Text('Discard', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+    return ok == true;
+  }
+
+  Future<void> _onQueueItemAction(String action, String queueId) async {
     final storage = OfflineStorageService();
     if (action == 'retry') {
       await storage.retryQueueItem(queueId);
     } else {
+      if (!await _confirmDiscard()) return;
       await storage.discardQueueItem(queueId);
     }
     if (mounted) setState(() {});
@@ -86,6 +112,7 @@ class _OfflineHomeScreenState extends State<OfflineHomeScreen> {
     final connectivity = context.read<ConnectivityProvider>();
     switch (action) {
       case 'discard':
+        if (!await _confirmDiscard()) return;
         await storage.deleteDraft(draftId);
       case 'retry':
         await storage.updateDraft(draftId, {'status': 'draft'});
@@ -101,10 +128,14 @@ class _OfflineHomeScreenState extends State<OfflineHomeScreen> {
     }
   }
 
+  /// Every pending item can be discarded (e.g. a draft the user no longer
+  /// wants, or one that keeps failing); failed / ownerless ones also offer
+  /// retry / submit.
   Widget? _itemActions(_PendingItem item, bool isSignedIn) {
     final draftId = item.draftId;
-    if (draftId != null && (item.failed || item.ownerless)) {
+    if (draftId != null) {
       return PopupMenuButton<String>(
+        tooltip: 'Actions',
         onSelected: (action) => _onDraftAction(action, draftId),
         itemBuilder: (_) => [
           if (item.ownerless && isSignedIn)
@@ -116,16 +147,16 @@ class _OfflineHomeScreenState extends State<OfflineHomeScreen> {
       );
     }
     final queueId = item.queueId;
-    if (item.failed && queueId != null) {
-      return PopupMenuButton<String>(
-        onSelected: (action) => _onFailedItemAction(action, queueId),
-        itemBuilder: (_) => const [
-          PopupMenuItem(value: 'retry', child: Text('Retry')),
-          PopupMenuItem(value: 'discard', child: Text('Discard')),
-        ],
-      );
-    }
-    return null;
+    if (queueId == null) return null;
+    return PopupMenuButton<String>(
+      tooltip: 'Actions',
+      onSelected: (action) => _onQueueItemAction(action, queueId),
+      itemBuilder: (_) => [
+        if (item.failed)
+          const PopupMenuItem(value: 'retry', child: Text('Retry')),
+        const PopupMenuItem(value: 'discard', child: Text('Discard')),
+      ],
+    );
   }
 
   @override

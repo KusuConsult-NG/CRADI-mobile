@@ -124,17 +124,9 @@ class PendingApprovalScreen extends StatelessWidget {
               ),
               const SizedBox(height: 16),
               TextButton(
-                onPressed: () {
-                  // Simply refresh status by checking session again or waiting
-                  // For now, logout is the main action
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text(
-                        'Please check back later or contact admin.',
-                      ),
-                    ),
-                  );
-                },
+                // /help is a public route, so it is reachable while the
+                // account waits for approval.
+                onPressed: () => context.push('/help'),
                 child: Text(
                   'Contact Support',
                   style: GoogleFonts.lexend(

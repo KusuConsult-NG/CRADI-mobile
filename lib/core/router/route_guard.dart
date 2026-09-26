@@ -34,6 +34,9 @@ const Set<String> kPublicRoutes = {
   '/reset-password',
   '/pending-approval',
   '/verify-otp',
+  // Static help / contact details: reachable from the pending-approval
+  // screen (and signed out).
+  '/help',
   // Must be public: the offline check sends logged-out users here, and
   // redirecting them on to /login would bounce straight back to /offline.
   '/offline',

@@ -352,6 +352,19 @@ class _MyReportsScreenState extends State<MyReportsScreen>
                                 ),
                               ],
                             ),
+                            if (report.status == ReportStatus.rejected &&
+                                report.rejectionReason != null) ...[
+                              const SizedBox(height: 4),
+                              Text(
+                                'Reason: ${report.rejectionReason}',
+                                style: GoogleFonts.lexend(
+                                  fontSize: 12,
+                                  color: Colors.red.shade700,
+                                ),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
                           ],
                         ),
                       ),

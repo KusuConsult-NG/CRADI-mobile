@@ -5,6 +5,7 @@ import 'package:climate_app/core/services/supabase_service.dart';
 import 'package:climate_app/features/alerts/screens/alert_severity.dart';
 import 'package:climate_app/features/auth/providers/auth_provider.dart';
 import 'package:climate_app/features/verification/providers/reports_status_provider.dart';
+import 'package:climate_app/features/verification/widgets/dispute_comment_dialog.dart';
 
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -111,6 +112,15 @@ class _AlertDetailScreenState extends State<AlertDetailScreen> {
   Future<void> _submitVerification(bool isConfirmed) async {
     if (_isSubmitting || _hasVerified) return;
 
+    // A dispute must say what is wrong with the report.
+    var comment = _commentController.text.trim();
+    if (!isConfirmed && comment.isEmpty) {
+      final entered = await showDisputeCommentDialog(context);
+      if (entered == null || !mounted) return;
+      comment = entered;
+      _commentController.text = entered;
+    }
+
     setState(() => _isSubmitting = true);
 
     final reports = context.read<ReportsStatusProvider>();
@@ -129,17 +139,13 @@ class _AlertDetailScreenState extends State<AlertDetailScreen> {
       }
 
       // Through the provider so the voted-on cache and the lists refresh.
-      final comment = _commentController.text.trim();
       if (isConfirmed) {
         await reports.verifyReport(
           reportId,
           comment: comment.isEmpty ? null : comment,
         );
       } else {
-        await reports.disputeReport(
-          reportId,
-          comment: comment.isEmpty ? null : comment,
-        );
+        await reports.disputeReport(reportId, comment: comment);
       }
 
       if (!mounted) return;
@@ -373,7 +379,7 @@ class _AlertDetailScreenState extends State<AlertDetailScreen> {
                     TextField(
                       controller: _commentController,
                       decoration: InputDecoration(
-                        labelText: 'Add Comment (Optional)',
+                        labelText: 'Comment (required to dispute)',
                         hintText: 'Additional information about this report...',
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),

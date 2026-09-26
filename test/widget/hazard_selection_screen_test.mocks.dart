@@ -3,12 +3,12 @@
 // Do not manually edit this file.
 
 // ignore_for_file: no_leading_underscores_for_library_prefixes
-import 'dart:async' as _i4;
-import 'dart:ui' as _i6;
+import 'dart:async' as _i5;
+import 'dart:ui' as _i4;
 
 import 'package:climate_app/features/reporting/providers/reporting_provider.dart'
     as _i2;
-import 'package:flutter/material.dart' as _i5;
+import 'package:flutter/material.dart' as _i6;
 import 'package:image_picker/image_picker.dart' as _i3;
 import 'package:mockito/mockito.dart' as _i1;
 
@@ -71,6 +71,12 @@ class MockReportingProvider extends _i1.Mock implements _i2.ReportingProvider {
             returnValue: false,
           )
           as bool);
+
+  @override
+  set onReportsSynced(_i4.VoidCallback? value) => super.noSuchMethod(
+    Invocation.setter(#onReportsSynced, value),
+    returnValueForMissingStub: null,
+  );
 
   @override
   bool get hasListeners =>
@@ -143,13 +149,13 @@ class MockReportingProvider extends _i1.Mock implements _i2.ReportingProvider {
   );
 
   @override
-  _i4.Future<void> pickImage(_i3.ImageSource? source) =>
+  _i5.Future<void> pickImage(_i3.ImageSource? source) =>
       (super.noSuchMethod(
             Invocation.method(#pickImage, [source]),
-            returnValue: _i4.Future<void>.value(),
-            returnValueForMissingStub: _i4.Future<void>.value(),
+            returnValue: _i5.Future<void>.value(),
+            returnValueForMissingStub: _i5.Future<void>.value(),
           )
-          as _i4.Future<void>);
+          as _i5.Future<void>);
 
   @override
   void removeImage(int? index) => super.noSuchMethod(
@@ -164,35 +170,35 @@ class MockReportingProvider extends _i1.Mock implements _i2.ReportingProvider {
   );
 
   @override
-  _i4.Future<Map<String, dynamic>> submitReport(_i5.BuildContext? context) =>
+  _i5.Future<Map<String, dynamic>> submitReport(_i6.BuildContext? context) =>
       (super.noSuchMethod(
             Invocation.method(#submitReport, [context]),
-            returnValue: _i4.Future<Map<String, dynamic>>.value(
+            returnValue: _i5.Future<Map<String, dynamic>>.value(
               <String, dynamic>{},
             ),
           )
-          as _i4.Future<Map<String, dynamic>>);
+          as _i5.Future<Map<String, dynamic>>);
 
   @override
-  _i4.Future<Map<String, dynamic>> syncPendingReports(
-    _i5.BuildContext? context,
+  _i5.Future<Map<String, dynamic>> syncPendingReports(
+    _i6.BuildContext? context,
   ) =>
       (super.noSuchMethod(
             Invocation.method(#syncPendingReports, [context]),
-            returnValue: _i4.Future<Map<String, dynamic>>.value(
+            returnValue: _i5.Future<Map<String, dynamic>>.value(
               <String, dynamic>{},
             ),
           )
-          as _i4.Future<Map<String, dynamic>>);
+          as _i5.Future<Map<String, dynamic>>);
 
   @override
-  void addListener(_i6.VoidCallback? listener) => super.noSuchMethod(
+  void addListener(_i4.VoidCallback? listener) => super.noSuchMethod(
     Invocation.method(#addListener, [listener]),
     returnValueForMissingStub: null,
   );
 
   @override
-  void removeListener(_i6.VoidCallback? listener) => super.noSuchMethod(
+  void removeListener(_i4.VoidCallback? listener) => super.noSuchMethod(
     Invocation.method(#removeListener, [listener]),
     returnValueForMissingStub: null,
   );

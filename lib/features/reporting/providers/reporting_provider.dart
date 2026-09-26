@@ -9,6 +9,7 @@ import 'package:climate_app/core/providers/connectivity_provider.dart';
 import 'package:climate_app/core/constants/app_config.dart';
 import 'dart:developer' as developer;
 import 'package:provider/provider.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' show PostgrestException;
 import 'package:uuid/uuid.dart';
 
 enum HazardType { flood, drought, temp, wind, erosion, fire, pest }
@@ -45,6 +46,10 @@ class ReportingProvider extends ChangeNotifier {
 
   /// Maximum length of the free-text description.
   static const int maxDescriptionLength = 500;
+
+  /// Maximum length of the location text (the database caps location /
+  /// address fields at 500 characters).
+  static const int maxLocationDetailsLength = 500;
 
   final SupabaseService _db = SupabaseService();
   final ImagePicker _picker = ImagePicker();
@@ -96,7 +101,9 @@ class ReportingProvider extends ChangeNotifier {
   }
 
   void setLocationDetails(String details) {
-    _locationDetails = details;
+    _locationDetails = details.length > maxLocationDetailsLength
+        ? details.substring(0, maxLocationDetailsLength)
+        : details;
     notifyListeners();
   }
 
@@ -338,12 +345,19 @@ class ReportingProvider extends ChangeNotifier {
       developer.log('Error submitting report: $e');
       return {
         'success': false,
-        'message': ErrorHandler.handleError(e, context: 'Report Submission'),
+        'message': (e is PostgrestException && SupabaseService.isRateLimited(e))
+            ? e.message
+            : ErrorHandler.handleError(e, context: 'Report Submission'),
       };
     }
   }
 
   Future<Map<String, dynamic>>? _syncInFlight;
+
+  /// Called after a sync uploaded at least one report (from any entry
+  /// point: reconnect, dashboard, offline screen), e.g. to refresh the
+  /// report lists that do not include them yet.
+  VoidCallback? onReportsSynced;
 
   /// Sync pending drafts and failed submissions to the backend.
   ///
@@ -453,6 +467,13 @@ class ReportingProvider extends ChangeNotifier {
 
       _isLoading = false;
       notifyListeners();
+      if (successCount > 0) {
+        try {
+          onReportsSynced?.call();
+        } on Exception catch (e) {
+          developer.log('onReportsSynced error: $e');
+        }
+      }
       return {
         'success': true,
         'synced': successCount,

@@ -1,3 +1,4 @@
+import 'package:climate_app/core/services/remote_config_service.dart';
 import 'package:climate_app/core/constants/hazards.dart';
 import 'package:climate_app/core/theme/app_colors.dart';
 import 'package:climate_app/core/design/animated_card.dart';
@@ -22,6 +23,16 @@ import 'package:climate_app/features/reporting/providers/reporting_provider.dart
 import 'package:climate_app/l10n/app_localizations.dart';
 import 'package:climate_app/shared/widgets/shimmer_loading.dart';
 import 'package:climate_app/shared/widgets/animated_list_item.dart';
+
+/// Home feed tab actually shown for [selected] (0 To Verify, 1 Alerts,
+/// 2 My Reports, 3 Nearby): "To Verify" only exists for peer verifiers and
+/// "Nearby" not for plain users; both fall back to My Reports.
+@visibleForTesting
+int effectiveFeedTab(int selected, UserRole? role) {
+  if (selected == 0 && !AuthProvider.verifierRoles.contains(role)) return 2;
+  if (selected == 3 && role == UserRole.user) return 2;
+  return selected;
+}
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -380,10 +391,15 @@ class _HomeScreenState extends State<HomeScreen> {
                         padding: const EdgeInsets.all(6),
                         child: Row(
                           children: [
-                            _buildFilterTab(
-                              0,
-                              AppLocalizations.of(context)!.toVerify,
-                            ),
+                            // Only peer verifiers have anything to verify;
+                            // everyone else starts on My Reports.
+                            if (AuthProvider.verifierRoles.contains(
+                              context.watch<AuthProvider>().userRole,
+                            ))
+                              _buildFilterTab(
+                                0,
+                                AppLocalizations.of(context)!.toVerify,
+                              ),
                             _buildFilterTab(
                               1,
                               AppLocalizations.of(context)!.alerts,
@@ -518,31 +534,32 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           Row(
             children: [
-              GestureDetector(
-                onTap: () => context.push('/chat'),
-                child: Container(
-                  width: 40,
-                  height: 40,
-                  margin: const EdgeInsets.only(right: 12),
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: Colors.white,
-                    border: Border.all(color: Colors.grey.shade200),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.05),
-                        blurRadius: 4,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                  child: const Icon(
-                    Icons.chat_bubble_outline,
-                    color: AppColors.textPrimary,
-                    size: 20,
+              if (RemoteConfigService().featureFlagPeerChat)
+                GestureDetector(
+                  onTap: () => context.push('/chat'),
+                  child: Container(
+                    width: 40,
+                    height: 40,
+                    margin: const EdgeInsets.only(right: 12),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.white,
+                      border: Border.all(color: Colors.grey.shade200),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.05),
+                          blurRadius: 4,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: const Icon(
+                      Icons.chat_bubble_outline,
+                      color: AppColors.textPrimary,
+                      size: 20,
+                    ),
                   ),
                 ),
-              ),
               GestureDetector(
                 onTap: () => context.push('/notifications'),
                 child: Stack(
@@ -696,7 +713,12 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildFilterTab(int index, String label) {
-    final bool isSelected = _selectedFilterIndex == index;
+    final bool isSelected =
+        effectiveFeedTab(
+          _selectedFilterIndex,
+          context.read<AuthProvider>().userRole,
+        ) ==
+        index;
     return Expanded(
       child: GestureDetector(
         onTap: () => setState(() => _selectedFilterIndex = index),
@@ -735,10 +757,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildFeedContent() {
     final statusProvider = context.watch<ReportsStatusProvider>();
     final auth = context.watch<AuthProvider>();
-    final selected =
-        (_selectedFilterIndex == 3 && auth.userRole == UserRole.user)
-        ? 0
-        : _selectedFilterIndex;
+    final selected = effectiveFeedTab(_selectedFilterIndex, auth.userRole);
 
     if (selected == 0) {
       // To Verify: pending reports this user may still vote on (never

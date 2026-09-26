@@ -5,6 +5,7 @@ import 'package:climate_app/core/utils/error_handler.dart';
 import 'package:climate_app/features/auth/providers/auth_provider.dart';
 import 'package:climate_app/features/verification/models/verification_report_model.dart';
 import 'package:climate_app/features/verification/providers/reports_status_provider.dart';
+import 'package:climate_app/features/verification/widgets/dispute_comment_dialog.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
@@ -14,9 +15,12 @@ import 'package:provider/provider.dart';
 /// has not voted yet. Used on the report screen that a
 /// `verification_request` push opens.
 class ReportVoteActions extends StatefulWidget {
-  const ReportVoteActions({super.key, required this.report});
+  const ReportVoteActions({super.key, required this.report, this.onVoted});
 
   final VerificationReport report;
+
+  /// Called after a vote was recorded (e.g. to reload the report).
+  final VoidCallback? onVoted;
 
   @override
   State<ReportVoteActions> createState() => _ReportVoteActionsState();
@@ -50,17 +54,12 @@ class _ReportVoteActionsState extends State<ReportVoteActions> {
         reportLga: report.lga,
       );
 
-  Future<String?> _askDisputeComment() => showDialog<String>(
-    context: context,
-    builder: (_) => const _DisputeDialog(),
-  );
-
   Future<void> _vote({required bool confirm}) async {
     final reports = context.read<ReportsStatusProvider>();
     final messenger = ScaffoldMessenger.of(context);
     String? comment;
     if (!confirm) {
-      comment = await _askDisputeComment();
+      comment = await showDisputeCommentDialog(context);
       if (comment == null || !mounted) return;
     }
     setState(() => _submitting = true);
@@ -80,6 +79,7 @@ class _ReportVoteActionsState extends State<ReportVoteActions> {
           backgroundColor: confirm ? AppColors.successGreen : Colors.orange,
         ),
       );
+      widget.onVoted?.call();
     } on VerificationRefusedException catch (e) {
       if (e.noLongerPending && mounted) {
         setState(() => _noLongerPending = true);
@@ -160,58 +160,6 @@ class _ReportVoteActionsState extends State<ReportVoteActions> {
           ),
         ],
       ),
-    );
-  }
-}
-
-/// Asks for the (required) dispute comment. Owns its text controller so it
-/// is disposed only once the dialog route is gone.
-class _DisputeDialog extends StatefulWidget {
-  const _DisputeDialog();
-
-  @override
-  State<_DisputeDialog> createState() => _DisputeDialogState();
-}
-
-class _DisputeDialogState extends State<_DisputeDialog> {
-  final TextEditingController _controller = TextEditingController();
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text(
-        'Dispute report?',
-        style: GoogleFonts.lexend(fontWeight: FontWeight.bold),
-      ),
-      content: TextField(
-        controller: _controller,
-        autofocus: true,
-        maxLines: 3,
-        maxLength: 500,
-        decoration: const InputDecoration(
-          labelText: 'What is wrong with this report? (required)',
-          border: OutlineInputBorder(),
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
-        ),
-        TextButton(
-          onPressed: () {
-            final text = _controller.text.trim();
-            if (text.isNotEmpty) Navigator.pop(context, text);
-          },
-          child: const Text('Dispute', style: TextStyle(color: Colors.red)),
-        ),
-      ],
     );
   }
 }

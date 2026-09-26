@@ -26,6 +26,12 @@ class VerificationReport {
   final String? ward;
   final String? state;
 
+  /// Staff's reason for rejecting the report (null unless rejected).
+  final String? rejectionReason;
+
+  /// When the report was rejected (local time).
+  final DateTime? rejectedAt;
+
   VerificationReport({
     required this.id,
     required this.title,
@@ -47,6 +53,8 @@ class VerificationReport {
     this.lga,
     this.ward,
     this.state,
+    this.rejectionReason,
+    this.rejectedAt,
   });
 
   /// Whether this report is in an active state (visible in "Active" tab).
@@ -78,6 +86,8 @@ class VerificationReport {
     String? lga,
     String? ward,
     String? state,
+    String? rejectionReason,
+    DateTime? rejectedAt,
   }) {
     return VerificationReport(
       id: id ?? this.id,
@@ -100,6 +110,8 @@ class VerificationReport {
       lga: lga ?? this.lga,
       ward: ward ?? this.ward,
       state: state ?? this.state,
+      rejectionReason: rejectionReason ?? this.rejectionReason,
+      rejectedAt: rejectedAt ?? this.rejectedAt,
     );
   }
 
@@ -130,6 +142,8 @@ class VerificationReport {
       lga: data['lga'] as String?,
       ward: data['ward'] as String?,
       state: data['state'] as String?,
+      rejectionReason: _nonEmpty(data['rejectionReason']),
+      rejectedAt: _parseDate(data['rejectedAt']),
     );
   }
 
@@ -155,10 +169,23 @@ class VerificationReport {
       'lga': lga,
       'ward': ward,
       'state': state,
+      'rejectionReason': rejectionReason,
+      'rejectedAt': rejectedAt?.toUtc().toIso8601String(),
     };
   }
 
   // ── Private helpers ──────────────────────────────────────────────────────
+
+  static String? _nonEmpty(Object? raw) {
+    final s = raw?.toString().trim();
+    return (s == null || s.isEmpty) ? null : s;
+  }
+
+  static DateTime? _parseDate(Object? raw) {
+    if (raw is DateTime) return raw.toLocal();
+    if (raw is String) return DateTime.tryParse(raw)?.toLocal();
+    return null;
+  }
 
   static ReportStatus _parseStatus(dynamic raw) {
     final s = (raw ?? 'pending').toString().toLowerCase();

@@ -2,6 +2,7 @@ import 'package:climate_app/core/constants/app_config.dart';
 import 'package:climate_app/core/services/supabase_service.dart';
 import 'package:climate_app/features/auth/providers/auth_provider.dart';
 import 'package:climate_app/features/verification/providers/reports_status_provider.dart';
+import 'package:climate_app/features/verification/widgets/report_verifications_section.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -204,8 +205,11 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
       developer.log('Status update failed: $e', name: 'AdminReportsScreen');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Could not update report status.'),
+          SnackBar(
+            content: Text(
+              'Could not update report status: '
+              '${reportActionErrorMessage(e, context: 'AdminReports')}',
+            ),
             backgroundColor: Colors.red,
           ),
         );
@@ -250,6 +254,7 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
     final imageUrls =
         (data['imageUrls'] as List<dynamic>?)?.cast<String>() ?? [];
     final status = data['status'] as String? ?? 'pending';
+    final rejectionReason = (data['rejectionReason'] as String?)?.trim();
     // Status changes are refused by the database for tech support (and for
     // staff on their own reports) — mirror guard_report_update.
     final actions = _allowedActions(context, data);
@@ -320,6 +325,13 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
                       _detailRow('LGA', lga),
                       _detailRow('Ward', ward),
                       _detailRow('Location Details', locationDetails),
+                      if (status == 'rejected')
+                        _detailRow(
+                          'Rejection reason',
+                          (rejectionReason == null || rejectionReason.isEmpty)
+                              ? 'No reason given'
+                              : rejectionReason,
+                        ),
                       const SizedBox(height: 16),
                       Text(
                         'Description',
@@ -373,6 +385,8 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
                         ),
                         const SizedBox(height: 16),
                       ],
+                      // Confirmations / disputes with their comments.
+                      ReportVerificationsSection(reportId: id),
                     ],
                   ),
                 ),

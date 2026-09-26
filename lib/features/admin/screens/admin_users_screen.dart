@@ -1,5 +1,6 @@
 import 'package:climate_app/core/constants/app_config.dart';
 import 'package:climate_app/core/services/supabase_service.dart';
+import 'package:climate_app/core/widgets/location_selector_widget.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:climate_app/core/theme/app_colors.dart';
@@ -257,6 +258,76 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
     );
   }
 
+  /// Moves a user to another state / LGA / ward. Approved staff can't
+  /// change their own area (ward-scoped access), so admins do it here.
+  Future<void> _changeLocation(String uid, Map<String, dynamic> user) async {
+    String? state = user['state'] as String?;
+    String? lga = user['lga'] as String?;
+    String? ward = user['ward'] as String?;
+    final apply = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setS) {
+          final complete =
+              (state?.isNotEmpty ?? false) &&
+              (lga?.isNotEmpty ?? false) &&
+              (ward?.isNotEmpty ?? false);
+          return AlertDialog(
+            title: Text('Change location', style: GoogleFonts.lexend()),
+            content: SizedBox(
+              width: double.maxFinite,
+              child: SingleChildScrollView(
+                child: LocationSelectorWidget(
+                  initialState: state,
+                  initialLGA: lga,
+                  initialWard: ward,
+                  required: true,
+                  onLocationChanged: (s, l, w) => setS(() {
+                    state = s;
+                    lga = l;
+                    ward = w;
+                  }),
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primaryRed,
+                ),
+                onPressed: complete ? () => Navigator.pop(ctx, true) : null,
+                child: const Text(
+                  'Apply',
+                  style: TextStyle(color: Colors.white),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+    if (apply != true || !mounted) return;
+    try {
+      await _update(uid, {'state': state, 'lga': lga, 'ward': ward});
+    } on Exception catch (e) {
+      _showWriteError(e);
+      return;
+    }
+    developer.log(
+      'Location changed: $uid → $ward, $lga',
+      name: 'AdminUsersScreen',
+    );
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Location updated to $ward, $lga, $state')),
+      );
+    }
+  }
+
   Future<void> _setDisabled(String uid, bool disabled) async {
     try {
       await _update(uid, {'isDisabled': disabled});
@@ -508,6 +579,9 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
                               if (action == 'approve') _setApproval(uid, true);
                               if (action == 'reject') _setApproval(uid, false);
                               if (action == 'role') _changeRole(uid, role);
+                              if (action == 'location') {
+                                _changeLocation(uid, d);
+                              }
                               if (action == 'disable') _setDisabled(uid, true);
                               if (action == 'enable') _setDisabled(uid, false);
                             },
@@ -525,6 +599,10 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
                               const PopupMenuItem(
                                 value: 'role',
                                 child: Text('🔄 Change role'),
+                              ),
+                              const PopupMenuItem(
+                                value: 'location',
+                                child: Text('📍 Change location'),
                               ),
                               const PopupMenuDivider(),
                               PopupMenuItem(

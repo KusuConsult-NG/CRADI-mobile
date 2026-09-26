@@ -58,18 +58,40 @@ android {
                 "proguard-rules.pro"
             )
             
-            // Release signing config; falls back to debug signing when
-            // key.properties is absent (local/CI builds without the keystore).
-            signingConfig = if (keystorePropertiesFile.exists()) {
-                signingConfigs.getByName("release")
-            } else {
-                signingConfigs.getByName("debug")
+            // Release builds are signed with the upload key only. Without
+            // key.properties the build fails (see verifyReleaseSigning below)
+            // instead of silently producing a debug-signed release.
+            if (keystorePropertiesFile.exists()) {
+                signingConfig = signingConfigs.getByName("release")
             }
         }
         debug {
             // Disable minification for debug builds
             isMinifyEnabled = false
         }
+    }
+}
+
+// Fails any release build (flutter build apk / appbundle, run --release)
+// when the release keystore is not configured. Debug and profile builds
+// (flutter run) are unaffected.
+val hasReleaseKeystore = keystorePropertiesFile.exists()
+val verifyReleaseSigning by tasks.registering {
+    doFirst {
+        if (!hasReleaseKeystore) {
+            throw GradleException(
+                "Release signing is not configured: android/key.properties is " +
+                    "missing. Copy android/key.properties.template to " +
+                    "android/key.properties and fill in the upload keystore " +
+                    "(storeFile, storePassword, keyAlias, keyPassword). " +
+                    "Use a debug build (flutter run) for local testing."
+            )
+        }
+    }
+}
+tasks.configureEach {
+    if (name == "preReleaseBuild") {
+        dependsOn(verifyReleaseSigning)
     }
 }
 

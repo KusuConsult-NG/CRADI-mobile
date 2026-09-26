@@ -9,6 +9,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:climate_app/core/constants/app_config.dart';
 import 'package:climate_app/core/services/supabase_mapping.dart';
+import 'package:climate_app/core/utils/error_handler.dart' show SecureException;
 
 export 'package:climate_app/core/services/supabase_mapping.dart'
     show
@@ -18,6 +19,16 @@ export 'package:climate_app/core/services/supabase_mapping.dart'
         OrderByFilter,
         LimitFilter,
         parseTimestamp;
+
+/// Thrown when a picked image can't be re-encoded (so its metadata can't be
+/// stripped); it is not uploaded.
+class ImageEncodingException extends SecureException {
+  ImageEncodingException()
+    : super(
+        'A photo could not be processed. Please remove it or choose '
+        'another photo.',
+      );
+}
 
 /// Thrown by [SupabaseService.getDocument] / [SupabaseService.updateDocument]
 /// when no row matches (or RLS hides it).
@@ -163,6 +174,10 @@ class SupabaseService {
           b = v == null ? b.isFilter(f.column, null) : b.eq(f.column, v);
         case FilterOp.neq:
           b = v == null ? b.not(f.column, 'is', null) : b.neq(f.column, v);
+        case FilterOp.distinctFrom:
+          b = v == null
+              ? b.not(f.column, 'is', null)
+              : b.or('${f.column}.is.null,${f.column}.neq.${_orValue(v)}');
         case FilterOp.gt:
           b = b.gt(f.column, v!);
         case FilterOp.lt:
@@ -173,6 +188,11 @@ class SupabaseService {
     }
     return b;
   }
+
+  /// Quotes a value for a PostgREST `or=(...)` filter (reserved
+  /// characters such as `,` `.` `(` `)` would otherwise split it).
+  static String _orValue(Object value) =>
+      '"${value.toString().replaceAll('\\', '\\\\').replaceAll('"', '\\"')}"';
 
   /// Create a row. [documentId] sets the primary key (must be a UUID for
   /// uuid-keyed tables); otherwise the database generates one.
@@ -361,13 +381,23 @@ class SupabaseService {
   // ─────────────────────────── STORAGE ─────────────────────────────────────
   // Buckets are public-read; object paths must start with the uploader's
   // user id (enforced by storage RLS).
+  //
+  // Evidence (report-images) can't be overwritten: there is no update
+  // policy, so those uploads use upsert: false. Their paths are
+  // deterministic per report + index, so an object that already exists
+  // (a retried upload) is treated as uploaded.
+  //
+  // Metadata: images are re-encoded by flutter_image_compress, whose
+  // keepExif defaults to false, so EXIF (incl. GPS) is dropped. Bytes that
+  // can't be re-encoded are never uploaded as-is (see [uploadFileFromPath]).
 
-  /// Upload image bytes (JPEG-compressed to max 1920px @ 85%) and return the
-  /// public URL.
+  /// Upload image bytes (re-encoded as JPEG, max 1920px @ 85%, without
+  /// EXIF metadata) and return the public URL.
   Future<String> uploadFile({
     required String bucketId,
     required String storagePath,
     required List<int> fileBytes,
+    bool upsert = false,
   }) async {
     final compressed = await FlutterImageCompress.compressWithList(
       Uint8List.fromList(fileBytes),
@@ -375,40 +405,46 @@ class SupabaseService {
       minHeight: 1920,
       quality: 85,
       format: CompressFormat.jpeg,
+      keepExif: false, // strip EXIF, incl. GPS position
     );
-    final data = compressed.isNotEmpty
-        ? compressed
-        : Uint8List.fromList(fileBytes);
-    return _uploadBytes(bucketId, storagePath, data, 'image/jpeg');
+    if (compressed.isEmpty) throw ImageEncodingException();
+    return _uploadBytes(
+      bucketId,
+      storagePath,
+      compressed,
+      'image/jpeg',
+      upsert: upsert,
+    );
   }
 
-  /// Upload a file (images are JPEG-compressed first) and return its public
-  /// URL.
+  /// Upload an image file and return its public URL. The image is always
+  /// re-encoded as JPEG (max 1920px @ 85%) without EXIF metadata (camera
+  /// GPS position, device details); an image that can't be re-encoded is
+  /// refused rather than uploaded with its metadata.
   Future<String> uploadFileFromPath({
     required String bucketId,
     required String storagePath,
     required File file,
     String? contentType,
+    bool upsert = false,
   }) async {
-    final isImage = contentType?.startsWith('image/') ?? true;
-    if (isImage) {
-      final compressed = await FlutterImageCompress.compressWithFile(
-        file.absolute.path,
-        minWidth: 1920,
-        minHeight: 1920,
-        quality: 85,
-        format: CompressFormat.jpeg,
-      );
-      if (compressed != null && compressed.isNotEmpty) {
-        return _uploadBytes(bucketId, storagePath, compressed, 'image/jpeg');
-      }
+    final compressed = await FlutterImageCompress.compressWithFile(
+      file.absolute.path,
+      minWidth: 1920,
+      minHeight: 1920,
+      quality: 85,
+      format: CompressFormat.jpeg,
+      keepExif: false, // strip EXIF, incl. GPS position
+    );
+    if (compressed == null || compressed.isEmpty) {
+      throw ImageEncodingException();
     }
-    final bytes = await file.readAsBytes();
     return _uploadBytes(
       bucketId,
       storagePath,
-      bytes,
-      contentType ?? imageMimeTypeForPath(file.path),
+      compressed,
+      'image/jpeg',
+      upsert: upsert,
     );
   }
 
@@ -430,14 +466,24 @@ class SupabaseService {
     String bucketId,
     String storagePath,
     Uint8List bytes,
-    String contentType,
-  ) async {
+    String contentType, {
+    required bool upsert,
+  }) async {
     final bucket = client.storage.from(bucketId);
-    await bucket.uploadBinary(
-      storagePath,
-      bytes,
-      fileOptions: FileOptions(contentType: contentType, upsert: true),
-    );
+    try {
+      await bucket.uploadBinary(
+        storagePath,
+        bytes,
+        fileOptions: FileOptions(contentType: contentType, upsert: upsert),
+      );
+    } on StorageException catch (e) {
+      // Deterministic path already uploaded by an earlier attempt.
+      if (upsert || !isStorageDuplicate(e)) rethrow;
+      developer.log(
+        '$bucketId/$storagePath already exists; reusing it',
+        name: 'SupabaseService',
+      );
+    }
     final url = bucket.getPublicUrl(storagePath);
     developer.log(
       'Uploaded ${bytes.length ~/ 1024}KB to $bucketId/$storagePath',
@@ -469,6 +515,19 @@ class SupabaseService {
   static bool isPermissionDenied(Object error) =>
       error is PostgrestException &&
       (error.code == '42501' || error.code == 'PGRST301');
+
+  /// True when the database refused a write for exceeding a per-user rate
+  /// limit (errcode 54000; e.g. chat messages per minute, reports per
+  /// hour). Its message is user-facing; retrying later can succeed.
+  static bool isRateLimited(Object error) =>
+      error is PostgrestException && error.code == '54000';
+
+  /// True when a storage upload failed because the object already exists.
+  static bool isStorageDuplicate(Object error) =>
+      error is StorageException &&
+      (error.statusCode == '409' ||
+          error.error?.toLowerCase() == 'duplicate' ||
+          error.message.toLowerCase().contains('already exists'));
 
   /// True when [error] is a unique-constraint violation.
   static bool isUniqueViolation(Object error) =>

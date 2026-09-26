@@ -19,7 +19,7 @@ class AdminScreen extends StatefulWidget {
 
 class _AdminScreenState extends State<AdminScreen> {
   /// Created once (and on refresh) so rebuilds do not re-run the counts.
-  late Future<List<int>> _countsFuture;
+  late Future<List<int?>> _countsFuture;
 
   @override
   void initState() {
@@ -37,11 +37,18 @@ class _AdminScreenState extends State<AdminScreen> {
     return query.timeout(const Duration(seconds: 10));
   }
 
-  Future<List<int>> _loadCounts() => Future.wait([
-    _count('profiles', where: {'is_approved': false}),
+  /// Other users' profiles are readable by admins only (tech support sees
+  /// just its own row), so profile counts are unknown (null) otherwise.
+  Future<int?> _countProfiles({Map<String, Object>? where}) =>
+      context.read<AuthProvider>().userRole == UserRole.admin
+      ? _count('profiles', where: where)
+      : Future<int?>.value();
+
+  Future<List<int?>> _loadCounts() => Future.wait<int?>([
+    _countProfiles(where: {'is_approved': false}),
     _count('reports', where: {'status': 'pending'}),
     _count('reports', where: {'status': 'verified'}),
-    _count('profiles'),
+    _countProfiles(),
     _count('alerts', where: {'is_active': true}),
     _count('reports'),
   ]);
@@ -74,7 +81,7 @@ class _AdminScreenState extends State<AdminScreen> {
         backgroundColor: AppColors.primaryRed,
         foregroundColor: Colors.white,
       ),
-      body: FutureBuilder<List<int>>(
+      body: FutureBuilder<List<int?>>(
         future: _countsFuture,
         builder: (context, snap) {
           // null = unknown (loading or failed), never a fake 0.
