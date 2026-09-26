@@ -4,6 +4,7 @@ import 'package:climate_app/core/theme/app_colors.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:go_router/go_router.dart';
 import 'dart:io';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:climate_app/core/l10n/l10n.dart';
 
 class PermissionService {
@@ -87,11 +88,13 @@ class PermissionService {
 
   /// Request Storage/Photos Permission
   Future<bool> requestPhotos(BuildContext context) async {
-    final permission = Platform.isAndroid
+    // On Android the photo picker needs no permission (the manifest declares
+    // none), so this resolves to a permission that is already effectively
+    // granted; the dialog exists for iOS. Guarded for web, where dart:io
+    // throws an Error rather than an Exception.
+    final permission = (!kIsWeb && Platform.isAndroid)
         ? Permission.mediaLibrary
         : Permission.photos;
-    // For Android 13+ (SDK 33), we might need Permission.photos instead of storage
-    // But permission_handler handles mostly. Let's use specific logic if needed.
 
     return await requestPermission(
       context: context,

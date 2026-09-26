@@ -41,7 +41,7 @@ class TTSService {
         debugPrint('TTS Error: $msg');
       });
 
-      if (Platform.isIOS) {
+      if (!kIsWeb && Platform.isIOS) {
         await _flutterTts?.setSharedInstance(true);
         await _flutterTts
             ?.setIosAudioCategory(IosTextToSpeechAudioCategory.playback, [
@@ -58,14 +58,16 @@ class TTSService {
       await _flutterTts?.setPitch(1.0);
 
       // getEngines is Android-only (it throws on iOS).
-      if (Platform.isAndroid) {
+      if (!kIsWeb && Platform.isAndroid) {
         final engines = await _flutterTts?.getEngines;
         debugPrint('TTS Engines: $engines');
       }
 
       _isInitialized = true;
       debugPrint('TTS Initialized Successfully');
-    } on Exception catch (e) {
+    } on Object catch (e) {
+      // dart:io on an unsupported platform throws an Error, not an Exception,
+      // so `on Exception` would let it escape and leave the caller hanging.
       debugPrint('TTS Initialization Error: $e');
       _isInitialized = false; // Ensure we try again if failed
     }
