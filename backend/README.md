@@ -161,6 +161,7 @@ Database triggers (see `supabase/migrations/*_init.sql`) insert rows into
 | `report_created` | `{report_id}` | new report with status `pending` |
 | `report_status_changed` | `{report_id, old_status, new_status, reason}` | `reports.status` changes |
 | `alert_created` | `{alert_id}` | new active alert |
+| `user_access_changed` | `{user_id}` | `profiles.is_disabled` changed (block/unblock from web, mobile or SQL) |
 | `report_disputed` | `{report_id, verification_id}` | a peer inserts a verification with `is_confirmed = false` on a pending report (trigger to be added in a migration) |
 
 The worker calls `rpc('claim_outbox_events', {p_limit: 50})`. That function
@@ -195,6 +196,7 @@ Handlers:
   (idempotent) push only when `escalation_reason` names *this* event, so a
   second dispute event never re-notifies an escalation made by the first. The escalation cron skips reports already escalated for
   another reason.
+- **user_access_changed**: applies (`ban_duration: 876000h`) or lifts (`none`) the Supabase Auth ban to match the profile's current `is_disabled`, so blocking from the mobile admin screen also stops sign-in.
 - **alert_created**: title/message of the alert to everyone (`All`) or to the
   LGA tag.
 

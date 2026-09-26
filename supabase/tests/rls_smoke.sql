@@ -197,3 +197,11 @@ update auth.users set email_confirmed_at=now() where id='00000000-0000-0000-0000
 \echo '--- after confirming, approval works (expect UPDATE)'
 update profiles set is_approved=true where id='00000000-0000-0000-0000-000000000013';
 select is_approved from profiles where id='00000000-0000-0000-0000-000000000013';
+
+\echo '=== round 8: blocking queues an auth-ban sync ==='
+reset role;
+select set_config('request.jwt.claim.sub','',false);
+update profiles set is_disabled=true where id='00000000-0000-0000-0000-000000000013';
+update profiles set is_disabled=false where id='00000000-0000-0000-0000-000000000013';
+select count(*) as access_events from notification_outbox where event_type='user_access_changed' and payload->>'user_id'='00000000-0000-0000-0000-000000000013';
+select count(*) as dead_settings from app_settings where key in ('sms_dedup_window_minutes','content_cache_ttl_hours','max_report_image_mb','feature_flag_voice_reports');

@@ -126,6 +126,21 @@ export function createHandlers({ repo, push, authoritySms = null, logger = defau
       return null;
     },
 
+    // profiles.is_disabled changed (web or mobile admin): make Supabase Auth
+    // agree, so a blocked user can't sign in and an unblocked one can. Acts
+    // on the profile's current value, so late or repeated events are safe.
+    async user_access_changed(event) {
+      const userId = event.payload?.user_id;
+      if (!userId) throw new PermanentEventError('invalid payload: user_id missing');
+      const profile = await repo.getProfile(userId);
+      if (!profile) return 'user not found';
+      const disabled = profile.is_disabled === true;
+      const found = await repo.setAuthBan(userId, disabled);
+      if (!found) return 'auth user not found';
+      logger.info('outbox.user_access_changed', { event_id: event.id, user_id: userId, disabled });
+      return null;
+    },
+
     async alert_created(event) {
       const alertId = event.payload?.alert_id;
       if (!alertId) throw new PermanentEventError('invalid payload: alert_id missing');

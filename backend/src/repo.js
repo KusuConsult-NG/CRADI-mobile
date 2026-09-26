@@ -65,6 +65,19 @@ export function createRepo(supabase) {
       return check(await q.limit(limit), 'find profiles') ?? [];
     },
 
+    /**
+     * Applies or lifts the Supabase Auth ban for a user so sign-in matches
+     * profiles.is_disabled. Returns false when the auth user doesn't exist.
+     */
+    async setAuthBan(userId, banned) {
+      const { error } = await supabase.auth.admin.updateUserById(userId, {
+        ban_duration: banned ? '876000h' : 'none',
+      });
+      if (!error) return true;
+      if (error.status === 404 || /not.?found/i.test(error.message ?? '')) return false;
+      throw new Error(`update auth ban: ${error.message}`);
+    },
+
     async getProfile(id) {
       return check(
         await supabase

@@ -60,6 +60,12 @@ export function fakeRepo({
     async getAlert(id) {
       return state.alerts.find((a) => a.id === id) ?? null;
     },
+    async setAuthBan(userId, banned) {
+      state.bans ??= {};
+      if (state.missingAuthUsers?.includes(userId)) return false;
+      state.bans[userId] = banned;
+      return true;
+    },
     async getProfile(id) {
       return state.profiles.find((p) => p.id === id) ?? null;
     },
