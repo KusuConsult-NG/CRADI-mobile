@@ -186,3 +186,14 @@ insert into verification_overrides(report_id,action) values ('10000000-0000-0000
 select as_user('00000000-0000-0000-0000-00000000000b');
 update reports set reporter_name='X' where id='10000000-0000-0000-0000-000000000009';
 reset role;
+
+\echo '=== round 7: approval needs confirmation ==='
+reset role;
+select set_config('request.jwt.claim.sub','',false);
+insert into auth.users values ('00000000-0000-0000-0000-000000000013','unconf@x.com',null,'{"name":"Unconfirmed","role":"ewm"}',null,null);
+\echo '--- approving an unconfirmed account, even as service role (expect ERROR)'
+update profiles set is_approved=true where id='00000000-0000-0000-0000-000000000013';
+update auth.users set email_confirmed_at=now() where id='00000000-0000-0000-0000-000000000013';
+\echo '--- after confirming, approval works (expect UPDATE)'
+update profiles set is_approved=true where id='00000000-0000-0000-0000-000000000013';
+select is_approved from profiles where id='00000000-0000-0000-0000-000000000013';

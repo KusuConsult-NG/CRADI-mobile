@@ -369,9 +369,16 @@ export function transformUser(uid, authRecord, doc, ctx) {
     address: asFreeText(d.address),
   };
 
+  // An account an admin already approved in Firebase keeps its approval; the
+  // database only accepts approval of confirmed accounts, so it is imported
+  // as confirmed (the admin vouched for it before the migration).
+  const approved = asBool(d.isApproved, false);
+  if (approved && !verified && kind !== 'phone') {
+    warnings.push('approved in Firebase but email not verified; imported as confirmed');
+  }
   const auth = kind === 'phone'
     ? { phone, phone_confirm: true, user_metadata: metadata }
-    : { email: authEmail.toLowerCase(), email_confirm: verified, user_metadata: metadata };
+    : { email: authEmail.toLowerCase(), email_confirm: verified || approved, user_metadata: metadata };
 
   const created = toIso(d.createdAt) ?? toIso(a.metadata?.creationTime);
   const profile = {
@@ -382,7 +389,7 @@ export function transformUser(uid, authRecord, doc, ctx) {
     ward: metadata.ward,
     phone: metadata.phone,
     address: metadata.address,
-    is_approved: asBool(d.isApproved, false),
+    is_approved: approved,
     is_disabled: asBool(d.isDisabled, false) || asBool(a.disabled, false),
     is_verified: verified || kind === 'phone',
     biometrics_enabled: asBool(d.biometricsEnabled, false),

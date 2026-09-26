@@ -206,6 +206,12 @@ describe('users', () => {
     assert.equal(t.row.profile.role, 'user');
     assert.ok(t.warnings.some((w) => w.includes('unknown role')));
   });
+  test('approved but unverified account is imported confirmed (DB only approves confirmed accounts)', () => {
+    const t = transformUser('erin', authEmail, { role: 'ewm', isApproved: true }, ctx);
+    assert.equal(t.row.auth.email_confirm, true);
+    assert.equal(t.row.profile.is_approved, true);
+    assert.ok(t.warnings.some((w) => w.includes('imported as confirmed')));
+  });
   test('Firestore-only user and auth-only user', () => {
     const docOnly = transformUser('carol', null, { email: 'carol@example.com', name: 'Carol' }, ctx);
     assert.equal(docOnly.kind, 'email');
