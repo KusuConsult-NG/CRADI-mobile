@@ -153,9 +153,15 @@ class ProfileProvider extends ChangeNotifier {
             // zones", so a zone cached on this device (possibly by another
             // account) must not be used instead.
             final remoteZone = (doc['monitoringZone'] as String?)?.trim();
+            final zoneBefore = _monitoringZone;
             _monitoringZone = (remoteZone != null && remoteZone.isNotEmpty)
                 ? remoteZone
                 : null;
+            // Lists may already have loaded with the previous (or no) zone,
+            // e.g. when an overlapping load was superseded; refetch them.
+            if (_monitoringZone != zoneBefore) {
+              onMonitoringZoneChanged?.call(_monitoringZone);
+            }
 
             final imageUrl = doc['profileImageUrl'] as String?;
             if (imageUrl != null && imageUrl.isNotEmpty) {

@@ -92,6 +92,27 @@ void main() {
       expect(await storage.read('monitoring_zone'), 'Benue State');
     });
 
+    test(
+      'a zone learned from the server notifies listeners of the change',
+      () async {
+        final db = _FakeDb(_user('u1', 'a@x.org'))
+          ..profileRow = () async => {
+            'name': 'A',
+            'email': 'a@x.org',
+            'monitoringZone': 'Benue State',
+          };
+        final profile = ProfileProvider(supabaseService: db);
+        final zones = <String?>[];
+        profile.onMonitoringZoneChanged = zones.add;
+        await profile.loadProfile();
+        expect(zones, ['Benue State']);
+
+        // Same zone again: no redundant refetch.
+        await profile.loadProfile();
+        expect(zones, ['Benue State']);
+      },
+    );
+
     test('clearProfile removes the cached profile keys', () async {
       FlutterSecureStorage.setMockInitialValues({
         'profile_name': 'A',
