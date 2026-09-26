@@ -22,7 +22,7 @@ import 'package:climate_app/features/contacts/models/emergency_contact_model.dar
 import 'package:climate_app/core/providers/language_provider.dart';
 import 'package:climate_app/features/verification/providers/reports_status_provider.dart';
 
-// ── Lightweight mocks — no Firebase constructor calls ────────────────────────
+// ── Lightweight mocks — no backend constructor calls ────────────────────────
 
 class MockEmergencyContactsProvider extends ChangeNotifier
     implements EmergencyContactsProvider {
@@ -34,39 +34,9 @@ class MockEmergencyContactsProvider extends ChangeNotifier
 
 class MockLanguageProvider extends ChangeNotifier implements LanguageProvider {
   @override
-  String get back => 'Back';
-  @override
-  String get settingsTitle => 'Settings';
-  @override
-  String get language => 'Language';
-  @override
   String get selectedLanguage => 'English';
   @override
-  String get notifications => 'Notifications';
-  @override
-  String get pushNotifications => 'Push Notifications';
-  @override
-  String get criticalAlerts => 'Critical Alerts';
-  @override
-  String get dnd => 'Do Not Disturb';
-  @override
-  String get dataStorage => 'Data & Storage';
-  @override
-  String get wifiOnly => 'WiFi Only';
-  @override
-  String get lowData => 'Low Data Mode';
-  @override
-  String get general => 'General';
-  @override
-  String get helpFaq => 'Help & FAQ';
-  @override
-  String get ok => 'OK';
-  @override
-  String get aboutApp => 'About App';
-  @override
-  String get logout => 'Logout';
-  @override
-  String get greeting => 'Good Morning';
+  Locale get locale => const Locale('en');
   @override
   dynamic noSuchMethod(Invocation i) => super.noSuchMethod(i);
 }

@@ -1,15 +1,19 @@
-import 'package:climate_app/core/services/peer_verification_service.dart';
+import 'package:climate_app/core/constants/hazards.dart';
+import 'package:climate_app/core/services/supabase_service.dart'
+    show parseTimestamp;
+import 'package:climate_app/features/verification/providers/reports_status_provider.dart';
+import 'package:climate_app/features/verification/widgets/dispute_comment_dialog.dart';
 import 'package:climate_app/core/theme/app_colors.dart';
 import 'package:climate_app/core/utils/error_handler.dart';
 import 'package:climate_app/shared/widgets/custom_button.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:intl/intl.dart';
 import 'package:climate_app/features/reporting/widgets/osm_location_picker.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
-import 'package:climate_app/features/auth/providers/auth_provider.dart';
+import 'package:climate_app/core/l10n/l10n.dart';
+import 'package:climate_app/core/utils/screen_security.dart';
 
 class VerificationDetailScreen extends StatefulWidget {
   final Map<String, dynamic> report;
@@ -21,8 +25,26 @@ class VerificationDetailScreen extends StatefulWidget {
       _VerificationDetailScreenState();
 }
 
-class _VerificationDetailScreenState extends State<VerificationDetailScreen> {
+/// Label and colour of the status badge for a report [status] value.
+@visibleForTesting
+(String, Color) statusBadgeFor(String status, AppLocalizations l10n) =>
+    switch (status) {
+      'verified' ||
+      'acknowledged' => (l10n.statusBadgeVerified, Colors.green.shade700),
+      'approved' ||
+      'validated' ||
+      'resolved' => (l10n.statusBadgeApproved, Colors.blue),
+      'rejected' => (l10n.statusBadgeRejected, Colors.red),
+      _ => (l10n.statusBadgePending, Colors.orange.shade800),
+    };
+
+class _VerificationDetailScreenState extends State<VerificationDetailScreen>
+    with ScreenSecurityMixin<VerificationDetailScreen> {
   bool _isLoading = false;
+
+  /// Set once voting is no longer possible (already voted, or the report
+  /// left 'pending'): the buttons are disabled.
+  bool _votingClosed = false;
   final TextEditingController _commentController = TextEditingController();
 
   @override
@@ -32,62 +54,87 @@ class _VerificationDetailScreenState extends State<VerificationDetailScreen> {
   }
 
   Future<void> _submitVerification(bool isConfirmed) async {
+    final reportId = (widget.report['\$id'] ?? widget.report['id'])?.toString();
+    if (reportId == null || reportId.isEmpty) return;
+    // A dispute must say what is wrong with the report.
+    var comment = _commentController.text.trim();
+    if (!isConfirmed && comment.isEmpty) {
+      final entered = await showDisputeCommentDialog(context);
+      if (entered == null || !mounted) return;
+      comment = entered;
+      _commentController.text = entered;
+    }
     setState(() => _isLoading = true);
+    final messenger = ScaffoldMessenger.of(context);
+    final l10n = context.l10n;
+    final provider = context.read<ReportsStatusProvider>();
 
     try {
-      // In a real app, we'd get the current user ID globally
-      // For MVP, we'll assume a user ID or fetch it
-      final userId =
-          context.read<AuthProvider>().currentUser?.uid ?? 'unknown_user';
-
-      final result = await PeerVerificationService().submitVerification(
-        reportId: widget.report['\$id'] ?? widget.report['id'] ?? 'unknown',
-        userId: userId,
-        isConfirmed: isConfirmed,
-        comment: _commentController.text,
-      );
-
-      if (mounted) {
-        setState(() => _isLoading = false);
-
-        if (result['success'] == true) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(result['message']),
-              backgroundColor: isConfirmed ? Colors.green : Colors.orange,
-            ),
-          );
-          context.pop(); // Go back to list
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Verification failed: ${result['error']}')),
-          );
-        }
-      }
-    } on Exception catch (e) {
-      if (mounted) {
-        setState(() => _isLoading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(ErrorHandler.handleError(e, context: 'Verification')),
-          ),
+      // Goes through the provider so the "already voted" cache and the
+      // loaded lists are updated.
+      if (isConfirmed) {
+        await provider.verifyReport(
+          reportId,
+          comment: comment.isEmpty ? null : comment,
         );
+      } else {
+        await provider.disputeReport(reportId, comment: comment);
       }
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            isConfirmed ? l10n.voteConfirmedThanks : l10n.voteDisputeRecorded,
+          ),
+          backgroundColor: isConfirmed ? Colors.green : Colors.orange,
+        ),
+      );
+      context.pop(); // Go back to list
+    } on VerificationRefusedException catch (e) {
+      if (!mounted) return;
+      final closed = e.alreadyVoted || e.noLongerPending;
+      setState(() {
+        _isLoading = false;
+        if (closed) _votingClosed = true;
+      });
+      messenger.showSnackBar(SnackBar(content: Text(e.message(l10n))));
+      // Nothing left to do here: back to the (refreshed) list.
+      if (closed && context.canPop()) context.pop();
+    } on Exception catch (e) {
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            ErrorHandler.handleError(e, l10n, context: 'Verification'),
+          ),
+        ),
+      );
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final report = widget.report;
-    final date =
-        DateTime.tryParse(report['submittedAt'] ?? '') ?? DateTime.now();
-    final formattedDate = DateFormat('MMM d, y • h:mm a').format(date);
+    final lat = double.tryParse('${report['latitude']}');
+    final lng = double.tryParse('${report['longitude']}');
+    final reportLatLng = (lat != null && lng != null) ? LatLng(lat, lng) : null;
+    // Stored in UTC; show the device's local time.
+    final date = parseTimestamp(report['submittedAt']);
+    final formattedDate = date == null
+        ? context.l10n.verificationDetailUnknownTime
+        : localizedDateFormat(context, 'MMM d, y • h:mm a').format(date);
+    final status = (report['status'] ?? 'pending').toString().toLowerCase();
+    final (badgeLabel, badgeColor) = statusBadgeFor(status, context.l10n);
+    final canVote = status == 'pending' && !_votingClosed;
 
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
-        title: const Text('Verify Report'),
+        title: Text(context.l10n.verificationDetailTitle),
         leading: IconButton(
+          tooltip: context.l10n.back,
           icon: const Icon(Icons.arrow_back),
           onPressed: () => context.pop(),
         ),
@@ -97,20 +144,24 @@ class _VerificationDetailScreenState extends State<VerificationDetailScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Status Badge
+            // Status Badge (the report's actual status)
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
-                color: Colors.orange.withValues(alpha: 0.1),
+                color: badgeColor.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: Colors.orange),
+                border: Border.all(color: badgeColor),
               ),
-              child: Text(
-                'PENDING VERIFICATION',
-                style: GoogleFonts.lexend(
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.orange.shade800,
+              child: Semantics(
+                label: context.l10n.a11yStatusLabel(badgeLabel),
+                excludeSemantics: true,
+                child: Text(
+                  badgeLabel,
+                  style: GoogleFonts.lexend(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: badgeColor,
+                  ),
                 ),
               ),
             ),
@@ -118,7 +169,7 @@ class _VerificationDetailScreenState extends State<VerificationDetailScreen> {
 
             // Header Info
             Text(
-              report['hazardType'] ?? 'Unknown Hazard',
+              Hazard.labelFor(report['hazardType'], context.l10n),
               style: GoogleFonts.lexend(
                 fontSize: 24,
                 fontWeight: FontWeight.bold,
@@ -136,7 +187,8 @@ class _VerificationDetailScreenState extends State<VerificationDetailScreen> {
                 const SizedBox(width: 4),
                 Expanded(
                   child: Text(
-                    report['locationDetails'] ?? 'No location details',
+                    report['locationDetails'] ??
+                        context.l10n.verificationDetailNoLocation,
                     style: GoogleFonts.lexend(
                       fontSize: 14,
                       color: AppColors.textSecondary,
@@ -170,7 +222,7 @@ class _VerificationDetailScreenState extends State<VerificationDetailScreen> {
 
             // Description
             Text(
-              'Description',
+              context.l10n.descriptionLabel,
               style: GoogleFonts.lexend(
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
@@ -178,7 +230,9 @@ class _VerificationDetailScreenState extends State<VerificationDetailScreen> {
             ),
             const SizedBox(height: 8),
             Text(
-              report['description'] ?? 'No description provided.',
+              (report['description'] as String?)?.trim().isNotEmpty == true
+                  ? report['description'] as String
+                  : context.l10n.noDescriptionProvided,
               style: GoogleFonts.lexend(
                 fontSize: 14,
                 color: AppColors.textPrimary,
@@ -188,18 +242,14 @@ class _VerificationDetailScreenState extends State<VerificationDetailScreen> {
 
             const SizedBox(height: 24),
 
-            // Map Placeholder (In real app, show map)
-            // Map View
-            if (report['latitude'] != null && report['longitude'] != null)
+            // Report location on a (read-only) map, when it has coordinates.
+            if (reportLatLng != null)
               SizedBox(
                 height: 200,
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(12),
                   child: OSMLocationPicker(
-                    initialPosition: LatLng(
-                      double.tryParse(report['latitude'].toString()) ?? 0,
-                      double.tryParse(report['longitude'].toString()) ?? 0,
-                    ),
+                    initialPosition: reportLatLng,
                     isInteractive: false,
                   ),
                 ),
@@ -222,7 +272,7 @@ class _VerificationDetailScreenState extends State<VerificationDetailScreen> {
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        'No map location available',
+                        context.l10n.verificationDetailNoMap,
                         style: GoogleFonts.lexend(color: Colors.grey),
                       ),
                     ],
@@ -234,7 +284,7 @@ class _VerificationDetailScreenState extends State<VerificationDetailScreen> {
 
             // Verification Actions
             Text(
-              'Can you confirm this report?',
+              context.l10n.verificationDetailQuestion,
               style: GoogleFonts.lexend(
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
@@ -242,7 +292,7 @@ class _VerificationDetailScreenState extends State<VerificationDetailScreen> {
             ),
             const SizedBox(height: 8),
             Text(
-              'Please verify if you have observed this hazard in the reported location.',
+              context.l10n.verificationDetailInstructions,
               style: GoogleFonts.lexend(
                 fontSize: 14,
                 color: AppColors.textSecondary,
@@ -252,10 +302,11 @@ class _VerificationDetailScreenState extends State<VerificationDetailScreen> {
             const SizedBox(height: 16),
             TextField(
               controller: _commentController,
-              decoration: const InputDecoration(
-                labelText: 'Optional Comment',
-                border: OutlineInputBorder(),
-                hintText: 'Add details about what you see...',
+              enabled: canVote,
+              decoration: InputDecoration(
+                labelText: context.l10n.alertDetailCommentLabel,
+                border: const OutlineInputBorder(),
+                hintText: context.l10n.verificationDetailCommentHint,
               ),
               maxLines: 2,
             ),
@@ -266,8 +317,8 @@ class _VerificationDetailScreenState extends State<VerificationDetailScreen> {
               children: [
                 Expanded(
                   child: CustomButton(
-                    text: 'I Cannot Confirm',
-                    onPressed: _isLoading
+                    text: context.l10n.voteDispute,
+                    onPressed: _isLoading || !canVote
                         ? null
                         : () => _submitVerification(false),
                     backgroundColor: Colors.white,
@@ -279,8 +330,8 @@ class _VerificationDetailScreenState extends State<VerificationDetailScreen> {
                 const SizedBox(width: 16),
                 Expanded(
                   child: CustomButton(
-                    text: 'I Can Confirm',
-                    onPressed: _isLoading
+                    text: context.l10n.verificationDetailConfirm,
+                    onPressed: _isLoading || !canVote
                         ? null
                         : () => _submitVerification(true),
                     backgroundColor: Colors.green,

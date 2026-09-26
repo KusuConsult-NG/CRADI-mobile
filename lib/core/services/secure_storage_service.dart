@@ -23,6 +23,11 @@ class SecureStorageService {
   static const String _keyLastLoginAttempt = 'last_login_attempt';
   static const String _keyAccountLockedUntil = 'account_locked_until';
   static const String _keyBiometricEnabled = 'biometric_enabled';
+
+  /// User id of the account that enabled the biometric lock: the lock is
+  /// per account, so it never carries over to another account signing in
+  /// on a shared device.
+  static const String _keyBiometricOwner = 'biometric_owner';
   static const String _keyRememberMe = 'remember_me';
 
   // Authentication token management
@@ -42,27 +47,16 @@ class SecureStorageService {
     return await _storage.read(key: _keyRefreshToken);
   }
 
-  // Credentials management for Biometric Auto-Login
-  static const String _keyUserEmail = 'user_email';
-  static const String _keyUserPassword = 'user_password';
+  // Legacy keys: older builds stored the plaintext email/password for
+  // biometric re-login. Biometric unlock now reuses the persisted Supabase
+  // session instead; these keys are only ever deleted.
+  static const String _legacyKeyUserEmail = 'user_email';
+  static const String _legacyKeyUserPassword = 'user_password';
 
-  Future<void> saveUserCredentials(String email, String password) async {
-    await _storage.write(key: _keyUserEmail, value: email);
-    await _storage.write(key: _keyUserPassword, value: password);
-  }
-
-  Future<Map<String, String>?> getUserCredentials() async {
-    final email = await _storage.read(key: _keyUserEmail);
-    final password = await _storage.read(key: _keyUserPassword);
-    if (email != null && password != null) {
-      return {'email': email, 'password': password};
-    }
-    return null;
-  }
-
-  Future<void> clearUserCredentials() async {
-    await _storage.delete(key: _keyUserEmail);
-    await _storage.delete(key: _keyUserPassword);
+  /// Remove credentials persisted by older app versions.
+  Future<void> purgeLegacyCredentials() async {
+    await _storage.delete(key: _legacyKeyUserEmail);
+    await _storage.delete(key: _legacyKeyUserPassword);
   }
 
   // User data management
@@ -100,9 +94,23 @@ class SecureStorageService {
   }
 
   Future<DateTime?> getSessionExpiry() async {
-    final expiryStr = await _storage.read(key: _keySessionExpiry);
-    if (expiryStr == null) return null;
-    return DateTime.parse(expiryStr);
+    return _readTimestamp(_keySessionExpiry);
+  }
+
+  /// A stored ISO-8601 timestamp, or null when the key is absent or holds a
+  /// value this build cannot parse (data written by an older build, or a
+  /// corrupted keystore entry). Never throws: these are read on the startup
+  /// path and from a periodic timer, where a FormatException would surface
+  /// as an unhandled async error.
+  Future<DateTime?> _readTimestamp(String key) async {
+    final raw = await _storage.read(key: key);
+    if (raw == null) return null;
+    final parsed = DateTime.tryParse(raw);
+    if (parsed == null) {
+      await _storage.delete(key: key);
+      return null;
+    }
+    return parsed;
   }
 
   Future<bool> isSessionValid() async {
@@ -143,10 +151,9 @@ class SecureStorageService {
   }
 
   Future<bool> isAccountLocked() async {
-    final lockedUntilStr = await _storage.read(key: _keyAccountLockedUntil);
-    if (lockedUntilStr == null) return false;
+    final lockedUntil = await _readTimestamp(_keyAccountLockedUntil);
+    if (lockedUntil == null) return false;
 
-    final lockedUntil = DateTime.parse(lockedUntilStr);
     if (DateTime.now().isAfter(lockedUntil)) {
       // Lock expired, clear it
       await _storage.delete(key: _keyAccountLockedUntil);
@@ -157,19 +164,43 @@ class SecureStorageService {
   }
 
   Future<DateTime?> getAccountLockedUntil() async {
-    final lockedUntilStr = await _storage.read(key: _keyAccountLockedUntil);
-    if (lockedUntilStr == null) return null;
-    return DateTime.parse(lockedUntilStr);
+    return _readTimestamp(_keyAccountLockedUntil);
   }
 
   // Biometric settings
-  Future<void> setBiometricEnabled(bool enabled) async {
+  /// Enables / disables the biometric lock for [userId] (the owner is
+  /// recorded when enabling).
+  Future<void> setBiometricEnabled(bool enabled, {String? userId}) async {
     await _storage.write(key: _keyBiometricEnabled, value: enabled.toString());
+    if (enabled && userId != null) {
+      await _storage.write(key: _keyBiometricOwner, value: userId);
+    } else if (!enabled) {
+      await _storage.delete(key: _keyBiometricOwner);
+    }
   }
 
-  Future<bool> isBiometricEnabled() async {
+  /// Whether the biometric lock is enabled. With [forUserId], only when it
+  /// was enabled by that account (flags written by older builds have no
+  /// owner and count for whoever is signed in; see [bindBiometricOwner]).
+  Future<bool> isBiometricEnabled({String? forUserId}) async {
     final enabledStr = await _storage.read(key: _keyBiometricEnabled);
-    return enabledStr == 'true';
+    if (enabledStr != 'true') return false;
+    if (forUserId == null) return true;
+    final owner = await _storage.read(key: _keyBiometricOwner);
+    return owner == null || owner == forUserId;
+  }
+
+  /// Ties the biometric flag to [userId]: an ownerless (legacy) flag is
+  /// bound to it, and a flag enabled by another account is cleared.
+  Future<void> bindBiometricOwner(String userId) async {
+    final enabledStr = await _storage.read(key: _keyBiometricEnabled);
+    if (enabledStr != 'true') return;
+    final owner = await _storage.read(key: _keyBiometricOwner);
+    if (owner == null) {
+      await _storage.write(key: _keyBiometricOwner, value: userId);
+    } else if (owner != userId) {
+      await setBiometricEnabled(false);
+    }
   }
 
   // Generic secure storage
@@ -190,52 +221,63 @@ class SecureStorageService {
     await _storage.write(key: key, value: json.encode(value));
   }
 
+  /// A stored JSON object, or null when the key is absent or holds a value
+  /// that is not a JSON object (corrupted entry, or a shape written by an
+  /// older build). The unreadable entry is dropped so the caller starts a
+  /// fresh one instead of failing on every read.
   Future<Map<String, dynamic>?> readJson(String key) async {
     final jsonStr = await _storage.read(key: key);
     if (jsonStr == null) return null;
-    return json.decode(jsonStr) as Map<String, dynamic>;
+    try {
+      final decoded = json.decode(jsonStr);
+      if (decoded is Map<String, dynamic>) return decoded;
+    } on FormatException {
+      // Fall through: treat an unparsable entry as absent.
+    }
+    await _storage.delete(key: key);
+    return null;
   }
 
-  // Clear all secure data (logout)
-  /// [keepAuth] if true, preserves auth token and user info for biometric login
-  /// [keepPreferences] if true, preserves user preferences like biometric enabled status
+  /// Keys holding the signed-in user's session / identity data.
+  static const List<String> _sessionKeys = [
+    _keyAuthToken,
+    _keyRefreshToken,
+    _keyUserRole,
+    _keySessionExpiry,
+    _keyRememberMe,
+    _legacyKeyUserEmail,
+    _legacyKeyUserPassword,
+  ];
+
+  /// Clears secure data on logout.
+  ///
+  /// Only this service's own keys are deleted — never `deleteAll()`: the
+  /// keystore also holds the Hive encryption key (`hive_encryption_key`,
+  /// see HiveEncryptionService), which must survive a logout or every
+  /// encrypted Hive box becomes unreadable on the next launch. Login-attempt
+  /// / lockout counters are kept too, so logging out cannot reset them.
+  ///
+  /// [keepAuth] preserves the auth token and user info (biometric login).
+  /// [keepPreferences] preserves the biometric preference (and, when it is
+  /// enabled, the phone number).
   Future<void> clearAll({
     bool keepAuth = false,
     bool keepPreferences = false,
   }) async {
-    if (keepAuth && keepPreferences) {
-      // Only clear temporary session data
-      await _storage.delete(key: _keySessionExpiry);
-      await _storage.delete(key: _keyLoginAttempts);
-      await _storage.delete(key: _keyLastLoginAttempt);
-      await _storage.delete(key: _keyAccountLockedUntil);
-      return;
+    final keys = <String>[
+      _keySessionExpiry,
+      if (!keepAuth) ..._sessionKeys.where((k) => k != _keySessionExpiry),
+    ];
+
+    final keepPhone = keepPreferences && await isBiometricEnabled();
+    if (!keepAuth && !keepPhone) keys.add(_keyPhoneNumber);
+    if (!keepPreferences) {
+      keys.addAll([_keyBiometricEnabled, _keyBiometricOwner]);
     }
 
-    if (keepPreferences) {
-      // Keep preferences like biometric enabled, but clear auth and user data
-      final biometricEnabled = await isBiometricEnabled();
-      final phoneNumber = await getPhoneNumber();
-      final email = await _storage.read(key: _keyUserEmail);
-      final password = await _storage.read(key: _keyUserPassword);
-
-      await _storage.deleteAll();
-
-      // Restore selected preferences
-      if (biometricEnabled) {
-        await setBiometricEnabled(true);
-        if (phoneNumber != null) {
-          await savePhoneNumber(phoneNumber);
-        }
-        if (email != null && password != null) {
-          await saveUserCredentials(email, password);
-        }
-      }
-      return;
+    for (final key in keys) {
+      await _storage.delete(key: key);
     }
-
-    // Default: Clear absolutely everything
-    await _storage.deleteAll();
   }
 
   // Clear only authentication data

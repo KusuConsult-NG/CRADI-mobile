@@ -51,14 +51,13 @@ app.*.map.json
 **/node_modules/
 node_modules/
 
-# Firebase Configuration (contains sensitive API keys)
-android/app/google-services.json
-ios/Runner/GoogleService-Info.plist
+# Runtime configuration (--dart-define-from-file); see env.example.json
+env.json
+env.production.json
 
 # Environment variables
 .env
 .env.*
-!.env.example
 
 # SMS Configuration (contains API keys - NEVER commit!)
 lib/core/config/sms_config.dart
@@ -67,3 +66,17 @@ test_sms.dart
 # Build artifacts — never commit APKs/AABs to git
 *.apk
 *.aab
+
+# Signing material — never commit keystores or their passwords
+*.jks
+*.keystore
+*.p12
+*.pem
+key.properties
+
+# Browser smoke-test harness output (screenshots + reports are large and regenerated)
+web_smoke/screenshots/
+web_smoke/report*.json
+web_smoke/language-texts.json
+web_smoke/build/
+web_smoke/node_modules/

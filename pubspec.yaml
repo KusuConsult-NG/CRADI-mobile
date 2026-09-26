@@ -37,7 +37,6 @@ dependencies:
   provider: ^6.1.5+1
   go_router: ^17.0.1 # UI/UX
   google_fonts: ^8.0.0
-  flutter_svg: ^2.2.3
   image_picker: ^1.2.1
   geolocator: ^14.0.2
   hive: ^2.2.3
@@ -54,18 +53,11 @@ dependencies:
   local_auth: ^3.0.0
   crypto: ^3.0.6
   http: ^1.2.2
-  pointycastle: ^4.0.0
-  # Device fingerprinting and security (compatible with Appwrite)
+  # Device fingerprinting and security
   device_info_plus: ^12.0.0
-  # 2FA/TOTP
-  otp: ^3.1.4
-  qr_flutter: ^4.1.0
-  # Network info for security
-  network_info_plus: ^7.0.0
   
   # Speech recognition - Used for voice input in reports
   speech_to_text: ^7.0.0
-  flutter_local_notifications: ^20.0.0
   fluttertoast: ^9.0.0
   # Maps removed - using flutter_map instead (lighter weight)
   
@@ -81,34 +73,28 @@ dependencies:
   flutter_map: ^8.2.2
   latlong2: ^0.9.1
   # Chat
-  flutter_chat_ui: ^2.11.1  # Locked to v1 due to breaking changes in v2
-  flutter_chat_types: ^3.6.2
+  flutter_chat_ui: ^2.11.1
   flutter_chat_core: ^2.9.0  # Explicit dep — transitively used by flutter_chat_ui
-  # Backend – Firebase
-  firebase_auth: ^6.2.0
-  cloud_firestore: ^6.1.3
-  firebase_storage: ^13.0.6
-  # Firebase Cloud Messaging for push notifications
-  firebase_messaging: ^16.1.1
-  firebase_core: ^4.4.0
-  firebase_crashlytics: ^5.0.7
+  # Backend – Supabase (auth, Postgres, storage, realtime)
+  supabase_flutter: ^2.10.0
+  # Incoming deep links (cradi:// and https://cradi.ng). Already pulled in by
+  # supabase_flutter for its auth callbacks; declared here because
+  # DeepLinkService imports it directly.
+  app_links: ^7.2.1
+  # Push notifications
+  onesignal_flutter: ^5.3.0
+  # Crash reporting (optional — only initialised when SENTRY_DSN is set)
+  sentry_flutter: ^9.0.0
   permission_handler: ^12.0.1
   path: ^1.9.1
   # Package info for dynamic version string in Settings
   package_info_plus: ^9.0.0
-  # Image compression before Firebase Storage upload (reduces upload size 70-90%)
+  # Image compression before storage upload (reduces upload size 70-90%)
   flutter_image_compress: ^2.3.0
-  # Firebase Cloud Functions — callable functions for FCM peer notifications
-  cloud_functions: ^6.0.6
-  # FLAG_SECURE is implemented via native MethodChannel in MainActivity.java.
+  # FLAG_SECURE is implemented via a native MethodChannel in MainActivity.kt
+  # (android/app/src/main/kotlin/.../MainActivity.kt), applied by ScreenSecurityMixin.
   # flutter_windowmanager_plus removed — incompatible with AGP 8.0+ (missing namespace).
-  # Firebase Remote Config — server-side parameters (peer threshold, SMS caps, feature flags)
-  firebase_remote_config: ^6.1.4
-  http_certificate_pinning: ^3.0.1
   share_plus: ^12.0.1
-  # Backend – Supabase & OneSignal
-  supabase_flutter: ^2.8.4
-  onesignal_flutter: ^5.3.4
 
 
 dev_dependencies:
@@ -126,7 +112,6 @@ dev_dependencies:
   mockito: ^5.4.4
   build_runner: ^2.4.13
   flutter_launcher_icons: ^0.14.1
-  fake_cloud_firestore: ^4.0.1
 
 # App icon configuration
 flutter_launcher_icons:

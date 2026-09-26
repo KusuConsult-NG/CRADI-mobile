@@ -22,14 +22,20 @@ class FraudAssessment {
 
 /// Service for detecting fraudulent login attempts.
 ///
-/// Analyzes login patterns to detect new devices, failed attempts, etc.
+/// Flags sign-ins from devices not yet trusted by the user. Backed by the
+/// trusted_devices / login_history tables.
+///
+/// Failed sign-ins are *not* assessed here: a failed attempt has no session,
+/// so RLS does not let the client record it in login_history. Repeated
+/// failures are throttled by the local RateLimiter and by Supabase Auth's
+/// own rate limits instead.
 class FraudDetectionService {
   static final FraudDetectionService _instance =
       FraudDetectionService._internal();
   factory FraudDetectionService() => _instance;
   FraudDetectionService._internal();
 
-  final SupabaseService _supabase = SupabaseService();
+  final SupabaseService _db = SupabaseService();
 
   Future<FraudAssessment> assessLoginRisk({
     required String userId,
@@ -46,12 +52,6 @@ class FraudDetectionService {
       if (!isKnownDevice) {
         flags.add('new_device');
         risk = FraudRisk.medium;
-      }
-
-      final failedAttempts = await _getRecentFailedAttempts(userId);
-      if (failedAttempts >= 3) {
-        flags.add('multiple_failed_attempts');
-        risk = FraudRisk.high;
       }
 
       final requiresVerification =
@@ -88,11 +88,11 @@ class FraudDetectionService {
     String deviceFingerprint,
   ) async {
     try {
-      final devices = await _supabase.listDocuments(
+      final devices = await _db.listDocuments(
         collectionId: AppConfig.trustedDevicesCollection,
         queries: [
-          SQuery.equal('user_id', userId),
-          SQuery.equal('device_id', deviceFingerprint),
+          FQuery.equal('userId', userId),
+          FQuery.equal('deviceFingerprint', deviceFingerprint),
         ],
       );
       return devices.isNotEmpty;
@@ -102,32 +102,8 @@ class FraudDetectionService {
     }
   }
 
-  Future<int> _getRecentFailedAttempts(String userId) async {
-    try {
-      final oneHourAgo = DateTime.now().subtract(const Duration(hours: 1));
-      final attempts = await _supabase.listDocuments(
-        collectionId: AppConfig.loginHistoryCollection,
-        queries: [
-          SQuery.equal('user_id', userId),
-          SQuery.equal('status', 'failed'),
-          SQuery.greaterThan(
-            'login_time',
-            oneHourAgo.toUtc().toIso8601String(),
-          ),
-        ],
-      );
-      return attempts.length;
-    } on Exception catch (e) {
-      developer.log('Error getting failed attempts: $e');
-      return 0;
-    }
-  }
-
   String _getRiskReason(List<String> flags) {
     if (flags.isEmpty) return 'Normal login activity';
-    if (flags.contains('multiple_failed_attempts')) {
-      return 'Multiple failed login attempts detected';
-    }
     if (flags.contains('new_device')) return 'Login from new device';
     return 'Unusual activity detected';
   }
@@ -138,13 +114,13 @@ class FraudDetectionService {
     required String deviceName,
   }) async {
     try {
-      await _supabase.createDocument(
+      await _db.createDocument(
         collectionId: AppConfig.trustedDevicesCollection,
         data: {
-          'user_id': userId,
-          'device_id': deviceFingerprint,
-          'device_name': deviceName,
-          'last_used_at': DateTime.now().toUtc().toIso8601String(),
+          'userId': userId,
+          'deviceFingerprint': deviceFingerprint,
+          'deviceName': deviceName,
+          'trusted': true,
         },
       );
       developer.log(
@@ -152,11 +128,15 @@ class FraudDetectionService {
         name: 'FraudDetectionService',
       );
     } on Exception catch (e) {
+      // Already registered (unique per user + fingerprint).
+      if (SupabaseService.isUniqueViolation(e)) return;
       developer.log('Error registering trusted device: $e');
       rethrow;
     }
   }
 
+  /// Records a login in login_history. Only successful sign-ins can be
+  /// recorded (the insert needs the signed-in user's session).
   Future<void> recordLoginAttempt({
     required String userId,
     required bool success,
@@ -164,13 +144,14 @@ class FraudDetectionService {
     String? deviceName,
   }) async {
     try {
-      await _supabase.createDocument(
+      await _db.createDocument(
         collectionId: AppConfig.loginHistoryCollection,
         data: {
-          'user_id': userId,
-          'status': success ? 'success' : 'failed',
-          'device_info': '$deviceName ($deviceFingerprint)',
-          'login_time': DateTime.now().toUtc().toIso8601String(),
+          'userId': userId,
+          'success': success,
+          'deviceFingerprint': deviceFingerprint,
+          'deviceName': deviceName ?? 'Unknown',
+          'riskScore': 0,
         },
       );
       developer.log(

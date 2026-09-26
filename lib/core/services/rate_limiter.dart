@@ -2,6 +2,7 @@ import 'secure_storage_service.dart';
 import 'device_fingerprint_service.dart';
 import 'dart:math' as math;
 import 'dart:developer' as developer;
+import 'package:climate_app/core/l10n/l10n.dart';
 
 /// Enhanced rate limiting service with adaptive throttling and attack detection
 /// Prevents brute force, distributed attacks, and bot attacks
@@ -36,7 +37,7 @@ class RateLimiter {
         remainingAttempts: 0,
         lockedUntil: lockedUntil,
         threatLevel: threatLevel,
-        reason: 'Account is locked due to too many failed attempts',
+        reason: (l) => l.rateLimitAccountLocked,
       );
     }
 
@@ -47,8 +48,12 @@ class RateLimiter {
     // Check if cooldown period is active
     if (cooldown > Duration.zero && attempts > 0) {
       final lastAttemptStr = await _storage.read('last_login_attempt');
-      if (lastAttemptStr != null) {
-        final lastAttempt = DateTime.parse(lastAttemptStr);
+      final lastAttempt = lastAttemptStr == null
+          ? null
+          : DateTime.tryParse(lastAttemptStr);
+      if (lastAttempt != null) {
+        // A device clock moved backwards makes `elapsed` negative, which is
+        // still < cooldown, so the user waits rather than being let through.
         final elapsed = DateTime.now().difference(lastAttempt);
 
         if (elapsed < cooldown) {
@@ -58,8 +63,7 @@ class RateLimiter {
             remainingAttempts: maxLoginAttempts - attempts,
             threatLevel: threatLevel,
             waitDuration: waitTime,
-            reason:
-                'Please wait ${waitTime.inSeconds} seconds before trying again',
+            reason: (l) => l.rateLimitWaitSeconds(waitTime.inSeconds),
           );
         }
       }
@@ -86,8 +90,7 @@ class RateLimiter {
         remainingAttempts: 0,
         lockedUntil: lockedUntil,
         threatLevel: threatLevel,
-        reason:
-            'Too many failed attempts. Account locked for ${lockoutDuration.inMinutes} minutes.',
+        reason: (l) => l.rateLimitLockedMinutes(lockoutDuration.inMinutes),
       );
     }
 
@@ -150,8 +153,18 @@ class RateLimiter {
       );
     }
 
-    final requests = requestData['count'] as int;
-    final windowStart = DateTime.parse(requestData['windowStart'] as String);
+    final requests = _asCount(requestData['count']);
+    final windowStart = DateTime.tryParse('${requestData['windowStart']}');
+
+    // An entry this build cannot read is treated as a fresh window rather
+    // than crashing the OTP screen.
+    if (windowStart == null) {
+      return RateLimitResult(
+        allowed: true,
+        remainingAttempts: maxOtpRequests - 1,
+        threatLevel: ThreatLevel.low,
+      );
+    }
 
     // Check if we're still in the rate limit window
     if (DateTime.now().difference(windowStart) > otpRequestWindow) {
@@ -172,8 +185,7 @@ class RateLimiter {
         remainingAttempts: 0,
         threatLevel: ThreatLevel.high,
         waitDuration: waitTime,
-        reason:
-            'Too many OTP requests. Please try again in ${waitTime.inMinutes} minutes.',
+        reason: (l) => l.rateLimitOtpMinutes(waitTime.inMinutes),
       );
     }
 
@@ -187,8 +199,10 @@ class RateLimiter {
   /// Check if OTP resend cooldown has elapsed
   Future<RateLimitResult> checkOtpResend() async {
     final lastAttemptStr = await _storage.read('last_otp_resend');
-    if (lastAttemptStr != null) {
-      final lastAttempt = DateTime.parse(lastAttemptStr);
+    final lastAttempt = lastAttemptStr == null
+        ? null
+        : DateTime.tryParse(lastAttemptStr);
+    if (lastAttempt != null) {
       final elapsed = DateTime.now().difference(lastAttempt);
 
       if (elapsed < otpResendCooldown) {
@@ -198,8 +212,7 @@ class RateLimiter {
           remainingAttempts: 0,
           threatLevel: ThreatLevel.medium,
           waitDuration: waitTime,
-          reason:
-              'Please wait ${waitTime.inSeconds} seconds before requesting another code',
+          reason: (l) => l.rateLimitResendSeconds(waitTime.inSeconds),
         );
       }
     }
@@ -230,10 +243,11 @@ class RateLimiter {
         'windowStart': now.toIso8601String(),
       });
     } else {
-      final windowStart = DateTime.parse(requestData['windowStart'] as String);
+      final windowStart = DateTime.tryParse('${requestData['windowStart']}');
 
-      // Check if window has expired
-      if (now.difference(windowStart) > otpRequestWindow) {
+      // Check if window has expired (or cannot be read at all)
+      if (windowStart == null ||
+          now.difference(windowStart) > otpRequestWindow) {
         // Start new window
         await _storage.writeJson(key, {
           'count': 1,
@@ -243,7 +257,7 @@ class RateLimiter {
       } else {
         // Increment counter in current window
         await _storage.writeJson(key, {
-          'count': (requestData['count'] as int) + 1,
+          'count': _asCount(requestData['count']) + 1,
           'lastRequest': now.toIso8601String(),
           'windowStart': requestData['windowStart'],
         });
@@ -268,6 +282,14 @@ class RateLimiter {
 
     final remaining = lockedUntil.difference(DateTime.now());
     return remaining.isNegative ? null : remaining;
+  }
+
+  /// A stored counter, whatever JSON shape it came back as (int, double or
+  /// string). Anything unreadable counts as zero.
+  static int _asCount(Object? raw) {
+    if (raw is int) return raw;
+    if (raw is num) return raw.toInt();
+    return int.tryParse('$raw') ?? 0;
   }
 
   /// Calculate threat level based on failed attempts
@@ -343,7 +365,7 @@ class RateLimiter {
       if (pattern == null) return false;
 
       // Check if multiple unique device fingerprints attempted login
-      final deviceCount = pattern['uniqueDevices'] as int? ?? 0;
+      final deviceCount = _asCount(pattern['uniqueDevices']);
       return deviceCount >= distributedAttackThreshold;
     } on Exception catch (e) {
       developer.log(
@@ -388,7 +410,9 @@ class RateLimitResult {
   final int remainingAttempts;
   final DateTime? lockedUntil;
   final Duration? waitDuration;
-  final String? reason;
+
+  /// Why the attempt was refused (resolved in the current language).
+  final LocalizedText? reason;
   final ThreatLevel threatLevel;
 
   RateLimitResult({
@@ -400,13 +424,15 @@ class RateLimitResult {
     this.threatLevel = ThreatLevel.low,
   });
 
-  String get userMessage {
+  /// User-facing text for this result (resolve with the current
+  /// [AppLocalizations]).
+  LocalizedText get userMessage {
     if (allowed) {
-      return remainingAttempts > 0
-          ? '$remainingAttempts attempts remaining'
+      return (l) => remainingAttempts > 0
+          ? l.rateLimitAttemptsRemaining(remainingAttempts)
           : '';
     }
-    return reason ?? 'Rate limit exceeded';
+    return reason ?? (l) => l.rateLimitExceeded;
   }
 
   /// Get color indicator for UI based on threat level

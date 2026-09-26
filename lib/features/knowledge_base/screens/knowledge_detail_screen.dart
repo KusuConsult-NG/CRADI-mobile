@@ -1,4 +1,6 @@
 import 'package:climate_app/core/theme/app_colors.dart';
+import 'package:climate_app/features/knowledge_base/knowledge_categories.dart';
+import 'package:climate_app/features/knowledge_base/widgets/guide_image.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
@@ -7,6 +9,8 @@ import 'package:climate_app/features/knowledge_base/providers/knowledge_provider
 import 'package:go_router/go_router.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:climate_app/core/l10n/l10n.dart';
+import 'package:climate_app/core/widgets/app_network_image.dart';
 
 class KnowledgeDetailScreen extends StatefulWidget {
   final Map<String, dynamic> guide;
@@ -20,6 +24,13 @@ class KnowledgeDetailScreen extends StatefulWidget {
 class _KnowledgeDetailScreenState extends State<KnowledgeDetailScreen> {
   bool _isBookmarked = false;
   static const _bookmarksKey = 'bookmarked_guides';
+
+  @override
+  void dispose() {
+    // Don't keep reading the guide aloud after leaving it.
+    TTSService().stop();
+    super.dispose();
+  }
 
   @override
   void initState() {
@@ -52,7 +63,9 @@ class _KnowledgeDetailScreenState extends State<KnowledgeDetailScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            _isBookmarked ? 'Guide bookmarked' : 'Bookmark removed',
+            _isBookmarked
+                ? context.l10n.knowledgeBookmarked
+                : context.l10n.knowledgeBookmarkRemoved,
           ),
           duration: const Duration(seconds: 1),
           backgroundColor: _isBookmarked
@@ -64,35 +77,40 @@ class _KnowledgeDetailScreenState extends State<KnowledgeDetailScreen> {
   }
 
   void _shareGuide() {
-    final title = widget.guide['title'] ?? 'CRADI Guide';
+    final l10n = context.l10n;
+    final title = widget.guide['title'] ?? l10n.knowledgeShareDefaultTitle;
     final description = widget.guide['description'] ?? '';
     final content = widget.guide['content'] ?? '';
-    final shareText =
-        '$title\n\n$description${content.isNotEmpty ? '\n\n$content' : ''}\n\nShared via CRADI Early Warning App';
+    final body = [
+      title,
+      description,
+      content,
+    ].where((p) => p.toString().isNotEmpty).join('\n\n');
+    final shareText = l10n.knowledgeShareText(body);
     SharePlus.instance.share(ShareParams(text: shareText));
+  }
+
+  /// "Updated 3 Mar 2026" (or "Updated recently" without a date).
+  String _updatedText(BuildContext context) {
+    final guide = widget.guide;
+    final date = formatKnowledgeDate(
+      guide['updatedAt'] ?? guide['lastUpdated'],
+      context.intlLocale,
+    );
+    return date != null
+        ? context.l10n.knowledgeUpdatedOn(date)
+        : context.l10n.knowledgeUpdatedRecently;
   }
 
   @override
   Widget build(BuildContext context) {
     final guide = widget.guide;
-    // Determine category icon and color
-    IconData categoryIcon = Icons.info_outline;
-    Color categoryColor = AppColors.primaryRed;
-
-    switch (guide['category']) {
-      case 'Safety':
-        categoryIcon = Icons.security;
-        categoryColor = Colors.blue;
-        break;
-      case 'Emergency':
-        categoryIcon = Icons.warning_amber_rounded;
-        categoryColor = Colors.orange;
-        break;
-      case 'Tech':
-        categoryIcon = Icons.smartphone;
-        categoryColor = Colors.purple;
-        break;
-    }
+    // Category icon and color (shared with the list screens).
+    final category =
+        knowledgeCategoryFor(guide['hazardType']) ??
+        knowledgeCategoryFor(guide['category']);
+    final IconData categoryIcon = category?.icon ?? Icons.info_outline;
+    final Color categoryColor = category?.color ?? AppColors.primaryRed;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -100,15 +118,17 @@ class _KnowledgeDetailScreenState extends State<KnowledgeDetailScreen> {
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
+          tooltip: context.l10n.back,
           icon: const Icon(
             Icons.arrow_back_ios_new,
             color: AppColors.textPrimary,
             size: 20,
           ),
-          onPressed: () => Navigator.pop(context),
+          onPressed: () =>
+              context.canPop() ? context.pop() : context.go('/knowledge-base'),
         ),
         title: Text(
-          'Guide Detail',
+          context.l10n.knowledgeDetailTitle,
           style: GoogleFonts.lexend(
             fontWeight: FontWeight.bold,
             color: AppColors.textPrimary,
@@ -116,6 +136,7 @@ class _KnowledgeDetailScreenState extends State<KnowledgeDetailScreen> {
         ),
         actions: [
           IconButton(
+            tooltip: context.l10n.knowledgeShareTooltip,
             icon: const Icon(
               Icons.share_outlined,
               color: AppColors.textPrimary,
@@ -123,6 +144,9 @@ class _KnowledgeDetailScreenState extends State<KnowledgeDetailScreen> {
             onPressed: _shareGuide,
           ),
           IconButton(
+            tooltip: _isBookmarked
+                ? context.l10n.knowledgeBookmarkRemoveTooltip
+                : context.l10n.knowledgeBookmarkAddTooltip,
             icon: Icon(
               _isBookmarked ? Icons.bookmark : Icons.bookmark_border,
               color: _isBookmarked
@@ -132,6 +156,7 @@ class _KnowledgeDetailScreenState extends State<KnowledgeDetailScreen> {
             onPressed: _toggleBookmark,
           ),
           IconButton(
+            tooltip: context.l10n.knowledgeListenTooltip,
             icon: const Icon(
               Icons.volume_up_outlined,
               color: AppColors.textPrimary,
@@ -144,16 +169,16 @@ class _KnowledgeDetailScreenState extends State<KnowledgeDetailScreen> {
                   await TTSService().speak(text);
                 } else {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('No text to speak')),
+                    SnackBar(
+                      content: Text(context.l10n.knowledgeNoTextToSpeak),
+                    ),
                   );
                 }
               } on Exception {
                 if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text(
-                        'Text-to-speech is unavailable. Please try again.',
-                      ),
+                    SnackBar(
+                      content: Text(context.l10n.knowledgeTtsUnavailable),
                     ),
                   );
                 }
@@ -181,7 +206,10 @@ class _KnowledgeDetailScreenState extends State<KnowledgeDetailScreen> {
                   Icon(categoryIcon, size: 14, color: categoryColor),
                   const SizedBox(width: 6),
                   Text(
-                    guide['category'] ?? 'General',
+                    knowledgeCategoryDisplay(
+                      context.l10n,
+                      guide['category'] ?? guide['hazardType'] ?? 'general',
+                    ),
                     style: GoogleFonts.lexend(
                       fontSize: 12,
                       fontWeight: FontWeight.bold,
@@ -207,30 +235,37 @@ class _KnowledgeDetailScreenState extends State<KnowledgeDetailScreen> {
                 const Icon(Icons.access_time, size: 14, color: Colors.grey),
                 const SizedBox(width: 4),
                 Text(
-                  'Updated ${guide['lastUpdated'] ?? 'recently'}',
+                  _updatedText(context),
                   style: GoogleFonts.lexend(fontSize: 12, color: Colors.grey),
                 ),
                 const SizedBox(width: 16),
                 const Icon(Icons.menu_book, size: 14, color: Colors.grey),
                 const SizedBox(width: 4),
                 Text(
-                  '5 min read',
+                  context.l10n.knowledgeReadTime(
+                    readingMinutes(
+                      (guide['content'] ?? guide['description'])?.toString(),
+                    ),
+                  ),
                   style: GoogleFonts.lexend(fontSize: 12, color: Colors.grey),
                 ),
               ],
             ),
             const SizedBox(height: 24),
-            // Featured Image Placeholder
-            if (guide['imageUrl'] != null &&
-                guide['imageUrl'].toString().isNotEmpty)
+            // Featured image, or a category placeholder when there is none.
+            if (guideImageUrl(guide) != null)
               ClipRRect(
                 borderRadius: BorderRadius.circular(16),
                 child: AspectRatio(
                   aspectRatio: 16 / 9,
-                  child: Image.network(
-                    guide['imageUrl'],
+                  // Admin-set guide images are usually off-site, so the CDN
+                  // rewrite is a no-op for them; the disk cache still means
+                  // one download per guide instead of one per rebuild.
+                  child: AppNetworkImage(
+                    url: guideImageUrl(guide)!,
                     fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) {
+                    renderWidth: 720,
+                    errorWidget: (context) {
                       return _buildFallbackImage(categoryIcon, categoryColor);
                     },
                   ),
@@ -242,6 +277,17 @@ class _KnowledgeDetailScreenState extends State<KnowledgeDetailScreen> {
             if (guide['content'] != null &&
                 guide['content'].toString().isNotEmpty)
               _buildDynamicContent(guide['content'])
+            else if (guide['description'] != null &&
+                guide['description'].toString().trim().isNotEmpty)
+              // No body yet: show the summary rather than an empty state.
+              Text(
+                guide['description'].toString(),
+                style: GoogleFonts.lexend(
+                  fontSize: 15,
+                  color: AppColors.textSecondary,
+                  height: 1.6,
+                ),
+              )
             else
               Center(
                 child: Padding(
@@ -255,7 +301,7 @@ class _KnowledgeDetailScreenState extends State<KnowledgeDetailScreen> {
                       ),
                       const SizedBox(height: 16),
                       Text(
-                        'Detailed content coming soon.',
+                        context.l10n.knowledgeContentComingSoon,
                         style: GoogleFonts.lexend(
                           color: AppColors.textSecondary,
                           fontSize: 16,
@@ -269,7 +315,7 @@ class _KnowledgeDetailScreenState extends State<KnowledgeDetailScreen> {
             const Divider(),
             const SizedBox(height: 24),
             Text(
-              'Related Topics',
+              context.l10n.knowledgeRelatedTopics,
               style: GoogleFonts.lexend(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
@@ -279,14 +325,25 @@ class _KnowledgeDetailScreenState extends State<KnowledgeDetailScreen> {
             const SizedBox(height: 12),
             Consumer<KnowledgeProvider>(
               builder: (context, knowledgeProvider, child) {
-                // Find guides with the same category/tag
+                // Guides in the same category. Stored categories are not
+                // normalised ('Flood' / 'Floods' / 'flooding' all exist), so
+                // resolve them through the shared category list instead of
+                // comparing the raw strings.
                 final currentCategory =
                     guide['category'] ?? guide['hazardType'] ?? 'General';
+                final target = knowledgeCategoryFor(currentCategory);
                 final relatedGuides = knowledgeProvider.guides
                     .where((g) {
+                      // Ignore the guide being shown.
+                      if (g[r'$id'] != null && guide[r'$id'] != null) {
+                        if (g[r'$id'] == guide[r'$id']) return false;
+                      } else if (g['title'] == guide['title']) {
+                        return false;
+                      }
+                      if (target != null) {
+                        return guideMatchesCategory(g, target.label);
+                      }
                       final cat = g['category'] ?? g['hazardType'] ?? 'General';
-                      // Ignore exact same guide
-                      if (g['title'] == guide['title']) return false;
                       return cat.toString().toLowerCase() ==
                           currentCategory.toString().toLowerCase();
                     })
@@ -297,7 +354,7 @@ class _KnowledgeDetailScreenState extends State<KnowledgeDetailScreen> {
                   return Padding(
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     child: Text(
-                      'No related topics found.',
+                      context.l10n.knowledgeNoRelated,
                       style: GoogleFonts.lexend(
                         color: AppColors.textSecondary,
                         fontSize: 14,
@@ -309,7 +366,7 @@ class _KnowledgeDetailScreenState extends State<KnowledgeDetailScreen> {
                 return Column(
                   children: relatedGuides.map((relatedGuide) {
                     return _buildRelatedItem(
-                      relatedGuide['title'] ?? 'Guide',
+                      relatedGuide['title'] ?? context.l10n.knowledgeNoTitle,
                       categoryIcon,
                       onTap: () {
                         context.push(

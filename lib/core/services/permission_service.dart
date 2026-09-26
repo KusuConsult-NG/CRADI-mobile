@@ -4,6 +4,8 @@ import 'package:climate_app/core/theme/app_colors.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:go_router/go_router.dart';
 import 'dart:io';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:climate_app/core/l10n/l10n.dart';
 
 class PermissionService {
   static final PermissionService _instance = PermissionService._internal();
@@ -67,9 +69,8 @@ class PermissionService {
     return await requestPermission(
       context: context,
       permission: Permission.location,
-      title: 'Location Access',
-      rationale:
-          'EWER needs your location to accurately pinpoint hazards and alert nearby responders. Your location is only used when you submit a report or use the tactical map.',
+      title: context.l10n.permissionLocationTitle,
+      rationale: context.l10n.permissionLocationRationale,
       icon: Icons.location_on_outlined,
     );
   }
@@ -79,27 +80,27 @@ class PermissionService {
     return await requestPermission(
       context: context,
       permission: Permission.notification,
-      title: 'Enable Alerts',
-      rationale:
-          'Get real-time updates about hazards in your area. We only send critical safety alerts and status updates for your reports.',
+      title: context.l10n.permissionNotificationsTitle,
+      rationale: context.l10n.permissionNotificationsRationale,
       icon: Icons.notifications_active_outlined,
     );
   }
 
   /// Request Storage/Photos Permission
   Future<bool> requestPhotos(BuildContext context) async {
-    final permission = Platform.isAndroid
+    // On Android the photo picker needs no permission (the manifest declares
+    // none), so this resolves to a permission that is already effectively
+    // granted; the dialog exists for iOS. Guarded for web, where dart:io
+    // throws an Error rather than an Exception.
+    final permission = (!kIsWeb && Platform.isAndroid)
         ? Permission.mediaLibrary
         : Permission.photos;
-    // For Android 13+ (SDK 33), we might need Permission.photos instead of storage
-    // But permission_handler handles mostly. Let's use specific logic if needed.
 
     return await requestPermission(
       context: context,
       permission: permission,
-      title: 'Photo Access',
-      rationale:
-          'EWER needs access to your photos so you can upload evidence of hazards. We only upload photos you explicitly select.',
+      title: context.l10n.permissionPhotosTitle,
+      rationale: context.l10n.permissionPhotosRationale,
       icon: Icons.photo_library_outlined,
     );
   }
@@ -137,7 +138,7 @@ class PermissionService {
               TextButton(
                 onPressed: () => context.pop(false),
                 child: Text(
-                  'Not Now',
+                  context.l10n.permissionNotNow,
                   style: GoogleFonts.lexend(color: Colors.grey),
                 ),
               ),
@@ -150,7 +151,7 @@ class PermissionService {
                   ),
                 ),
                 child: Text(
-                  'Continue',
+                  context.l10n.continueButton,
                   style: GoogleFonts.lexend(fontWeight: FontWeight.bold),
                 ),
               ),
@@ -166,20 +167,18 @@ class PermissionService {
       context: context,
       builder: (context) => AlertDialog(
         title: Text(title),
-        content: Text(
-          '$message\n\nPlease enable this in your device settings.',
-        ),
+        content: Text(context.l10n.permissionSettingsBody(message)),
         actions: [
           TextButton(
             onPressed: () => context.pop(),
-            child: const Text('Cancel'),
+            child: Text(context.l10n.cancel),
           ),
           TextButton(
             onPressed: () {
               context.pop();
               openAppSettings();
             },
-            child: const Text('Open Settings'),
+            child: Text(context.l10n.offlineOpenSettings),
           ),
         ],
       ),

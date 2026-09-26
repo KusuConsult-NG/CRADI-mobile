@@ -1,18 +1,21 @@
 import 'package:climate_app/core/theme/app_colors.dart';
 import 'package:climate_app/core/providers/language_provider.dart';
+import 'package:climate_app/core/widgets/language_selector_sheet.dart';
+import 'package:climate_app/core/l10n/zone_label.dart';
 import 'package:climate_app/features/auth/providers/auth_provider.dart';
 import 'package:climate_app/core/providers/connectivity_provider.dart';
 import 'package:climate_app/features/profile/providers/profile_provider.dart';
 import 'package:climate_app/core/providers/settings_provider.dart';
 import 'package:climate_app/core/services/biometric_service.dart';
+import 'package:climate_app/core/services/notification_service.dart';
 import 'package:climate_app/core/utils/error_handler.dart';
-import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'dart:io';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:climate_app/core/l10n/l10n.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -22,8 +25,6 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  bool _pushNotifications = true;
-  bool _criticalAlerts = true;
   bool _biometricAvailable = false;
   bool _biometricEnabled = false;
   bool _checkingBiometric = true;
@@ -64,10 +65,46 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  /// Persists the Push Notifications setting and opts this device in to /
+  /// out of OneSignal push.
+  Future<void> _setPushNotifications(
+    SettingsProvider settings,
+    bool value,
+  ) async {
+    await settings.setPushNotifications(value);
+    final service = NotificationService();
+    if (value) {
+      // Explicit user action: may offer to open the system settings when
+      // the permission was denied before.
+      await service.requestPushPermission(fallbackToSettings: true);
+      if (service.isPushAvailable && !service.hasPushPermission) {
+        // optIn() would prompt a second time; the OS permission is needed first.
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(context.l10n.settingsPushPermissionNeeded)),
+          );
+        }
+        return;
+      }
+    }
+    final ok = await service.setPushSubscribed(value);
+    if (!ok && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.l10n.settingsPushUnavailable)),
+      );
+    }
+  }
+
   Future<void> _toggleBiometric(bool value) async {
     try {
       final authProvider = context.read<AuthProvider>();
-      await authProvider.setBiometricEnabled(value);
+      final profileProvider = context.read<ProfileProvider>();
+      await authProvider.setBiometricEnabled(
+        value,
+        promptReason: context.l10n.biometricEnablePrompt,
+      );
+      // Keep the profile screen's biometric switch in sync.
+      await profileProvider.refreshBiometricsEnabled();
 
       if (mounted) {
         setState(() => _biometricEnabled = value);
@@ -75,61 +112,40 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              value ? 'Biometric login enabled' : 'Biometric login disabled',
+              value
+                  ? context.l10n.biometricsEnabled
+                  : context.l10n.biometricsDisabled,
             ),
             backgroundColor: Colors.green,
           ),
         );
       }
-    } on PlatformException catch (e) {
-      if (!mounted) return;
-      // noCredentialsSet = no fingerprints/face enrolled on device
-      if (e.code == 'noCredentialsSet' || e.code == 'NotEnrolled') {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'No biometrics enrolled. Please add a fingerprint or Face ID in your device Settings first.',
-            ),
-            backgroundColor: Colors.orange,
-            duration: Duration(seconds: 4),
-          ),
-        );
-        // Refresh biometric availability status
-        await _checkBiometric();
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Biometric authentication failed. Please try again.'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
     } on AuthException catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.toString()), backgroundColor: Colors.red),
-        );
-      }
-    } on Exception catch (e) {
-      // Check if it's a PlatformException wrapped in a generic Exception
-      final msg = e.toString();
-      if (msg.contains('noCredentialsSet') || msg.contains('NotEnrolled')) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                'No biometrics enrolled. Please add a fingerprint in your device Settings first.',
-              ),
-              backgroundColor: Colors.orange,
-              duration: Duration(seconds: 4),
-            ),
-          );
-          await _checkBiometric();
-        }
-      } else if (mounted) {
+      // setBiometricEnabled throws when the confirming prompt fails;
+      // BiometricService keeps the local_auth error code of that failure.
+      if (!mounted) return;
+      final bio = BiometricService();
+      final code = bio.lastErrorCode;
+      final notEnrolled = bio.lastErrorIsNotEnrolled;
+      final message = code != null
+          ? BiometricService.messageFor(code)?.call(context.l10n)
+          : ErrorHandler.getUserMessage(e, context.l10n);
+      if (message != null) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(ErrorHandler.getUserMessage(e)),
+            content: Text(message),
+            backgroundColor: notEnrolled ? Colors.orange : Colors.red,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
+      // Enrolment / hardware state may have changed: refresh availability.
+      if (notEnrolled) await _checkBiometric();
+    } on Exception catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(ErrorHandler.getUserMessage(e, context.l10n)),
             backgroundColor: Colors.red,
           ),
         );
@@ -162,7 +178,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
                 const SizedBox(width: 4),
                 Text(
-                  provider.back,
+                  context.l10n.back,
                   style: GoogleFonts.lexend(
                     fontSize: 16,
                     color: AppColors.primaryRed,
@@ -180,7 +196,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                provider.settingsTitle,
+                context.l10n.settingsTitle,
                 style: GoogleFonts.lexend(
                   fontSize: 32,
                   fontWeight: FontWeight.bold,
@@ -257,7 +273,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                profile.name,
+                                profile.name.isNotEmpty
+                                    ? profile.name
+                                    : context.l10n.profileDefaultName,
                                 style: GoogleFonts.lexend(
                                   fontSize: 18,
                                   fontWeight: FontWeight.bold,
@@ -265,7 +283,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 ),
                               ),
                               Text(
-                                '${profile.monitoringZone ?? "Not Set"} • ${profile.monitoringZone != null ? "Active" : "Select Zone"}',
+                                context.l10n.homeZoneStatus(
+                                  profile.monitoringZone != null
+                                      ? monitoringZoneLabel(
+                                          context.l10n,
+                                          profile.monitoringZone!,
+                                        )
+                                      : context.l10n.notSetZone,
+                                  profile.monitoringZone != null
+                                      ? context.l10n.activeZone
+                                      : context.l10n.selectZone,
+                                ),
                                 style: GoogleFonts.lexend(
                                   fontSize: 14,
                                   color: AppColors.primaryRed,
@@ -295,42 +323,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               const SizedBox(height: 24),
 
               // Notifications
-              _buildSectionHeader(provider.notifications),
-              Container(
-                decoration: _cardDecoration(),
-                child: Column(
-                  children: [
-                    _buildSwitchTile(
-                      icon: Icons.notifications,
-                      color: Colors.red,
-                      title: provider.pushNotifications,
-                      value: _pushNotifications,
-                      onChanged: (v) => setState(() => _pushNotifications = v),
-                    ),
-                    Divider(height: 1, color: Colors.grey.shade100, indent: 60),
-                    _buildSwitchTile(
-                      icon: Icons.warning,
-                      color: Colors.orange,
-                      title: provider.criticalAlerts,
-                      subtitle: 'Play sound even if muted',
-                      value: _criticalAlerts,
-                      onChanged: (v) => setState(() => _criticalAlerts = v),
-                    ),
-                    Divider(height: 1, color: Colors.grey.shade100, indent: 60),
-                    _buildNavTile(
-                      icon: Icons.do_not_disturb_on,
-                      color: Colors.purple,
-                      title: provider.dnd,
-                      trailingText: 'Off',
-                      onTap: () {},
-                    ),
-                  ],
-                ),
-              ),
-
-              const SizedBox(height: 24),
-
-              _buildSectionHeader(provider.dataStorage),
+              _buildSectionHeader(context.l10n.notifications),
               Container(
                 decoration: _cardDecoration(),
                 child: Column(
@@ -339,25 +332,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       builder: (context, settings, _) => Column(
                         children: [
                           _buildSwitchTile(
-                            icon: Icons.wifi,
-                            color: Colors.blue,
-                            title: provider.wifiOnly,
-                            value: settings.wifiOnly,
-                            onChanged: (v) => settings.setWifiOnly(v),
+                            icon: Icons.notifications,
+                            color: Colors.red,
+                            title: context.l10n.pushNotifications,
+                            value: settings.pushNotifications,
+                            onChanged: (v) =>
+                                _setPushNotifications(settings, v),
                           ),
-                          Divider(
-                            height: 1,
-                            color: Colors.grey.shade100,
-                            indent: 60,
-                          ),
-                          _buildSwitchTile(
-                            icon: Icons.data_saver_on,
-                            color: Colors.green,
-                            title: provider.lowData,
-                            subtitle: 'Reduce data usage for maps',
-                            value: settings.lowData,
-                            onChanged: (v) => settings.setLowData(v),
-                          ),
+                          // "Critical alerts" (sound while muted) is hidden until
+                          // the iOS critical-alert entitlement and an Android
+                          // high-importance channel actually back it.
                         ],
                       ),
                     ),
@@ -368,7 +352,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               const SizedBox(height: 24),
 
               // Security
-              _buildSectionHeader('SECURITY \u0026 PRIVACY'),
+              _buildSectionHeader(context.l10n.settingsSectionSecurity),
               Container(
                 decoration: _cardDecoration(),
                 child: Column(
@@ -377,8 +361,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       _buildSwitchTile(
                         icon: Icons.fingerprint,
                         color: AppColors.primaryRed,
-                        title: 'Biometric Login',
-                        subtitle: 'Use fingerprint or Face ID to login',
+                        title: context.l10n.biometricLogin,
+                        subtitle: context.l10n.settingsBiometricSubtitle,
                         value: _biometricEnabled,
                         onChanged: _toggleBiometric,
                       ),
@@ -405,14 +389,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    'Biometric Login',
+                                    context.l10n.biometricLogin,
                                     style: GoogleFonts.lexend(
                                       fontSize: 16,
                                       color: Colors.grey.shade400,
                                     ),
                                   ),
                                   Text(
-                                    'Not available on this device',
+                                    context.l10n.settingsBiometricUnavailable,
                                     style: GoogleFonts.lexend(
                                       fontSize: 12,
                                       color: Colors.grey.shade400,
@@ -436,7 +420,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               const SizedBox(height: 24),
 
               // General
-              _buildSectionHeader(provider.general),
+              _buildSectionHeader(context.l10n.general),
               Container(
                 decoration: _cardDecoration(),
                 child: Column(
@@ -444,16 +428,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     _buildNavTile(
                       icon: Icons.menu_book,
                       color: AppColors.primaryRed,
-                      title: provider.navGuides,
+                      title: context.l10n.navGuides,
                       onTap: () => context.push('/knowledge-base'),
                     ),
                     Divider(height: 1, color: Colors.grey.shade100, indent: 60),
                     _buildNavTile(
                       icon: Icons.language,
                       color: Colors.grey,
-                      title: provider.language,
-                      trailingText: provider.selectedLanguage,
-                      onTap: () => _showLanguageSelector(context, provider),
+                      title: context.l10n.language,
+                      trailingText:
+                          LanguageProvider.nativeNames[provider
+                              .selectedLanguage] ??
+                          provider.selectedLanguage,
+                      onTap: () => showLanguageSelectorSheet(context, provider),
                     ),
                     Divider(height: 1, color: Colors.grey.shade100, indent: 60),
 
@@ -472,7 +459,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         ),
                       ),
                       title: Text(
-                        'Offline Mode',
+                        context.l10n.settingsOfflineMode,
                         style: GoogleFonts.lexend(
                           fontSize: 16,
                           color: AppColors.textPrimary,
@@ -487,15 +474,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         );
                         if (value) {
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Offline mode enabled'),
+                            SnackBar(
+                              content: Text(
+                                context.l10n.settingsOfflineModeEnabled,
+                              ),
                               backgroundColor: Colors.orange,
                             ),
                           );
                         } else {
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Restoring connection...'),
+                            SnackBar(
+                              content: Text(
+                                context.l10n.settingsOfflineModeRestoring,
+                              ),
                               backgroundColor: Colors.green,
                             ),
                           );
@@ -507,14 +498,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     _buildNavTile(
                       icon: Icons.help,
                       color: Colors.grey,
-                      title: provider.helpFaq,
+                      title: context.l10n.helpFaq,
                       onTap: () => context.push('/help'),
                     ),
                     Divider(height: 1, color: Colors.grey.shade100, indent: 60),
                     _buildNavTile(
                       icon: Icons.info,
                       color: Colors.grey,
-                      title: provider.aboutApp,
+                      title: context.l10n.aboutApp,
                       onTap: () => context.push('/about'),
                     ),
                   ],
@@ -531,19 +522,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     final confirm = await showDialog<bool>(
                       context: context,
                       builder: (context) => AlertDialog(
-                        title: Text(provider.logout),
-                        content: const Text(
-                          'Are you sure you want to sign out?',
-                        ),
+                        title: Text(context.l10n.logout),
+                        content: Text(context.l10n.settingsLogoutConfirm),
                         actions: [
                           TextButton(
                             onPressed: () => Navigator.pop(context, false),
-                            child: Text(provider.cancel),
+                            child: Text(context.l10n.cancel),
                           ),
                           TextButton(
                             onPressed: () => Navigator.pop(context, true),
                             child: Text(
-                              provider.logout,
+                              context.l10n.logout,
                               style: const TextStyle(color: Colors.red),
                             ),
                           ),
@@ -564,7 +553,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
                               content: Text(
-                                ErrorHandler.handleError(e, context: 'Logout'),
+                                ErrorHandler.handleError(
+                                  e,
+                                  context.l10n,
+                                  context: 'Logout',
+                                ),
                               ),
                               backgroundColor: Colors.red,
                             ),
@@ -582,7 +575,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ),
                   ),
                   child: Text(
-                    provider.logout,
+                    context.l10n.logout,
                     style: GoogleFonts.lexend(
                       color: Colors.red,
                       fontWeight: FontWeight.bold,
@@ -593,7 +586,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               const SizedBox(height: 16),
               Center(
                 child: Text(
-                  'Climate Early Warning System (CEWS)',
+                  context.l10n.settingsFooterSystemName,
                   style: GoogleFonts.lexend(
                     fontSize: 12,
                     color: Colors.grey.shade400,
@@ -734,46 +727,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
           offset: const Offset(0, 2),
         ),
       ],
-    );
-  }
-
-  void _showLanguageSelector(BuildContext context, LanguageProvider provider) {
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) {
-        final languages = ['English', 'Hausa', 'Yoruba', 'Igbo', 'Pidgin'];
-        return Container(
-          padding: const EdgeInsets.symmetric(vertical: 20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                'Select Language',
-                style: GoogleFonts.lexend(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 16),
-              ...languages.map(
-                (lang) => ListTile(
-                  title: Text(lang, style: GoogleFonts.lexend(fontSize: 16)),
-                  trailing: provider.selectedLanguage == lang
-                      ? const Icon(Icons.check, color: AppColors.primaryRed)
-                      : null,
-                  onTap: () {
-                    provider.setLanguage(lang);
-                    Navigator.pop(context);
-                  },
-                ),
-              ),
-            ],
-          ),
-        );
-      },
     );
   }
 }

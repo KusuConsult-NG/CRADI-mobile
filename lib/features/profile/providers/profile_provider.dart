@@ -1,32 +1,35 @@
 import 'package:climate_app/core/services/secure_storage_service.dart';
 import 'package:climate_app/core/services/supabase_service.dart';
 import 'package:climate_app/core/services/offline_storage_service.dart';
-import 'package:climate_app/core/services/onesignal_service.dart';
 import 'package:climate_app/core/constants/app_config.dart';
+import 'package:climate_app/core/utils/input_sanitizer.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' as sb;
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:io';
 import 'dart:developer' as developer;
+import 'package:climate_app/core/l10n/l10n.dart';
+import 'package:climate_app/core/utils/error_handler.dart' show AuthException;
 
-/// Provider for managing user profile data with Supabase.
+/// Provider for managing user profile data (Supabase `profiles` row).
 class ProfileProvider extends ChangeNotifier {
   ProfileProvider({
     SupabaseService? supabaseService,
     Connectivity? connectivity,
-  }) : _supabase = supabaseService ?? SupabaseService(),
+  }) : _db = supabaseService ?? SupabaseService(),
        _connectivity = connectivity ?? Connectivity() {
     loadProfile();
   }
 
   final SecureStorageService _storage = SecureStorageService();
-  final SupabaseService _supabase;
+  final SupabaseService _db;
   final OfflineStorageService _offlineStorage = OfflineStorageService();
   Map<String, dynamic>? _userProfile;
   final Connectivity _connectivity;
 
-  String _name = 'User';
+  /// Display name; empty when unknown (the UI shows a localised default).
+  String _name = '';
   String _email = '';
   String _phone = '';
   String? _profileImagePath;
@@ -52,147 +55,201 @@ class ProfileProvider extends ChangeNotifier {
   DateTime? get registrationDate => _registrationDate;
   bool get biometricsEnabled => _biometricsEnabled;
   bool get isLoading => _isLoading;
-  String? get role => _userProfile?['role'] as String?;
 
-  /// Get current user's reports as a real-time Supabase Realtime stream.
+  /// Get current user's reports as a realtime stream.
   Stream<List<Map<String, dynamic>>> getUserReportsStream() {
-    final user = Supabase.instance.client.auth.currentUser;
+    final user = _db.getCurrentUser();
     if (user == null) return const Stream.empty();
 
-    return _supabase.subscribeToCollection(
+    return _db.subscribeToCollection(
       collectionId: AppConfig.reportsCollection,
-      queries: [
-        SQuery.equal('user_id', user.id),
-        SQuery.orderDesc('submitted_at'),
-      ],
+      queries: [FQuery.equal('userId', user.id), FQuery.orderDesc('createdAt')],
     );
   }
 
+  /// Bumped by [clearProfile] and by every [loadProfile]: a load that was
+  /// superseded (or outlived a sign-out) drops its results instead of
+  /// writing another user's data into this provider or the device cache.
+  int _loadGen = 0;
+
+  /// Secure-storage keys caching the signed-in user's profile.
+  static const List<String> _profileStorageKeys = [
+    'profile_name',
+    'profile_email',
+    'profile_phone',
+    'profile_image',
+    'profile_state',
+    'profile_lga',
+    'profile_ward',
+    'monitoring_zone',
+  ];
+
   Future<void> loadProfile() async {
+    final gen = ++_loadGen;
+    final user = _db.getCurrentUser();
+    final uid = user?.id;
+    bool stale() => gen != _loadGen || _db.currentUserId != uid;
+
     _isLoading = true;
     notifyListeners();
 
     try {
-      final user = Supabase.instance.client.auth.currentUser;
-
       if (user != null) {
         _email = user.email ?? '';
-
         // ── Fast path: load from secure-storage cache immediately ──────────
+        // This ensures the name is correct on the very first frame,
+        // without waiting for the network round-trip.
         final cachedEmail = await _storage.read('profile_email');
+        if (stale()) return;
         if (cachedEmail == user.email) {
           final cachedName = await _storage.read('profile_name');
-          if (cachedName != null && cachedName.isNotEmpty) {
-            _name = cachedName;
-          } else {
-            _name =
-                user.userMetadata?['full_name'] as String? ?? 'User';
-          }
-          _phone = await _storage.read('profile_phone') ?? '';
-          _profileImagePath = await _storage.read('profile_image');
-          _state = await _storage.read('profile_state');
-          _lga = await _storage.read('profile_lga');
-          _ward = await _storage.read('profile_ward');
+          final phone = await _storage.read('profile_phone');
+          final image = await _storage.read('profile_image');
+          final state = await _storage.read('profile_state');
+          final lga = await _storage.read('profile_lga');
+          final ward = await _storage.read('profile_ward');
           final storedZone = await _storage.read('monitoring_zone');
-          _monitoringZone =
-              (storedZone != null && storedZone.isNotEmpty)
-                  ? storedZone
-                  : null;
-          final bioEnabled = await _storage.read('biometric_enabled');
-          _biometricsEnabled = bioEnabled == 'true';
+          final bioEnabled = await _storage.isBiometricEnabled(forUserId: uid);
+          if (stale()) return;
+          _name = (cachedName != null && cachedName.isNotEmpty)
+              ? cachedName
+              : _metadataName(user);
+          _phone = phone ?? '';
+          _profileImagePath = image;
+          _state = state;
+          _lga = lga;
+          _ward = ward;
+          _monitoringZone = (storedZone != null && storedZone.isNotEmpty)
+              ? storedZone
+              : null;
+          _biometricsEnabled = bioEnabled;
           // Notify immediately so the UI shows cached data, then continue
-          // fetching from Supabase to refresh.
+          // fetching from the server to refresh.
           notifyListeners();
         } else {
-          _name = user.userMetadata?['full_name'] as String? ?? 'User';
+          _name = _metadataName(user);
         }
+        _registrationDate = parseTimestamp(user.createdAt);
 
-        // Parse account creation time from JWT
-        _registrationDate = user.createdAt.isNotEmpty
-            ? DateTime.tryParse(user.createdAt)
-            : null;
-
-        // Load from Supabase (source of truth)
+        // Load the profiles row (source of truth)
         try {
-          final doc = await _supabase.getDocument(
+          final doc = await _db.getDocument(
             collectionId: AppConfig.usersCollection,
             documentId: user.id,
           );
+          if (stale()) return;
 
           if (doc.isNotEmpty) {
-            // Sanitize before storing: Supabase returns plain Dart types,
-            // but dates come as Strings which Hive handles fine.
-            _userProfile = _sanitizeDoc(doc);
-            await _offlineStorage.cacheUserProfile(_userProfile!);
+            // Rows are plain JSON (timestamps are ISO strings), so they can
+            // be cached in Hive as-is.
+            _userProfile = Map<String, dynamic>.from(doc);
 
-            _name = doc['full_name'] as String? ?? _name;
-            _email = doc['email'] as String? ?? _email;
-            _phone = doc['phone'] as String? ?? '';
-            _state = doc['state'] as String?;
-            _lga = doc['lga'] as String?;
-            _ward = doc['ward'] as String?;
-            _registrationCode = doc['registration_code'] as String?;
-            _biometricsEnabled = doc['biometrics_enabled'] as bool? ?? false;
-
-            final remoteZone = doc['monitoring_zone'] as String?;
-            if (remoteZone != null && remoteZone.isNotEmpty) {
-              _monitoringZone = remoteZone;
-              await _storage.write('monitoring_zone', remoteZone);
-            } else {
-              _monitoringZone = await _storage.read('monitoring_zone');
+            _name = doc['name'] ?? _name;
+            _email = doc['email'] ?? _email;
+            _phone = doc['phone'] ?? '';
+            _state = doc['state'];
+            _lga = doc['lga'];
+            _ward = doc['ward'];
+            _registrationCode = doc['registrationCode'];
+            // Registration date: the earlier of the auth account and the
+            // profiles row (either can be missing).
+            final rowCreated = parseTimestamp(doc['createdAt']);
+            final authCreated = _registrationDate;
+            if (rowCreated != null &&
+                (authCreated == null || rowCreated.isBefore(authCreated))) {
+              _registrationDate = rowCreated;
             }
-
-            if (doc['avatar_url'] != null &&
-                (doc['avatar_url'] as String).isNotEmpty) {
-              _profileImagePath = doc['avatar_url'] as String;
-            }
-
-            // Cache to secure storage
-            await _storage.write('profile_name', _name);
-            await _storage.write('profile_email', _email);
-            await _storage.write('profile_phone', _phone);
-            if (_state != null) await _storage.write('profile_state', _state!);
-            if (_lga != null) await _storage.write('profile_lga', _lga!);
-            if (_ward != null) await _storage.write('profile_ward', _ward!);
-            if (_profileImagePath != null) {
-              await _storage.write('profile_image', _profileImagePath!);
-            }
-            await _storage.write(
-              'biometric_enabled',
-              _biometricsEnabled.toString(),
+            // The row's biometricsEnabled is informational only: the
+            // device lock is per device and is read from local storage,
+            // never overwritten from the server (a device without
+            // biometrics would lock the user out).
+            _biometricsEnabled = await _storage.isBiometricEnabled(
+              forUserId: uid,
             );
+            if (stale()) return;
 
-            developer.log('Profile loaded from Supabase: ${user.id}');
-            // Link user ID and sync tags to OneSignal
-            await OneSignalService().login(user.id);
-            await OneSignalService().setUserTags(
-              state: _state,
-              lga: _lga,
-              ward: _ward,
-              role: role,
-            );
+            // The row is the truth: '' (the column default) means "all
+            // zones", so a zone cached on this device (possibly by another
+            // account) must not be used instead.
+            final remoteZone = (doc['monitoringZone'] as String?)?.trim();
+            final zoneBefore = _monitoringZone;
+            _monitoringZone = (remoteZone != null && remoteZone.isNotEmpty)
+                ? remoteZone
+                : null;
+            // Lists may already have loaded with the previous (or no) zone,
+            // e.g. when an overlapping load was superseded; refetch them.
+            if (_monitoringZone != zoneBefore) {
+              onMonitoringZoneChanged?.call(_monitoringZone);
+            }
+
+            final imageUrl = doc['profileImageUrl'] as String?;
+            if (imageUrl != null && imageUrl.isNotEmpty) {
+              _profileImagePath = imageUrl;
+            }
+            notifyListeners();
+
+            // Cache locally; stop as soon as the load became stale so the
+            // cache never receives another account's profile.
+            try {
+              await _offlineStorage.cacheUserProfile(_userProfile!);
+            } on Object catch (e) {
+              developer.log('Could not cache profile: $e');
+            }
+            final cache = <String, String?>{
+              'profile_name': _name,
+              'profile_email': _email,
+              'profile_phone': _phone,
+              'profile_state': _state,
+              'profile_lga': _lga,
+              'profile_ward': _ward,
+              'profile_image': _profileImagePath,
+              'monitoring_zone': _monitoringZone ?? '',
+            };
+            for (final entry in cache.entries) {
+              if (stale()) return;
+              final value = entry.value;
+              if (value == null) {
+                await _storage.delete(entry.key);
+              } else {
+                await _storage.write(entry.key, value);
+              }
+            }
+
+            developer.log('Profile loaded: ${user.id}');
           }
         } on Exception catch (e) {
-          developer.log('Supabase error, using local fallback: $e');
+          if (stale()) return;
+          developer.log('Profile fetch error, using local fallback: $e');
           final cached = _offlineStorage.getCachedUserProfile();
           if (cached != null) {
             _userProfile = cached;
           }
         }
       } else {
-        clearProfile();
+        await clearProfile();
       }
     } on Exception catch (e) {
       developer.log('Error loading profile: $e');
     } finally {
-      _isLoading = false;
-      notifyListeners();
+      // A newer load or a clear owns the loading flag now.
+      if (gen == _loadGen) {
+        _isLoading = false;
+        notifyListeners();
+      }
     }
   }
 
-  /// Resets all profile data to default values (called on logout)
+  /// Resets all profile data to default values (called on logout).
+  ///
+  /// The cached profile (Hive and secure storage) is removed so the next
+  /// account on a shared device never starts from it. Offline drafts and
+  /// the sync queue are owner-tagged and filtered per user, so they are
+  /// kept: wiping them here would destroy reports that have not been
+  /// uploaded yet.
   Future<void> clearProfile() async {
-    _name = 'User';
+    _loadGen++;
+    _isLoading = false;
+    _name = '';
     _email = '';
     _phone = '';
     _profileImagePath = null;
@@ -204,16 +261,36 @@ class ProfileProvider extends ChangeNotifier {
     _registrationDate = null;
     _biometricsEnabled = false;
     _userProfile = null;
-    await _offlineStorage.clearUserData();
-    await OneSignalService().logout();
     notifyListeners();
+    try {
+      for (final key in _profileStorageKeys) {
+        await _storage.delete(key);
+      }
+    } on Object catch (e) {
+      developer.log('Could not clear cached profile keys: $e');
+    }
+    try {
+      await _offlineStorage.clearUserProfile();
+    } on Object catch (e) {
+      // Hive may not be initialised yet (e.g. signed-out cold start); a
+      // HiveError is an Error, not an Exception.
+      developer.log('Could not clear cached profile: $e');
+    }
   }
 
-  /// Sync changes to Supabase
-  Future<void> _syncToSupabase(Map<String, dynamic> data) async {
+  /// Message shown when a profile edit could not be saved while offline.
+  static String offlineNotSavedMessage(AppLocalizations l) =>
+      l.profileErrorOfflineNotSaved;
+
+  /// Push profile changes to the `profiles` row.
+  ///
+  /// Returns null when the server accepted the change, otherwise a
+  /// user-facing message (offline, signed out, server error). There is no
+  /// retry queue for profile edits, so callers must report the failure.
+  Future<LocalizedText?> _syncToServer(Map<String, dynamic> data) async {
     try {
-      final user = Supabase.instance.client.auth.currentUser;
-      if (user == null) return;
+      final user = _db.getCurrentUser();
+      if (user == null) return (AppLocalizations l) => l.profileErrorSignedOut;
 
       final connectivityResults = await _connectivity.checkConnectivity();
       final hasConnection = connectivityResults.any(
@@ -221,94 +298,172 @@ class ProfileProvider extends ChangeNotifier {
       );
 
       if (!hasConnection) {
-        developer.log('Offline - profile update will be cached locally');
-        return;
+        developer.log('Offline - profile update not saved');
+        return offlineNotSavedMessage;
       }
 
-      await _supabase.updateDocument(
+      await _db.updateDocument(
         collectionId: AppConfig.usersCollection,
         documentId: user.id,
         data: data,
       );
 
-      developer.log('Profile synced to Supabase', name: 'ProfileProvider');
+      developer.log('Profile synced', name: 'ProfileProvider');
+      return null;
     } on Exception catch (e) {
-      developer.log('Error syncing to Supabase: $e', name: 'ProfileProvider');
+      developer.log('Error syncing profile: $e', name: 'ProfileProvider');
+      return (AppLocalizations l) => l.profileErrorSaveFailed;
     }
   }
 
   Future<void> _updateLocalState(Map<String, dynamic> updates) async {
     _userProfile ??= {};
     _userProfile!.addAll(updates);
-    await _offlineStorage.cacheUserProfile(_userProfile!);
+    // Best effort: the change is already saved on the server.
+    try {
+      await _offlineStorage.cacheUserProfile(_userProfile!);
+    } on Object catch (e) {
+      developer.log('Could not cache profile: $e', name: 'ProfileProvider');
+    }
   }
 
-  Future<void> updateName(String name) async {
-    _name = name;
-    await _storage.write('profile_name', name);
-    await _updateLocalState({'full_name': name});
+  /// Cleans a display name for storage; returns '' when nothing is left.
+  static String cleanName(String name) =>
+      InputSanitizer.cleanForStorage(name).trim();
+
+  /// Updates the display name. Returns null when saved, otherwise a
+  /// user-facing message (the local name is then left unchanged).
+  Future<LocalizedText?> updateName(String name) async {
+    final cleaned = cleanName(name);
+    if (cleaned.isEmpty) {
+      return (AppLocalizations l) => l.profileErrorNameRequired;
+    }
+    if (cleaned == _name) return null;
+    final error = await _syncToServer({'name': cleaned});
+    if (error != null) return error;
+    _name = cleaned;
+    await _storage.write('profile_name', cleaned);
+    await _updateLocalState({'name': cleaned});
     notifyListeners();
-    await _syncToSupabase({'full_name': name});
+    return null;
   }
 
-  Future<void> updateEmail(String email) async {
-    _email = email;
-    await _storage.write('profile_email', email);
-    await _updateLocalState({'email': email});
-    notifyListeners();
-    await _syncToSupabase({'email': email});
+  /// Request an email change.
+  ///
+  /// The sign-in email lives in Supabase Auth: `updateUser(email:)` makes
+  /// Supabase send a confirmation link to the new address. The change only
+  /// takes effect once it is confirmed; a database trigger then mirrors the
+  /// new email into the `profiles` row.
+  ///
+  /// Returns a user-facing message describing the outcome, or `null` when
+  /// [email] is unchanged. Never throws.
+  Future<LocalizedText?> updateEmail(String email) async {
+    final newEmail = email.trim();
+    final user = _db.getCurrentUser();
+    if (newEmail.isEmpty ||
+        newEmail.toLowerCase() == (user?.email ?? _email).toLowerCase()) {
+      return null;
+    }
+    if (user == null) {
+      return (AppLocalizations l) => l.profileErrorEmailSignedOut;
+    }
+
+    try {
+      await _db.auth.updateUser(sb.UserAttributes(email: newEmail));
+      developer.log(
+        'Email change confirmation sent to $newEmail',
+        name: 'ProfileProvider',
+      );
+      return (AppLocalizations l) => l.profileEmailConfirmationSent(newEmail);
+    } on sb.AuthException catch (e) {
+      developer.log(
+        'updateEmail error: ${e.code} ${e.message}',
+        name: 'ProfileProvider',
+      );
+      switch (e.code) {
+        case 'reauthentication_needed':
+          return (AppLocalizations l) => l.profileErrorEmailReauth;
+        case 'validation_failed':
+        case 'email_address_invalid':
+          return (AppLocalizations l) => l.validation_invalidEmail;
+        case 'email_exists':
+          return (AppLocalizations l) => l.profileErrorEmailInUse;
+        default:
+          return (AppLocalizations l) => l.profileErrorEmailUpdateFailed;
+      }
+    } on Exception catch (e) {
+      developer.log('updateEmail error: $e', name: 'ProfileProvider');
+      return (AppLocalizations l) => l.profileErrorEmailUpdateFailed;
+    }
   }
 
-  Future<void> updatePhone(String phone) async {
+  /// Updates the phone number. Returns null when saved, otherwise a
+  /// user-facing message (the local value is then left unchanged).
+  Future<LocalizedText?> updatePhone(String phone) async {
+    final error = await _syncToServer({'phone': phone});
+    if (error != null) return error;
     _phone = phone;
     await _storage.write('profile_phone', phone);
     await _updateLocalState({'phone': phone});
     notifyListeners();
-    await _syncToSupabase({'phone': phone});
+    return null;
   }
 
-  Future<void> updateProfileImage(String imagePath) async {
+  /// Updates the profile image URL. Returns null when saved, otherwise a
+  /// user-facing message (the local value is then left unchanged).
+  Future<LocalizedText?> updateProfileImage(String imagePath) async {
+    final error = await _syncToServer({'profileImageUrl': imagePath});
+    if (error != null) return error;
     _profileImagePath = imagePath;
     await _storage.write('profile_image', imagePath);
-    await _updateLocalState({'avatar_url': imagePath});
+    await _updateLocalState({'profileImageUrl': imagePath});
     notifyListeners();
-    await _syncToSupabase({'avatar_url': imagePath});
+    return null;
   }
 
-  /// Upload profile image to Supabase Storage and update profile row.
+  /// Upload profile image to the `profile-images` bucket and store its URL.
+  ///
+  /// Throws a [ProfileSaveException] (with a user-facing message) when the
+  /// device is offline or the profile row could not be updated.
   Future<void> uploadProfileImage(XFile imageFile) async {
     try {
       _isLoading = true;
       notifyListeners();
 
-      final user = Supabase.instance.client.auth.currentUser;
+      final user = _db.getCurrentUser();
       if (user == null) {
-        throw Exception('User must be logged in to upload profile image');
+        throw AuthException((l) => l.authErrorNotLoggedIn);
+      }
+
+      final connectivityResults = await _connectivity.checkConnectivity();
+      if (!connectivityResults.any((r) => r != ConnectivityResult.none)) {
+        throw const ProfileSaveException(offlineNotSavedMessage);
       }
 
       final file = File(imageFile.path);
-      final ext = imageFile.path.split('.').last.toLowerCase();
-      final validExt =
-          (ext == 'png' || ext == 'jpg' || ext == 'jpeg') ? ext : 'jpg';
       final timestamp = DateTime.now().millisecondsSinceEpoch;
-      final storagePath =
-          'profile_images/${user.id}/profile_$timestamp.$validExt';
+      // Images are re-encoded as JPEG before upload. The first path segment
+      // must be the user id (storage RLS).
+      final storagePath = '${user.id}/profile_$timestamp.jpg';
 
       developer.log(
-        'Uploading profile image to Supabase Storage: $storagePath',
+        'Uploading profile image: $storagePath',
         name: 'ProfileProvider',
       );
 
-      final fileUrl = await _supabase.uploadFileFromPath(
+      final fileUrl = await _db.uploadFileFromPath(
+        bucketId: AppConfig.profileImagesBucket,
         storagePath: storagePath,
         file: file,
-        contentType: 'image/$validExt',
+        contentType: 'image/jpeg',
+        upsert: true,
       );
 
+      final error = await _syncToServer({'profileImageUrl': fileUrl});
+      if (error != null) throw ProfileSaveException(error);
       _profileImagePath = fileUrl;
       await _storage.write('profile_image', fileUrl);
-      await _updateLocalState({'avatar_url': fileUrl});
-      await _syncToSupabase({'avatar_url': fileUrl});
+      await _updateLocalState({'profileImageUrl': fileUrl});
 
       developer.log('Profile image uploaded: $fileUrl');
     } on Exception catch (e) {
@@ -320,72 +475,100 @@ class ProfileProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> updateLocation(String? state, String? lga, String? ward) async {
-    _state = state;
-    _lga = lga;
-    _ward = ward;
-    if (state != null) await _storage.write('profile_state', state);
-    if (lga != null) await _storage.write('profile_lga', lga);
-    if (ward != null) await _storage.write('profile_ward', ward);
-    await _updateLocalState({'state': state, 'lga': lga, 'ward': ward});
+  /// Updates the profile location. Returns a user-facing message when the
+  /// change was not saved, otherwise null.
+  ///
+  /// The columns are NOT NULL, so all three parts must be present. The
+  /// local state only changes once the server accepted the update (there is
+  /// no retry queue for profile edits, so an offline change is not kept).
+  Future<LocalizedText?> updateLocation(
+    String? state,
+    String? lga,
+    String? ward,
+  ) async {
+    final s = state?.trim() ?? '';
+    final l = lga?.trim() ?? '';
+    final w = ward?.trim() ?? '';
+    if (s == (_state ?? '') && l == (_lga ?? '') && w == (_ward ?? '')) {
+      return null;
+    }
+    if (s.isEmpty || l.isEmpty || w.isEmpty) {
+      return (AppLocalizations l) => l.profileErrorLocationIncomplete;
+    }
+
+    final user = _db.getCurrentUser();
+    if (user == null) {
+      return (AppLocalizations l) => l.profileErrorLocationSignedOut;
+    }
+    try {
+      await _db.updateDocument(
+        collectionId: AppConfig.usersCollection,
+        documentId: user.id,
+        data: {'state': s, 'lga': l, 'ward': w},
+      );
+    } on Exception catch (e) {
+      if (SupabaseService.isPermissionDenied(e) ||
+          e is DocumentNotFoundException) {
+        return (AppLocalizations l) => l.profileErrorLocationManaged;
+      }
+      developer.log('Location sync failed: $e', name: 'ProfileProvider');
+      return (AppLocalizations l) => l.profileErrorLocationFailed;
+    }
+
+    _state = s;
+    _lga = l;
+    _ward = w;
+    await _storage.write('profile_state', s);
+    await _storage.write('profile_lga', l);
+    await _storage.write('profile_ward', w);
+    await _updateLocalState({'state': s, 'lga': l, 'ward': w});
     notifyListeners();
-    await _syncToSupabase({'state': state, 'lga': lga, 'ward': ward});
-    await OneSignalService().setUserTags(
-      state: state,
-      lga: lga,
-      ward: ward,
-      role: role,
-    );
+    return null;
   }
 
-  Future<void> updateMonitoringZone(String zone) async {
-    final effectiveZone = zone.isEmpty ? null : zone;
+  /// Called after the monitoring zone changed (e.g. to refresh zone-filtered
+  /// report lists). Wired in `main.dart`.
+  void Function(String? zone)? onMonitoringZoneChanged;
+
+  /// Sets the monitoring zone; an empty [zone] means "all zones" (null).
+  ///
+  /// The zone is applied on this device right away (it filters local
+  /// lists). Returns null when it was also saved to the account, otherwise
+  /// a user-facing message.
+  Future<LocalizedText?> updateMonitoringZone(String zone) async {
+    final trimmed = zone.trim();
+    final String? effectiveZone = trimmed.isEmpty ? null : trimmed;
+    final changed = effectiveZone != _monitoringZone;
     _monitoringZone = effectiveZone;
     await _storage.write('monitoring_zone', effectiveZone ?? '');
-    await _updateLocalState({'monitoring_zone': effectiveZone ?? ''});
+    // The column is NOT NULL (default ''): "all zones" is stored as ''.
+    await _updateLocalState({'monitoringZone': effectiveZone ?? ''});
     notifyListeners();
-    await _syncToSupabase({'monitoring_zone': effectiveZone ?? ''});
-    await OneSignalService().setUserTags(
-      state: _state,
-      lga: _lga,
-      ward: _ward,
-      role: role,
+    if (changed) onMonitoringZoneChanged?.call(effectiveZone);
+    return _syncToServer({'monitoringZone': effectiveZone ?? ''});
+  }
+
+  /// Re-reads the device's biometric lock flag for display. The flag is
+  /// written only by AuthProvider.setBiometricEnabled.
+  Future<void> refreshBiometricsEnabled() async {
+    _biometricsEnabled = await _storage.isBiometricEnabled(
+      forUserId: _db.currentUserId,
     );
-  }
-
-  Future<void> setBiometricsEnabled(bool enabled) async {
-    _biometricsEnabled = enabled;
-    await _storage.write('biometric_enabled', enabled.toString());
-    await _updateLocalState({'biometrics_enabled': enabled});
     notifyListeners();
-    await _syncToSupabase({'biometrics_enabled': enabled});
   }
 
-  Future<void> updateFCMToken(String token) async {
-    await _updateLocalState({'fcm_token': token});
-    await _syncToSupabase({'fcm_token': token});
+  static String _metadataName(sb.User user) {
+    final n = user.userMetadata?['name'];
+    return (n is String && n.trim().isNotEmpty) ? n : '';
   }
+}
 
-  /// Sanitizes document maps before storing in Hive.
-  /// Supabase returns plain Dart types; only DateTime and nested
-  /// maps/lists need conversion.
-  Map<String, dynamic> _sanitizeDoc(Map<String, dynamic> data) {
-    final result = <String, dynamic>{};
-    data.forEach((key, value) {
-      if (value is DateTime) {
-        result[key] = value.toIso8601String();
-      } else if (value is Map<String, dynamic>) {
-        result[key] = _sanitizeDoc(value);
-      } else if (value is List) {
-        result[key] = value.map((e) {
-          if (e is DateTime) return e.toIso8601String();
-          if (e is Map<String, dynamic>) return _sanitizeDoc(e);
-          return e;
-        }).toList();
-      } else {
-        result[key] = value;
-      }
-    });
-    return result;
-  }
+/// A profile edit that was not saved to the server; [message] is
+/// user-facing.
+class ProfileSaveException implements Exception {
+  const ProfileSaveException(this.message);
+  final LocalizedText message;
+
+  @override
+  String toString() => message(englishL10n);
 }

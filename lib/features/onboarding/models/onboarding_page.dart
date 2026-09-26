@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:climate_app/l10n/app_localizations.dart';
 
 class OnboardingPage {
   final String title;
@@ -13,15 +14,15 @@ class OnboardingPage {
     required this.gradientColors,
   });
 
-  static List<OnboardingPage> getPages() {
+  /// The onboarding pages with text in the language of [l10n].
+  static List<OnboardingPage> getPages(AppLocalizations l10n) {
     return [
       // Page 1: Welcome - Red to Dark Gray gradient
-      const OnboardingPage(
-        title: 'Welcome to EWER',
-        description:
-            'Early Warning and Emergency Response system for your community',
+      OnboardingPage(
+        title: l10n.landingWelcome,
+        description: l10n.onboardingWelcomeBody,
         icon: Icons.shield_outlined,
-        gradientColors: [
+        gradientColors: const [
           Color(0xFFE53935), // Bright red from logo
           Color(0xFFB71C1C), // Darker red
           Color(0xFF5D5D5D), // Dark gray from logo
@@ -29,12 +30,11 @@ class OnboardingPage {
       ),
 
       // Page 2: Features - Gray to Red gradient
-      const OnboardingPage(
-        title: 'Monitor Hazards in Real-Time',
-        description:
-            'Report emergencies, track hazards, and keep your community safe',
+      OnboardingPage(
+        title: l10n.onboardingMonitorTitle,
+        description: l10n.onboardingMonitorBody,
         icon: Icons.warning_amber_rounded,
-        gradientColors: [
+        gradientColors: const [
           Color(0xFF5D5D5D), // Dark gray from logo
           Color(0xFF9E9E9E), // Medium gray
           Color(0xFFE53935), // Bright red from logo
@@ -42,12 +42,11 @@ class OnboardingPage {
       ),
 
       // Page 3: Get Started - Red accent gradient
-      const OnboardingPage(
-        title: 'Join the Network',
-        description:
-            'Create an account and start protecting your community today',
+      OnboardingPage(
+        title: l10n.registrationJoinNetwork,
+        description: l10n.onboardingJoinBody,
         icon: Icons.people_outline,
-        gradientColors: [
+        gradientColors: const [
           Color(0xFFB71C1C), // Dark red
           Color(0xFFE53935), // Bright red from logo
           Color(0xFFFF5252), // Lighter red accent

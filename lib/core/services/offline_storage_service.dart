@@ -1,11 +1,76 @@
-import 'package:hive_flutter/hive_flutter.dart';
-import 'package:climate_app/core/services/hive_encryption_service.dart';
-import 'package:climate_app/core/services/supabase_service.dart';
-import 'package:climate_app/core/constants/app_config.dart';
+import 'dart:async';
 import 'dart:developer' as developer;
 import 'dart:io';
-import 'package:path_provider/path_provider.dart';
+
+import 'package:hive_flutter/hive_flutter.dart';
+import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as path;
+import 'package:path_provider/path_provider.dart';
+import 'package:supabase_flutter/supabase_flutter.dart'
+    show AuthRetryableFetchException, PostgrestException, StorageException;
+
+import 'package:climate_app/core/services/hive_encryption_service.dart';
+import 'package:climate_app/core/services/supabase_service.dart';
+import 'package:climate_app/core/utils/error_handler.dart'
+    show ValidationException;
+import 'package:climate_app/core/l10n/l10n.dart';
+
+/// Thrown when an online submission could not reach the server and the
+/// payload was saved to the offline sync queue instead. The data is safe and
+/// will be uploaded automatically; UIs should treat this as "saved".
+class OfflineQueuedException implements Exception {
+  const OfflineQueuedException([this.message = _defaultMessage]);
+
+  /// Shown to the user (resolved in the current language).
+  final LocalizedText message;
+
+  static String _defaultMessage(AppLocalizations l) => l.offlineSavedWillSync;
+
+  @override
+  String toString() => message(englishL10n);
+}
+
+/// Postgres error codes that will fail the same way on every retry
+/// (permissions, constraint / type violations, unknown columns).
+const Set<String> _permanentPostgresCodes = {
+  '42501', // insufficient_privilege / RLS
+  '23502', // not_null_violation
+  '23503', // foreign_key_violation
+  '23514', // check_violation
+  '22P02', // invalid_text_representation
+  '22001', // string_data_right_truncation
+  '22007', // invalid_datetime_format
+  '42703', // undefined_column
+  'PGRST204', // unknown column in payload
+};
+
+/// True for connectivity failures worth retrying later (no network, DNS,
+/// timeouts, dropped connections, auth refresh that could not reach the
+/// server).
+bool isTransientNetworkError(Object error) =>
+    error is SocketException ||
+    error is TimeoutException ||
+    error is HandshakeException ||
+    error is http.ClientException ||
+    error is AuthRetryableFetchException;
+
+/// True when the server rejected the payload and retrying cannot succeed:
+/// a permanent Postgres error, a storage upload refused with a 4xx status
+/// (e.g. file too large, wrong type, not permitted — but not a timeout,
+/// conflict or rate limit), or an image that can't be processed.
+bool isPermanentSyncError(Object error) {
+  if (error is PostgrestException) {
+    return _permanentPostgresCodes.contains(error.code);
+  }
+  if (error is StorageException) {
+    final status = int.tryParse(error.statusCode ?? '');
+    return status != null &&
+        status >= 400 &&
+        status < 500 &&
+        !const {408, 409, 429}.contains(status);
+  }
+  return error is ImageEncodingException;
+}
 
 /// Service for storing draft reports offline using Hive
 /// Allows users to create reports without internet and sync later
@@ -57,13 +122,23 @@ class OfflineStorageService {
     }
   }
 
-  /// Save a draft report
+  /// Save a draft report. [userId] (the signed-in author) is stored so the
+  /// draft is only ever uploaded as that user.
+  ///
+  /// An online submission interrupted while uploading photos passes its
+  /// [reportId] and the [imageStoragePaths] (aligned with [imagePaths]) it
+  /// was uploading to, so the sync reuses both: no duplicate report and no
+  /// orphaned photos.
   Future<String> saveDraft({
+    String? userId,
+    String? reportId,
+    List<String>? imageStoragePaths,
     required String hazardType,
     required String severity,
     required String locationDetails,
     String? ward,
     String? lga,
+    String? state,
     double? latitude,
     double? longitude,
     String? description,
@@ -74,23 +149,34 @@ class OfflineStorageService {
 
     // Check if we've reached the max draft limit
     if (_draftsBox!.length >= _maxDrafts) {
-      throw Exception('Maximum draft limit ($_maxDrafts) reached');
+      throw ValidationException((l) => l.offlineDraftLimit(_maxDrafts));
     }
 
     final draftId = DateTime.now().millisecondsSinceEpoch.toString();
+    final persistedImages = await _persistImages(imagePaths);
     final draft = {
       'id': draftId,
+      'userId': userId,
       'hazardType': hazardType,
       'severity': severity,
       'locationDetails': locationDetails,
       'ward': ward,
       'lga': lga,
-      'latitude': latitude ?? 0.0,
-      'longitude': longitude ?? 0.0,
+      'state': state,
+      // Unknown coordinates stay null (never 0,0 — that is in the ocean).
+      'latitude': latitude,
+      'longitude': longitude,
       'description': description ?? '',
-      'reportDateTime':
-          reportDateTime?.toIso8601String() ?? DateTime.now().toIso8601String(),
-      'imagePaths': await _persistImages(imagePaths),
+      'reportDateTime': (reportDateTime ?? DateTime.now())
+          .toUtc()
+          .toIso8601String(),
+      'imagePaths': persistedImages,
+      'reportId': ?reportId,
+      // Only while still aligned with the stored images (a photo that
+      // vanished meanwhile is dropped by _persistImages).
+      if (imageStoragePaths != null &&
+          imageStoragePaths.length == persistedImages.length)
+        'imageStoragePaths': imageStoragePaths,
       'createdAt': DateTime.now().toIso8601String(),
       'status': 'draft',
     };
@@ -101,9 +187,9 @@ class OfflineStorageService {
     return draftId;
   }
 
-  /// Get all drafts
+  /// Get all drafts (empty before [initialize] has completed).
   List<Map<String, dynamic>> getAllDrafts() {
-    _ensureInitialized();
+    if (!isInitialized) return [];
 
     return _draftsBox!.values
         .map((draft) => Map<String, dynamic>.from(draft))
@@ -113,6 +199,27 @@ class OfflineStorageService {
             b['createdAt'].toString().compareTo(a['createdAt'].toString()),
       );
   }
+
+  /// Author of a draft; null for drafts saved by older builds, whose owner
+  /// is unknown.
+  static String? draftOwner(Map draft) {
+    final owner = draft['userId'];
+    return owner is String && owner.isNotEmpty ? owner : null;
+  }
+
+  /// Drafts shown to [userId]: their own, plus ownerless (legacy) drafts
+  /// that the user may submit as their own or discard.
+  List<Map<String, dynamic>> getDraftsFor(String? userId) =>
+      getAllDrafts().where((d) {
+        final owner = draftOwner(d);
+        return owner == null || owner == userId;
+      }).toList();
+
+  /// Whether [draft] may be uploaded automatically for [userId]: only the
+  /// author's own drafts, never ownerless ones (the author is unknown on a
+  /// shared device) nor drafts the server refused permanently.
+  static bool isAutoSyncableDraft(Map draft, String userId) =>
+      draftOwner(draft) == userId && draft['status'] != statusRejected;
 
   /// Get a specific draft by ID
   Map<String, dynamic>? getDraft(String draftId) {
@@ -143,8 +250,10 @@ class OfflineStorageService {
     final draft = _draftsBox!.get(draftId);
 
     // Delete associated persistent images
-    if (draft != null && draft['imagePaths'] != null) {
-      final paths = (draft['imagePaths'] as List).cast<String>();
+    final storedPaths = draft?['imagePaths'];
+    if (storedPaths is List) {
+      // Entries written by an older build may not all be strings.
+      final paths = storedPaths.whereType<String>();
       for (final imagePath in paths) {
         if (imagePath.contains('offline_images')) {
           try {
@@ -186,7 +295,7 @@ class OfflineStorageService {
             as String;
 
     final queueItem = {
-      'data': report, // actual Firestore payload
+      'data': report, // row payload (app field names)
       'docId': docId,
       'collection': collection,
       'createdAt': report['createdAt'] ?? DateTime.now().toIso8601String(),
@@ -201,6 +310,64 @@ class OfflineStorageService {
       'Added to sync queue: $queueId (collection: $collection)',
       name: 'OfflineStorageService',
     );
+  }
+
+  /// Queue item status for a payload the server refused permanently (RLS,
+  /// constraint violations). Such items are never retried automatically;
+  /// the user can retry or discard them from the offline screen.
+  static const String statusRejected = 'rejected';
+
+  /// Owner (report author) of a queue item, when recorded.
+  static String? _itemOwner(Map item) {
+    final data = item['data'];
+    final owner = data is Map ? data['userId'] : item['userId'];
+    return owner is String && owner.isNotEmpty ? owner : null;
+  }
+
+  /// Whether [item] may be shown to / synced for [userId]. Items of another
+  /// account are hidden, also when nobody is signed in ([userId] null):
+  /// only ownerless (legacy) items are visible then.
+  static bool belongsTo(Map item, String? userId) {
+    final owner = _itemOwner(item);
+    return owner == null || owner == userId;
+  }
+
+  /// A queue item's retry count, whatever shape it was stored in (an older
+  /// build, or a JSON round-trip, can leave it as a double or a string).
+  /// Anything unreadable counts as no retries yet.
+  static int retryCountOf(Map item) {
+    final raw = item['retryCount'];
+    if (raw is int) return raw;
+    if (raw is num) return raw.toInt();
+    return int.tryParse('$raw') ?? 0;
+  }
+
+  /// Whether a queue item will not be retried automatically any more.
+  static bool isTerminalFailure(Map item) =>
+      item['status'] == statusRejected ||
+      (item['status'] == 'failed' && retryCountOf(item) >= maxSyncAttempts);
+
+  /// Unsynced queue items (pending, failed or rejected) belonging to
+  /// [userId] (only ownerless items when null). Safe to call before
+  /// [initialize].
+  List<Map<String, dynamic>> getUnsyncedItems({String? userId}) {
+    if (!isInitialized) return [];
+    return getSyncQueue()
+        .where((item) => item['status'] != 'synced')
+        .where((item) => belongsTo(item, userId))
+        .toList();
+  }
+
+  /// Items that will not sync without user action (rejected by the server
+  /// or out of retries). Safe to call before [initialize].
+  List<Map<String, dynamic>> getFailedSyncItems({String? userId}) =>
+      getUnsyncedItems(userId: userId).where(isTerminalFailure).toList();
+
+  /// Removes a queue item (e.g. a permanently rejected submission the user
+  /// chose to discard).
+  Future<void> discardQueueItem(String queueId) async {
+    _ensureInitialized();
+    await _syncQueueBox!.delete(queueId);
   }
 
   /// Get all items in sync queue
@@ -244,34 +411,75 @@ class OfflineStorageService {
     }
   }
 
-  /// Mark queue item as failed
-  Future<void> markAsFailed(String queueId, String error) async {
+  /// The retry count after a failed attempt: unchanged when the attempt
+  /// does not count (transient network failure).
+  static int nextRetryCount(int previous, {required bool countsAsRetry}) =>
+      countsAsRetry ? previous + 1 : previous;
+
+  /// Whether a sync failure should consume one of the item's retries.
+  static bool failureCountsAsRetry(Object error) =>
+      !isTransientNetworkError(error) && !SupabaseService.isRateLimited(error);
+
+  /// Mark queue item as failed.
+  ///
+  /// When [countsAsRetry] is false (a transient network failure: the device
+  /// is offline / the server unreachable) the retry budget is not consumed,
+  /// so an item is never given up on just because the phone was offline.
+  Future<void> markAsFailed(
+    String queueId,
+    String error, {
+    bool countsAsRetry = true,
+  }) async {
     _ensureInitialized();
 
     final item = _syncQueueBox!.get(queueId);
     if (item != null) {
-      final retryCount = (item['retryCount'] as int?) ?? 0;
+      final retryCount = nextRetryCount(
+        retryCountOf(item),
+        countsAsRetry: countsAsRetry,
+      );
       final updated = Map<String, dynamic>.from(item)
         ..['status'] = 'failed'
-        ..['retryCount'] = retryCount + 1
+        ..['retryCount'] = retryCount
         ..['lastError'] = error
         ..['lastAttemptAt'] = DateTime.now().toIso8601String();
 
       await _syncQueueBox!.put(queueId, updated);
       developer.log(
-        'Marked as failed: $queueId (retry: ${retryCount + 1})',
+        'Marked as failed: $queueId (retry: $retryCount)',
         name: 'OfflineStorageService',
       );
     }
   }
 
-  /// Retry failed queue item
+  /// Mark a queue item as permanently rejected by the server; it is kept
+  /// (visible on the offline screen) but no longer retried automatically.
+  Future<void> markAsRejected(String queueId, String error) async {
+    _ensureInitialized();
+
+    final item = _syncQueueBox!.get(queueId);
+    if (item != null) {
+      final updated = Map<String, dynamic>.from(item)
+        ..['status'] = statusRejected
+        ..['lastError'] = error
+        ..['lastAttemptAt'] = DateTime.now().toIso8601String();
+      await _syncQueueBox!.put(queueId, updated);
+      developer.log(
+        'Marked as rejected (permanent): $queueId',
+        name: 'OfflineStorageService',
+      );
+    }
+  }
+
+  /// Retry failed queue item (resets its attempt counter).
   Future<void> retryQueueItem(String queueId) async {
     _ensureInitialized();
 
     final item = _syncQueueBox!.get(queueId);
     if (item != null) {
-      final updated = Map<String, dynamic>.from(item)..['status'] = 'pending';
+      final updated = Map<String, dynamic>.from(item)
+        ..['status'] = 'pending'
+        ..['retryCount'] = 0;
 
       await _syncQueueBox!.put(queueId, updated);
       developer.log(
@@ -281,25 +489,51 @@ class OfflineStorageService {
     }
   }
 
-  /// Sync all pending queue items to Supabase.
+  /// Maximum number of attempts for a queued item before it is skipped.
+  static const int maxSyncAttempts = 5;
+
+  /// In-flight sync, used as a re-entrancy guard so that concurrent triggers
+  /// (reconnect, dashboard open, manual sync) never process the queue twice.
+  Future<Map<String, int>>? _syncInFlight;
+
+  /// Sync all pending (and previously failed) queue items to Supabase.
   ///
-  /// Called automatically by [ConnectivityProvider.onReconnect] when the
-  /// device transitions from offline → online. Items that have failed
-  /// more than 5 times are permanently skipped.
-  Future<void> syncPendingReports() async {
+  /// This is the single implementation of queue syncing. Concurrent calls
+  /// share the same in-flight run. Items that have failed
+  /// [maxSyncAttempts] times, items the server rejected permanently and
+  /// items queued by another account are skipped.
+  ///
+  /// Returns a map with `synced`, `failed` and `rejected` counts.
+  Future<Map<String, int>> syncPendingReports() {
+    return _syncInFlight ??= _doSyncPendingReports().whenComplete(() {
+      _syncInFlight = null;
+    });
+  }
+
+  Future<Map<String, int>> _doSyncPendingReports() async {
+    final currentUserId = SupabaseService.isReady
+        ? SupabaseService().currentUserId
+        : null;
     if (!isInitialized) {
       developer.log(
         'syncPendingReports: not initialized, skipping',
         name: 'OfflineStorageService',
       );
-      return;
+      return {'synced': 0, 'failed': 0, 'rejected': 0};
+    }
+    if (currentUserId == null) {
+      // RLS stamps rows with auth.uid(); nothing can sync signed out.
+      return {'synced': 0, 'failed': 0, 'rejected': 0};
     }
 
     final pending = _syncQueueBox!.values
         .where(
           (item) =>
-              item['status'] == 'pending' &&
-              ((item['retryCount'] as int?) ?? 0) < 5,
+              (item['status'] == 'pending' || item['status'] == 'failed') &&
+              retryCountOf(item) < maxSyncAttempts &&
+              // Items queued by another account would be refused by RLS
+              // (and must never be attributed to this user).
+              belongsTo(item, currentUserId),
         )
         .toList();
 
@@ -308,7 +542,7 @@ class OfflineStorageService {
         'syncPendingReports: no pending items',
         name: 'OfflineStorageService',
       );
-      return;
+      return {'synced': 0, 'failed': 0, 'rejected': 0};
     }
 
     developer.log(
@@ -316,8 +550,10 @@ class OfflineStorageService {
       name: 'OfflineStorageService',
     );
 
-    final supabase = SupabaseService();
+    final db = SupabaseService();
     int successCount = 0;
+    int failCount = 0;
+    int rejectedCount = 0;
 
     for (final rawItem in pending) {
       final item = Map<String, dynamic>.from(rawItem);
@@ -325,47 +561,80 @@ class OfflineStorageService {
       if (queueId.isEmpty) continue;
 
       try {
-        final data = Map<String, dynamic>.from(item['data'] as Map? ?? item);
         final collection =
-            (item['collection'] ?? item['collectionId'] ?? AppConfig.reportsCollection)
-                as String;
+            (item['collection'] ?? item['collectionId'] ?? 'reports') as String;
+        final Map<String, dynamic> data;
+        if (item['data'] is Map) {
+          // Current format: the row payload is wrapped under 'data'.
+          data = Map<String, dynamic>.from(item['data'] as Map);
+        } else {
+          // Legacy flat format: strip queue-meta keys (including the queue
+          // item's own 'status', which is not the report status).
+          data = Map<String, dynamic>.from(item)
+            ..removeWhere(
+              (k, _) => const {
+                'queueId',
+                'addedToQueueAt',
+                'retryCount',
+                'status',
+                'lastError',
+                'lastAttemptAt',
+                'syncedAt',
+                'collection',
+                'collectionId',
+                'docId',
+              }.contains(k),
+            );
+        }
+        data
+          ..remove('collection')
+          ..remove('collectionId')
+          ..remove('docId');
+        // RLS only allows new reports to be inserted as 'pending'.
+        if (collection == 'reports') {
+          data['status'] = 'pending';
+        }
+        // created_at / updated_at are set by the database.
+        data['syncedAt'] = DateTime.now();
 
-        // Remove queue-meta keys to avoid writing them to Supabase
-        data.removeWhere(
-          (k, _) => const {
-            'queueId',
-            'addedToQueueAt',
-            'retryCount',
-            'status',
-            'lastError',
-            'lastAttemptAt',
-            'syncedAt',
-            'collection',
-            'collectionId',
-            'docId',
-          }.contains(k),
-        );
-
-        data['synced_at'] = DateTime.now().toUtc().toIso8601String();
-
+        // With a known id, upsert idempotently (a row that already exists
+        // was synced by an earlier attempt and is left untouched);
+        // otherwise insert a new row.
         final docId = item['docId'] as String?;
         if (docId != null && docId.isNotEmpty) {
-          await supabase.updateDocument(
+          await db.upsertDocument(
             collectionId: collection,
             documentId: docId,
             data: data,
+            ignoreDuplicates: true,
           );
         } else {
-          await supabase.createDocument(
-            collectionId: collection,
-            data: data,
-          );
+          await db.createDocument(collectionId: collection, data: data);
         }
 
         await markAsSynced(queueId);
         successCount++;
       } on Exception catch (e) {
-        await markAsFailed(queueId, e.toString());
+        if (SupabaseService.isUniqueViolation(e)) {
+          // Already inserted by an earlier attempt.
+          await markAsSynced(queueId);
+          successCount++;
+          continue;
+        }
+        if (isPermanentSyncError(e)) {
+          await markAsRejected(
+            queueId,
+            e is PostgrestException ? e.message : e.toString(),
+          );
+          rejectedCount++;
+        } else {
+          await markAsFailed(
+            queueId,
+            e.toString(),
+            countsAsRetry: failureCountsAsRetry(e),
+          );
+          failCount++;
+        }
         developer.log(
           'syncPendingReports: failed item $queueId: $e',
           name: 'OfflineStorageService',
@@ -380,8 +649,12 @@ class OfflineStorageService {
       'syncPendingReports: $successCount/${pending.length} synced successfully',
       name: 'OfflineStorageService',
     );
+    return {
+      'synced': successCount,
+      'failed': failCount,
+      'rejected': rejectedCount,
+    };
   }
-
 
   /// Clear synced items from queue (cleanup)
   Future<void> clearSyncedItems() async {
@@ -512,12 +785,12 @@ class OfflineStorageService {
   Map<String, dynamic>? getCachedUserProfile() {
     _ensureInitialized();
     final cached = _contentCacheBox!.get('user_profile');
-    if (cached != null) {
+    if (cached != null && cached['data'] is Map) {
       if (_isCacheStale(cached)) {
         _contentCacheBox!.delete('user_profile');
         return null;
       }
-      return Map<String, dynamic>.from(cached['data']);
+      return Map<String, dynamic>.from(cached['data'] as Map);
     }
     return null;
   }
@@ -542,20 +815,24 @@ class OfflineStorageService {
     );
   }
 
-  /// Get cached guides
-  List<Map<String, dynamic>> getCachedGuides() {
+  /// Get cached guides.
+  ///
+  /// Served regardless of age and never deleted on read: this is the
+  /// offline fallback, and guides rarely change, so an old copy is far
+  /// better than none. The cache is refreshed whenever the guides are
+  /// fetched online (see KnowledgeProvider.fetchGuides).
+  ///
+  /// Returns null when nothing was ever cached. An empty list means the
+  /// server had no guides at the last successful fetch.
+  List<Map<String, dynamic>>? getCachedGuides() {
     _ensureInitialized();
     final cached = _contentCacheBox!.get('guides');
     if (cached != null && cached['data'] is List) {
-      if (_isCacheStale(cached)) {
-        _contentCacheBox!.delete('guides');
-        return [];
-      }
       return (cached['data'] as List)
           .map((e) => Map<String, dynamic>.from(e))
           .toList();
     }
-    return [];
+    return null;
   }
 
   /// Cache alerts
@@ -612,10 +889,12 @@ class OfflineStorageService {
 
   /// Returns true when a cached entry is older than [maxAge] (default 24 hours).
   bool _isCacheStale(Map entry, {Duration maxAge = const Duration(hours: 24)}) {
-    final timestampStr = entry['timestamp'] as String?;
-    if (timestampStr == null) return true;
-    final cached = DateTime.tryParse(timestampStr);
+    final raw = entry['timestamp'];
+    if (raw == null) return true;
+    final cached = raw is DateTime ? raw : DateTime.tryParse('$raw');
     if (cached == null) return true;
+    // A device clock that has moved backwards makes the difference
+    // negative; that is never "stale", so cached content keeps serving.
     return DateTime.now().difference(cached) > maxAge;
   }
 
@@ -632,12 +911,16 @@ class OfflineStorageService {
     final synced = _syncQueueBox!.values
         .where((item) => item['status'] == 'synced')
         .length;
+    final rejected = _syncQueueBox!.values
+        .where((item) => item['status'] == statusRejected)
+        .length;
 
     return {
       'totalDrafts': _draftsBox!.length,
       'maxDrafts': _maxDrafts,
       'pendingSync': pending,
       'failedSync': failed,
+      'rejectedSync': rejected,
       'syncedItems': synced,
       'totalQueue': _syncQueueBox!.length,
     };
@@ -651,26 +934,32 @@ class OfflineStorageService {
     developer.log('Offline storage disposed', name: 'OfflineStorageService');
   }
 
-  /// Sanitizes maps before storing them in Hive.
-  /// Converts DateTime values to ISO-8601 strings (Supabase returns standard
-  /// Dart types; no Firestore-specific types needed).
-  Map<String, dynamic> _sanitizeForHive(Map<String, dynamic> data) {
+  /// Sanitizes maps before sending them to hive.
+  ///
+  /// Hive can only store primitives, lists and maps of those. DateTimes are
+  /// converted to ISO strings and anything else that Hive cannot serialize
+  /// is dropped.
+  Map<String, dynamic> _sanitizeForHive(Map<dynamic, dynamic> data) {
     final Map<String, dynamic> sanitized = {};
     data.forEach((key, value) {
-      if (value is DateTime) {
-        sanitized[key] = value.toIso8601String();
-      } else if (value is Map<String, dynamic>) {
-        sanitized[key] = _sanitizeForHive(value);
-      } else if (value is List) {
-        sanitized[key] = value.map((e) {
-          if (e is Map<String, dynamic>) return _sanitizeForHive(e);
-          if (e is DateTime) return e.toIso8601String();
-          return e;
-        }).toList();
-      } else {
-        sanitized[key] = value;
-      }
+      final converted = _sanitizeValue(value);
+      if (converted != _unsupported) sanitized[key.toString()] = converted;
     });
     return sanitized;
+  }
+
+  static const Object _unsupported = Object();
+
+  Object? _sanitizeValue(Object? value) {
+    if (value == null || value is String || value is num || value is bool) {
+      return value;
+    }
+    if (value is DateTime) return value.toIso8601String();
+    if (value is Map) return _sanitizeForHive(value);
+    if (value is List) {
+      return value.map(_sanitizeValue).where((e) => e != _unsupported).toList();
+    }
+    // Anything else cannot be stored in Hive.
+    return _unsupported;
   }
 }

@@ -1,3 +1,5 @@
+import 'package:climate_app/core/l10n/l10n.dart';
+
 class EmergencyContact {
   final String id;
   final String name;
@@ -20,7 +22,7 @@ class EmergencyContact {
     this.isAvailable = true,
   });
 
-  factory EmergencyContact.fromFirestore(Map<String, dynamic> data, String id) {
+  factory EmergencyContact.fromMap(Map<String, dynamic> data, String id) {
     return EmergencyContact(
       id: id,
       name: data['name'] as String? ?? '',
@@ -33,32 +35,40 @@ class EmergencyContact {
     );
   }
 
-  factory EmergencyContact.fromAppwrite(Map<String, dynamic> data, String id) {
-    return EmergencyContact(
-      id: id,
-      name: data['name'] as String? ?? '',
-      role: data['relationship'] as String? ?? '',
-      phone: data['phone'] as String? ?? '',
-      organization: null,
-      lga: null,
-      category: 'other',
-      isAvailable: true,
-    );
-  }
-
-  Map<String, dynamic> toFirestore() {
+  Map<String, dynamic> toMap() {
     return {
       'name': name,
       'role': role,
       'phone': phone,
-      if (organization != null) 'organization': organization,
-      if (lga != null) 'lga': lga,
+      // Always sent (null clears the column on update).
+      'organization': organization,
+      'lga': lga,
       'category': category,
       'isAvailable': isAvailable,
     };
   }
 
-  Map<String, dynamic> toAppwrite() {
-    return {'name': name, 'phone': phone, 'relationship': role};
+  /// Validates a contact name (required, at most 100 characters).
+  static String? validateName(String? value, AppLocalizations l10n) {
+    final v = value?.trim() ?? '';
+    if (v.isEmpty) return l10n.contactsNameRequired;
+    if (v.length > 100) return l10n.contactsNameTooLong;
+    return null;
+  }
+
+  /// Validates a contact phone number: required; digits with an optional
+  /// leading '+', spaces, dashes and brackets allowed. Short codes (e.g.
+  /// 112) are accepted, as are local and international numbers.
+  static String? validatePhone(String? value, AppLocalizations l10n) {
+    final v = value?.trim() ?? '';
+    if (v.isEmpty) return l10n.validatorPhoneRequired;
+    if (!RegExp(r'^\+?[\d\s\-()]+$').hasMatch(v)) {
+      return l10n.contactsPhoneDigitsOnly;
+    }
+    final digits = v.replaceAll(RegExp(r'\D'), '');
+    if (digits.length < 3 || digits.length > 15) {
+      return l10n.contactsPhoneInvalid;
+    }
+    return null;
   }
 }

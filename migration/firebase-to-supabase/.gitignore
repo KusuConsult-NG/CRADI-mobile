@@ -1,0 +1,12 @@
+node_modules/
+.env
+.env.*
+!.env.example
+migration-state.json
+migration-state.json.tmp
+migration-report-*.json
+# Service-account keys — never commit these.
+*service-account*.json
+*serviceAccount*.json
+*-firebase-adminsdk-*.json
+credentials*.json

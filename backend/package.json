@@ -1,0 +1,19 @@
+{
+  "name": "cradi-ewer-backend",
+  "version": "1.0.0",
+  "private": true,
+  "description": "CRADI/EWER backend on Railway: Supabase outbox worker, escalation cron, OneSignal push and transactional email.",
+  "type": "module",
+  "main": "src/index.js",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch --env-file-if-exists=.env src/index.js",
+    "test": "node --test \"test/**/*.test.js\""
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.117.2"
+  }
+}

@@ -1,9 +1,12 @@
 import 'package:climate_app/core/theme/app_colors.dart';
+import 'package:climate_app/features/knowledge_base/knowledge_categories.dart';
 import 'package:climate_app/features/knowledge_base/providers/knowledge_provider.dart';
+import 'package:climate_app/features/knowledge_base/widgets/guide_image.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import 'package:climate_app/core/l10n/l10n.dart';
 
 class HazardGuidesScreen extends StatefulWidget {
   final String? initialCategory;
@@ -16,28 +19,29 @@ class HazardGuidesScreen extends StatefulWidget {
 
 class _HazardGuidesScreenState extends State<HazardGuidesScreen> {
   int _selectedFilterIndex = 0;
-  final List<String> _filters = [
-    'All',
-    'Flood',
-    'Fire',
-    'Accident',
-    'Erosion',
-    'Disease',
-    'Conflict',
-    'Safety',
-  ];
+  final List<String> _filters = knowledgeCategoryFilters;
+  final TextEditingController _searchController = TextEditingController();
+  String _query = '';
+
+  String get _category => _filters[_selectedFilterIndex];
 
   @override
   void initState() {
     super.initState();
-    if (widget.initialCategory != null) {
+    final initial = widget.initialCategory;
+    if (initial != null) {
+      final label = knowledgeCategoryFor(initial)?.label ?? initial;
       final index = _filters.indexWhere(
-        (f) => f.toLowerCase() == widget.initialCategory!.toLowerCase(),
+        (f) => f.toLowerCase() == label.toLowerCase(),
       );
       if (index != -1) {
         _selectedFilterIndex = index;
       }
     }
+    _searchController.addListener(() {
+      final q = _searchController.text.trim();
+      if (q != _query) setState(() => _query = q);
+    });
 
     Future.microtask(() {
       if (!mounted) return;
@@ -45,6 +49,12 @@ class _HazardGuidesScreenState extends State<HazardGuidesScreen> {
         category: _filters[_selectedFilterIndex],
       );
     });
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
   }
 
   void _onFilterSelected(int index) {
@@ -56,22 +66,27 @@ class _HazardGuidesScreenState extends State<HazardGuidesScreen> {
   @override
   Widget build(BuildContext context) {
     final knowledgeProvider = context.watch<KnowledgeProvider>();
+    final guides = knowledgeProvider.searchGuides(_query, category: _category);
+    final isLoading = knowledgeProvider.isLoadingCategory(_category);
+    final error = knowledgeProvider.errorFor(_category);
 
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
         leading: IconButton(
+          tooltip: context.l10n.back,
           icon: const Icon(
             Icons.arrow_back_ios_new,
             size: 20,
             color: AppColors.textPrimary,
           ),
-          onPressed: () => context.pop(),
+          onPressed: () =>
+              context.canPop() ? context.pop() : context.go('/knowledge-base'),
         ),
         title: Column(
           children: [
             Text(
-              'Hazard Guides',
+              context.l10n.knowledgeGuidesTitle,
               style: GoogleFonts.lexend(
                 fontWeight: FontWeight.bold,
                 color: AppColors.textPrimary,
@@ -79,7 +94,7 @@ class _HazardGuidesScreenState extends State<HazardGuidesScreen> {
               ),
             ),
             Text(
-              'KNOWLEDGE BASE',
+              context.l10n.knowledgeBaseCaption,
               style: GoogleFonts.lexend(
                 fontWeight: FontWeight.w500,
                 color: Colors.grey.shade500,
@@ -92,6 +107,7 @@ class _HazardGuidesScreenState extends State<HazardGuidesScreen> {
         centerTitle: true,
         actions: [
           IconButton(
+            tooltip: context.l10n.refresh,
             icon: const Icon(Icons.refresh, color: AppColors.textPrimary),
             onPressed: () => knowledgeProvider.fetchGuides(
               category: _filters[_selectedFilterIndex],
@@ -126,9 +142,17 @@ class _HazardGuidesScreenState extends State<HazardGuidesScreen> {
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: TextField(
-                        onChanged: knowledgeProvider.searchGuides,
+                        controller: _searchController,
+                        textInputAction: TextInputAction.search,
                         decoration: InputDecoration(
-                          hintText: 'Search guides, signs, or hazards...',
+                          suffixIcon: _query.isEmpty
+                              ? null
+                              : IconButton(
+                                  tooltip: context.l10n.alertsClearSearch,
+                                  icon: const Icon(Icons.clear),
+                                  onPressed: _searchController.clear,
+                                ),
+                          hintText: context.l10n.knowledgeGuidesSearchHint,
                           hintStyle: GoogleFonts.lexend(
                             color: Colors.grey.shade500,
                           ),
@@ -157,7 +181,12 @@ class _HazardGuidesScreenState extends State<HazardGuidesScreen> {
                       itemBuilder: (context, index) {
                         final isSelected = _selectedFilterIndex == index;
                         return ChoiceChip(
-                          label: Text(_filters[index]),
+                          label: Text(
+                            knowledgeCategoryDisplay(
+                              context.l10n,
+                              _filters[index],
+                            ),
+                          ),
                           selected: isSelected,
                           onSelected: (v) => _onFilterSelected(index),
                           labelStyle: GoogleFonts.lexend(
@@ -189,14 +218,14 @@ class _HazardGuidesScreenState extends State<HazardGuidesScreen> {
 
                   const SizedBox(height: 24),
 
-                  if (knowledgeProvider.isLoading)
+                  if (isLoading && guides.isEmpty)
                     const Center(
                       child: Padding(
                         padding: EdgeInsets.all(40.0),
                         child: CircularProgressIndicator(),
                       ),
                     )
-                  else if (knowledgeProvider.error != null)
+                  else if (error != null && guides.isEmpty)
                     Center(
                       child: Padding(
                         padding: const EdgeInsets.all(16.0),
@@ -209,7 +238,7 @@ class _HazardGuidesScreenState extends State<HazardGuidesScreen> {
                             ),
                             const SizedBox(height: 8),
                             Text(
-                              knowledgeProvider.error!,
+                              error(context.l10n),
                               textAlign: TextAlign.center,
                               style: GoogleFonts.lexend(color: Colors.red),
                             ),
@@ -217,13 +246,13 @@ class _HazardGuidesScreenState extends State<HazardGuidesScreen> {
                               onPressed: () => knowledgeProvider.fetchGuides(
                                 category: _filters[_selectedFilterIndex],
                               ),
-                              child: const Text('Retry'),
+                              child: Text(context.l10n.retry),
                             ),
                           ],
                         ),
                       ),
                     )
-                  else if (knowledgeProvider.guides.isEmpty)
+                  else if (guides.isEmpty)
                     Center(
                       child: Padding(
                         padding: const EdgeInsets.all(40.0),
@@ -236,7 +265,12 @@ class _HazardGuidesScreenState extends State<HazardGuidesScreen> {
                             ),
                             const SizedBox(height: 16),
                             Text(
-                              'No guides found for this category',
+                              _query.isNotEmpty
+                                  ? context.l10n.knowledgeNoGuidesMatch(_query)
+                                  : _category == allKnowledgeCategories
+                                  ? context.l10n.knowledgeNoGuides
+                                  : context.l10n.knowledgeNoGuidesCategory,
+                              textAlign: TextAlign.center,
                               style: GoogleFonts.lexend(
                                 color: Colors.grey.shade500,
                                 fontSize: 16,
@@ -252,7 +286,7 @@ class _HazardGuidesScreenState extends State<HazardGuidesScreen> {
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
                       padding: const EdgeInsets.symmetric(horizontal: 16),
-                      itemCount: knowledgeProvider.guides.length,
+                      itemCount: guides.length,
                       gridDelegate:
                           const SliverGridDelegateWithFixedCrossAxisCount(
                             crossAxisCount: 2,
@@ -261,13 +295,18 @@ class _HazardGuidesScreenState extends State<HazardGuidesScreen> {
                             childAspectRatio: 0.75,
                           ),
                       itemBuilder: (context, index) {
-                        final guide = knowledgeProvider.guides[index];
+                        final guide = guides[index];
                         return _buildGuideCard(
-                          guide['title'] ?? 'No Title',
-                          guide['subtitle'] ?? guide['category'] ?? 'Manual',
-                          guide['tag'] ?? 'GUIDE',
+                          guide['title'] ?? context.l10n.knowledgeNoTitle,
+                          (guide['subtitle'] ?? guide['category']) != null
+                              ? knowledgeCategoryDisplay(
+                                  context.l10n,
+                                  guide['subtitle'] ?? guide['category'],
+                                )
+                              : context.l10n.knowledgeSubtitleManual,
+                          knowledgeTagDisplay(context.l10n, guide['tag']),
                           _getTagColor(guide['tag']),
-                          _resolveImage(guide),
+                          guide,
                           isDownloaded: guide['isOffline'] ?? true,
                           onTap: () {
                             context.push(
@@ -285,101 +324,6 @@ class _HazardGuidesScreenState extends State<HazardGuidesScreen> {
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  /// Returns a guaranteed non-null network image URL for a guide,
-  /// using category→image mapping. Never returns the app logo.
-  String _resolveImage(Map<String, dynamic> guide) {
-    final url = guide['imageUrl']?.toString() ?? '';
-    if (url.isNotEmpty && url.startsWith('http')) return url;
-    // No valid imageUrl stored — derive from category/hazardType
-    final cat = (guide['category'] ?? guide['hazardType'] ?? '').toString();
-    return _getImageForType(cat);
-  }
-
-  String _getImageForType(String? type) {
-    switch (type?.toLowerCase()) {
-      case 'flood':
-        return 'https://images.unsplash.com/photo-1504701954957-2010ec3bcec1?auto=format&fit=crop&q=80&w=800';
-      case 'fire':
-      case 'wildfires':
-        return 'https://images.unsplash.com/photo-1516912481808-3406841bd33c?auto=format&fit=crop&q=80&w=800';
-      case 'accident':
-        return 'https://images.unsplash.com/photo-1544636331-e26879cd4d9b?auto=format&fit=crop&q=80&w=800';
-      case 'erosion':
-        return 'https://images.unsplash.com/photo-1509316785289-025f5b846b35?auto=format&fit=crop&q=80&w=800';
-      case 'disease':
-      case 'epidemic':
-        return 'https://images.unsplash.com/photo-1588681664899-f142ff2dc9b1?auto=format&fit=crop&q=80&w=800';
-      case 'conflict':
-        return 'https://images.unsplash.com/photo-1599059813005-11265ba4b4ce?auto=format&fit=crop&q=80&w=800';
-      case 'storm':
-        return 'https://images.unsplash.com/photo-1535350356005-fd52b3b524fb?auto=format&fit=crop&q=80&w=800';
-      case 'earthquake':
-        return 'https://images.unsplash.com/photo-1548337138-e87d889cc369?auto=format&fit=crop&q=80&w=800';
-      case 'extreme heat':
-      case 'drought':
-        return 'https://images.unsplash.com/photo-1504192010706-dd7f569ee2be?auto=format&fit=crop&q=80&w=800';
-      default:
-        return 'https://images.unsplash.com/photo-1496247749665-49cf5b1022e9?auto=format&fit=crop&q=80&w=800';
-    }
-  }
-
-  /// Hazard-colored placeholder shown when the network image fails to load.
-  Widget _errorPlaceholder(String? category) {
-    final cat = (category ?? '').toLowerCase();
-    Color bg;
-    IconData icon;
-    switch (cat) {
-      case 'flood':
-        bg = Colors.blue.shade800;
-        icon = Icons.water;
-        break;
-      case 'fire':
-      case 'wildfires':
-        bg = Colors.deepOrange.shade800;
-        icon = Icons.local_fire_department;
-        break;
-      case 'accident':
-        bg = Colors.red.shade800;
-        icon = Icons.car_crash;
-        break;
-      case 'erosion':
-        bg = Colors.brown.shade700;
-        icon = Icons.landscape;
-        break;
-      case 'disease':
-      case 'epidemic':
-        bg = Colors.teal.shade700;
-        icon = Icons.coronavirus;
-        break;
-      case 'conflict':
-        bg = Colors.grey.shade800;
-        icon = Icons.shield;
-        break;
-      case 'storm':
-        bg = Colors.blueGrey.shade700;
-        icon = Icons.thunderstorm;
-        break;
-      case 'earthquake':
-        bg = Colors.deepPurple.shade800;
-        icon = Icons.vibration;
-        break;
-      case 'extreme heat':
-      case 'drought':
-        bg = Colors.orange.shade800;
-        icon = Icons.wb_sunny;
-        break;
-      default:
-        bg = Colors.grey.shade800;
-        icon = Icons.health_and_safety;
-    }
-    return Container(
-      color: bg,
-      child: Center(
-        child: Icon(icon, color: Colors.white.withValues(alpha: 0.6), size: 40),
       ),
     );
   }
@@ -405,40 +349,21 @@ class _HazardGuidesScreenState extends State<HazardGuidesScreen> {
     String subtitle,
     String tag,
     Color tagColor,
-    String imageUrl, {
+    Map<String, dynamic> guide, {
     bool isDownloaded = true,
     VoidCallback? onTap,
   }) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
+        clipBehavior: Clip.antiAlias,
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(12),
-          image: DecorationImage(
-            image: NetworkImage(imageUrl),
-            fit: BoxFit.cover,
-            onError: (e, s) {
-              // Fallback to local asset if network fails
-              // We'll use the logo as a fallback if no specific placeholder exists
-            },
-          ),
           color: Colors.grey.shade900,
         ),
-        // Additional layer if image fails to load
         child: Stack(
           children: [
-            if (imageUrl.startsWith('http'))
-              Image.network(
-                imageUrl,
-                fit: BoxFit.cover,
-                width: double.infinity,
-                height: double.infinity,
-                errorBuilder: (context, error, stackTrace) =>
-                    _errorPlaceholder(null),
-              )
-            else
-              // Should never happen — imageUrl is always http via _resolveImage
-              _errorPlaceholder(null),
+            GuideImage(guide: guide),
             Container(
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(12),

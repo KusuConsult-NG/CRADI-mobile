@@ -1,48 +1,124 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:developer' as developer;
 import 'package:climate_app/core/utils/error_handler.dart';
-export 'package:climate_app/core/utils/error_handler.dart' show AuthException;
+export 'package:climate_app/core/utils/error_handler.dart'
+    show AuthException, EmailNotConfirmedException;
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' as sb;
 import 'package:climate_app/core/services/supabase_service.dart';
+import 'package:climate_app/core/services/notification_service.dart';
 import 'package:climate_app/core/services/secure_storage_service.dart';
 import 'package:climate_app/core/services/session_manager.dart';
 import 'package:climate_app/core/services/rate_limiter.dart';
 import 'package:climate_app/core/services/biometric_service.dart';
 import 'package:climate_app/core/services/device_fingerprint_service.dart';
 import 'package:climate_app/core/services/fraud_detection_service.dart';
-import 'dart:math' as math;
-import 'package:climate_app/core/services/email_service.dart';
-import 'package:climate_app/core/services/sms_service.dart';
 import 'package:climate_app/core/constants/app_config.dart';
-import 'package:supabase_flutter/supabase_flutter.dart' hide AuthException;
-import 'package:supabase_flutter/supabase_flutter.dart' as sp show AuthException;
+import 'package:climate_app/core/utils/validators.dart';
+import 'package:climate_app/core/l10n/l10n.dart';
 
-extension SupabaseUserCompat on User {
-  String get uid => id;
-  String? get displayName => userMetadata?['full_name'] as String?;
+enum UserRole {
+  user,
+  ewm,
+  ewv,
+  ewr,
+  ldpCoordinator,
+  projectStaff,
+  admin,
+  techSupport,
 }
 
-enum UserRole { user, ewm, ewv, ewr, admin, techSupport }
+extension UserRoleValue on UserRole {
+  /// The value stored in `profiles.role`.
+  String get dbValue => switch (this) {
+    UserRole.ldpCoordinator => 'ldp_coordinator',
+    UserRole.projectStaff => 'project_staff',
+    _ => name,
+  };
 
-/// Authentication state and operations — backed by Supabase Auth + PostgREST.
+  /// Display name of the role in the language of [l10n] (the stored value
+  /// is [dbValue]).
+  String label(AppLocalizations l10n) => switch (this) {
+    UserRole.user => l10n.roleUser,
+    UserRole.ewm => l10n.roleEwm,
+    UserRole.ewv => l10n.roleEwv,
+    UserRole.ewr => l10n.roleEwr,
+    UserRole.ldpCoordinator => l10n.roleLdpCoordinator,
+    UserRole.projectStaff => l10n.roleProjectStaff,
+    UserRole.admin => l10n.roleAdmin,
+    UserRole.techSupport => l10n.roleTechSupport,
+  };
+
+  /// Parses a `profiles.role` value (null when unknown).
+  static UserRole? fromDb(String? value) {
+    if (value == null) return null;
+    for (final role in UserRole.values) {
+      if (role.dbValue == value) return role;
+    }
+    return null;
+  }
+}
+
+/// Authentication state and operations — backed by Supabase Auth and the
+/// `profiles` table.
+///
+/// * Sign-up passes the profile fields as user metadata; a database trigger
+///   creates the `profiles` row. The client never inserts it.
+/// * Email verification and password recovery use Supabase's 6-digit OTPs.
+/// * Phone accounts use Supabase phone OTP (SMS provider configured in the
+///   Supabase dashboard).
+/// * The session (incl. refresh token) is persisted by supabase_flutter in
+///   secure storage; the biometric lock re-uses it — no password is stored.
+/// * Role / approval / disabled changes arrive through a realtime
+///   subscription on the user's own profile row.
 class AuthProvider extends ChangeNotifier {
   AuthProvider() {
     _initializeSessionManager();
-    // Start listening to Supabase auth state immediately.
-    // ignore: unnecessary_statements
-    _authSub;
+    unawaited(_storage.purgeLegacyCredentials());
+    _authSub = _db.authStateChanges.listen(
+      _onAuthEvent,
+      onError: (Object e) =>
+          developer.log('Auth stream error: $e', name: 'AuthProvider'),
+    );
+    if (!SupabaseService.isReady) {
+      // No backend configured: behave as signed out.
+      unawaited(_handleSignedOut());
+    } else {
+      // The auth stream only replays its latest event: when the session
+      // restored at startup was already refreshed, only `tokenRefreshed`
+      // arrives. Seed the state from the restored session instead of
+      // waiting for `initialSession`.
+      final session = _db.auth.currentSession;
+      if (session != null) {
+        unawaited(_ensureSignedIn(session.user));
+      } else {
+        unawaited(_handleSignedOut());
+      }
+    }
+    // Safety net: never leave the app stuck on the splash screen.
+    _initTimer = Timer(initTimeout, _onInitTimeout);
   }
 
-  final SupabaseService _supabase = SupabaseService();
+  /// How long the splash screen may wait for the initial auth state.
+  static const Duration initTimeout = Duration(seconds: 12);
+
+  /// Phone (SMS OTP) sign-up and sign-in. Keep false until an SMS provider
+  /// is configured in the Supabase dashboard (Auth → Providers → Phone);
+  /// the registration and login screens hide the phone option meanwhile.
+  static const bool phoneAuthEnabled = false;
+
+  final SupabaseService _db = SupabaseService();
   bool _isAuthenticated = false;
   UserRole? _userRole;
   String? _phoneNumber;
   bool _isLoading = false;
-  User? _currentUser;
+  sb.User? _currentUser;
   bool? _isApproved;
   bool _isVerified = false;
+  String? _ward;
+  String? _lga;
+  Timer? _initTimer;
 
   // Services
   final SecureStorageService _storage = SecureStorageService();
@@ -56,35 +132,207 @@ class AuthProvider extends ChangeNotifier {
   bool _isInitialized = false;
   bool _hasCompletedOnboarding = false;
   bool _isLocked = false;
-  // Set true during a fresh manual login to prevent _onAuthStateChanged
-  // from immediately locking the app via the biometric lock screen.
+  // Set during an explicit sign-in / OTP verification so the sign-in handler
+  // does not immediately re-lock the app behind the biometric screen.
   bool _justLoggedIn = false;
+  // True while a password-recovery session is active (verifyOTP recovery →
+  // updateUser → signOut); auth events are ignored meanwhile.
+  bool _recovering = false;
+  // Set when the profile row says the account is disabled.
+  bool _accountDisabled = false;
 
-  // Real-time listener on the user's profile row in Supabase.
-  StreamSubscription<List<Map<String, dynamic>>>? _userDocSub;
+  // Email awaiting OTP confirmation (sign-up without a session yet).
+  String? _pendingEmail;
+  // Phone registration metadata, re-sent with an OTP resend.
+  Map<String, dynamic>? _pendingPhoneMetadata;
+  // NDPA consent to record once a session exists.
+  Map<String, String>? _pendingNdpaConsent;
 
-  // Auth state subscription (initialized lazily on first access).
-  // ignore: cancel_subscriptions
-  late final _authSub = _supabase.authStateChanges.listen(
-    (AuthState state) => _onAuthStateChanged(state.session?.user),
-  );
+  // Realtime listener on the user's profile row.
+  StreamSubscription<Map<String, dynamic>?>? _profileSub;
+  late final StreamSubscription<sb.AuthState> _authSub;
+
+  // Single in-flight sign-in handling per user.
+  Future<void>? _signInFuture;
+  String? _signInUid;
+
+  /// Roles that may cast a peer-verification vote (`is_verifier()`).
+  static const Set<UserRole> verifierRoles = {
+    UserRole.ewm,
+    UserRole.ewv,
+    UserRole.ewr,
+    UserRole.admin,
+  };
+
+  /// Roles that may send a verification request (/verification/request).
+  /// The only entry point is the verification list, which is limited to
+  /// [verifierRoles], so this must stay a subset of those.
+  static const Set<UserRole> verificationRequestRoles = {
+    UserRole.ewv,
+    UserRole.ewr,
+    UserRole.admin,
+  };
+
+  /// Roles that may approve / reject / reopen reports.
+  static const Set<UserRole> statusManagerRoles = {
+    UserRole.ewv,
+    UserRole.ewr,
+    UserRole.ldpCoordinator,
+    UserRole.projectStaff,
+    UserRole.admin,
+  };
+
+  /// Roles that may read the peer votes (and dispute comments) on reports
+  /// (`verifications_select`).
+  static const Set<UserRole> verificationReaderRoles = {
+    UserRole.ewm,
+    UserRole.ewv,
+    UserRole.ewr,
+    UserRole.ldpCoordinator,
+    UserRole.projectStaff,
+    UserRole.admin,
+    UserRole.techSupport,
+  };
+
+  /// Roles that may broadcast / dismiss alerts (`alerts_insert` /
+  /// `alerts_update`).
+  static const Set<UserRole> alertManagerRoles = {
+    UserRole.ewv,
+    UserRole.ewr,
+    UserRole.ldpCoordinator,
+    UserRole.projectStaff,
+    UserRole.admin,
+    UserRole.techSupport,
+  };
 
   bool get isAuthenticated => _isAuthenticated;
-  UserRole? get userRole => _userRole;
+
+  /// The effective role, matching the database's `app_role()`: the stored
+  /// role only counts once an admin has approved the account and it is not
+  /// disabled; otherwise the user is treated as a plain [UserRole.user].
+  /// Use this for all UI gating.
+  UserRole? get userRole {
+    final raw = _userRole;
+    if (raw == null) return null;
+    return (_isApproved == true && !_accountDisabled) ? raw : UserRole.user;
+  }
+
+  /// The role stored on the profile (requested or assigned), regardless of
+  /// approval. For display only.
+  UserRole? get rawUserRole => _userRole;
+
+  /// The signed-in user's ward (from the profile row).
+  String? get ward => _ward;
+
+  /// The signed-in user's LGA (from the profile row).
+  String? get lga => _lga;
+
+  /// Whether the user may cast a peer-verification vote on a report (mirrors
+  /// the `verifications_insert` policy): never on one's own report, and an
+  /// EWM only within their own LGA *and* ward (ward names repeat across
+  /// LGAs, so the ward alone is not enough).
+  bool canVoteOn({String? reporterId, String? reportWard, String? reportLga}) {
+    final role = userRole;
+    if (role == null || !verifierRoles.contains(role)) return false;
+    final uid = _currentUser?.id;
+    if (reporterId != null && uid != null && reporterId == uid) return false;
+    if (role == UserRole.ewm) {
+      return _sameArea(_ward, reportWard) && _sameArea(_lga, reportLga);
+    }
+    return true;
+  }
+
+  // Exact match, like the database policy (values come from the same
+  // location lists), so the button never shows for a vote the DB refuses.
+  static bool _sameArea(String? mine, String? theirs) {
+    final a = mine ?? '';
+    return a.isNotEmpty && a == theirs;
+  }
+
+  /// Whether the user may approve / reject / reopen a report (mirrors the
+  /// `guard_report_update` trigger).
+  bool canManageReportStatus({String? reporterId}) {
+    final role = userRole;
+    if (role == null || !statusManagerRoles.contains(role)) return false;
+    if (role != UserRole.admin &&
+        reporterId != null &&
+        reporterId == _currentUser?.id) {
+      return false;
+    }
+    return true;
+  }
+
   bool get isLoading => _isLoading;
   String? get phoneNumber => _phoneNumber;
-  User? get currentUser => _currentUser;
+  sb.User? get currentUser => _currentUser;
   bool? get isApproved => _isApproved;
   bool get isVerified => _isVerified;
   bool get isInitialized => _isInitialized;
   bool get hasCompletedOnboarding => _hasCompletedOnboarding;
   bool get isLocked => _isLocked;
 
+  /// Email of the account waiting for OTP confirmation, if any.
+  String? get pendingEmail => _pendingEmail ?? _currentUser?.email;
+
+  /// Whether a persisted Supabase session exists on this device (the
+  /// biometric sign-in re-uses it; after a logout there is none).
+  bool get hasStoredSession =>
+      SupabaseService.isReady && _db.auth.currentSession != null;
+
+  /// Called after every completed sign-in (new user id) — e.g. to refetch
+  /// data that was loaded before the session existed.
+  final List<VoidCallback> _signInListeners = [];
+  void addSignInListener(VoidCallback listener) =>
+      _signInListeners.add(listener);
+  void removeSignInListener(VoidCallback listener) =>
+      _signInListeners.remove(listener);
+
+  /// Called after the user state was cleared on sign-out (including a
+  /// signed-out cold start) — e.g. to drop caches of the previous account.
+  final List<VoidCallback> _signOutListeners = [];
+  void addSignOutListener(VoidCallback listener) =>
+      _signOutListeners.add(listener);
+  void removeSignOutListener(VoidCallback listener) =>
+      _signOutListeners.remove(listener);
+
+  /// Incremented whenever the user state is reset or a new sign-in starts;
+  /// an in-flight [_handleSignedIn] stops once it no longer matches.
+  int _authGen = 0;
+
+  /// User id the sign-in listeners last ran for (null after a reset), so a
+  /// sign-in that is retried after a failed attempt still notifies them.
+  String? _listenersFiredFor;
+
+  static void _notifyAll(List<VoidCallback> listeners, String kind) {
+    for (final listener in List.of(listeners)) {
+      try {
+        listener();
+      } on Exception catch (e) {
+        developer.log('$kind listener error: $e', name: 'AuthProvider');
+      }
+    }
+  }
+
   // ─────────────────────────── Initialization ───────────────────────────────
 
+  void _onInitTimeout() {
+    if (_isInitialized) return;
+    developer.log(
+      'Auth initialization timed out — leaving the splash screen',
+      name: 'AuthProvider',
+    );
+    _isInitialized = true;
+    notifyListeners();
+  }
+
   void _initializeSessionManager() {
+    // Inactivity timeout: lock (keeping the session) when biometrics are
+    // enabled, otherwise sign out.
     _sessionManager.onSessionExpired = () async {
-      final bioEnabled = await _storage.isBiometricEnabled();
+      if (!_isAuthenticated) return;
+      final bioEnabled = await _storage.isBiometricEnabled(
+        forUserId: _currentUser?.id,
+      );
       if (bioEnabled) {
         _isLocked = true;
         notifyListeners();
@@ -94,153 +342,340 @@ class AuthProvider extends ChangeNotifier {
     };
   }
 
-  /// React to Supabase auth state changes.
-  Future<void> _onAuthStateChanged(User? user) async {
-    if (user == null) {
-      _userDocSub?.cancel();
-      _userDocSub = null;
-      _currentUser = null;
-      _isAuthenticated = false;
-      _userRole = null;
-      _isInitialized = true;
-      notifyListeners();
+  Future<void> _onAuthEvent(sb.AuthState state) async {
+    final session = state.session;
+    switch (state.event) {
+      case sb.AuthChangeEvent.passwordRecovery:
+        _recovering = true;
+        return;
+      case sb.AuthChangeEvent.signedOut:
+        await _handleSignedOut();
+        return;
+      case sb.AuthChangeEvent.initialSession:
+      case sb.AuthChangeEvent.signedIn:
+        if (_recovering) return;
+        if (session == null) {
+          await _handleSignedOut();
+          return;
+        }
+        await _ensureSignedIn(session.user);
+        return;
+      default:
+        // tokenRefreshed / userUpdated / mfa.
+        if (session == null || _recovering) return;
+        if (_signInUid != session.user.id) {
+          // Not signed in for this user yet: the stream only replays its
+          // latest event, so a refresh that completed before we subscribed
+          // is the only event we get. Treat it as a sign-in.
+          await _ensureSignedIn(session.user);
+          return;
+        }
+        // Keep the user object fresh without re-running the sign-in flow
+        // (which would re-lock the app).
+        _currentUser = session.user;
+        if (state.event == sb.AuthChangeEvent.userUpdated) {
+          notifyListeners();
+        }
+    }
+  }
+
+  Future<void> _ensureSignedIn(sb.User user) {
+    final inFlight = _signInFuture;
+    if (_signInUid == user.id && inFlight != null) return inFlight;
+    _signInUid = user.id;
+    // Supersede any sign-in still running for another user.
+    final gen = ++_authGen;
+    return _signInFuture = _handleSignedIn(user).catchError((
+      Object e,
+      StackTrace st,
+    ) {
+      // Do not cache a failed sign-in: a later auth event must retry it.
+      if (gen == _authGen && _signInUid == user.id) {
+        _signInFuture = null;
+        _signInUid = null;
+      }
+      Error.throwWithStackTrace(e, st);
+    });
+  }
+
+  Future<void> _handleSignedOut() async {
+    // Sign-in paths sign out a stale session first; that `signedOut` event
+    // can be delivered after the new sign-in completed. Ignore it while a
+    // session exists.
+    if (SupabaseService.isReady && _db.auth.currentSession != null) {
+      developer.log('Ignoring stale signedOut event', name: 'AuthProvider');
       return;
     }
+    final profileSub = _profileSub;
+    _profileSub = null;
+    _resetUserState();
+    // A sign-in that starts during the awaits below supersedes this run.
+    final gen = _authGen;
+    _sessionManager.cancelTimers();
+    // Before any await, so a sign-in that follows is queued after it.
+    unawaited(NotificationService().onUserSignedOut());
+    await profileSub?.cancel();
+    // Load onboarding status here too, otherwise logged-out users are sent
+    // back to /onboarding on every cold start.
+    await _loadOnboardingStatus();
+    if (gen != _authGen) return;
+    _isInitialized = true;
+    notifyListeners();
+    _notifyAll(_signOutListeners, 'Sign-out');
+  }
 
+  /// Clears everything tied to the signed-in user (logout / sign-out).
+  /// Pending registration data (email / phone OTP in progress) is kept.
+  void _resetUserState() {
+    _authGen++;
+    _listenersFiredFor = null;
+    _signInFuture = null;
+    _signInUid = null;
+    _currentUser = null;
+    _isAuthenticated = false;
+    _isLocked = false;
+    _userRole = null;
+    _phoneNumber = null;
+    _isApproved = null;
+    _isVerified = false;
+    _ward = null;
+    _lga = null;
+    _accountDisabled = false;
+  }
+
+  static bool _authConfirmed(sb.User? user) =>
+      user != null &&
+      (user.emailConfirmedAt != null || user.phoneConfirmedAt != null);
+
+  Future<void> _handleSignedIn(sb.User user) async {
+    // A sign-out (or another sign-in) during any await below cancels this
+    // run: nothing may be applied for a user who is no longer signed in.
+    final gen = _authGen;
+    bool stale() => gen != _authGen;
+    if (_currentUser != null && _currentUser!.id != user.id) {
+      // A different account without an intervening sign-out: drop the
+      // previous user's profile-derived state.
+      _userRole = null;
+      _isApproved = null;
+      _isVerified = false;
+      _ward = null;
+      _lga = null;
+      _phoneNumber = null;
+    }
     _currentUser = user;
+    _pendingEmail = null;
+    _accountDisabled = false;
+    // Supabase Auth already knows whether the email / phone is confirmed;
+    // do not send confirmed users to the verify screen when the profile
+    // row cannot be fetched.
+    if (_authConfirmed(user)) _isVerified = true;
 
-    // Load onboarding status
-    final prefs = await SharedPreferences.getInstance();
-    _hasCompletedOnboarding =
-        prefs.getBool('has_completed_onboarding') ?? false;
+    await _loadOnboardingStatus();
+    if (stale()) return;
 
-    // Check biometric lock
-    final bioEnabled = await _storage.isBiometricEnabled();
+    // Biometric lock only on cold start / resume with a persisted session,
+    // not right after an explicit sign-in.
+    // The lock belongs to the account that enabled it: a flag left by
+    // another account on this device is cleared.
+    await _storage.bindBiometricOwner(user.id);
+    if (stale()) return;
+    final bioEnabled = await _storage.isBiometricEnabled(forUserId: user.id);
+    if (stale()) return;
     if (bioEnabled && !_justLoggedIn) {
       _isLocked = true;
-      _isAuthenticated = true;
-    } else {
-      _isAuthenticated = true;
     }
+    // Must stay true while locked so GoRouter shows the lock screen.
+    _isAuthenticated = true;
     _justLoggedIn = false;
 
-    // Fetch Supabase profile row for role + approval/verification status.
+    Map<String, dynamic>? profile;
     try {
-      final userDoc = await _supabase.getDocument(
+      profile = await _db.getDocument(
         collectionId: AppConfig.usersCollection,
         documentId: user.id,
       );
+      if (stale()) return;
+      await _applyProfile(profile);
+      if (stale()) return;
 
-      final firestoreRole = userDoc['role'] as String?;
-      if (firestoreRole != null) {
-        _userRole = _parseUserRole(firestoreRole);
-        await _storage.saveUserRole(firestoreRole);
-      } else {
-        final cachedRole = await _storage.getUserRole();
-        _userRole = _parseUserRole(cachedRole);
-      }
-
-      _isApproved = userDoc['is_approved'] as bool? ?? false;
-      _isVerified = userDoc['is_verified'] as bool? ?? false;
-
-      // Self-heal: if Supabase email is confirmed but profile row is not
-      final emailVerified = user.emailConfirmedAt != null;
-      if (emailVerified && !_isVerified) {
-        developer.log(
-          'Auth verified but profile row not. Syncing...',
-          name: 'AuthProvider',
-        );
+      // Self-heal: Auth confirmed the email/phone but the row lags behind.
+      if (_authConfirmed(user) && profile['isVerified'] != true) {
         try {
-          await _supabase.updateDocument(
+          await _db.updateDocument(
             collectionId: AppConfig.usersCollection,
             documentId: user.id,
-            data: {'is_verified': true},
+            data: {'isVerified': true},
           );
-          _isVerified = true;
         } on Exception catch (e) {
           developer.log('Failed to sync verification: $e');
         }
       }
     } on Exception catch (e) {
-      developer.log('Error fetching Supabase profile: $e');
+      developer.log('Error fetching profile: $e', name: 'AuthProvider');
       final cachedRole = await _storage.getUserRole();
-      if (cachedRole != null) {
-        _userRole = _parseUserRole(cachedRole);
-      }
+      if (stale()) return;
+      if (cachedRole != null) _userRole = _parseUserRole(cachedRole);
+    }
+    if (stale()) return;
+
+    if (_accountDisabled) {
+      developer.log('Account is disabled — signing out', name: 'AuthProvider');
+      await logout();
+      return;
     }
 
-    // Start real-time listener so admin role changes take effect immediately
-    _startUserDocListener(user.id);
+    // Record a consent given during registration, now that a session exists.
+    await _flushPendingNdpaConsent();
+    if (stale()) return;
 
-    _phoneNumber = await _storage.getPhoneNumber();
+    _startProfileListener(user.id);
+
+    _syncPushIdentity(user.id, profile);
+
+    final phone = await _storage.getPhoneNumber();
+    if (stale()) return;
+    _phoneNumber = phone;
+    // (Re)start the inactivity timeout for this session.
+    await _sessionManager.extendSession();
+    if (stale()) return;
     _isInitialized = true;
     notifyListeners();
+    if (_listenersFiredFor != user.id) {
+      _listenersFiredFor = user.id;
+      _notifyAll(_signInListeners, 'Sign-in');
+    }
   }
 
-  /// Listen to the user's profile row in real-time via Supabase Realtime.
-  void _startUserDocListener(String uid) {
-    _userDocSub?.cancel();
-    _userDocSub = _supabase
-        .subscribeToCollection(
+  /// Identifies this device to OneSignal with the user id and targeting
+  /// tags. The role tag is the effective role (what the database grants).
+  /// Without a profile row (fetch failed) only the identity is synced: the
+  /// role is unknown, and tagging it as `user` would drop staff targeting.
+  void _syncPushIdentity(String uid, Map<String, dynamic>? profile) {
+    unawaited(
+      NotificationService().onUserSignedIn(
+        userId: uid,
+        role: userRole?.dbValue,
+        lga: profile?['lga'] as String?,
+        state: profile?['state'] as String?,
+        ward: profile?['ward'] as String?,
+        monitoringZone: profile?['monitoringZone'] as String?,
+        updateTags: profile != null,
+      ),
+    );
+  }
+
+  /// Applies role / approval / verification / disabled flags from a
+  /// profile row. Returns true when anything changed.
+  Future<bool> _applyProfile(Map<String, dynamic> data) async {
+    var changed = false;
+    final roleStr = data['role'] as String?;
+    if (roleStr != null) {
+      final role = _parseUserRole(roleStr);
+      if (role != _userRole) {
+        _userRole = role;
+        changed = true;
+      }
+      await _storage.saveUserRole(roleStr);
+    }
+    final approved = data['isApproved'] as bool? ?? false;
+    final verified =
+        (data['isVerified'] as bool? ?? false) || _authConfirmed(_currentUser);
+    if (_isApproved != approved) {
+      _isApproved = approved;
+      changed = true;
+    }
+    if (_isVerified != verified) {
+      _isVerified = verified;
+      changed = true;
+    }
+    final disabled = data['isDisabled'] as bool? ?? false;
+    if (_accountDisabled != disabled) {
+      _accountDisabled = disabled;
+      changed = true;
+    }
+    final ward = data['ward'] as String?;
+    if (_ward != ward) {
+      _ward = ward;
+      changed = true;
+    }
+    final lga = data['lga'] as String?;
+    if (_lga != lga) {
+      _lga = lga;
+      changed = true;
+    }
+    return changed;
+  }
+
+  Future<void> _loadOnboardingStatus() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      _hasCompletedOnboarding =
+          prefs.getBool('has_completed_onboarding') ?? false;
+    } on Exception catch (e) {
+      developer.log('Failed to load onboarding status: $e');
+    }
+  }
+
+  /// Realtime subscription on the user's own profile row, so admin changes
+  /// to role / approval / disabled take effect immediately.
+  void _startProfileListener(String uid) {
+    _profileSub?.cancel();
+    // A missing row is only meaningful once the row has been seen: the
+    // first snapshot may arrive before the profile exists (sign-up).
+    var seenRow = false;
+    _profileSub = _db
+        .subscribeToDocument(
           collectionId: AppConfig.usersCollection,
-          queries: [SQuery.equal('id', uid)],
+          documentId: uid,
         )
         .listen(
-          (rows) {
-            if (rows.isEmpty) return;
-            final data = rows.first;
-
-            final newRoleStr = data['role'] as String?;
-            if (newRoleStr != null) {
-              final newRole = _parseUserRole(newRoleStr);
-              if (newRole != _userRole) {
-                developer.log(
-                  'Role changed via Realtime: $_userRole → $newRole',
-                  name: 'AuthProvider',
-                );
-                _userRole = newRole;
-                _storage.saveUserRole(newRoleStr);
-              }
+          (data) async {
+            if (data == null) {
+              if (!seenRow || _currentUser?.id != uid) return;
+              developer.log(
+                'Profile row deleted — logging out',
+                name: 'AuthProvider',
+              );
+              await logout(notice: (l) => l.authAccountRemoved);
+              return;
             }
-
-            final newApproved = data['is_approved'] as bool? ?? false;
-            final newVerified = data['is_verified'] as bool? ?? false;
-            final newDisabled = data['is_disabled'] as bool? ?? false;
-
-            bool changed = false;
-            if (_isApproved != newApproved) {
-              _isApproved = newApproved;
-              changed = true;
-            }
-            if (_isVerified != newVerified) {
-              _isVerified = newVerified;
-              changed = true;
-            }
-
-            if (newDisabled) {
+            seenRow = true;
+            final changed = await _applyProfile(data);
+            if (_accountDisabled) {
               developer.log(
                 'Account disabled via admin — logging out',
                 name: 'AuthProvider',
               );
-              logout();
+              await logout(notice: (l) => l.authErrorAccountDisabled);
               return;
             }
-
-            if (changed || newRoleStr != null) {
+            if (changed) {
+              // Role / approval / ward changed: refresh push targeting.
+              _syncPushIdentity(uid, data);
               notifyListeners();
             }
           },
-          onError: (e) {
-            developer.log('User doc listener error: $e', name: 'AuthProvider');
+          onError: (Object e) {
+            developer.log('Profile listener error: $e', name: 'AuthProvider');
           },
         );
   }
 
-  /// Force reload of user data (e.g. after profile update).
+  /// Force reload of user data (e.g. after profile update or verification).
   Future<void> reloadUserData() async {
-    await _supabase.reloadCurrentUser();
-    final user = _supabase.getCurrentUser();
-    if (user != null) await _onAuthStateChanged(user);
+    try {
+      final user = await _db.reloadCurrentUser();
+      if (user == null) return;
+      _currentUser = user;
+      final profile = await _db.getDocument(
+        collectionId: AppConfig.usersCollection,
+        documentId: user.id,
+      );
+      await _applyProfile(profile);
+      notifyListeners();
+    } on Exception catch (e) {
+      developer.log('reloadUserData failed: $e', name: 'AuthProvider');
+    }
   }
 
   Future<void> completeOnboarding() async {
@@ -252,12 +687,15 @@ class AuthProvider extends ChangeNotifier {
 
   // ─────────────────────────── Biometric Lock ───────────────────────────────
 
-  Future<bool> unlockApp() async {
+  /// [promptReason] is the localised text of the system biometric prompt.
+  Future<bool> unlockApp({String? promptReason}) async {
     try {
       _isLoading = true;
       notifyListeners();
 
-      final authenticated = await _biometricService.authenticateForLogin();
+      final authenticated = await _biometricService.authenticateForLogin(
+        reason: promptReason ?? englishL10n.biometricLoginPrompt,
+      );
 
       if (authenticated) {
         final isValid = await _isServerSessionValid();
@@ -287,6 +725,11 @@ class AuthProvider extends ChangeNotifier {
 
   // ─────────────────────────── Sign Up ─────────────────────────────────────
 
+  /// Creates the account. With email confirmation enabled (recommended),
+  /// Supabase emails a 6-digit code and no session exists until
+  /// [verifyOtpAndLogin] succeeds.
+  ///
+  /// [ndpaPolicyVersion] records the NDPA consent once a session exists.
   Future<bool> signUpWithEmail({
     required String email,
     required String password,
@@ -296,61 +739,55 @@ class AuthProvider extends ChangeNotifier {
     String? state,
     String? lga,
     String? ward,
-    bool? isVerified,
     String? phoneNumber,
+    String? ndpaPolicyVersion,
   }) async {
     try {
       _isLoading = true;
       notifyListeners();
 
       // Sign out any stale session
-      try {
-        await _supabase.logout();
-      } on Exception {
-        developer.log('No existing session to clear', name: 'AuthProvider');
+      if (_db.getCurrentUser() != null) {
+        await _db.logout();
+        _resetUserState();
       }
 
-      // 1. Create Supabase Auth user
-      developer.log('Creating Supabase account...', name: 'AuthProvider');
-      final user = await _supabase.createAccount(
-        email: email,
+      final normalisedEmail = email.trim().toLowerCase();
+      if (ndpaPolicyVersion != null) {
+        _pendingNdpaConsent = {'policyVersion': ndpaPolicyVersion};
+      }
+
+      _justLoggedIn = true;
+      final response = await _db.auth.signUp(
+        email: normalisedEmail,
         password: password,
-        name: name ?? 'User',
+        data: _signUpMetadata(
+          name: name,
+          role: role,
+          phone: phoneNumber,
+          state: state,
+          lga: lga,
+          ward: ward,
+          address: address,
+        ),
       );
-      developer.log('Account created: ${user.id}', name: 'AuthProvider');
-      _currentUser = user;
 
-      // 2. Determine role
-      final userRole = role ?? UserRole.user;
+      // With confirmations on, an already-registered address returns an
+      // obfuscated user without identities instead of an error.
+      final identities = response.user?.identities;
+      if (response.session == null &&
+          identities != null &&
+          identities.isEmpty) {
+        _justLoggedIn = false;
+        throw AuthException((l) => l.authErrorEmailRegistered);
+      }
 
-      // 3. Create profile row
-      developer.log(
-        'Creating Supabase profile row...',
-        name: 'AuthProvider',
-      );
-      await _createUserDocument(
-        userId: user.id,
-        email: email,
-        role: userRole,
-        name: name,
-        address: address,
-        state: state,
-        lga: lga,
-        ward: ward,
-        isVerified: isVerified ?? false,
-        phoneNumber: phoneNumber,
-      );
-      developer.log('User profile created', name: 'AuthProvider');
-
-      // 4. Start session
-      await _startUserSession(user, userRole, isVerified: isVerified ?? false);
-
-      // Save credentials for Biometric auto-login bypass
-      await _storage.saveUserCredentials(email, password);
-
-      // 5. Send OTP email
-      if (isVerified != true) {
-        await sendOtpForEmail(email, name: name);
+      if (response.session == null) {
+        // Waiting for the emailed code.
+        _justLoggedIn = false;
+        _pendingEmail = normalisedEmail;
+      } else {
+        await _ensureSignedIn(response.session!.user);
       }
 
       _isLoading = false;
@@ -360,187 +797,109 @@ class AuthProvider extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
       rethrow;
-    } on sp.AuthException catch (e) {
+    } on sb.AuthException catch (e) {
       _isLoading = false;
+      _justLoggedIn = false;
       notifyListeners();
       developer.log(
-        'SignUp AuthException: ${e.statusCode} – ${e.message}',
+        'SignUp AuthException: ${e.code} – ${e.message}',
         name: 'AuthProvider',
       );
-      if (e.message.toLowerCase().contains('already registered') ||
-          e.statusCode == '422') {
-        throw AuthException('Email is already registered. Please login.');
-      }
-      if (e.message.toLowerCase().contains('weak') ||
-          e.message.toLowerCase().contains('password')) {
-        throw AuthException(
-          'Password is too weak. Use at least 8 characters with letters, numbers and symbols.',
-        );
-      }
-      if (e.statusCode == '429') {
-        throw AuthException(
-          'Too many attempts. Please wait a few minutes before trying again.',
-        );
-      }
-      throw AuthException('Registration failed. Please try again.');
+      throw _mapSignUpError(e);
     } on Exception catch (e) {
       _isLoading = false;
+      _justLoggedIn = false;
       notifyListeners();
       ErrorHandler.logError(e, context: 'AuthProvider.signUpWithEmail');
-      final errorMsg = e.toString();
-      if (errorMsg.contains('network') || errorMsg.contains('connection')) {
-        throw AuthException('Network error. Please check your connection.');
-      }
-      throw AuthException(
-        'Registration error: ${errorMsg.length > 100 ? errorMsg.substring(0, 100) : errorMsg}',
-      );
+      throw AuthException((l) => l.authErrorRegistrationFailed);
     }
   }
 
-  // ─────────────────────────── Phone Sign-Up ───────────────────────────────
+  AuthException _mapSignUpError(sb.AuthException e) {
+    if (e is sb.AuthRetryableFetchException) {
+      return AuthException((l) => l.authErrorNetworkRetry);
+    }
+    if (e is sb.AuthWeakPasswordException || e.code == 'weak_password') {
+      return AuthException((l) => l.authErrorWeakPassword);
+    }
+    switch (e.code) {
+      case 'user_already_exists':
+      case 'email_exists':
+      case 'phone_exists':
+        return AuthException((l) => l.authErrorAccountRegistered);
+      case 'email_address_invalid':
+      case 'validation_failed':
+        return AuthException((l) => l.validation_invalidEmail);
+      case 'signup_disabled':
+      case 'email_provider_disabled':
+      case 'phone_provider_disabled':
+        return AuthException((l) => l.authErrorRegistrationDisabled);
+      case 'over_email_send_rate_limit':
+      case 'over_sms_send_rate_limit':
+      case 'over_request_rate_limit':
+        return AuthException((l) => l.authErrorTooManyAttempts);
+      default:
+        return AuthException((l) => l.authErrorRegistrationFailed);
+    }
+  }
 
-  /// Creates a Supabase Auth account for a phone-registered user after OTP
-  /// verification. Since we use email+password Auth, we derive a surrogate
-  /// email (`{sanitised_phone}@ewer.phone`) and generate a secure
-  /// random password stored in SecureStorage (transparent to the user).
-  Future<bool> signUpWithPhone({
-    required String phone,
+  Map<String, dynamic> _signUpMetadata({
     String? name,
-    String? address,
     UserRole? role,
+    String? phone,
     String? state,
     String? lga,
     String? ward,
-  }) async {
-    final sanitisedPhone = phone.trim().replaceAll(RegExp(r'[^0-9]'), '');
-    final derivedEmail = '$sanitisedPhone@ewer.phone';
+    String? address,
+  }) => {
+    'name': name ?? 'User',
+    // Requested role only; it grants nothing until an admin approves.
+    'role': (role ?? UserRole.user).dbValue,
+    'phone': phone ?? '',
+    'state': state ?? '',
+    'lga': lga ?? '',
+    'ward': ward ?? '',
+    'address': address ?? '',
+  };
 
-    const salt = 'cradi_ewer_2026_phone_auth_salt';
-    final rawBytes = utf8.encode('${sanitisedPhone}_$salt');
-    final generatedPassword = base64Encode(rawBytes).substring(0, 32);
-
-    await _storage.write('phone_derived_email_$sanitisedPhone', derivedEmail);
-    await _storage.write(
-      'phone_derived_password_$sanitisedPhone',
-      generatedPassword,
-    );
-
-    try {
-      await _supabase.logout();
-    } on Exception {
-      /* ignore */
-    }
-
-    User? user;
-    bool isNewUser = true;
-    try {
-      user = await _supabase.createAccount(
-        email: derivedEmail,
-        password: generatedPassword,
-        name: name ?? 'User',
-      );
-    } on sp.AuthException catch (e) {
-      if (e.message.toLowerCase().contains('already registered') ||
-          e.statusCode == '422') {
-        developer.log(
-          'Phone user exists. Falling back to login.',
-          name: 'AuthProvider',
-        );
-        user = await _supabase.createEmailPasswordSession(
-          email: derivedEmail,
-          password: generatedPassword,
-        );
-        isNewUser = false;
-      } else {
-        rethrow;
-      }
-    }
-
-    _currentUser = user;
-
-    final userRole = role ?? UserRole.user;
-
-    if (isNewUser) {
-      await _createUserDocument(
-        userId: user.id,
-        email: derivedEmail,
-        role: userRole,
-        name: name,
-        address: address,
-        state: state,
-        lga: lga,
-        ward: ward,
-        isVerified: true,
-        phoneNumber: phone,
-      );
-    }
-
-    await _startUserSession(user, userRole, isVerified: true);
-    developer.log(
-      'signUpWithPhone: account created/logged in uid=${user.id}',
-      name: 'AuthProvider',
-    );
-    return true;
-  }
+  // ─────────────────────────── Sign In ─────────────────────────────────────
 
   Future<bool> signInWithEmail({
     required String email,
     required String password,
     bool rememberMe = false,
   }) async {
-    String? deviceFingerprint;
+    final normalisedEmail = email.trim().toLowerCase();
     try {
       _isLoading = true;
       notifyListeners();
 
-      try {
-        await _supabase.logout();
-      } on Exception {
-        developer.log('No existing session to clear', name: 'AuthProvider');
+      final rateLimitResult = await _rateLimiter.checkLoginAttempt();
+      if (!rateLimitResult.allowed) {
+        throw AuthException(rateLimitResult.userMessage);
       }
-      _currentUser = null;
-      _isAuthenticated = false;
-      _userRole = null;
 
-      deviceFingerprint = await _fingerprintService.generateFingerprint();
+      // Clear stale state. The `signedOut` event of this logout may arrive
+      // after the new session exists (and is then ignored), so reset the
+      // previous user's state here.
+      if (_db.getCurrentUser() != null) await _db.logout();
+      _resetUserState();
+
+      final deviceFingerprint = await _fingerprintService.generateFingerprint();
       final deviceName = await _fingerprintService.getDeviceName();
 
       _justLoggedIn = true;
-      final user = await _supabase.createEmailPasswordSession(
-        email: email,
+      final response = await _db.auth.signInWithPassword(
+        email: normalisedEmail,
         password: password,
       );
-      _currentUser = user;
+      final user = response.user ?? response.session?.user;
+      if (user == null) throw AuthException((l) => l.authErrorLoginFailed);
 
-      // Fetch Supabase profile row
-      Map<String, dynamic> userDoc;
-      try {
-        userDoc = await _supabase.getDocument(
-          collectionId: AppConfig.usersCollection,
-          documentId: user.id,
-        );
-      } on PostgrestException catch (e) {
-        developer.log(
-          'User profile missing (zombie user), recovering: ${e.message}',
-          name: 'AuthProvider',
-        );
-        await _createUserDocument(
-          userId: user.id,
-          email: user.email ?? email,
-          name: user.userMetadata?['full_name'] as String?,
-          role: UserRole.user,
-        );
-        userDoc = await _supabase.getDocument(
-          collectionId: AppConfig.usersCollection,
-          documentId: user.id,
-        );
+      await _ensureSignedIn(user);
+      if (_accountDisabled || _currentUser == null) {
+        throw AuthException((l) => l.authErrorAccountDisabled);
       }
-
-      final roleStr = userDoc['role'] as String?;
-      final role = _parseUserRole(roleStr) ?? UserRole.user;
-      _userRole = role;
-      _isApproved = userDoc['is_approved'] as bool? ?? false;
-      _isVerified = userDoc['is_verified'] as bool? ?? false;
 
       // Fraud assessment (non-blocking)
       try {
@@ -552,14 +911,12 @@ class AuthProvider extends ChangeNotifier {
           'Fraud assessment: ${fraudAssessment.risk} – ${fraudAssessment.reason}',
           name: 'AuthProvider',
         );
-
         await _fraudService.recordLoginAttempt(
           userId: user.id,
           success: true,
           deviceFingerprint: deviceFingerprint,
           deviceName: deviceName,
         );
-
         if (fraudAssessment.flags.contains('new_device')) {
           await _fraudService.registerTrustedDevice(
             userId: user.id,
@@ -574,56 +931,101 @@ class AuthProvider extends ChangeNotifier {
         );
       }
 
-      await _startUserSession(user, role, rememberMe: rememberMe);
+      unawaited(_touchLastLogin(user.id));
+      await _startUserSession(
+        user,
+        _userRole ?? UserRole.user,
+        rememberMe: rememberMe,
+      );
       await _rateLimiter.resetLoginAttempts();
-
-      await _storage.saveUserCredentials(email, password);
 
       _isLoading = false;
       notifyListeners();
       return true;
-    } on sp.AuthException catch (e) {
+    } on AuthException {
+      _isLoading = false;
+      _justLoggedIn = false;
+      notifyListeners();
+      rethrow;
+    } on sb.AuthException catch (e) {
       _isLoading = false;
       _justLoggedIn = false;
       notifyListeners();
       developer.log(
-        'Login AuthException: ${e.statusCode} – ${e.message}',
+        'Login AuthException: ${e.code} – ${e.message}',
         name: 'AuthProvider',
       );
-      if (e.statusCode == '400') {
-        throw AuthException('Invalid email or password');
+      if (e is sb.AuthRetryableFetchException) {
+        throw AuthException((l) => l.authErrorLoginConnection);
       }
-      if (e.statusCode == '429') {
-        throw AuthException(
-          'Too many login attempts. Please wait a few minutes and try again.',
-        );
+      switch (e.code) {
+        case 'invalid_credentials':
+        case 'user_not_found':
+          await _rateLimiter.recordFailedLogin();
+          throw AuthException((l) => l.authErrorInvalidCredentials);
+        case 'email_not_confirmed':
+          _pendingEmail = normalisedEmail;
+          try {
+            await _resendSignupCode(normalisedEmail);
+          } on Exception catch (resendError) {
+            developer.log('Resend failed: $resendError', name: 'AuthProvider');
+          }
+          throw EmailNotConfirmedException(normalisedEmail);
+        case 'user_banned':
+          throw AuthException((l) => l.authErrorAccountDisabled);
+        case 'over_request_rate_limit':
+          throw AuthException((l) => l.authErrorTooManyLogins);
+        default:
+          ErrorHandler.logError(
+            'Unhandled AuthException: ${e.code} – ${e.message}',
+            context: 'AuthProvider.signInWithEmail',
+          );
+          throw AuthException((l) => l.authErrorLoginFailed);
       }
-      ErrorHandler.logError(
-        'AuthException: ${e.statusCode} – ${e.message}',
-        context: 'AuthProvider.signInWithEmail',
-      );
-      throw AuthException(
-        'Login failed: ${e.message.length > 100 ? e.message.substring(0, 100) : e.message}',
-      );
     } on Exception catch (e) {
       _isLoading = false;
       _justLoggedIn = false;
       notifyListeners();
       ErrorHandler.logError(e, context: 'AuthProvider.signInWithEmail');
       if (kDebugMode) {
-        throw AuthException(
-          'Login error: ${e.runtimeType} – ${e.toString().substring(0, e.toString().length.clamp(0, 200))}',
-        );
+        // Debug builds only: raw diagnostics for developers (not
+        // translated on purpose).
+        final detail =
+            'Login error: ${e.runtimeType} – ${e.toString().substring(0, e.toString().length.clamp(0, 200))}';
+        throw AuthException((_) => detail);
       }
-      throw AuthException(
-        'An unexpected error occurred during login. Please try again.',
+      throw AuthException((l) => l.authErrorLoginUnexpected);
+    }
+  }
+
+  Future<void> _touchLastLogin(String uid) async {
+    try {
+      await _db.updateDocument(
+        collectionId: AppConfig.usersCollection,
+        documentId: uid,
+        data: {'lastLoginAt': DateTime.now()},
       );
+    } on Exception catch (e) {
+      developer.log('lastLoginAt update failed: $e', name: 'AuthProvider');
     }
   }
 
   // ─────────────────────────── OTP ─────────────────────────────────────────
 
-  Future<bool> sendOtpForPhone(String phone) async {
+  /// Sends a Supabase SMS OTP to [phone].
+  ///
+  /// Pass [registrationData] (name, address, role, state, lga, ward) when
+  /// registering: it becomes the new user's metadata, from which the
+  /// database creates the profile. Without it only existing accounts (or a
+  /// registration started earlier in this session) can sign in.
+  ///
+  /// With [loginOnly] (sign-in from the login screen) no account is ever
+  /// created: an unknown number is rejected.
+  Future<bool> sendOtpForPhone(
+    String phone, {
+    Map<String, dynamic>? registrationData,
+    bool loginOnly = false,
+  }) async {
     try {
       _isLoading = true;
       notifyListeners();
@@ -633,43 +1035,35 @@ class AuthProvider extends ChangeNotifier {
         throw AuthException(rateLimitResult.userMessage);
       }
 
-      final normalised = phone.trim().toLowerCase();
-      if (normalised.isEmpty) {
-        throw AuthException('Invalid phone number.');
+      final normalised = Validators.normalizePhoneNumber(phone.trim());
+      if (normalised.length < 8) {
+        throw AuthException((l) => l.authErrorInvalidPhone);
       }
 
-      final secureRandom = math.Random.secure();
-      final otp = (100000 + secureRandom.nextInt(900000)).toString();
-
-      final docId = normalised.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '_');
-      final expiryTime = DateTime.now().add(const Duration(minutes: 10));
-
-      await _supabase.createDocument(
-        collectionId: 'otp_verifications',
-        documentId: docId,
-        data: {
-          'id': docId,
-          'identifier': normalised,
-          'code': otp,
-          'expires_at': expiryTime.toUtc().toIso8601String(),
-          'created_at': DateTime.now().toUtc().toIso8601String(),
-          'used': false,
-          'attempts': 0,
-        },
-      );
-
-      final smsService = SmsService();
-      if (!smsService.isReady) {
-        throw AuthException(
-          'SMS service is not configured. Please contact support.',
+      if (loginOnly) {
+        _pendingPhoneMetadata = null;
+      } else if (registrationData != null) {
+        _pendingPhoneMetadata = _signUpMetadata(
+          name: registrationData['name'] as String?,
+          role: registrationData['role'] as UserRole?,
+          phone: normalised,
+          state: registrationData['state'] as String?,
+          lga: registrationData['lga'] as String?,
+          ward: registrationData['ward'] as String?,
+          address: registrationData['address'] as String?,
         );
+        final version = registrationData['ndpaPolicyVersion'] as String?;
+        if (version != null) {
+          _pendingNdpaConsent = {'policyVersion': version};
+        }
       }
 
-      final messageId = await smsService.sendOtp(to: phone, otp: otp);
-      if (messageId == null) {
-        throw AuthException('Failed to send SMS. Please try again.');
-      }
-
+      await _db.auth.signInWithOtp(
+        phone: normalised,
+        shouldCreateUser: _pendingPhoneMetadata != null,
+        data: _pendingPhoneMetadata,
+      );
+      await _storage.savePhoneNumber(normalised);
       await _rateLimiter.recordOtpResend();
 
       _isLoading = false;
@@ -679,14 +1073,31 @@ class AuthProvider extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
       rethrow;
+    } on sb.AuthException catch (e) {
+      _isLoading = false;
+      notifyListeners();
+      developer.log('Phone OTP error: ${e.code} ${e.message}');
+      switch (e.code) {
+        case 'phone_provider_disabled':
+        case 'sms_send_failed':
+          throw AuthException((l) => l.authErrorSmsUnavailable);
+        case 'otp_disabled':
+          throw AuthException((l) => l.authErrorPhoneNotRegistered);
+        case 'over_sms_send_rate_limit':
+        case 'over_request_rate_limit':
+          throw AuthException((l) => l.authErrorTooManyAttempts);
+        default:
+          throw AuthException((l) => l.authErrorSmsFailed);
+      }
     } on Exception catch (e) {
       _isLoading = false;
       notifyListeners();
       ErrorHandler.logError(e, context: 'AuthProvider.sendOtpForPhone');
-      throw AuthException('Failed to send verification SMS.');
+      throw AuthException((l) => l.authErrorSmsFailed);
     }
   }
 
+  /// Re-sends the sign-up confirmation code to [email].
   Future<bool> sendOtpForEmail(String email, {String? name}) async {
     try {
       _isLoading = true;
@@ -697,40 +1108,7 @@ class AuthProvider extends ChangeNotifier {
         throw AuthException(rateLimitResult.userMessage);
       }
 
-      final secureRandom = math.Random.secure();
-      final otp = (100000 + secureRandom.nextInt(900000)).toString();
-
-      final normalisedEmail = email.trim().toLowerCase();
-      final docId = normalisedEmail.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '_');
-      final expiryTime = DateTime.now().add(const Duration(minutes: 10));
-
-      await _supabase.createDocument(
-        collectionId: 'otp_verifications',
-        documentId: docId,
-        data: {
-          'id': docId,
-          'identifier': normalisedEmail,
-          'code': otp,
-          'expires_at': expiryTime.toUtc().toIso8601String(),
-          'created_at': DateTime.now().toUtc().toIso8601String(),
-          'used': false,
-          'attempts': 0,
-        },
-      );
-
-      final emailService = EmailService();
-      final success = await emailService.sendVerificationCode(
-        email,
-        otp,
-        name: name,
-      );
-
-      if (!success) {
-        throw AuthException(
-          'Failed to send verification email. Please try again.',
-        );
-      }
-
+      await _resendSignupCode(email.trim().toLowerCase());
       await _rateLimiter.recordOtpResend();
 
       _isLoading = false;
@@ -740,14 +1118,29 @@ class AuthProvider extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
       rethrow;
+    } on sb.AuthException catch (e) {
+      _isLoading = false;
+      notifyListeners();
+      developer.log('Resend error: ${e.code} ${e.message}');
+      if (e.code == 'over_email_send_rate_limit' ||
+          e.code == 'over_request_rate_limit') {
+        throw AuthException((l) => l.authErrorTooManyAttempts);
+      }
+      throw AuthException((l) => l.authErrorCodeSendFailed);
     } on Exception catch (e) {
       _isLoading = false;
       notifyListeners();
       ErrorHandler.logError(e, context: 'AuthProvider.sendOtpForEmail');
-      throw AuthException('Failed to send verification code.');
+      throw AuthException((l) => l.authErrorCodeSendFailed);
     }
   }
 
+  Future<void> _resendSignupCode(String email) =>
+      _db.auth.resend(type: sb.OtpType.signup, email: email);
+
+  /// Verifies a 6-digit code: the email sign-up confirmation code, or the
+  /// SMS code for phone sign-in/registration. On success a session exists
+  /// and the user is signed in.
   Future<bool> verifyOtpAndLogin(
     String otp, {
     Map<String, dynamic>? registrationData,
@@ -756,244 +1149,215 @@ class AuthProvider extends ChangeNotifier {
       _isLoading = true;
       notifyListeners();
 
-      if (registrationData == null ||
-          (!registrationData.containsKey('email') &&
-              !registrationData.containsKey('phone'))) {
-        // Fallback: use current Supabase user email
-        final userEmail =
-            _currentUser?.email ?? _supabase.getCurrentUser()?.email;
-        if (userEmail == null || userEmail.isEmpty) {
-          throw AuthException(
-            'No user context for verification. Please login again.',
-          );
+      var data = registrationData;
+      if (data == null ||
+          (!data.containsKey('email') && !data.containsKey('phone'))) {
+        final email = pendingEmail;
+        if (email == null || email.isEmpty) {
+          throw AuthException((l) => l.authErrorNoUserContext);
         }
-        registrationData = {'email': userEmail};
+        data = {'email': email};
       }
 
-      final rawKey =
-          ((registrationData['phone'] ?? registrationData['email']) as String)
-              .trim()
-              .toLowerCase();
-      final docId = rawKey.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '_');
-
-      // 1. READ the stored OTP document
-      Map<String, dynamic> data;
-      try {
-        data = await _supabase.getDocument(
-          collectionId: 'otp_verifications',
-          documentId: docId,
-        );
-      } on PostgrestException catch (_) {
-        throw AuthException('Invalid or expired verification code.');
-      } on Exception catch (e) {
-        if (e.toString().contains('not found') ||
-            e.toString().contains('0 rows')) {
-          throw AuthException('Invalid or expired verification code.');
-        }
-        rethrow;
-      }
-
-      // 2. Check if already used
-      final alreadyUsed = data['used'] as bool? ?? false;
-      if (alreadyUsed) {
-        throw AuthException(
-          'This code has already been used. Please request a new one.',
-        );
-      }
-
-      // 3. Check expiry
-      final expiresAtStr = data['expires_at'] as String?;
-      if (expiresAtStr != null) {
-        final expiresAt = DateTime.tryParse(expiresAtStr);
-        if (expiresAt != null && expiresAt.isBefore(DateTime.now())) {
-          throw AuthException(
-            'Verification code has expired. Please request a new one.',
-          );
-        }
-      }
-
-      // 4. Check attempt counter — lock after 5 failed tries
-      final attempts = (data['attempts'] as int?) ?? 0;
-      if (attempts >= 5) {
-        throw AuthException(
-          'Too many incorrect attempts. Please request a new code.',
-        );
-      }
-
-      // 5. Compare submitted OTP against stored code
-      final storedCode = (data['code'] as String? ?? '').trim();
-      final submittedCode = otp.trim();
-      if (storedCode.isEmpty || storedCode != submittedCode) {
-        // Increment attempt counter (best-effort)
-        try {
-          await _supabase.updateDocument(
-            collectionId: 'otp_verifications',
-            documentId: docId,
-            data: {'attempts': attempts + 1},
-          );
-        } on Exception catch (_) {}
-        final remaining = 4 - attempts;
-        if (remaining <= 0) {
-          throw AuthException(
-            'Too many incorrect attempts. Please request a new code.',
-          );
-        }
-        throw AuthException(
-          'Incorrect code. $remaining attempt${remaining == 1 ? '' : 's'} remaining.',
-        );
-      }
-
-      // 6. Mark the OTP as used
-      await _supabase.updateDocument(
-        collectionId: 'otp_verifications',
-        documentId: docId,
-        data: {'used': true},
-      );
-
-      // 7. Complete account creation / mark verified
       final isPhoneFlow =
-          registrationData.containsKey('phone') &&
-          !registrationData.containsKey('email');
+          data.containsKey('phone') && !data.containsKey('email');
+      final token = otp.trim();
 
+      _justLoggedIn = true;
+      final sb.AuthResponse response;
       if (isPhoneFlow) {
-        await signUpWithPhone(
-          phone: registrationData['phone'] as String,
-          name: registrationData['name'] as String?,
-          address: registrationData['address'] as String?,
-          role: registrationData['role'] as UserRole?,
-          state: registrationData['state'] as String?,
-          lga: registrationData['lga'] as String?,
-          ward: registrationData['ward'] as String?,
+        response = await _db.auth.verifyOTP(
+          type: sb.OtpType.sms,
+          phone: Validators.normalizePhoneNumber(data['phone'] as String),
+          token: token,
         );
       } else {
-        final user = _supabase.getCurrentUser();
-        if (user != null) {
-          await _supabase.updateDocument(
-            collectionId: AppConfig.usersCollection,
-            documentId: user.id,
-            data: {'is_verified': true},
-          );
-          _isVerified = true;
-        }
+        response = await _db.auth.verifyOTP(
+          type: sb.OtpType.signup,
+          email: (data['email'] as String).trim().toLowerCase(),
+          token: token,
+        );
       }
+
+      final user = response.user ?? response.session?.user;
+      if (user == null) {
+        throw AuthException((l) => l.authErrorVerificationFailed);
+      }
+      _pendingPhoneMetadata = null;
+      await _ensureSignedIn(user);
+      if (_accountDisabled) {
+        throw AuthException((l) => l.authErrorAccountDisabled);
+      }
+      _isVerified = true;
+      await _startUserSession(user, _userRole ?? UserRole.user);
 
       _isLoading = false;
       notifyListeners();
       return true;
     } on AuthException {
       _isLoading = false;
+      _justLoggedIn = false;
       notifyListeners();
       rethrow;
-    } on PostgrestException catch (e) {
+    } on sb.AuthException catch (e) {
       _isLoading = false;
+      _justLoggedIn = false;
       notifyListeners();
       developer.log(
-        'PostgrestException in verifyOtpAndLogin: ${e.code} – ${e.message}',
+        'verifyOtp AuthException: ${e.code} – ${e.message}',
         name: 'AuthProvider',
       );
-      throw AuthException('Verification failed. Please try again.');
+      if (e is sb.AuthRetryableFetchException) {
+        throw AuthException((l) => l.errorNetwork);
+      }
+      if (e.code == 'otp_expired' || e.code == 'invalid_credentials') {
+        throw AuthException((l) => l.authErrorInvalidCode);
+      }
+      if (e.code == 'over_request_rate_limit') {
+        throw AuthException((l) => l.authErrorTooManyAttemptsRetry);
+      }
+      throw AuthException((l) => l.authErrorVerificationFailed);
     } on Exception catch (e) {
       _isLoading = false;
+      _justLoggedIn = false;
       notifyListeners();
       ErrorHandler.logError(e, context: 'AuthProvider.verifyOtpAndLogin');
-      throw AuthException('Failed to verify code.');
+      throw AuthException((l) => l.authErrorVerifyCodeFailed);
     }
   }
 
   Future<void> resendVerificationLink() async {
+    final email = pendingEmail;
+    if (email == null || email.isEmpty) {
+      throw AuthException((l) => l.authErrorNotLoggedIn);
+    }
     try {
-      if (_currentUser == null) {
-        final user = _supabase.getCurrentUser();
-        if (user != null) {
-          _currentUser = user;
-        } else {
-          throw AuthException('User not logged in');
-        }
-      }
-
-      await sendOtpForEmail(
-        _currentUser!.email!,
-        name: _currentUser!.userMetadata?['full_name'] as String?,
-      );
+      await sendOtpForEmail(email);
     } on AuthException {
       rethrow;
     } on Exception catch (_) {
-      throw AuthException(
-        'Failed to resend verification code. Please try again.',
+      throw AuthException((l) => l.authErrorResendFailed);
+    }
+  }
+
+  // ─────────────────────────── NDPA consent ────────────────────────────────
+
+  Future<void> _flushPendingNdpaConsent() async {
+    final consent = _pendingNdpaConsent;
+    if (consent == null) return;
+    try {
+      await _db.upsertDocument(
+        collectionId: AppConfig.ndpaConsentsCollection,
+        ignoreDuplicates: true,
+        data: {
+          'policyVersion': consent['policyVersion'],
+          'dataResidency': 'supabase',
+          'platform': 'mobile',
+          'method': 'registration_screen',
+        },
       );
+      _pendingNdpaConsent = null;
+      developer.log('NDPA consent recorded', name: 'AuthProvider');
+    } on Exception catch (e) {
+      // Non-fatal: retried on the next sign-in of this app session.
+      developer.log('NDPA consent record failed: $e', name: 'AuthProvider');
     }
   }
 
   // ─────────────────────────── Password Reset ───────────────────────────────
 
+  /// Sends a recovery email containing a 6-digit code.
   Future<void> sendPasswordResetEmail(String email) async {
     try {
       _isLoading = true;
       notifyListeners();
-      await _supabase.createPasswordRecovery(email: email);
+      await _db.auth.resetPasswordForEmail(email.trim().toLowerCase());
       _isLoading = false;
       notifyListeners();
     } on Exception catch (e) {
       _isLoading = false;
       notifyListeners();
       ErrorHandler.logError(e, context: 'AuthProvider.sendPasswordResetEmail');
-      throw AuthException('Failed to send reset email. Please try again.');
+      throw AuthException((l) => l.authErrorResetEmailFailed);
+    }
+  }
+
+  /// Completes a password reset with the recovery [code] emailed to
+  /// [email]. The temporary recovery session is signed out afterwards so the
+  /// user logs in with the new password.
+  Future<void> confirmPasswordReset({
+    required String email,
+    required String code,
+    required String newPassword,
+  }) async {
+    try {
+      _isLoading = true;
+      _recovering = true;
+      notifyListeners();
+      await _db.auth.verifyOTP(
+        type: sb.OtpType.recovery,
+        email: email.trim().toLowerCase(),
+        token: code.trim(),
+      );
+      await _db.auth.updateUser(sb.UserAttributes(password: newPassword));
+    } on sb.AuthException catch (e) {
+      ErrorHandler.logError(e, context: 'AuthProvider.confirmPasswordReset');
+      if (e is sb.AuthWeakPasswordException || e.code == 'weak_password') {
+        throw AuthException((l) => l.authErrorResetWeakPassword);
+      }
+      switch (e.code) {
+        case 'otp_expired':
+        case 'invalid_credentials':
+          throw AuthException((l) => l.authErrorResetCodeInvalid);
+        case 'same_password':
+          throw AuthException((l) => l.authErrorResetSamePassword);
+        default:
+          throw AuthException((l) => l.authErrorResetFailed);
+      }
+    } on Exception catch (e) {
+      ErrorHandler.logError(e, context: 'AuthProvider.confirmPasswordReset');
+      throw AuthException((l) => l.authErrorResetFailed);
+    } finally {
+      try {
+        if (_db.getCurrentUser() != null) await _db.logout();
+      } on Exception catch (_) {}
+      _recovering = false;
+      _isLoading = false;
+      notifyListeners();
     }
   }
 
   // ─────────────────────────── Biometrics ──────────────────────────────────
 
-  Future<bool> authenticateWithBiometrics() async {
+  /// Unlocks with biometrics using the persisted Supabase session. Returns
+  /// false when there is no usable session (the user must sign in with
+  /// their password).
+  Future<bool> authenticateWithBiometrics({String? promptReason}) async {
     try {
-      final isBiometricEnabled = await _storage.isBiometricEnabled();
+      final isBiometricEnabled = await _storage.isBiometricEnabled(
+        forUserId: _db.currentUserId,
+      );
       if (!isBiometricEnabled) return false;
 
-      final authenticated = await _biometricService.authenticateForLogin();
-      if (authenticated) {
-        bool isValid = await _isServerSessionValid();
+      final authenticated = await _biometricService.authenticateForLogin(
+        reason: promptReason ?? englishL10n.biometricLoginPrompt,
+      );
+      if (!authenticated) return false;
 
-        if (!isValid) {
-          final creds = await _storage.getUserCredentials();
-          if (creds != null) {
-            try {
-              return await signInWithEmail(
-                email: creds['email']!,
-                password: creds['password']!,
-              );
-            } on Exception catch (e) {
-              developer.log(
-                'Biometric auto-login failed: $e',
-                name: 'AuthProvider',
-              );
-              return false;
-            }
-          }
-          return false;
-        }
+      final isValid = await _isServerSessionValid();
+      if (!isValid) return false;
 
-        _isAuthenticated = true;
-        final userRoleStr = await _storage.getUserRole();
-        _userRole = _parseUserRole(userRoleStr);
-        _phoneNumber = await _storage.getPhoneNumber();
+      final user = _db.getCurrentUser();
+      if (user == null) return false;
 
-        final user = _supabase.getCurrentUser();
-        if (user != null) {
-          try {
-            final userDoc = await _supabase.getDocument(
-              collectionId: AppConfig.usersCollection,
-              documentId: user.id,
-            );
-            _isApproved = userDoc['is_approved'] as bool? ?? false;
-            _isVerified = userDoc['is_verified'] as bool? ?? false;
-          } on Exception catch (e) {
-            developer.log('Biometric unlock failed to fetch profile: $e');
-          }
-        }
-
-        notifyListeners();
-        return true;
-      }
-      return false;
+      _justLoggedIn = true;
+      await _ensureSignedIn(user);
+      _justLoggedIn = false;
+      _isLocked = false;
+      _isAuthenticated = _currentUser != null;
+      _phoneNumber = await _storage.getPhoneNumber();
+      notifyListeners();
+      return _isAuthenticated;
     } on Exception catch (e) {
       ErrorHandler.logError(
         e,
@@ -1003,80 +1367,72 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> setBiometricEnabled(bool enabled) async {
+  /// [promptReason] is the localised text of the system biometric prompt.
+  Future<void> setBiometricEnabled(bool enabled, {String? promptReason}) async {
     if (enabled) {
       final canAuth = await _biometricService.authenticate(
-        reason: 'Enable biometric login for EWER',
+        reason: promptReason ?? englishL10n.biometricEnablePrompt,
       );
-      if (canAuth) {
-        await _storage.setBiometricEnabled(true);
-        final user = _supabase.getCurrentUser();
-        if (user != null) {
-          try {
-            await _supabase.updateDocument(
-              collectionId: AppConfig.usersCollection,
-              documentId: user.id,
-              data: {'biometrics_enabled': true},
-            );
-          } on Exception catch (e) {
-            developer.log('Error syncing biometric to Supabase: $e');
-          }
-        }
-      } else {
-        throw AuthException('Biometric authentication failed');
-      }
-    } else {
-      await _storage.setBiometricEnabled(false);
-      final user = _supabase.getCurrentUser();
-      if (user != null) {
-        try {
-          await _supabase.updateDocument(
-            collectionId: AppConfig.usersCollection,
-            documentId: user.id,
-            data: {'biometrics_enabled': false},
-          );
-        } on Exception catch (e) {
-          developer.log('Error syncing biometric to Supabase: $e');
-        }
+      if (!canAuth) throw AuthException((l) => l.biometricErrorFailed);
+    }
+    final user = _db.getCurrentUser();
+    await _storage.setBiometricEnabled(enabled, userId: user?.id);
+    if (user != null) {
+      try {
+        await _db.updateDocument(
+          collectionId: AppConfig.usersCollection,
+          documentId: user.id,
+          data: {'biometricsEnabled': enabled},
+        );
+      } on Exception catch (e) {
+        developer.log('Error syncing biometric setting: $e');
       }
     }
     notifyListeners();
   }
 
-  Future<bool> isBiometricEnabled() => _storage.isBiometricEnabled();
+  /// Whether the signed-in account enabled the biometric lock on this
+  /// device.
+  Future<bool> isBiometricEnabled() => _storage.isBiometricEnabled(
+    forUserId: _currentUser?.id ?? _db.currentUserId,
+  );
   Future<bool> isBiometricAvailable() =>
       _biometricService.isBiometricAvailable();
 
   // ─────────────────────────── Session ─────────────────────────────────────
 
+  /// Pushes the inactivity timeout forward (called on pointer events and
+  /// route changes from the app root).
   void recordActivity() {
-    if (_isAuthenticated) _sessionManager.recordActivity();
+    if (_isAuthenticated && !_isLocked) _sessionManager.recordActivity();
   }
 
   Future<bool> validateSession() => _isServerSessionValid();
 
   Future<bool> _isServerSessionValid() async {
+    if (!SupabaseService.isReady) return false;
+    final session = _db.auth.currentSession;
+    if (session == null) {
+      developer.log('No persisted session.', name: 'AuthProvider');
+      return false;
+    }
     try {
-      final user = _supabase.getCurrentUser();
-      if (user == null) {
-        developer.log(
-          'No active Supabase user found in session check.',
-          name: 'AuthProvider',
-        );
-        return false;
+      if (session.isExpired) {
+        await _db.auth.refreshSession();
       }
-
-      // Supabase tokens auto-refresh; a reload confirms validity
-      await _supabase.reloadCurrentUser();
       await _sessionManager.extendSession();
       return true;
-    } on sp.AuthException catch (e) {
-      developer.log('Session expired: ${e.statusCode}', name: 'AuthProvider');
+    } on sb.AuthRetryableFetchException catch (e) {
+      // Offline — allow access with the cached session.
+      developer.log('Session refresh offline: $e', name: 'AuthProvider');
+      return true;
+    } on sb.AuthException catch (e) {
+      developer.log('Session invalid: ${e.code}', name: 'AuthProvider');
       await logout();
       return false;
     } on Exception catch (e) {
       developer.log('Session network error: $e', name: 'AuthProvider');
-      return true; // Allow offline access
+      return true;
     }
   }
 
@@ -1085,13 +1441,29 @@ class AuthProvider extends ChangeNotifier {
 
   // ─────────────────────────── Logout ──────────────────────────────────────
 
-  Future<void> logout() async {
+  /// Why the user was signed out without asking (account disabled or
+  /// deleted); shown once by the UI, see [takeSignOutNotice].
+  LocalizedText? _signOutNotice;
+
+  /// Returns and clears the pending forced sign-out message, if any.
+  LocalizedText? takeSignOutNotice() {
+    final notice = _signOutNotice;
+    _signOutNotice = null;
+    return notice;
+  }
+
+  /// Signs out. [notice] is the message to show the user when the sign-out
+  /// was not requested by them.
+  Future<void> logout({LocalizedText? notice}) async {
+    // Cancel any sign-in still in flight right away.
+    _authGen++;
+    if (notice != null) _signOutNotice = notice;
     try {
       _isLoading = true;
       notifyListeners();
 
-      _userDocSub?.cancel();
-      _userDocSub = null;
+      await _profileSub?.cancel();
+      _profileSub = null;
 
       try {
         await _sessionManager.logout();
@@ -1099,154 +1471,53 @@ class AuthProvider extends ChangeNotifier {
         developer.log('Session manager logout error: $e', name: 'AuthProvider');
       }
 
-      try {
-        await _supabase.logout();
-      } on Exception catch (e) {
-        developer.log('Supabase logout error: $e', name: 'AuthProvider');
-      }
+      await NotificationService().onUserSignedOut();
 
-      await _storage.clearAll(keepPreferences: true);
+      // Revokes the refresh token and clears the persisted session.
+      await _db.logout();
 
-      _isAuthenticated = false;
-      _isLocked = false;
-      _userRole = null;
-      _currentUser = null;
-      _phoneNumber = null;
-      _isApproved = null;
-      _isVerified = false;
+      // The biometric lock is per account: it must not carry over to the
+      // next account signing in on this device.
+      await _storage.clearAll();
+
+      _resetUserState();
       _isLoading = false;
       notifyListeners();
+      // The signedOut auth event notifies too; listeners are idempotent.
+      _notifyAll(_signOutListeners, 'Sign-out');
     } on Exception catch (e) {
-      _isAuthenticated = false;
-      _isLocked = false;
-      _userRole = null;
+      _resetUserState();
       _isLoading = false;
       notifyListeners();
+      _notifyAll(_signOutListeners, 'Sign-out');
       ErrorHandler.logError(e, context: 'AuthProvider.logout');
     }
   }
 
   // ─────────────────────────── Helpers ─────────────────────────────────────
 
-  Future<void> _createUserDocument({
-    required String userId,
-    required String email,
-    required UserRole role,
-    String? name,
-    String? address,
-    String? state,
-    String? lga,
-    String? ward,
-    bool isVerified = false,
-    String? phoneNumber,
-  }) async {
-    final roleString = _roleToString(role);
-
-    final payload = {
-      'id': userId,
-      'email': email,
-      'full_name': name ?? 'User',
-      'role': roleString,
-      'address': address ?? '',
-      'state': state ?? '',
-      'lga': lga ?? '',
-      'ward': ward ?? '',
-      'is_verified': isVerified,
-      'is_approved': false,
-      'biometrics_enabled': false,
-      'created_at': DateTime.now().toUtc().toIso8601String(),
-      'last_login_at': DateTime.now().toUtc().toIso8601String(),
-      'phone': phoneNumber ?? '',
-      'avatar_url': '',
-    };
-
-    developer.log(
-      'Creating Supabase profile for $userId',
-      name: 'AuthProvider',
-    );
-
-    int retryCount = 0;
-    const maxRetries = 3;
-
-    while (retryCount < maxRetries) {
-      try {
-        await _supabase.createDocument(
-          collectionId: AppConfig.usersCollection,
-          documentId: userId,
-          data: payload,
-        );
-        return;
-      } on Exception catch (e) {
-        retryCount++;
-        developer.log(
-          'Error creating profile (attempt $retryCount): $e',
-          name: 'AuthProvider',
-        );
-        if (retryCount >= maxRetries) rethrow;
-        await Future.delayed(const Duration(milliseconds: 1500));
-      }
-    }
-  }
-
   Future<void> _startUserSession(
-    User user,
+    sb.User user,
     UserRole role, {
-    bool isVerified = true,
     bool rememberMe = false,
   }) async {
-    await _storage.saveUserRole(role.name);
+    await _storage.saveUserRole(role.dbValue);
     await _sessionManager.startSession(
       authToken: user.id,
-      userRole: role.name,
+      userRole: role.dbValue,
       rememberMe: rememberMe,
     );
     _isAuthenticated = true;
   }
 
-  String _roleToString(UserRole role) {
-    switch (role) {
-      case UserRole.ewm:
-        return 'ewm';
-      case UserRole.ewv:
-        return 'ewv';
-      case UserRole.ewr:
-        return 'ewr';
-      case UserRole.admin:
-        return 'admin';
-      case UserRole.techSupport:
-        return 'techSupport';
-      default:
-        return 'user';
-    }
-  }
-
-  UserRole? _parseUserRole(String? roleStr) {
-    if (roleStr == null) return null;
-    switch (roleStr) {
-      case 'user':
-        return UserRole.user;
-      case 'ewm':
-        return UserRole.ewm;
-      case 'ewv':
-        return UserRole.ewv;
-      case 'ewr':
-        return UserRole.ewr;
-      case 'admin':
-        return UserRole.admin;
-      case 'techSupport':
-        return UserRole.techSupport;
-      default:
-        return null;
-    }
-  }
+  UserRole? _parseUserRole(String? roleStr) => UserRoleValue.fromDb(roleStr);
 
   @override
   void dispose() {
+    _initTimer?.cancel();
     _authSub.cancel();
+    _profileSub?.cancel();
     _sessionManager.dispose();
     super.dispose();
   }
 }
-
-// AuthException is defined in package:climate_app/core/utils/error_handler.dart
-// and re-exported above. No local definition needed.

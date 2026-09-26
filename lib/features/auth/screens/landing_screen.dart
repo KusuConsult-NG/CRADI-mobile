@@ -4,6 +4,7 @@ import 'package:climate_app/shared/widgets/custom_button.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:climate_app/core/l10n/l10n.dart';
 
 class LandingScreen extends StatelessWidget {
   const LandingScreen({super.key});
@@ -67,7 +68,7 @@ class LandingScreen extends StatelessWidget {
 
                   // App Name & Tagline
                   Text(
-                    'Welcome to EWER',
+                    context.l10n.landingWelcome,
                     textAlign: TextAlign.center,
                     style: GoogleFonts.lexend(
                       fontSize: 32,
@@ -77,7 +78,7 @@ class LandingScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 16),
                   Text(
-                    'Early Warning and Early Response System',
+                    context.l10n.landingSubtitle,
                     textAlign: TextAlign.center,
                     style: GoogleFonts.lexend(
                       fontSize: 16,
@@ -87,7 +88,7 @@ class LandingScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 12),
                   Text(
-                    'Empowering communities with real-time hazard reporting and rapid response coordination.',
+                    context.l10n.landingTagline,
                     textAlign: TextAlign.center,
                     style: GoogleFonts.roboto(
                       fontSize: 14,
@@ -105,7 +106,7 @@ class LandingScreen extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         Text(
-                          'Get Started',
+                          context.l10n.landingGetStarted,
                           textAlign: TextAlign.center,
                           style: GoogleFonts.lexend(
                             fontSize: 18,
@@ -116,7 +117,7 @@ class LandingScreen extends StatelessWidget {
                         const SizedBox(height: 24),
 
                         CustomButton(
-                          text: 'Sign Up',
+                          text: context.l10n.authSignUp,
                           onPressed: () => context.push('/register'),
                           icon: Icons.person_add_outlined,
                         ),
@@ -124,7 +125,7 @@ class LandingScreen extends StatelessWidget {
                         const SizedBox(height: 16),
 
                         CustomButton(
-                          text: 'Login',
+                          text: context.l10n.authLogin,
                           type: ButtonType.secondary,
                           onPressed: () => context.push('/login'),
                           icon: Icons.login,
@@ -137,7 +138,7 @@ class LandingScreen extends StatelessWidget {
 
                   // Footer / Copyright
                   Text(
-                    '© ${DateTime.now().year} CRADI. All rights reserved.',
+                    context.l10n.landingCopyright('${DateTime.now().year}'),
                     textAlign: TextAlign.center,
                     style: GoogleFonts.roboto(
                       fontSize: 12,

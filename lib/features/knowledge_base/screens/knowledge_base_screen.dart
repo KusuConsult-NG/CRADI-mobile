@@ -3,12 +3,14 @@ import 'package:climate_app/core/providers/connectivity_provider.dart';
 import 'package:climate_app/features/knowledge_base/providers/news_provider.dart';
 import 'package:climate_app/features/knowledge_base/providers/knowledge_provider.dart';
 import 'package:climate_app/core/theme/app_colors.dart';
+import 'package:climate_app/features/knowledge_base/knowledge_categories.dart';
+import 'package:climate_app/features/knowledge_base/widgets/guide_image.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:climate_app/core/l10n/l10n.dart';
 
 class KnowledgeBaseScreen extends StatefulWidget {
   const KnowledgeBaseScreen({super.key});
@@ -38,8 +40,9 @@ class _KnowledgeBaseScreenState extends State<KnowledgeBaseScreen> {
     if (_searchQuery.isEmpty) return newsItems;
     return newsItems
         .where(
-          (item) =>
-              item['title'].toLowerCase().contains(_searchQuery.toLowerCase()),
+          (item) => (item['title']?.toString() ?? '').toLowerCase().contains(
+            _searchQuery.toLowerCase(),
+          ),
         )
         .toList();
   }
@@ -56,7 +59,7 @@ class _KnowledgeBaseScreenState extends State<KnowledgeBaseScreen> {
       backgroundColor: AppColors.background,
       appBar: AppBar(
         title: Text(
-          'Knowledge Base',
+          context.l10n.knowledgeBaseTitle,
           style: GoogleFonts.lexend(
             fontWeight: FontWeight.bold,
             color: AppColors.textPrimary,
@@ -66,20 +69,35 @@ class _KnowledgeBaseScreenState extends State<KnowledgeBaseScreen> {
         backgroundColor: AppColors.background.withValues(alpha: 0.95),
         elevation: 0,
         actions: [
-          GestureDetector(
-            onTap: () => context.push('/profile'),
-            child: Container(
-              margin: const EdgeInsets.only(right: 16),
-              width: 32,
-              height: 32,
-              decoration: BoxDecoration(
-                color: AppColors.primaryRed.withValues(alpha: 0.1),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                Icons.account_circle,
-                color: AppColors.primaryRed,
-                size: 20,
+          Semantics(
+            button: true,
+            label: context.l10n.myProfile,
+            child: Tooltip(
+              message: context.l10n.myProfile,
+              child: GestureDetector(
+                onTap: () => context.push('/profile'),
+                // 48pt hit area around the 32pt avatar.
+                child: Container(
+                  margin: const EdgeInsets.only(right: 8),
+                  width: 48,
+                  height: 48,
+                  alignment: Alignment.center,
+                  child: Container(
+                    width: 32,
+                    height: 32,
+                    decoration: BoxDecoration(
+                      color: AppColors.primaryRed.withValues(alpha: 0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const ExcludeSemantics(
+                      child: Icon(
+                        Icons.account_circle,
+                        color: AppColors.primaryRed,
+                        size: 20,
+                      ),
+                    ),
+                  ),
+                ),
               ),
             ),
           ),
@@ -109,7 +127,7 @@ class _KnowledgeBaseScreenState extends State<KnowledgeBaseScreen> {
                   });
                 },
                 decoration: InputDecoration(
-                  hintText: 'Search guides, hazards, or contacts...',
+                  hintText: context.l10n.knowledgeBaseSearchHint,
                   hintStyle: GoogleFonts.lexend(
                     color: Colors.grey.shade400,
                     fontSize: 14,
@@ -117,6 +135,7 @@ class _KnowledgeBaseScreenState extends State<KnowledgeBaseScreen> {
                   prefixIcon: Icon(Icons.search, color: Colors.grey.shade400),
                   suffixIcon: _searchQuery.isNotEmpty
                       ? IconButton(
+                          tooltip: context.l10n.commonClearSearch,
                           icon: const Icon(Icons.clear),
                           onPressed: () {
                             _searchController.clear();
@@ -181,8 +200,8 @@ class _KnowledgeBaseScreenState extends State<KnowledgeBaseScreen> {
                             children: [
                               Text(
                                 connectivity.manualOffline
-                                    ? 'Offline Mode Active'
-                                    : 'Offline Mode Available',
+                                    ? context.l10n.knowledgeOfflineActive
+                                    : context.l10n.knowledgeOfflineAvailable,
                                 style: GoogleFonts.lexend(
                                   fontSize: 14,
                                   fontWeight: FontWeight.bold,
@@ -191,8 +210,8 @@ class _KnowledgeBaseScreenState extends State<KnowledgeBaseScreen> {
                               ),
                               Text(
                                 connectivity.manualOffline
-                                    ? 'Using cached data'
-                                    : 'Content downloaded successfully',
+                                    ? context.l10n.knowledgeUsingCache
+                                    : context.l10n.knowledgeContentDownloaded,
                                 style: GoogleFonts.lexend(
                                   fontSize: 12,
                                   color: Colors.grey.shade500,
@@ -222,7 +241,7 @@ class _KnowledgeBaseScreenState extends State<KnowledgeBaseScreen> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    'Featured Guides',
+                    context.l10n.knowledgeFeaturedGuides,
                     style: GoogleFonts.lexend(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
@@ -234,7 +253,7 @@ class _KnowledgeBaseScreenState extends State<KnowledgeBaseScreen> {
                       context.push('/knowledge-base/guides');
                     },
                     child: Text(
-                      'See All',
+                      context.l10n.seeAll,
                       style: GoogleFonts.lexend(
                         fontSize: 14,
                         fontWeight: FontWeight.w500,
@@ -258,10 +277,37 @@ class _KnowledgeBaseScreenState extends State<KnowledgeBaseScreen> {
                     _searchQuery,
                   );
 
+                  final error = knowledgeProvider.error;
+                  if (allGuides.isEmpty && error != null) {
+                    return Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            error(context.l10n),
+                            textAlign: TextAlign.center,
+                            style: GoogleFonts.lexend(color: Colors.red),
+                          ),
+                          TextButton(
+                            onPressed: () => knowledgeProvider.fetchGuides(
+                              category: allKnowledgeCategories,
+                            ),
+                            child: Text(context.l10n.retry),
+                          ),
+                        ],
+                      ),
+                    );
+                  }
+
                   if (allGuides.isEmpty) {
                     return Center(
                       child: Text(
-                        'No guides available',
+                        _searchQuery.trim().isEmpty
+                            ? context.l10n.knowledgeNoGuides
+                            : context.l10n.knowledgeNoGuidesMatch(
+                                _searchQuery.trim(),
+                              ),
+                        textAlign: TextAlign.center,
                         style: GoogleFonts.lexend(color: Colors.grey),
                       ),
                     );
@@ -289,10 +335,9 @@ class _KnowledgeBaseScreenState extends State<KnowledgeBaseScreen> {
                       }
 
                       return _buildFavoriteCard(
-                        guide['title'] ?? 'Guide',
-                        tag,
+                        guide['title'] ?? context.l10n.knowledgeNoTitle,
+                        knowledgeTagDisplay(context.l10n, guide['tag']),
                         tagColor,
-                        _resolveGuideImage(guide),
                         context,
                         guideData: guide,
                       );
@@ -308,7 +353,7 @@ class _KnowledgeBaseScreenState extends State<KnowledgeBaseScreen> {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Text(
-                'Browse Categories',
+                context.l10n.browseCategories,
                 style: GoogleFonts.lexend(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
@@ -327,8 +372,8 @@ class _KnowledgeBaseScreenState extends State<KnowledgeBaseScreen> {
               childAspectRatio: 1.5,
               children: [
                 _buildCategoryCard(
-                  'Hazard ID Guides',
-                  'Identify local threats',
+                  context.l10n.knowledgeHazardIdGuides,
+                  context.l10n.knowledgeHazardIdGuidesDesc,
                   Icons.warning,
                   Colors.orange,
                   () {
@@ -336,8 +381,8 @@ class _KnowledgeBaseScreenState extends State<KnowledgeBaseScreen> {
                   },
                 ),
                 _buildCategoryCard(
-                  'Fire Response',
-                  'Wildfire protocols',
+                  context.l10n.knowledgeFireResponse,
+                  context.l10n.knowledgeFireResponseDesc,
                   Icons.local_fire_department,
                   Colors.red,
                   () {
@@ -345,8 +390,8 @@ class _KnowledgeBaseScreenState extends State<KnowledgeBaseScreen> {
                   },
                 ),
                 _buildCategoryCard(
-                  'Flood Readiness',
-                  'Water & Storms',
+                  context.l10n.knowledgeFloodReadiness,
+                  context.l10n.knowledgeFloodReadinessDesc,
                   Icons.water_drop,
                   Colors.blue,
                   () {
@@ -354,8 +399,8 @@ class _KnowledgeBaseScreenState extends State<KnowledgeBaseScreen> {
                   },
                 ),
                 _buildCategoryCard(
-                  'Contacts Directory',
-                  'Emergency services',
+                  context.l10n.knowledgeContactsDirectory,
+                  context.l10n.knowledgeContactsDirectoryDesc,
                   Icons.contacts,
                   Colors.purple,
                   () {
@@ -371,7 +416,7 @@ class _KnowledgeBaseScreenState extends State<KnowledgeBaseScreen> {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Text(
-                'External News & Updates',
+                context.l10n.knowledgeExternalNews,
                 style: GoogleFonts.lexend(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
@@ -396,7 +441,7 @@ class _KnowledgeBaseScreenState extends State<KnowledgeBaseScreen> {
                     child: Padding(
                       padding: const EdgeInsets.all(24),
                       child: Text(
-                        newsProvider.error!,
+                        newsProvider.error!(context.l10n),
                         style: GoogleFonts.lexend(color: Colors.red),
                       ),
                     ),
@@ -410,7 +455,7 @@ class _KnowledgeBaseScreenState extends State<KnowledgeBaseScreen> {
                     child: Padding(
                       padding: const EdgeInsets.all(24),
                       child: Text(
-                        'No recent news updates found.',
+                        context.l10n.knowledgeNoNews,
                         style: GoogleFonts.lexend(color: Colors.grey),
                       ),
                     ),
@@ -426,7 +471,7 @@ class _KnowledgeBaseScreenState extends State<KnowledgeBaseScreen> {
                         child: GestureDetector(
                           onTap: () async {
                             final url = item['url'];
-                            if (url != null) {
+                            if (url is String && url.startsWith('http')) {
                               try {
                                 final uri = Uri.parse(url);
                                 if (await canLaunchUrl(uri)) {
@@ -443,8 +488,16 @@ class _KnowledgeBaseScreenState extends State<KnowledgeBaseScreen> {
                             }
                           },
                           child: _buildRecentItem(
-                            item['title'],
-                            '${item['source']} • ${item['date']}',
+                            item['title'] ?? context.l10n.knowledgeNoTitle,
+                            [
+                                  item['source'],
+                                  formatKnowledgeDate(
+                                    item['date'],
+                                    context.intlLocale,
+                                  ),
+                                ]
+                                .where((p) => p != null && '$p'.isNotEmpty)
+                                .join(' • '),
                             Icons.public,
                           ),
                         ),
@@ -460,45 +513,10 @@ class _KnowledgeBaseScreenState extends State<KnowledgeBaseScreen> {
     );
   }
 
-  /// Returns a guaranteed non-null, topic-matched network image URL.
-  String _resolveGuideImage(Map<String, dynamic> guide) {
-    final url = guide['imageUrl']?.toString() ?? '';
-    if (url.isNotEmpty && url.startsWith('http')) return url;
-    final cat = (guide['category'] ?? guide['hazardType'] ?? '')
-        .toString()
-        .toLowerCase();
-    switch (cat) {
-      case 'flood':
-        return 'https://images.unsplash.com/photo-1504701954957-2010ec3bcec1?auto=format&fit=crop&q=80&w=800';
-      case 'fire':
-      case 'wildfires':
-        return 'https://images.unsplash.com/photo-1516912481808-3406841bd33c?auto=format&fit=crop&q=80&w=800';
-      case 'accident':
-        return 'https://images.unsplash.com/photo-1544636331-e26879cd4d9b?auto=format&fit=crop&q=80&w=800';
-      case 'erosion':
-        return 'https://images.unsplash.com/photo-1591700608620-4cdcf1d47898?auto=format&fit=crop&q=80&w=800';
-      case 'disease':
-      case 'epidemic':
-        return 'https://images.unsplash.com/photo-1584036561566-b93a50208c3c?auto=format&fit=crop&q=80&w=800';
-      case 'conflict':
-        return 'https://images.unsplash.com/photo-1599059813005-11265ba4b4ce?auto=format&fit=crop&q=80&w=800';
-      case 'storm':
-        return 'https://images.unsplash.com/photo-1535350356005-fd52b3b524fb?auto=format&fit=crop&q=80&w=800';
-      case 'earthquake':
-        return 'https://images.unsplash.com/photo-1548337138-e87d889cc369?auto=format&fit=crop&q=80&w=800';
-      case 'extreme heat':
-      case 'drought':
-        return 'https://images.unsplash.com/photo-1504192010706-dd7f569ee2be?auto=format&fit=crop&q=80&w=800';
-      default:
-        return 'https://images.unsplash.com/photo-1496247749665-49cf5b1022e9?auto=format&fit=crop&q=80&w=800';
-    }
-  }
-
   Widget _buildFavoriteCard(
     String title,
     String tag,
     Color tagColor,
-    String imageUrl,
     BuildContext context, {
     Map<String, dynamic>? guideData,
   }) {
@@ -509,11 +527,7 @@ class _KnowledgeBaseScreenState extends State<KnowledgeBaseScreen> {
         } else {
           context.push(
             '/knowledge-base/detail',
-            extra: {
-              'title': title,
-              'category': tag,
-              'lastUpdated': 'Recently saved',
-            },
+            extra: {'title': title, 'category': tag},
           );
         }
       },
@@ -526,26 +540,7 @@ class _KnowledgeBaseScreenState extends State<KnowledgeBaseScreen> {
             // Background Image
             ClipRRect(
               borderRadius: BorderRadius.circular(12),
-              child: CachedNetworkImage(
-                imageUrl: imageUrl,
-                fit: BoxFit.cover,
-                placeholder: (context, url) => Container(
-                  color: Colors.grey.shade200,
-                  child: const Center(
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  ),
-                ),
-                errorWidget: (context, url, error) => Container(
-                  color: Colors.grey.shade800,
-                  child: const Center(
-                    child: Icon(
-                      Icons.cloud_off,
-                      color: Colors.white54,
-                      size: 32,
-                    ),
-                  ),
-                ),
-              ),
+              child: GuideImage(guide: guideData ?? const {}),
             ),
             // Gradient Overlay
             Container(

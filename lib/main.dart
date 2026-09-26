@@ -1,5 +1,7 @@
-import 'package:flutter/foundation.dart';
+import 'dart:async';
+
 import 'package:go_router/go_router.dart';
+import 'package:climate_app/features/auth/widgets/sign_out_notice_listener.dart';
 import 'package:climate_app/core/router/app_router.dart';
 import 'package:climate_app/core/theme/app_theme.dart';
 import 'package:climate_app/features/auth/providers/auth_provider.dart';
@@ -18,77 +20,49 @@ import 'package:climate_app/core/services/session_manager.dart';
 import 'package:climate_app/core/services/offline_storage_service.dart';
 import 'package:climate_app/core/providers/settings_provider.dart';
 import 'package:climate_app/core/services/notification_service.dart';
-import 'package:climate_app/core/services/onesignal_service.dart';
+import 'package:climate_app/core/services/deep_link_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:provider/provider.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:climate_app/core/constants/app_config.dart';
-import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:flutter_localizations/flutter_localizations.dart';
-import 'package:climate_app/l10n/app_localizations.dart';
+import 'package:climate_app/core/l10n/fallback_localizations.dart';
+import 'package:climate_app/core/widgets/force_update_gate.dart';
 import 'package:climate_app/core/services/remote_config_service.dart';
-import 'package:climate_app/core/services/security_service.dart';
-import 'package:firebase_crashlytics/firebase_crashlytics.dart';
-
-/// Background message handler (must be top-level function)
-@pragma('vm:entry-point')
-Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  await Firebase.initializeApp();
-  debugPrint('📬 Background notification: ${message.notification?.title}');
-}
+import 'package:climate_app/core/services/supabase_service.dart';
+import 'package:climate_app/core/constants/app_config.dart';
+import 'package:climate_app/core/utils/error_handler.dart';
+import 'package:sentry_flutter/sentry_flutter.dart';
+import 'package:climate_app/core/l10n/l10n.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Security: Enforce SSL Certificate Pinning before any network calls
-  await SecurityService().initializePinning();
+  // Crash reporting is optional: only enabled when SENTRY_DSN is provided.
+  // SentryFlutter.init installs FlutterError / PlatformDispatcher handlers.
+  if (AppConfig.sentryDsn.isEmpty) {
+    await _bootstrap();
+    return;
+  }
+  await SentryFlutter.init((options) {
+    options.dsn = AppConfig.sentryDsn;
+    options.sendDefaultPii = false;
+    options.tracesSampleRate = 0.0;
+  }, appRunner: _bootstrap);
+}
 
-  // Initialize Firebase
+Future<void> _bootstrap() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize Supabase (auth session is restored from secure storage).
   try {
-    await Firebase.initializeApp();
-
-    // Set up background message handler
-    FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
-    debugPrint('✅ FCM background handler registered');
-
-    // Initialize Crashlytics
-    // Pass all uncaught "fatal" errors from the framework to Crashlytics
-    FlutterError.onError = (errorDetails) {
-      FirebaseCrashlytics.instance.recordFlutterFatalError(errorDetails);
-      // Also log to console in debug mode
-      debugPrint('Flutter error: ${errorDetails.exception}');
-    };
-
-    // Pass all uncaught asynchronous errors that aren't handled by the Flutter framework to Crashlytics
-    PlatformDispatcher.instance.onError = (error, stack) {
-      FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
-      debugPrint('Platform error: $error');
-      return true;
-    };
-
-    debugPrint('✅ Firebase Crashlytics initialized');
-
-    // Initialize Remote Config — fetches peer threshold, SMS caps, feature flags
-    await RemoteConfigService().initialize();
+    await SupabaseService.initialize();
   } on Exception catch (e) {
-    // Firebase not configured yet - app will work without crash reporting
-    debugPrint('Firebase initialization failed: $e');
+    debugPrint('Supabase initialization failed: $e');
   }
 
-  // Initialize Supabase
-  try {
-    await Supabase.initialize(
-      url: AppConfig.supabaseUrl,
-      // ignore: deprecated_member_use
-      anonKey: AppConfig.supabaseAnonKey,
-    );
-    debugPrint('✅ Supabase initialized');
-  } on Exception catch (e) {
-    debugPrint('Supabase initialization warning: $e');
-  }
+  // Server-side settings (peer threshold, SMS caps, feature flags) from the
+  // app_settings table; cached values/defaults are used until fetched.
+  await RemoteConfigService().initialize();
 
   // Security: Initialize secure storage (singleton pattern - no need to store reference)
   SecureStorageService();
@@ -99,8 +73,19 @@ Future<void> main() async {
   // Initialize Hive for local data storage
   await Hive.initFlutter();
 
-  // Initialize offline storage service for drafts and sync queue
-  await OfflineStorageService().initialize();
+  // Initialize offline storage service for drafts and sync queue. A failure
+  // (e.g. a corrupted box) must not keep the app from starting; offline
+  // features degrade instead. HiveError is an Error, hence `Object`.
+  try {
+    await OfflineStorageService().initialize();
+  } on Object catch (e, st) {
+    debugPrint('Offline storage initialization failed: $e');
+    ErrorHandler.logError(
+      e,
+      stackTrace: st,
+      context: 'main.OfflineStorageService.initialize',
+    );
+  }
 
   // Set preferred orientations
   SystemChrome.setPreferredOrientations([
@@ -142,16 +127,100 @@ class ClimateApp extends StatefulWidget {
   State<ClimateApp> createState() => _ClimateAppState();
 }
 
-class _ClimateAppState extends State<ClimateApp> {
+class _ClimateAppState extends State<ClimateApp> with WidgetsBindingObserver {
   GoRouter? _router;
+  AuthProvider? _auth;
+  VoidCallback? _onSignedIn;
+  VoidCallback? _onSignedOut;
 
   @override
   void initState() {
     super.initState();
-    // Initialize FCM after app starts
+    // Server-side settings (app_min_version, feature flags) are refreshed
+    // when the app returns to the foreground, not only at startup.
+    WidgetsBinding.instance.addObserver(this);
+    // Initialize push notifications after app starts
     _initializeNotifications();
+    // Start listening for cradi:// and https://cradi.ng links. Supabase auth
+    // callbacks are filtered out by DeepLinkService and stay with
+    // supabase_flutter's own listener.
+    unawaited(DeepLinkService().initialize());
     // Wire auto-sync: when connectivity is restored, flush the offline queue
     _wireAutoSync();
+    _wireDataRefresh();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _router?.routerDelegate.removeListener(_recordActivity);
+    final onSignedIn = _onSignedIn;
+    if (onSignedIn != null) _auth?.removeSignInListener(onSignedIn);
+    final onSignedOut = _onSignedOut;
+    if (onSignedOut != null) _auth?.removeSignOutListener(onSignedOut);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(RemoteConfigService().refreshOnResume());
+    }
+  }
+
+  /// Any interaction or navigation pushes the inactivity timeout forward.
+  void _recordActivity() => _auth?.recordActivity();
+
+  /// Refreshes data that providers loaded before it could be seen:
+  /// alerts, profile and report lists fetched before sign-in (RLS returned
+  /// nothing, or they belong to the previous account on a shared device),
+  /// and zone-filtered report lists after the monitoring zone changes.
+  /// On sign-out the previous user's cached lists, votes and profile are
+  /// dropped.
+  void _wireDataRefresh() {
+    _auth = context.read<AuthProvider>();
+    final alerts = context.read<AlertsProvider>();
+    final reports = context.read<ReportsStatusProvider>();
+    final profile = context.read<ProfileProvider>();
+    // Zone-filtered lists need the new user's monitoring zone first.
+    // clearUserData() also dropped the user's own (userId-scoped) lists, so
+    // those are reloaded too; screens showing them refetch on their own.
+    Future<void> reloadFor(String uid) async {
+      await profile.loadProfile();
+      // Signed out (or another account signed in) meanwhile: that event
+      // clears / reloads the lists itself.
+      if (_auth?.currentUser?.id != uid) return;
+      await Future.wait([
+        reports.refreshReports(),
+        reports.refreshReports(userId: uid),
+      ]);
+    }
+
+    _onSignedIn = () {
+      final uid = _auth?.currentUser?.id;
+      reports.clearUserData();
+      unawaited(RemoteConfigService().refreshOnSignIn());
+      unawaited(alerts.fetchAlerts());
+      if (uid != null) unawaited(reloadFor(uid));
+    };
+    _onSignedOut = () {
+      // The alerts feed is per session (RLS); restarted by fetchAlerts.
+      alerts.stopRealtime();
+      reports.clearUserData();
+      unawaited(profile.clearProfile());
+    };
+    _auth!
+      ..addSignInListener(_onSignedIn!)
+      ..addSignOutListener(_onSignedOut!);
+    profile.onMonitoringZoneChanged = (_) =>
+        unawaited(reports.refreshReports());
+    // Reports uploaded by an offline sync appear in the lists right away
+    // (staff lists and the user's own list).
+    context.read<ReportingProvider>().onReportsSynced = () {
+      final uid = _auth?.currentUser?.id;
+      unawaited(reports.refreshReports());
+      if (uid != null) unawaited(reports.refreshReports(userId: uid));
+    };
   }
 
   void _wireAutoSync() {
@@ -159,10 +228,15 @@ class _ClimateAppState extends State<ClimateApp> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       try {
+        // Single auto-sync trigger: flushes both the failed-submission queue
+        // and offline drafts. ReportingProvider guards against re-entrancy.
+        final reporting = context.read<ReportingProvider>();
         context.read<ConnectivityProvider>().onReconnect = () async {
           debugPrint('🔄 Auto-sync triggered by connectivity restore');
+          unawaited(RemoteConfigService().refreshOnReconnect());
+          if (!mounted) return;
           try {
-            await OfflineStorageService().syncPendingReports();
+            await reporting.syncPendingReports(context);
           } on Exception catch (e) {
             debugPrint('Auto-sync error: $e');
           }
@@ -185,68 +259,59 @@ class _ClimateAppState extends State<ClimateApp> {
           if (_router != null) {
             notificationService.router = _router;
           }
+          // A notification that launched the app from a terminated state is
+          // delivered to the OneSignal click listener and routed once the
+          // router is set.
           await notificationService.initialize(
             profileProvider: profileProvider,
           );
-          // Handle notification that launched a terminated app
-          final initialMessage = await notificationService.getInitialMessage();
-          if (initialMessage != null && _router != null) {
-            final data = initialMessage.data;
-            if (data.isNotEmpty) {
-              final type = data['type'] ?? 'alert';
-              final id = data['id'] ?? data['reportId'] ?? '';
-              if (type == 'alert' && id.toString().isNotEmpty) {
-                _router!.go('/alert/$id');
-              } else if (type == 'report' && id.toString().isNotEmpty) {
-                _router!.go('/report/$id');
-              }
-            }
-          }
-          // Initialize OneSignal
-          try {
-            final oneSignal = OneSignalService();
-            if (_router != null) {
-              oneSignal.router = _router;
-            }
-            await oneSignal.initialize(appId: AppConfig.oneSignalAppId);
-            // Sync user tags if already logged in
-            await oneSignal.setUserTags(
-              state: profileProvider.state,
-              lga: profileProvider.lga,
-              ward: profileProvider.ward,
-              role: profileProvider.role,
-            );
-          } on Exception catch (e) {
-            debugPrint('OneSignal initialization error: $e');
-          }
         } on Exception catch (e) {
-          debugPrint('Notifications initialization error: $e');
+          debugPrint('Notification initialization error: $e');
         }
       });
     } on Exception catch (e) {
-      debugPrint('Notifications initialization error: $e');
+      debugPrint('Notification initialization error: $e');
       // App continues to work without notifications
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    _router ??= createRouter(context);
-    // Keep NotificationService in sync if router was created after FCM init
+    if (_router == null) {
+      _router = createRouter(context);
+      _router!.routerDelegate.addListener(_recordActivity);
+    }
+    // Keep NotificationService in sync if router was created after init
     NotificationService().router ??= _router;
+    // Same for deep links: a link that launched the app (cold start) is
+    // replayed the moment the router exists.
+    DeepLinkService().router ??= _router;
 
-    return MaterialApp.router(
-      title: 'EWER Mobile - Early Warning System',
-      theme: AppTheme.lightTheme,
-      routerConfig: _router,
-      localizationsDelegates: const [
-        AppLocalizations.delegate,
-        GlobalMaterialLocalizations.delegate,
-        GlobalWidgetsLocalizations.delegate,
-        GlobalCupertinoLocalizations.delegate,
-      ],
-      supportedLocales: AppLocalizations.supportedLocales,
-      debugShowCheckedModeBanner: false,
+    return Listener(
+      behavior: HitTestBehavior.translucent,
+      onPointerDown: (_) => _recordActivity(),
+      child: _buildApp(),
+    );
+  }
+
+  Widget _buildApp() {
+    // The in-app language choice drives the locale; Flutter has no
+    // Material/Cupertino translations for Hausa, so fallback delegates
+    // supply English ones instead of null.
+    return Consumer<LanguageProvider>(
+      builder: (context, language, _) => MaterialApp.router(
+        onGenerateTitle: (context) => context.l10n.appTitle,
+        theme: AppTheme.lightTheme,
+        routerConfig: _router,
+        locale: language.locale,
+        localizationsDelegates: appLocalizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        debugShowCheckedModeBanner: false,
+        // Blocks the app while this build is below app_min_version.
+        builder: (context, child) => ForceUpdateGate(
+          child: SignOutNoticeListener(child: child ?? const SizedBox.shrink()),
+        ),
+      ),
     );
   }
 }

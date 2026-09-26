@@ -1,22 +1,78 @@
 import 'dart:developer' as developer;
+import 'package:flutter/foundation.dart';
 import 'package:local_auth/local_auth.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:climate_app/core/l10n/l10n.dart';
 
 /// Biometric authentication service
+///
+/// local_auth 3.x reports failures as [LocalAuthException] (not
+/// [PlatformException]); both are caught, and the code of the latest
+/// failure is kept in [lastErrorCode] so the UI can explain it.
 class BiometricService {
   static final BiometricService _instance = BiometricService._internal();
   factory BiometricService() => _instance;
-  BiometricService._internal();
+  BiometricService._internal([LocalAuthentication? localAuth])
+    : _localAuth = localAuth ?? LocalAuthentication();
 
-  final LocalAuthentication _localAuth = LocalAuthentication();
-  final FlutterSecureStorage _storage = const FlutterSecureStorage();
-  static const String _sessionTokenKey = 'biometric_session_token';
+  /// A separate instance backed by [localAuth] (tests only).
+  @visibleForTesting
+  factory BiometricService.withLocalAuth(LocalAuthentication localAuth) =>
+      BiometricService._internal(localAuth);
+
+  final LocalAuthentication _localAuth;
+
+  /// Code of the most recent failed call, or null after a call that did
+  /// not throw.
+  LocalAuthExceptionCode? lastErrorCode;
+
+  /// Whether the latest failure means no biometrics / device credentials
+  /// are enrolled (the user has to add them in the device settings).
+  bool get lastErrorIsNotEnrolled => isNotEnrolledCode(lastErrorCode);
+
+  static bool isNotEnrolledCode(LocalAuthExceptionCode? code) =>
+      code == LocalAuthExceptionCode.noBiometricsEnrolled ||
+      code == LocalAuthExceptionCode.noCredentialsSet;
+
+  /// User-facing text for a failure [code]; null for a user cancellation
+  /// (nothing to explain) or when there was no failure.
+  static LocalizedText? messageFor(LocalAuthExceptionCode? code) {
+    switch (code) {
+      case null:
+      case LocalAuthExceptionCode.userCanceled:
+      case LocalAuthExceptionCode.systemCanceled:
+        return null;
+      case LocalAuthExceptionCode.noBiometricsEnrolled:
+      case LocalAuthExceptionCode.noCredentialsSet:
+        return (l) => l.biometricErrorNotEnrolled;
+      case LocalAuthExceptionCode.noBiometricHardware:
+      case LocalAuthExceptionCode.biometricHardwareTemporarilyUnavailable:
+        return (l) => l.biometricErrorUnavailable;
+      case LocalAuthExceptionCode.temporaryLockout:
+      case LocalAuthExceptionCode.biometricLockout:
+        return (l) => l.biometricErrorLockedOut;
+      default:
+        return (l) => l.biometricErrorFailed;
+    }
+  }
+
+  void _recordError(Object e) {
+    lastErrorCode = e is LocalAuthException
+        ? e.code
+        : LocalAuthExceptionCode.unknownError;
+  }
 
   /// Check if biometric authentication is available on device
   Future<bool> isBiometricAvailable() async {
     try {
       return await _localAuth.canCheckBiometrics;
+    } on LocalAuthException catch (e) {
+      _recordError(e);
+      developer.log(
+        'Error checking biometric availability: $e',
+        name: 'BiometricService',
+      );
+      return false;
     } on PlatformException catch (e) {
       developer.log(
         'Error checking biometric availability: $e',
@@ -30,6 +86,13 @@ class BiometricService {
   Future<bool> isDeviceSupported() async {
     try {
       return await _localAuth.isDeviceSupported();
+    } on LocalAuthException catch (e) {
+      _recordError(e);
+      developer.log(
+        'Error checking device support: $e',
+        name: 'BiometricService',
+      );
+      return false;
     } on PlatformException catch (e) {
       developer.log(
         'Error checking device support: $e',
@@ -43,6 +106,13 @@ class BiometricService {
   Future<List<BiometricType>> getAvailableBiometrics() async {
     try {
       return await _localAuth.getAvailableBiometrics();
+    } on LocalAuthException catch (e) {
+      _recordError(e);
+      developer.log(
+        'Error getting available biometrics: $e',
+        name: 'BiometricService',
+      );
+      return [];
     } on PlatformException catch (e) {
       developer.log(
         'Error getting available biometrics: $e',
@@ -52,40 +122,41 @@ class BiometricService {
     }
   }
 
-  /// Authenticate using biometrics
+  /// Authenticate using biometrics. [reason] is shown in the system prompt;
+  /// UI callers pass it localised (the English default is a fallback).
   Future<bool> authenticate({
-    String reason = 'Please authenticate to continue',
+    String? reason,
     bool useErrorDialogs = true,
     bool stickyAuth = true,
   }) async {
+    lastErrorCode = null;
     try {
       final isAvailable = await isBiometricAvailable();
       if (!isAvailable) {
+        lastErrorCode ??= LocalAuthExceptionCode.noBiometricHardware;
         return false;
       }
 
-      return await _localAuth.authenticate(localizedReason: reason);
+      return await _localAuth.authenticate(
+        localizedReason: reason ?? englishL10n.biometricPromptDefault,
+      );
+    } on LocalAuthException catch (e) {
+      _recordError(e);
+      developer.log('Authentication error: $e', name: 'BiometricService');
+      return false;
     } on PlatformException catch (e) {
+      _recordError(e);
       developer.log('Authentication error: $e', name: 'BiometricService');
       return false;
     }
   }
 
-  /// Authenticate for login
-  Future<bool> authenticateForLogin() async {
+  /// Authenticate for login; [reason] is the localised system-prompt text.
+  Future<bool> authenticateForLogin({String? reason}) async {
     return await authenticate(
-      reason: 'Authenticate to login to EWER Mobile',
+      reason: reason,
       useErrorDialogs: true,
       stickyAuth: true,
-    );
-  }
-
-  /// Authenticate for sensitive operations
-  Future<bool> authenticateForSensitiveOperation(String operation) async {
-    return await authenticate(
-      reason: 'Authenticate to $operation',
-      useErrorDialogs: true,
-      stickyAuth: false,
     );
   }
 
@@ -102,18 +173,17 @@ class BiometricService {
   }
 
   /// Get biometric type name for UI display
-  String getBiometricTypeName(BiometricType type) {
+  String getBiometricTypeName(BiometricType type, AppLocalizations l10n) {
     switch (type) {
       case BiometricType.face:
-        return 'Face ID';
+        return l10n.biometricTypeFace;
       case BiometricType.fingerprint:
-        return 'Fingerprint';
+        return l10n.biometricTypeFingerprint;
       case BiometricType.iris:
-        return 'Iris';
+        return l10n.biometricTypeIris;
       case BiometricType.strong:
-        return 'Biometric';
       case BiometricType.weak:
-        return 'Biometric';
+        return l10n.biometricTypeGeneric;
     }
   }
 
@@ -127,37 +197,5 @@ class BiometricService {
   Future<bool> isFingerprintAvailable() async {
     final biometrics = await getAvailableBiometrics();
     return biometrics.contains(BiometricType.fingerprint);
-  }
-
-  /// Securely store session token
-  Future<void> secureSessionToken(String token) async {
-    await _storage.write(
-      key: _sessionTokenKey,
-      value: token,
-      aOptions: const AndroidOptions(),
-      iOptions: const IOSOptions(accessibility: KeychainAccessibility.passcode),
-    );
-  }
-
-  /// Retrieve session token (requires biometric auth)
-  Future<String?> getSessionToken() async {
-    // 1. Check if token exists first
-    final hasToken = await _storage.containsKey(key: _sessionTokenKey);
-    if (!hasToken) return null;
-
-    // 2. Require Biometric Auth to "Unlock"
-    final isAuthenticated = await authenticate(
-      reason: 'Scan fingerprint to unlock your session',
-    );
-
-    if (isAuthenticated) {
-      return await _storage.read(key: _sessionTokenKey);
-    }
-    return null;
-  }
-
-  /// Clear session token
-  Future<void> clearSessionToken() async {
-    await _storage.delete(key: _sessionTokenKey);
   }
 }

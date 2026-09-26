@@ -1,11 +1,18 @@
-import 'package:flutter/material.dart';
-import 'package:flutter_chat_ui/flutter_chat_ui.dart';
-import 'package:flutter_chat_core/flutter_chat_core.dart';
-import 'package:supabase_flutter/supabase_flutter.dart' as sp;
+import 'dart:async';
+
+import 'package:climate_app/core/theme/app_colors.dart';
 import 'package:climate_app/core/services/supabase_service.dart';
 import 'package:climate_app/core/constants/app_config.dart';
+import 'package:climate_app/core/utils/error_handler.dart';
+import 'package:climate_app/features/chat/providers/chat_provider.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' as sb;
+import 'package:flutter/material.dart';
+import 'package:flutter_chat_core/flutter_chat_core.dart';
+import 'package:flutter_chat_ui/flutter_chat_ui.dart';
 import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
+import 'package:climate_app/core/l10n/l10n.dart';
 
 class ChatScreen extends StatelessWidget {
   const ChatScreen({super.key});
@@ -14,9 +21,12 @@ class ChatScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Community Chat'),
+        title: Text(context.l10n.profileSupportChat),
+        backgroundColor: AppColors.primaryRed,
+        foregroundColor: Colors.white,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
+          tooltip: context.l10n.back,
+          icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white),
           onPressed: () {
             if (context.canPop()) {
               context.pop();
@@ -28,11 +38,11 @@ class ChatScreen extends StatelessWidget {
       ),
       body: Builder(
         builder: (context) {
-          final user = sp.Supabase.instance.client.auth.currentUser;
-          if (user == null) {
-            return const Center(child: Text('Please login to chat'));
+          final fbUser = SupabaseService().getCurrentUser();
+          if (fbUser == null) {
+            return Center(child: Text(context.l10n.chatLoginRequired));
           }
-          return _ChatView(user: user);
+          return _ChatView(fbUser: fbUser);
         },
       ),
     );
@@ -40,105 +50,156 @@ class ChatScreen extends StatelessWidget {
 }
 
 class _ChatView extends StatefulWidget {
-  final sp.User user;
-  const _ChatView({required this.user});
+  final sb.User fbUser;
+  const _ChatView({required this.fbUser});
 
   @override
   State<_ChatView> createState() => _ChatViewState();
 }
 
 class _ChatViewState extends State<_ChatView> {
-  final SupabaseService _supabase = SupabaseService();
+  static const String _chatId = 'general';
+
+  final SupabaseService _db = SupabaseService();
+  late final ChatProvider _chat;
   late final InMemoryChatController _chatController;
+  StreamSubscription<List<Map<String, dynamic>>>? _subscription;
+
+  /// Sender display names keyed by sender id (from the message rows).
+  final Map<String, String> _senderNames = {};
+
+  /// Optimistically inserted messages not yet echoed by the realtime stream.
+  final Map<String, Message> _pending = {};
+
   bool _isLoading = true;
+  LocalizedText? _error;
 
   @override
   void initState() {
     super.initState();
     _chatController = InMemoryChatController();
-    _loadMessages();
+    _chat = context.read<ChatProvider>();
+    _subscribe();
   }
 
   @override
   void dispose() {
+    _subscription?.cancel();
     _chatController.dispose();
     super.dispose();
   }
 
-  Future<void> _loadMessages() async {
-    try {
-      final docs = await _supabase.listDocuments(
-        collectionId: AppConfig.messagesCollection,
-        queries: [
-          SQuery.equal('chat_id', 'general'),
-          SQuery.orderAsc('sent_at'),
-          SQuery.limit(50),
-        ],
-      );
-
-      for (final data in docs) {
-        final id = (data['id'] ?? data['\$id'] ?? const Uuid().v4()).toString();
-        final senderId = (data['sender_id'] ?? data['senderId'] ?? 'unknown').toString();
-        final text = (data['message'] ?? '').toString();
-        final sentAt = data['sent_at'] ?? data['sentAt'];
-
-        final msg = Message.text(
-          id: id,
-          authorId: senderId,
-          text: text,
-          createdAt: sentAt != null ? DateTime.tryParse(sentAt.toString()) : null,
+  void _subscribe() {
+    _subscription?.cancel();
+    _subscription = _chat
+        .getMessages(chatId: _chatId)
+        .listen(
+          _onMessages,
+          onError: (Object e) {
+            debugPrint('Chat stream error: $e');
+            if (mounted) {
+              setState(() {
+                _isLoading = false;
+                _error = (l) => l.chatLoadError;
+              });
+            }
+          },
         );
-        await _chatController.insertMessage(msg, animated: false);
-      }
-    } on Exception catch (e) {
-      debugPrint('Chat load error: $e');
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
+  }
+
+  Future<void> _onMessages(List<Map<String, dynamic>> docs) async {
+    // The stream delivers the newest messages first; the chat UI expects
+    // chronological order (oldest first).
+    final messages = <Message>[];
+    final seen = <String>{};
+    for (final data in docs.reversed) {
+      final id = (data[r'$id'] ?? data['id'])?.toString() ?? const Uuid().v4();
+      if (!seen.add(id)) continue;
+      final authorId = data['senderId']?.toString() ?? 'unknown';
+      final name = data['senderName']?.toString().trim() ?? '';
+      if (name.isNotEmpty) _senderNames[authorId] = name;
+      messages.add(
+        Message.text(
+          id: id,
+          authorId: authorId,
+          text: data['message']?.toString() ?? '',
+          createdAt: parseTimestamp(data['sentAt']),
+        ),
+      );
+    }
+    _pending.removeWhere((id, _) => seen.contains(id));
+    messages.addAll(_pending.values);
+
+    if (!mounted) return;
+    await _chatController.setMessages(messages, animated: !_isLoading);
+    if (mounted && (_isLoading || _error != null)) {
+      setState(() {
+        _isLoading = false;
+        _error = null;
+      });
     }
   }
 
   Future<User?> _resolveUser(UserID id) async {
-    if (id == widget.user.id) {
-      final name = widget.user.userMetadata?['full_name'] as String? ?? 'Me';
-      return User(id: id, name: name);
+    if (id == widget.fbUser.id) {
+      return User(
+        id: id,
+        name: _displayName(widget.fbUser, context.l10n.chatMe),
+      );
     }
-    return User(id: id);
+    final name = _senderNames[id];
+    return User(id: id, name: name);
   }
 
   Future<void> _handleMessageSend(String text) async {
     if (text.trim().isEmpty) return;
-    final user = widget.user;
+    final user = widget.fbUser;
     final msgId = const Uuid().v4();
 
-    // Optimistic insert
+    // Optimistic insert. The row is created with the same id so the realtime
+    // echo replaces it instead of duplicating it.
     final message = Message.text(
       id: msgId,
       authorId: user.id,
       text: text.trim(),
       createdAt: DateTime.now(),
     );
+    _pending[msgId] = message;
     await _chatController.insertMessage(message);
 
     try {
-      await _supabase.createDocument(
+      await _db.createDocument(
         collectionId: AppConfig.messagesCollection,
+        documentId: msgId,
         data: {
-          'chat_id': 'general',
-          'sender_id': user.id,
-          'sender_name': user.userMetadata?['full_name'] as String? ?? 'User',
+          'chatId': _chatId,
+          'senderId': user.id,
+          // sender_name is set by the database from the sender's profile.
           'message': text.trim(),
           'type': 'text',
-          'sent_at': DateTime.now().toUtc().toIso8601String(),
           'read': false,
         },
       );
     } on Exception catch (e) {
       debugPrint('Failed to send message: $e');
-      await _chatController.removeMessage(message);
+      _pending.remove(msgId);
+      try {
+        await _chatController.removeMessage(message);
+      } on Object catch (_) {
+        // Already replaced by a stream emission.
+      }
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Failed to send: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              e is sb.PostgrestException && SupabaseService.isRateLimited(e)
+                  ? context.l10n.chatRateLimited(e.message)
+                  : context.l10n.chatSendFailed(
+                      ErrorHandler.getUserMessage(e, context.l10n),
+                    ),
+            ),
+          ),
+        );
       }
     }
   }
@@ -148,13 +209,48 @@ class _ChatViewState extends State<_ChatView> {
     if (_isLoading) {
       return const Center(child: CircularProgressIndicator());
     }
+    if (_error != null) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(_error!(context.l10n)),
+            const SizedBox(height: 12),
+            ElevatedButton(
+              onPressed: () {
+                setState(() {
+                  _isLoading = true;
+                  _error = null;
+                });
+                _subscribe();
+              },
+              child: Text(context.l10n.retry),
+            ),
+          ],
+        ),
+      );
+    }
 
     return Chat(
-      currentUserId: widget.user.id,
+      currentUserId: widget.fbUser.id,
       chatController: _chatController,
       resolveUser: _resolveUser,
       onMessageSend: _handleMessageSend,
       theme: ChatTheme.fromThemeData(Theme.of(context)),
+      // flutter_chat_ui hard-codes its English placeholders, so the empty
+      // state and the composer hint stay untranslated unless they are built
+      // here (every other string on this screen comes from the ARBs).
+      builders: Builders(
+        emptyChatListBuilder: (context) =>
+            EmptyChatList(text: context.l10n.chatEmpty),
+        composerBuilder: (context) =>
+            Composer(hintText: context.l10n.chatComposerHint),
+      ),
     );
+  }
+
+  static String _displayName(sb.User user, String fallback) {
+    final n = user.userMetadata?['name'];
+    return (n is String && n.trim().isNotEmpty) ? n : fallback;
   }
 }

@@ -6,6 +6,7 @@
 import 'dart:async' as _i5;
 import 'dart:ui' as _i7;
 
+import 'package:climate_app/core/l10n/l10n.dart' as _i9;
 import 'package:climate_app/features/auth/providers/auth_provider.dart' as _i8;
 import 'package:climate_app/features/profile/providers/profile_provider.dart'
     as _i3;
@@ -46,6 +47,14 @@ class MockReportsStatusProvider extends _i1.Mock
           as bool);
 
   @override
+  int get userDataGeneration =>
+      (super.noSuchMethod(
+            Invocation.getter(#userDataGeneration),
+            returnValue: 0,
+          )
+          as int);
+
+  @override
   bool get hasListeners =>
       (super.noSuchMethod(Invocation.getter(#hasListeners), returnValue: false)
           as bool);
@@ -56,6 +65,12 @@ class MockReportsStatusProvider extends _i1.Mock
         Invocation.method(#updateContext, [profileProvider]),
         returnValueForMissingStub: null,
       );
+
+  @override
+  void clearUserData() => super.noSuchMethod(
+    Invocation.method(#clearUserData, []),
+    returnValueForMissingStub: null,
+  );
 
   @override
   List<_i4.VerificationReport> getReports(
@@ -122,6 +137,14 @@ class MockReportsStatusProvider extends _i1.Mock
           as int);
 
   @override
+  bool hasVotedOn(String? reportId) =>
+      (super.noSuchMethod(
+            Invocation.method(#hasVotedOn, [reportId]),
+            returnValue: false,
+          )
+          as bool);
+
+  @override
   _i5.Future<void> submitVerificationRequest({
     required String? hazardType,
     required String? severity,
@@ -165,11 +188,66 @@ class MockReportsStatusProvider extends _i1.Mock
           as _i5.Future<void>);
 
   @override
+  _i5.Future<void> refreshLoadedLists() =>
+      (super.noSuchMethod(
+            Invocation.method(#refreshLoadedLists, []),
+            returnValue: _i5.Future<void>.value(),
+            returnValueForMissingStub: _i5.Future<void>.value(),
+          )
+          as _i5.Future<void>);
+
+  @override
+  _i5.Future<void> loadMyVotes({bool? force = false}) =>
+      (super.noSuchMethod(
+            Invocation.method(#loadMyVotes, [], {#force: force}),
+            returnValue: _i5.Future<void>.value(),
+            returnValueForMissingStub: _i5.Future<void>.value(),
+          )
+          as _i5.Future<void>);
+
+  @override
+  _i5.Future<void> fetchAllPages({
+    _i4.ReportStatus? status,
+    String? userId,
+    String? excludeUserId,
+    int? maxRows = 1000,
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(#fetchAllPages, [], {
+              #status: status,
+              #userId: userId,
+              #excludeUserId: excludeUserId,
+              #maxRows: maxRows,
+            }),
+            returnValue: _i5.Future<void>.value(),
+            returnValueForMissingStub: _i5.Future<void>.value(),
+          )
+          as _i5.Future<void>);
+
+  @override
+  _i5.Future<void> fetchToVerify() =>
+      (super.noSuchMethod(
+            Invocation.method(#fetchToVerify, []),
+            returnValue: _i5.Future<void>.value(),
+            returnValueForMissingStub: _i5.Future<void>.value(),
+          )
+          as _i5.Future<void>);
+
+  @override
+  List<_i4.VerificationReport> toVerifyReports(String? uid) =>
+      (super.noSuchMethod(
+            Invocation.method(#toVerifyReports, [uid]),
+            returnValue: <_i4.VerificationReport>[],
+          )
+          as List<_i4.VerificationReport>);
+
+  @override
   _i5.Future<void> fetchReports({
     bool? loadMore = false,
     _i4.ReportStatus? status,
     String? userId,
     String? excludeUserId,
+    int? pageSize = 20,
   }) =>
       (super.noSuchMethod(
             Invocation.method(#fetchReports, [], {
@@ -177,11 +255,36 @@ class MockReportsStatusProvider extends _i1.Mock
               #status: status,
               #userId: userId,
               #excludeUserId: excludeUserId,
+              #pageSize: pageSize,
             }),
             returnValue: _i5.Future<void>.value(),
             returnValueForMissingStub: _i5.Future<void>.value(),
           )
           as _i5.Future<void>);
+
+  @override
+  _i5.Future<_i4.VerificationReport?> fetchReportById(String? reportId) =>
+      (super.noSuchMethod(
+            Invocation.method(#fetchReportById, [reportId]),
+            returnValue: _i5.Future<_i4.VerificationReport?>.value(),
+          )
+          as _i5.Future<_i4.VerificationReport?>);
+
+  @override
+  _i5.Future<List<Map<String, dynamic>>> fetchAllReportRows({
+    _i4.ReportStatus? status,
+    int? maxRows = 10000,
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(#fetchAllReportRows, [], {
+              #status: status,
+              #maxRows: maxRows,
+            }),
+            returnValue: _i5.Future<List<Map<String, dynamic>>>.value(
+              <Map<String, dynamic>>[],
+            ),
+          )
+          as _i5.Future<List<Map<String, dynamic>>>);
 
   @override
   _i5.Future<List<_i4.VerificationReport>> getAllReports() =>
@@ -194,9 +297,34 @@ class MockReportsStatusProvider extends _i1.Mock
           as _i5.Future<List<_i4.VerificationReport>>);
 
   @override
-  _i5.Future<void> verifyReport(String? reportId, {String? userId}) =>
+  _i5.Future<void> verifyReport(
+    String? reportId, {
+    String? userId,
+    String? comment,
+  }) =>
       (super.noSuchMethod(
-            Invocation.method(#verifyReport, [reportId], {#userId: userId}),
+            Invocation.method(
+              #verifyReport,
+              [reportId],
+              {#userId: userId, #comment: comment},
+            ),
+            returnValue: _i5.Future<void>.value(),
+            returnValueForMissingStub: _i5.Future<void>.value(),
+          )
+          as _i5.Future<void>);
+
+  @override
+  _i5.Future<void> disputeReport(
+    String? reportId, {
+    String? userId,
+    String? comment,
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(
+              #disputeReport,
+              [reportId],
+              {#userId: userId, #comment: comment},
+            ),
             returnValue: _i5.Future<void>.value(),
             returnValueForMissingStub: _i5.Future<void>.value(),
           )
@@ -212,9 +340,16 @@ class MockReportsStatusProvider extends _i1.Mock
           as _i5.Future<void>);
 
   @override
-  _i5.Future<void> rejectReport(String? reportId, {String? userId}) =>
+  _i5.Future<void> staffRejectReport(
+    String? reportId, {
+    required String? reason,
+  }) =>
       (super.noSuchMethod(
-            Invocation.method(#rejectReport, [reportId], {#userId: userId}),
+            Invocation.method(
+              #staffRejectReport,
+              [reportId],
+              {#reason: reason},
+            ),
             returnValue: _i5.Future<void>.value(),
             returnValueForMissingStub: _i5.Future<void>.value(),
           )
@@ -312,9 +447,63 @@ class MockAuthProvider extends _i1.Mock implements _i8.AuthProvider {
           as bool);
 
   @override
+  bool get hasStoredSession =>
+      (super.noSuchMethod(
+            Invocation.getter(#hasStoredSession),
+            returnValue: false,
+          )
+          as bool);
+
+  @override
   bool get hasListeners =>
       (super.noSuchMethod(Invocation.getter(#hasListeners), returnValue: false)
           as bool);
+
+  @override
+  bool canVoteOn({String? reporterId, String? reportWard, String? reportLga}) =>
+      (super.noSuchMethod(
+            Invocation.method(#canVoteOn, [], {
+              #reporterId: reporterId,
+              #reportWard: reportWard,
+              #reportLga: reportLga,
+            }),
+            returnValue: false,
+          )
+          as bool);
+
+  @override
+  bool canManageReportStatus({String? reporterId}) =>
+      (super.noSuchMethod(
+            Invocation.method(#canManageReportStatus, [], {
+              #reporterId: reporterId,
+            }),
+            returnValue: false,
+          )
+          as bool);
+
+  @override
+  void addSignInListener(_i7.VoidCallback? listener) => super.noSuchMethod(
+    Invocation.method(#addSignInListener, [listener]),
+    returnValueForMissingStub: null,
+  );
+
+  @override
+  void removeSignInListener(_i7.VoidCallback? listener) => super.noSuchMethod(
+    Invocation.method(#removeSignInListener, [listener]),
+    returnValueForMissingStub: null,
+  );
+
+  @override
+  void addSignOutListener(_i7.VoidCallback? listener) => super.noSuchMethod(
+    Invocation.method(#addSignOutListener, [listener]),
+    returnValueForMissingStub: null,
+  );
+
+  @override
+  void removeSignOutListener(_i7.VoidCallback? listener) => super.noSuchMethod(
+    Invocation.method(#removeSignOutListener, [listener]),
+    returnValueForMissingStub: null,
+  );
 
   @override
   _i5.Future<void> reloadUserData() =>
@@ -335,9 +524,9 @@ class MockAuthProvider extends _i1.Mock implements _i8.AuthProvider {
           as _i5.Future<void>);
 
   @override
-  _i5.Future<bool> unlockApp() =>
+  _i5.Future<bool> unlockApp({String? promptReason}) =>
       (super.noSuchMethod(
-            Invocation.method(#unlockApp, []),
+            Invocation.method(#unlockApp, [], {#promptReason: promptReason}),
             returnValue: _i5.Future<bool>.value(false),
           )
           as _i5.Future<bool>);
@@ -352,8 +541,8 @@ class MockAuthProvider extends _i1.Mock implements _i8.AuthProvider {
     String? state,
     String? lga,
     String? ward,
-    bool? isVerified,
     String? phoneNumber,
+    String? ndpaPolicyVersion,
   }) =>
       (super.noSuchMethod(
             Invocation.method(#signUpWithEmail, [], {
@@ -365,32 +554,8 @@ class MockAuthProvider extends _i1.Mock implements _i8.AuthProvider {
               #state: state,
               #lga: lga,
               #ward: ward,
-              #isVerified: isVerified,
               #phoneNumber: phoneNumber,
-            }),
-            returnValue: _i5.Future<bool>.value(false),
-          )
-          as _i5.Future<bool>);
-
-  @override
-  _i5.Future<bool> signUpWithPhone({
-    required String? phone,
-    String? name,
-    String? address,
-    _i8.UserRole? role,
-    String? state,
-    String? lga,
-    String? ward,
-  }) =>
-      (super.noSuchMethod(
-            Invocation.method(#signUpWithPhone, [], {
-              #phone: phone,
-              #name: name,
-              #address: address,
-              #role: role,
-              #state: state,
-              #lga: lga,
-              #ward: ward,
+              #ndpaPolicyVersion: ndpaPolicyVersion,
             }),
             returnValue: _i5.Future<bool>.value(false),
           )
@@ -413,9 +578,17 @@ class MockAuthProvider extends _i1.Mock implements _i8.AuthProvider {
           as _i5.Future<bool>);
 
   @override
-  _i5.Future<bool> sendOtpForPhone(String? phone) =>
+  _i5.Future<bool> sendOtpForPhone(
+    String? phone, {
+    Map<String, dynamic>? registrationData,
+    bool? loginOnly = false,
+  }) =>
       (super.noSuchMethod(
-            Invocation.method(#sendOtpForPhone, [phone]),
+            Invocation.method(
+              #sendOtpForPhone,
+              [phone],
+              {#registrationData: registrationData, #loginOnly: loginOnly},
+            ),
             returnValue: _i5.Future<bool>.value(false),
           )
           as _i5.Future<bool>);
@@ -462,17 +635,40 @@ class MockAuthProvider extends _i1.Mock implements _i8.AuthProvider {
           as _i5.Future<void>);
 
   @override
-  _i5.Future<bool> authenticateWithBiometrics() =>
+  _i5.Future<void> confirmPasswordReset({
+    required String? email,
+    required String? code,
+    required String? newPassword,
+  }) =>
       (super.noSuchMethod(
-            Invocation.method(#authenticateWithBiometrics, []),
+            Invocation.method(#confirmPasswordReset, [], {
+              #email: email,
+              #code: code,
+              #newPassword: newPassword,
+            }),
+            returnValue: _i5.Future<void>.value(),
+            returnValueForMissingStub: _i5.Future<void>.value(),
+          )
+          as _i5.Future<void>);
+
+  @override
+  _i5.Future<bool> authenticateWithBiometrics({String? promptReason}) =>
+      (super.noSuchMethod(
+            Invocation.method(#authenticateWithBiometrics, [], {
+              #promptReason: promptReason,
+            }),
             returnValue: _i5.Future<bool>.value(false),
           )
           as _i5.Future<bool>);
 
   @override
-  _i5.Future<void> setBiometricEnabled(bool? enabled) =>
+  _i5.Future<void> setBiometricEnabled(bool? enabled, {String? promptReason}) =>
       (super.noSuchMethod(
-            Invocation.method(#setBiometricEnabled, [enabled]),
+            Invocation.method(
+              #setBiometricEnabled,
+              [enabled],
+              {#promptReason: promptReason},
+            ),
             returnValue: _i5.Future<void>.value(),
             returnValueForMissingStub: _i5.Future<void>.value(),
           )
@@ -517,9 +713,9 @@ class MockAuthProvider extends _i1.Mock implements _i8.AuthProvider {
           as _i5.Future<Duration?>);
 
   @override
-  _i5.Future<void> logout() =>
+  _i5.Future<void> logout({_i9.LocalizedText? notice}) =>
       (super.noSuchMethod(
-            Invocation.method(#logout, []),
+            Invocation.method(#logout, [], {#notice: notice}),
             returnValue: _i5.Future<void>.value(),
             returnValueForMissingStub: _i5.Future<void>.value(),
           )

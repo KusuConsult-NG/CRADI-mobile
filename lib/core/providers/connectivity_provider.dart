@@ -35,6 +35,10 @@ class ConnectivityProvider extends ChangeNotifier {
     _startMonitoring();
   }
 
+  /// Without platform monitoring (tests only).
+  @visibleForTesting
+  ConnectivityProvider.forTesting({bool online = true}) : _isOnline = online;
+
   /// Perform initial connectivity check
   Future<void> _initConnectivity() async {
     try {
@@ -117,6 +121,15 @@ class ConnectivityProvider extends ChangeNotifier {
     if (_manualOffline != value) {
       _manualOffline = value;
       notifyListeners();
+      // Leaving manual offline mode with a connection is a reconnect too:
+      // flush what was queued meanwhile.
+      if (!value && _isOnline) {
+        developer.log(
+          'Manual offline mode off — triggering offline queue sync',
+          name: 'ConnectivityProvider',
+        );
+        onReconnect?.call();
+      }
     }
   }
 

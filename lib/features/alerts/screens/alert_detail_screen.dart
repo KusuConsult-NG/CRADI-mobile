@@ -1,12 +1,29 @@
+import 'package:climate_app/core/constants/hazards.dart';
 import 'package:climate_app/core/theme/app_colors.dart';
 import 'package:climate_app/core/utils/error_handler.dart';
-import 'package:climate_app/core/services/peer_verification_service.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:climate_app/core/services/supabase_service.dart';
 
+import 'package:climate_app/features/alerts/screens/alert_severity.dart';
+import 'package:climate_app/features/auth/providers/auth_provider.dart';
+import 'package:climate_app/features/verification/providers/reports_status_provider.dart';
+import 'package:climate_app/features/verification/models/verification_report_model.dart';
+import 'package:climate_app/features/verification/widgets/dispute_comment_dialog.dart';
+import 'package:climate_app/features/verification/widgets/verification_request_badge.dart';
+
+import 'package:climate_app/features/alerts/providers/alerts_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart';
+import 'package:climate_app/core/l10n/l10n.dart';
 
+/// Detail view for an alert.
+///
+/// Accepts either a report-derived map from the alerts list (title, type,
+/// severity, location, time, status, description, reportId, reporterId,
+/// ward, color, icon) or an `alerts` row created by staff (title, message,
+/// severity, targetLga, reportId?, isActive, createdAt). Every field is
+/// optional.
 class AlertDetailScreen extends StatefulWidget {
   final Map<String, dynamic> alert;
 
@@ -22,37 +39,138 @@ class _AlertDetailScreenState extends State<AlertDetailScreen> {
   bool _hasVerified = false;
 
   @override
+  void initState() {
+    super.initState();
+    // Votes of the signed-in user, to hide the vote actions on a report
+    // already voted on. Re-read: a reopen elsewhere may have cleared them.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        context.read<ReportsStatusProvider>().loadMyVotes(force: true);
+      }
+    });
+  }
+
+  @override
   void dispose() {
     _commentController.dispose();
     super.dispose();
   }
 
+  /// Non-empty string value of the first present key, else null.
+  String? _str(List<String> keys) {
+    for (final k in keys) {
+      final v = widget.alert[k];
+      if (v == null) continue;
+      final s = v.toString().trim();
+      if (s.isNotEmpty) return s;
+    }
+    return null;
+  }
+
+  String? get _reportId => _str(['reportId', 'report_id']);
+
+  String get _title => _str(['title']) ?? context.l10n.alertDetailDefaultTitle;
+
+  String? get _severity => _str(['severity']);
+
+  String get _location =>
+      _str(['location']) ??
+      AlertsProvider.targetLabel(widget.alert) ??
+      _str(['targetLga', 'target_lga']) ??
+      context.l10n.alertDetailNotSpecified;
+
+  String get _time {
+    final t = _str(['time']);
+    if (t != null) return t;
+    final created = parseTimestamp(
+      widget.alert['createdAt'] ?? widget.alert['created_at'],
+    );
+    return created == null
+        ? context.l10n.timeJustNow
+        : localizedDateFormat(
+            context,
+            'MMM d, yyyy • h:mm a',
+          ).format(created.toLocal());
+  }
+
+  /// Stored status ('pending', 'approved', …) or 'active' / 'inactive'
+  /// for staff alerts.
+  String get _status {
+    final s = _str(['status']);
+    if (s != null) return s;
+    final active = widget.alert['isActive'] ?? widget.alert['is_active'];
+    return active == false ? 'inactive' : 'active';
+  }
+
+  /// Display text for [_status].
+  String _statusLabel(String status) {
+    final l10n = context.l10n;
+    switch (status.toLowerCase()) {
+      case 'active':
+        return l10n.alertStatusActive;
+      case 'inactive':
+        return l10n.alertStatusInactive;
+    }
+    for (final s in ReportStatus.values) {
+      if (s.name == status.toLowerCase()) return s.label(l10n);
+    }
+    return status;
+  }
+
+  /// Whether the alert is a report sent as a verification request.
+  bool get _isVerificationRequest =>
+      _str(['reportType']) == VerificationReport.verificationRequestType;
+
+  /// Hazard of a report-derived alert (null for staff alerts).
+  Hazard? get _hazard => Hazard.tryParse(_str(['type', 'hazardType']));
+
+  /// Hazard colour for reports (same as the list card), else the colour
+  /// handed over by the caller, else by severity (staff alerts).
+  Color get _severityColor {
+    final hazard = _hazard;
+    if (hazard != null) return hazard.color;
+    final c = widget.alert['color'];
+    if (c is Color) return c;
+    return alertSeverityColor(_severity);
+  }
+
+  IconData get _icon {
+    final hazard = _hazard;
+    if (hazard != null) return hazard.icon;
+    final i = widget.alert['icon'];
+    return i is IconData ? i : alertSeverityIcon(_severity);
+  }
+
+  void _close() {
+    if (context.canPop()) {
+      context.pop();
+    } else {
+      context.go('/alerts');
+    }
+  }
+
   Future<void> _submitVerification(bool isConfirmed) async {
     if (_isSubmitting || _hasVerified) return;
 
+    // A dispute must say what is wrong with the report.
+    var comment = _commentController.text.trim();
+    if (!isConfirmed && comment.isEmpty) {
+      final entered = await showDisputeCommentDialog(context);
+      if (entered == null || !mounted) return;
+      comment = entered;
+      _commentController.text = entered;
+    }
+
     setState(() => _isSubmitting = true);
 
+    final reports = context.read<ReportsStatusProvider>();
     try {
-      final currentUser = Supabase.instance.client.auth.currentUser;
-
-      if (currentUser == null) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Please log in to continue.'),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
-        return;
-      }
-
-      final reportId = (widget.alert['reportId'] ?? widget.alert['report_id']) as String?;
+      final reportId = _reportId;
       if (reportId == null || reportId.isEmpty) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Report details could not be loaded.'),
+            SnackBar(
+              content: Text(context.l10n.alertDetailReportLoadError),
               backgroundColor: Colors.red,
             ),
           );
@@ -60,41 +178,54 @@ class _AlertDetailScreenState extends State<AlertDetailScreen> {
         return;
       }
 
-      final result = await PeerVerificationService().submitVerification(
-        reportId: reportId,
-        userId: currentUser.id,
-        isConfirmed: isConfirmed,
-        comment: _commentController.text.trim().isEmpty
-            ? null
-            : _commentController.text.trim(),
+      // Through the provider so the voted-on cache and the lists refresh.
+      if (isConfirmed) {
+        await reports.verifyReport(
+          reportId,
+          comment: comment.isEmpty ? null : comment,
+        );
+      } else {
+        await reports.disputeReport(reportId, comment: comment);
+      }
+
+      if (!mounted) return;
+      setState(() => _hasVerified = true);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            isConfirmed
+                ? context.l10n.verifyConfirmedMessage
+                : context.l10n.verifyDisputedMessage,
+          ),
+          backgroundColor: isConfirmed ? Colors.green : Colors.orange,
+          duration: const Duration(seconds: 3),
+        ),
       );
 
-      if (mounted && result['success'] == true) {
-        setState(() => _hasVerified = true);
-
+      // Wait a bit then go back
+      Future.delayed(const Duration(seconds: 2), () {
+        if (mounted) _close();
+      });
+    } on VerificationRefusedException catch (e) {
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(
-              result['message'] ?? 'Verification submitted successfully',
-            ),
-            backgroundColor: isConfirmed ? Colors.green : Colors.orange,
-            duration: const Duration(seconds: 3),
+            content: Text(e.message(context.l10n)),
+            backgroundColor: Colors.red,
           ),
         );
-
-        // Wait a bit then go back
-        Future.delayed(const Duration(seconds: 2), () {
-          if (mounted) {
-            context.pop();
-          }
-        });
       }
     } on Exception catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              ErrorHandler.handleError(e, context: 'Alert Verification'),
+              ErrorHandler.handleError(
+                e,
+                context.l10n,
+                context: 'Alert Verification',
+              ),
             ),
             backgroundColor: Colors.red,
           ),
@@ -109,20 +240,35 @@ class _AlertDetailScreenState extends State<AlertDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final severityColor =
-        widget.alert['color'] as Color? ?? AppColors.primaryRed;
-    final status = widget.alert['status'] as String? ?? 'Active';
-    final isPendingVerification = status.toLowerCase() == 'pending';
+    final severityColor = _severityColor;
+    final status = _status;
+    final auth = context.watch<AuthProvider>();
+    final reports = context.watch<ReportsStatusProvider>();
+    final reportId = _reportId;
+    // Peer verification only applies to a report-backed alert the user may
+    // vote on (mirrors the verifications_insert policy) and has not voted
+    // on yet.
+    final isPendingVerification =
+        status.toLowerCase() == 'pending' &&
+        reportId != null &&
+        !reports.hasVotedOn(reportId) &&
+        auth.canVoteOn(
+          reporterId: _str(['reporterId']),
+          reportWard: _str(['ward']),
+          reportLga: _str(['lga']),
+        );
+    final description = _str(['description', 'message']);
 
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
         leading: IconButton(
+          tooltip: context.l10n.back,
           icon: const Icon(Icons.arrow_back_ios_new, size: 20),
-          onPressed: () => context.pop(),
+          onPressed: _close,
         ),
         title: Text(
-          'Alert Details',
+          context.l10n.alertDetailTitle,
           style: GoogleFonts.lexend(fontWeight: FontWeight.bold),
         ),
         centerTitle: true,
@@ -159,10 +305,8 @@ class _AlertDetailScreenState extends State<AlertDetailScreen> {
                           color: severityColor.withValues(alpha: 0.1),
                           shape: BoxShape.circle,
                         ),
-                        child: Icon(
-                          widget.alert['icon'] as IconData? ?? Icons.warning,
-                          color: severityColor,
-                          size: 32,
+                        child: ExcludeSemantics(
+                          child: Icon(_icon, color: severityColor, size: 32),
                         ),
                       ),
                       const SizedBox(width: 16),
@@ -171,7 +315,7 @@ class _AlertDetailScreenState extends State<AlertDetailScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              widget.alert['title'] ?? 'Unknown Alert',
+                              _title,
                               style: GoogleFonts.lexend(
                                 fontSize: 20,
                                 fontWeight: FontWeight.bold,
@@ -179,14 +323,27 @@ class _AlertDetailScreenState extends State<AlertDetailScreen> {
                               ),
                             ),
                             const SizedBox(height: 4),
-                            Text(
-                              widget.alert['severity'] ?? 'Normal Severity',
-                              style: GoogleFonts.lexend(
-                                fontSize: 14,
-                                color: severityColor,
-                                fontWeight: FontWeight.w600,
+                            // Severity is also signalled by the icon and the
+                            // colour, neither of which a screen reader can
+                            // convey, so the text node carries the meaning.
+                            Semantics(
+                              label: context.l10n.a11ySeverityLabel(
+                                alertSeverityLabel(_severity, context.l10n),
+                              ),
+                              excludeSemantics: true,
+                              child: Text(
+                                alertSeverityLabel(_severity, context.l10n),
+                                style: GoogleFonts.lexend(
+                                  fontSize: 14,
+                                  color: severityColor,
+                                  fontWeight: FontWeight.w600,
+                                ),
                               ),
                             ),
+                            if (_isVerificationRequest) ...[
+                              const SizedBox(height: 6),
+                              const VerificationRequestBadge(),
+                            ],
                           ],
                         ),
                       ),
@@ -195,17 +352,21 @@ class _AlertDetailScreenState extends State<AlertDetailScreen> {
                   const Divider(height: 32),
                   _buildInfoRow(
                     Icons.location_on,
-                    'Location',
-                    widget.alert['location'] ?? 'Not specified',
+                    context.l10n.locationLabel,
+                    _location,
                   ),
                   const SizedBox(height: 16),
                   _buildInfoRow(
                     Icons.schedule,
-                    'Reported Time',
-                    widget.alert['time'] ?? 'Just now',
+                    context.l10n.alertDetailReportedTime,
+                    _time,
                   ),
                   const SizedBox(height: 16),
-                  _buildInfoRow(Icons.info_outline, 'Status', status),
+                  _buildInfoRow(
+                    Icons.info_outline,
+                    context.l10n.alertDetailStatus,
+                    _statusLabel(status),
+                  ),
                 ],
               ),
             ),
@@ -213,7 +374,7 @@ class _AlertDetailScreenState extends State<AlertDetailScreen> {
             const SizedBox(height: 24),
 
             Text(
-              'Description',
+              context.l10n.descriptionLabel,
               style: GoogleFonts.lexend(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
@@ -222,8 +383,7 @@ class _AlertDetailScreenState extends State<AlertDetailScreen> {
             ),
             const SizedBox(height: 12),
             Text(
-              widget.alert['description'] ??
-                  'No additional description provided for this alert. Please take necessary precautions and follow local guidelines.',
+              description ?? context.l10n.alertDetailNoDescription,
               style: GoogleFonts.lexend(
                 fontSize: 15,
                 color: AppColors.textSecondary,
@@ -234,7 +394,7 @@ class _AlertDetailScreenState extends State<AlertDetailScreen> {
             const SizedBox(height: 24),
 
             Text(
-              'Recommended Actions',
+              context.l10n.alertDetailRecommendedActions,
               style: GoogleFonts.lexend(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
@@ -242,10 +402,10 @@ class _AlertDetailScreenState extends State<AlertDetailScreen> {
               ),
             ),
             const SizedBox(height: 12),
-            _buildActionItem('1. Stay informed via local news/radio.'),
-            _buildActionItem('2. Prepare emergency supplies.'),
-            _buildActionItem('3. Avoid travel to affected areas.'),
-            _buildActionItem('4. Follow evacuation orders if issued.'),
+            _buildActionItem(context.l10n.alertDetailAction1),
+            _buildActionItem(context.l10n.alertDetailAction2),
+            _buildActionItem(context.l10n.alertDetailAction3),
+            _buildActionItem(context.l10n.alertDetailAction4),
 
             // Verification Section (only show if pending)
             if (isPendingVerification && !_hasVerified) ...[
@@ -270,7 +430,7 @@ class _AlertDetailScreenState extends State<AlertDetailScreen> {
                         const SizedBox(width: 12),
                         Expanded(
                           child: Text(
-                            'Peer Verification Required',
+                            context.l10n.alertDetailPeerVerificationTitle,
                             style: GoogleFonts.lexend(
                               fontSize: 16,
                               fontWeight: FontWeight.bold,
@@ -282,7 +442,7 @@ class _AlertDetailScreenState extends State<AlertDetailScreen> {
                     ),
                     const SizedBox(height: 12),
                     Text(
-                      'As an EWM in this ward, please verify if you can confirm this report based on what you\'ve observed.',
+                      context.l10n.alertDetailPeerVerificationBody,
                       style: GoogleFonts.lexend(
                         fontSize: 14,
                         color: Colors.blue.shade700,
@@ -295,8 +455,8 @@ class _AlertDetailScreenState extends State<AlertDetailScreen> {
                     TextField(
                       controller: _commentController,
                       decoration: InputDecoration(
-                        labelText: 'Add Comment (Optional)',
-                        hintText: 'Additional information about this report...',
+                        labelText: context.l10n.alertDetailCommentLabel,
+                        hintText: context.l10n.alertDetailCommentHint,
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
                           borderSide: BorderSide(color: Colors.grey.shade300),
@@ -337,7 +497,9 @@ class _AlertDetailScreenState extends State<AlertDetailScreen> {
                                   )
                                 : const Icon(Icons.check_circle, size: 20),
                             label: Text(
-                              _isSubmitting ? 'Submitting...' : 'Confirm',
+                              _isSubmitting
+                                  ? context.l10n.commonSubmitting
+                                  : context.l10n.voteConfirm,
                               style: GoogleFonts.lexend(
                                 fontSize: 14,
                                 fontWeight: FontWeight.bold,
@@ -373,7 +535,9 @@ class _AlertDetailScreenState extends State<AlertDetailScreen> {
                                   )
                                 : const Icon(Icons.cancel, size: 20),
                             label: Text(
-                              _isSubmitting ? 'Submitting...' : 'Decline',
+                              _isSubmitting
+                                  ? context.l10n.commonSubmitting
+                                  : context.l10n.voteDecline,
                               style: GoogleFonts.lexend(
                                 fontSize: 14,
                                 fontWeight: FontWeight.bold,
@@ -425,7 +589,7 @@ class _AlertDetailScreenState extends State<AlertDetailScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Verification Submitted',
+                            context.l10n.alertDetailVerificationSubmitted,
                             style: GoogleFonts.lexend(
                               fontSize: 16,
                               fontWeight: FontWeight.bold,
@@ -434,7 +598,7 @@ class _AlertDetailScreenState extends State<AlertDetailScreen> {
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            'Thank you for your contribution!',
+                            context.l10n.alertDetailThanks,
                             style: GoogleFonts.lexend(
                               fontSize: 14,
                               color: Colors.green.shade700,
@@ -469,7 +633,7 @@ class _AlertDetailScreenState extends State<AlertDetailScreen> {
             width: double.infinity,
             height: 56,
             child: ElevatedButton(
-              onPressed: () => context.pop(),
+              onPressed: _close,
               style: ElevatedButton.styleFrom(
                 backgroundColor: _hasVerified
                     ? Colors.grey.shade600
@@ -481,7 +645,9 @@ class _AlertDetailScreenState extends State<AlertDetailScreen> {
                 elevation: 0,
               ),
               child: Text(
-                _hasVerified ? 'Go Back' : 'Dismiss',
+                _hasVerified
+                    ? context.l10n.alertDetailGoBack
+                    : context.l10n.alertDetailDismiss,
                 style: GoogleFonts.lexend(
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
@@ -499,25 +665,27 @@ class _AlertDetailScreenState extends State<AlertDetailScreen> {
       children: [
         Icon(icon, size: 20, color: Colors.grey.shade400),
         const SizedBox(width: 12),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              label,
-              style: GoogleFonts.lexend(
-                fontSize: 12,
-                color: Colors.grey.shade500,
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: GoogleFonts.lexend(
+                  fontSize: 12,
+                  color: Colors.grey.shade500,
+                ),
               ),
-            ),
-            Text(
-              value,
-              style: GoogleFonts.lexend(
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-                color: AppColors.textPrimary,
+              Text(
+                value,
+                style: GoogleFonts.lexend(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  color: AppColors.textPrimary,
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ],
     );

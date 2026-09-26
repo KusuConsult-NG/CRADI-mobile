@@ -123,7 +123,46 @@ class InputSanitizer {
     return sanitize(stripHtml(input));
   }
 
-  /// Full sanitization for user input
+  /// Prepare free text for STORAGE: strips control characters, collapses
+  /// whitespace and trims, but does NOT HTML-escape. Escaping belongs at the
+  /// point of rendering into HTML; storing entity-encoded text corrupts data
+  /// (e.g. "don't" -> "don&#x27;t") shown in native widgets.
+  ///
+  /// When [preserveNewlines] is true, line breaks are kept (runs of spaces and
+  /// tabs are collapsed per line) so multi-line descriptions survive.
+  /// When [maxLength] is set the result is truncated to that many characters.
+  static String cleanForStorage(
+    String input, {
+    bool preserveNewlines = false,
+    int? maxLength,
+  }) {
+    if (input.isEmpty) return input;
+    // Normalise CRLF/CR to LF, then drop C0/C1 control chars except \n and \t.
+    var text = input.replaceAll(RegExp(r'\r\n?'), '\n');
+    text = text.replaceAll(
+      RegExp(r'[\u0000-\u0008\u000B-\u001F\u007F-\u009F]'),
+      '',
+    );
+    if (preserveNewlines) {
+      text = text
+          .split('\n')
+          .map((line) => line.replaceAll(RegExp(r'[ \t\f\v]+'), ' ').trim())
+          .join('\n')
+          .replaceAll(RegExp(r'\n{3,}'), '\n\n')
+          .trim();
+    } else {
+      text = normalizeWhitespace(text);
+    }
+    if (maxLength != null && text.length > maxLength) {
+      text = text.substring(0, maxLength).trimRight();
+    }
+    return text;
+  }
+
+  /// Full sanitization for user input.
+  ///
+  /// NOTE: this HTML-escapes the result and is only suitable for text that
+  /// will be embedded into HTML. Use [cleanForStorage] for persisted data.
   static String fullSanitize(String input) {
     String sanitized = input;
     sanitized = normalizeWhitespace(sanitized);

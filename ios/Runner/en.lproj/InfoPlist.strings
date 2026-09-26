@@ -1,0 +1,8 @@
+/* English (development language). Keeps the localised copies below in one
+   place; the fallback values also live in Info.plist. */
+"NSLocationWhenInUseUsageDescription" = "This app needs access to location when open to pinpoint incident reports.";
+"NSSpeechRecognitionUsageDescription" = "This app needs to recognize your speech to transcribe hazard descriptions.";
+"NSMicrophoneUsageDescription" = "This app needs microphone access to listen to your voice input for hazard reports.";
+"NSPhotoLibraryUsageDescription" = "This app requires access to the photo library to upload hazard evidence.";
+"NSCameraUsageDescription" = "This app requires access to the camera to take hazard evidence photos.";
+"NSFaceIDUsageDescription" = "Face ID is used to unlock the app and protect your account.";

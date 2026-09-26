@@ -1,14 +1,62 @@
+import 'package:climate_app/features/verification/widgets/verification_request_badge.dart';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:climate_app/core/l10n/severity_label.dart';
+import 'package:provider/provider.dart';
+import 'package:climate_app/core/constants/hazards.dart';
 import 'package:climate_app/core/theme/app_colors.dart';
 import 'package:climate_app/features/verification/models/verification_report_model.dart';
+import 'package:climate_app/features/verification/providers/reports_status_provider.dart';
+import 'package:climate_app/features/verification/widgets/report_staff_actions.dart';
+import 'package:climate_app/features/verification/widgets/report_verifications_section.dart';
+import 'package:climate_app/features/verification/widgets/report_vote_actions.dart';
+import 'package:climate_app/core/l10n/l10n.dart';
+import 'package:climate_app/core/utils/screen_security.dart';
+import 'package:climate_app/core/widgets/app_network_image.dart';
 
-/// Read-only screen that displays full report details.
+/// Screen that displays full report details, with the actions the
+/// signed-in user may take on it (peer vote, staff approve / reject /
+/// reopen), the peer votes (for roles that may read them) and, for a
+/// rejected report, the staff's reason.
 /// Receives a [VerificationReport] via GoRouter `extra` parameter.
-class ReportViewScreen extends StatelessWidget {
+class ReportViewScreen extends StatefulWidget {
   final VerificationReport report;
 
   const ReportViewScreen({super.key, required this.report});
+
+  @override
+  State<ReportViewScreen> createState() => _ReportViewScreenState();
+}
+
+class _ReportViewScreenState extends State<ReportViewScreen>
+    with ScreenSecurityMixin<ReportViewScreen> {
+  late VerificationReport report = widget.report;
+
+  /// Bumped after every reload so the peer votes are re-read too.
+  int _reloads = 0;
+
+  @override
+  void didUpdateWidget(covariant ReportViewScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.report != widget.report) report = widget.report;
+  }
+
+  /// Re-fetches the report after an action changed it.
+  Future<void> _reload() async {
+    try {
+      final fresh = await context.read<ReportsStatusProvider>().fetchReportById(
+        report.id,
+      );
+      if (!mounted) return;
+      setState(() {
+        if (fresh != null) report = fresh;
+        _reloads++;
+      });
+    } on Exception catch (_) {
+      if (mounted) setState(() => _reloads++);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -16,15 +64,18 @@ class ReportViewScreen extends StatelessWidget {
       backgroundColor: AppColors.background,
       appBar: AppBar(
         leading: IconButton(
+          tooltip: context.l10n.back,
           icon: const Icon(
             Icons.arrow_back_ios_new,
             size: 20,
             color: AppColors.textPrimary,
           ),
-          onPressed: () => Navigator.of(context).pop(),
+          // Opened from a notification / deep link there is nothing to pop.
+          onPressed: () =>
+              context.canPop() ? context.pop() : context.go('/reports-status'),
         ),
         title: Text(
-          'Report Details',
+          context.l10n.reportDetailsTitle,
           style: GoogleFonts.lexend(
             fontWeight: FontWeight.bold,
             color: AppColors.textPrimary,
@@ -46,20 +97,76 @@ class ReportViewScreen extends StatelessWidget {
           children: [
             // ── Status + Hazard Header ────────────────────────────────
             _buildHeaderCard(),
+            const SizedBox(height: 12),
+
+            // ── Safety guides for this hazard ─────────────────────────
+            Align(
+              alignment: Alignment.centerLeft,
+              child: OutlinedButton.icon(
+                key: const ValueKey('report-safety-guides'),
+                // HazardGuidesScreen resolves the hazard to its guide
+                // category (knowledgeCategoryFor).
+                onPressed: () =>
+                    context.push('/knowledge-base/guides', extra: report.type),
+                icon: const Icon(Icons.health_and_safety_outlined, size: 18),
+                label: Text(context.l10n.reportViewSafetyGuides),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.textPrimary,
+                  side: BorderSide(color: Colors.grey.shade300),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+            ),
             const SizedBox(height: 16),
+
+            // ── Rejection reason (shown to the reporter too) ──────────
+            if (report.status == ReportStatus.rejected) ...[
+              _buildRejectionCard(),
+              const SizedBox(height: 16),
+            ],
+
+            // ── Peer vote (verification_request pushes open this screen) ──
+            ReportVoteActions(report: report, onVoted: _reload),
+
+            // ── Staff approve / reject / reopen ───────────────────────
+            ReportStaffActions(report: report, onChanged: _reload),
+
+            // ── Confirmations / disputes with comments (staff) ────────
+            ReportVerificationsSection(
+              reportId: report.id,
+              refreshToken: _reloads,
+            ),
 
             // ── Details Section ───────────────────────────────────────
             _buildSectionCard(
-              title: 'Details',
+              title: context.l10n.reportViewSectionDetails,
               children: [
-                _buildDetailRow(Icons.person, 'Reporter', report.reporter),
-                _buildDetailRow(Icons.location_on, 'Location', report.location),
-                _buildDetailRow(Icons.access_time, 'Reported', report.time),
+                _buildDetailRow(
+                  Icons.person,
+                  context.l10n.reportViewReporter,
+                  report.displayReporter(context.l10n),
+                ),
+                _buildDetailRow(
+                  Icons.location_on,
+                  context.l10n.locationLabel,
+                  report.displayLocation(context.l10n),
+                ),
+                _buildDetailRow(
+                  Icons.access_time,
+                  context.l10n.reportViewReported,
+                  report.displayTime(context.l10n),
+                ),
                 if (report.severity != null)
-                  _buildDetailRow(Icons.speed, 'Severity', report.severity!),
+                  _buildDetailRow(
+                    Icons.speed,
+                    context.l10n.reportViewSeverity,
+                    severityLabel(context.l10n, report.severity),
+                  ),
                 _buildDetailRow(
                   Icons.verified_user,
-                  'Verifications',
+                  context.l10n.reportViewVerifications,
                   '${report.verificationCount}',
                 ),
               ],
@@ -70,7 +177,7 @@ class ReportViewScreen extends StatelessWidget {
             if (report.description != null &&
                 report.description!.isNotEmpty) ...[
               _buildSectionCard(
-                title: 'Description',
+                title: context.l10n.descriptionLabel,
                 children: [
                   Text(
                     report.description!,
@@ -88,7 +195,9 @@ class ReportViewScreen extends StatelessWidget {
             // ── Evidence Photos ───────────────────────────────────────
             if (report.imageUrls.isNotEmpty) ...[
               _buildSectionCard(
-                title: 'Evidence (${report.imageUrls.length})',
+                title: context.l10n.reportViewEvidenceCount(
+                  report.imageUrls.length,
+                ),
                 children: [
                   SizedBox(
                     height: 200,
@@ -99,12 +208,15 @@ class ReportViewScreen extends StatelessWidget {
                       itemBuilder: (context, index) {
                         return ClipRRect(
                           borderRadius: BorderRadius.circular(12),
-                          child: Image.network(
-                            report.imageUrls[index],
+                          // 200x200 box: the thumbnail uploaded next to the
+                          // photo, falling back to the full-size image for
+                          // reports that predate thumbnails.
+                          child: AppNetworkImage.thumbnail(
+                            url: report.imageUrls[index],
                             width: 200,
                             height: 200,
                             fit: BoxFit.cover,
-                            errorBuilder: (_, error, stackTrace) => Container(
+                            errorWidget: (_) => Container(
                               width: 200,
                               height: 200,
                               color: Colors.grey.shade200,
@@ -127,16 +239,16 @@ class ReportViewScreen extends StatelessWidget {
             // ── Location Coordinates ──────────────────────────────────
             if (report.latitude != null && report.longitude != null) ...[
               _buildSectionCard(
-                title: 'Coordinates',
+                title: context.l10n.reportViewCoordinates,
                 children: [
                   _buildDetailRow(
                     Icons.map,
-                    'Latitude',
+                    context.l10n.latitudeLabel,
                     report.latitude!.toStringAsFixed(6),
                   ),
                   _buildDetailRow(
                     Icons.map,
-                    'Longitude',
+                    context.l10n.longitudeLabel,
                     report.longitude!.toStringAsFixed(6),
                   ),
                 ],
@@ -190,16 +302,20 @@ class ReportViewScreen extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  report.title,
+                  report.displayTitle(context.l10n),
                   style: GoogleFonts.lexend(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
                     color: AppColors.textPrimary,
                   ),
                 ),
+                if (report.isVerificationRequest) ...[
+                  const SizedBox(height: 4),
+                  const VerificationRequestBadge(),
+                ],
                 const SizedBox(height: 4),
                 Text(
-                  report.type,
+                  Hazard.labelFor(report.type, context.l10n),
                   style: GoogleFonts.lexend(
                     fontSize: 13,
                     color: AppColors.textSecondary,
@@ -215,13 +331,69 @@ class ReportViewScreen extends StatelessWidget {
               borderRadius: BorderRadius.circular(20),
               border: Border.all(color: statusColor.withValues(alpha: 0.3)),
             ),
-            child: Text(
-              report.status.displayName,
-              style: GoogleFonts.lexend(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: statusColor,
+            child: Semantics(
+              label: context.l10n.a11yStatusLabel(
+                report.status.label(context.l10n),
               ),
+              excludeSemantics: true,
+              child: Text(
+                report.status.label(context.l10n),
+                style: GoogleFonts.lexend(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: statusColor,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Rejection reason ────────────────────────────────────────────────────
+
+  Widget _buildRejectionCard() {
+    final at = report.rejectedAt;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.red.shade50,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.red.shade100),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.info_outline, color: Colors.red.shade700),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  at == null
+                      ? context.l10n.reportRejectedItem
+                      : context.l10n.reportViewRejectedOn(
+                          localizedDateFormat(context, 'MMM d, y').format(at),
+                        ),
+                  style: GoogleFonts.lexend(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.red.shade800,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  report.rejectionReason ?? context.l10n.reportViewNoReason,
+                  style: GoogleFonts.lexend(
+                    fontSize: 13,
+                    color: AppColors.textPrimary,
+                    height: 1.5,
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -314,47 +486,7 @@ class ReportViewScreen extends StatelessWidget {
     }
   }
 
-  Color _getHazardColor(String type) {
-    switch (type.toLowerCase()) {
-      case 'flooding':
-      case 'flood':
-        return AppColors.hazardFlood;
-      case 'drought':
-        return AppColors.hazardDrought;
-      case 'fire':
-      case 'wildfire':
-        return AppColors.hazardFire;
-      case 'pest/disease':
-      case 'pest':
-        return AppColors.hazardPest;
-      case 'erosion':
-        return AppColors.hazardErosion;
-      case 'conflict':
-        return Colors.red;
-      default:
-        return Colors.orange;
-    }
-  }
+  Color _getHazardColor(String type) => Hazard.colorFor(type);
 
-  IconData _getHazardIcon(String type) {
-    switch (type.toLowerCase()) {
-      case 'flooding':
-      case 'flood':
-        return Icons.flood;
-      case 'drought':
-        return Icons.wb_sunny;
-      case 'fire':
-      case 'wildfire':
-        return Icons.local_fire_department;
-      case 'pest/disease':
-      case 'pest':
-        return Icons.bug_report;
-      case 'erosion':
-        return Icons.landscape;
-      case 'conflict':
-        return Icons.shield;
-      default:
-        return Icons.warning;
-    }
-  }
+  IconData _getHazardIcon(String type) => Hazard.iconFor(type);
 }

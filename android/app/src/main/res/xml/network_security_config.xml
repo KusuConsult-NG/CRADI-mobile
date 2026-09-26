@@ -1,18 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
   Android Network Security Configuration — CRADI / EWER Mobile
-  Updated: 2026-03-02
 
-  SSL Certificate Pinning for Firebase/Google APIs.
-
-  ⚠️  PIN ROTATION POLICY: These pins must be rotated before the leaf certificates expire.
-       Monitor https://pki.goog/roots.pem for root CA changes.
-       Current pins are the SHA-256 SPKI fingerprints of Google Trust Services roots
-       (GTS Root R1 + R2 + R3 + R4) that Google rotates on a roughly 4-year cycle.
-       Leaf certs expire on ~2027-09-30 for *.googleapis.com.
-
-  ⚠️  BACKUP PIN: Always keep at least one backup pin (the current + next root) to avoid
-       locking out users during a rotation.
+  No cleartext traffic; system CAs only (user CAs in debug builds). Backend
+  traffic goes to Supabase (*.supabase.co), the Railway backend, OneSignal
+  and Sentry over HTTPS.
 -->
 <network-security-config>
 

@@ -1,3 +1,4 @@
+import 'package:climate_app/core/router/route_guard.dart';
 import 'package:climate_app/core/theme/app_colors.dart';
 import 'package:climate_app/features/auth/providers/auth_provider.dart';
 import 'package:climate_app/features/profile/providers/profile_provider.dart';
@@ -11,6 +12,8 @@ import 'package:climate_app/core/design/glass_container.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+import 'package:climate_app/core/l10n/l10n.dart';
+import 'package:climate_app/core/utils/screen_security.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -19,7 +22,8 @@ class LoginScreen extends StatefulWidget {
   State<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen> {
+class _LoginScreenState extends State<LoginScreen>
+    with ScreenSecurityMixin<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
   final _identifierController = TextEditingController();
   final _passwordController = TextEditingController();
@@ -28,6 +32,8 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _isLoading = false;
   bool _isPasswordVisible = false;
   bool _rememberMe = false;
+  // Phone accounts have no password: they sign in with an SMS code.
+  bool _usePhone = false;
   String? _errorMessage;
   int _remainingAttempts = 5;
 
@@ -53,13 +59,103 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+  /// Where to continue after sign-in / unlock: the page that sent the user
+  /// here (`from`, e.g. a notification tap) or the dashboard.
+  String _destination() {
+    final from = GoRouterState.of(context).uri.queryParameters['from'];
+    return sanitizeRedirectTarget(from) ?? '/dashboard';
+  }
+
+  /// Phone sign-in: sends an SMS code to an existing account and opens the
+  /// code entry screen (which verifies it as an `sms` OTP).
+  Future<void> _submitPhone() async {
+    setState(() => _errorMessage = null);
+    if (!_formKey.currentState!.validate()) return;
+
+    final authProvider = context.read<AuthProvider>();
+    final phone = Validators.normalizePhoneNumber(
+      _identifierController.text.trim(),
+    );
+    setState(() => _isLoading = true);
+    try {
+      await authProvider.sendOtpForPhone(phone, loginOnly: true);
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      await context.push('/verify-otp?phone=${Uri.encodeComponent(phone)}');
+    } on AuthException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _errorMessage = e.userMessage(context.l10n);
+        _isLoading = false;
+      });
+    } on Exception catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _errorMessage = ErrorHandler.getUserMessage(e, context.l10n);
+        _isLoading = false;
+      });
+      ErrorHandler.logError(e, context: 'LoginScreen._submitPhone');
+    }
+  }
+
+  Widget _buildMethodToggle() {
+    Widget option(String label, bool phone) {
+      final selected = _usePhone == phone;
+      return Expanded(
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: _isLoading || selected
+              ? null
+              : () => setState(() {
+                  _usePhone = phone;
+                  _errorMessage = null;
+                  _identifierController.clear();
+                }),
+          child: Container(
+            decoration: BoxDecoration(
+              color: selected ? AppColors.primaryRed : Colors.transparent,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            alignment: Alignment.center,
+            child: Text(
+              label,
+              style: TextStyle(
+                color: selected ? Colors.white : AppColors.textSecondary,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      height: 44,
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: Colors.grey.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          option(context.l10n.authMethodEmail, false),
+          option(context.l10n.authMethodPhone, true),
+        ],
+      ),
+    );
+  }
+
   Future<void> _submit() async {
+    if (_usePhone) return _submitPhone();
+
     // Clear previous error
     setState(() => _errorMessage = null);
 
     if (_formKey.currentState!.validate()) {
-      // Read provider before any async operations
+      // Read providers before any async operations
       final authProvider = context.read<AuthProvider>();
+      final profileProvider = context.read<ProfileProvider>();
+      final destination = _destination();
 
       setState(() => _isLoading = true);
 
@@ -68,8 +164,9 @@ class _LoginScreenState extends State<LoginScreen> {
         final rateLimitResult = await _rateLimiter.checkLoginAttempt();
 
         if (!rateLimitResult.allowed) {
+          if (!mounted) return;
           setState(() {
-            _errorMessage = rateLimitResult.userMessage;
+            _errorMessage = rateLimitResult.userMessage(context.l10n);
             _isLoading = false;
           });
           return;
@@ -85,34 +182,43 @@ class _LoginScreenState extends State<LoginScreen> {
           rememberMe: _rememberMe,
         );
 
-        if (!mounted) return;
-
-        setState(() => _isLoading = false);
+        if (mounted) setState(() => _isLoading = false);
 
         if (success) {
-          // Reload profile to get fresh user data from Appwrite
-          if (!mounted) return;
-          await context.read<ProfileProvider>().loadProfile();
+          // Reload profile to get fresh user data. The router may already
+          // have left this screen (signed-in users are redirected away from
+          // /login), so this must not depend on `mounted`.
+          await profileProvider.loadProfile();
 
-          // Route directly to dashboard since approval is removed
+          // Same destination the router redirect picks.
           if (!mounted) return;
-          context.go('/dashboard');
+          context.go(destination);
         } else {
+          if (!mounted) return;
           setState(() {
-            _errorMessage = 'Login failed. Please check your credentials.';
+            _errorMessage = context.l10n.authLoginCheckCredentials;
           });
         }
+      } on EmailNotConfirmedException catch (e) {
+        // Account exists but the email was never confirmed: a new code was
+        // sent — take the user to the code entry screen.
+        if (!mounted) return;
+        setState(() {
+          _errorMessage = e.userMessage(context.l10n);
+          _isLoading = false;
+        });
+        context.push('/verify-otp?phone=${Uri.encodeComponent(e.email)}');
       } on AuthException catch (e) {
         if (!mounted) return;
         setState(() {
-          _errorMessage = e.userMessage;
+          _errorMessage = e.userMessage(context.l10n);
           _isLoading = false;
         });
         await _checkRateLimit();
       } on Exception catch (e) {
         if (!mounted) return;
         setState(() {
-          _errorMessage = ErrorHandler.getUserMessage(e);
+          _errorMessage = ErrorHandler.getUserMessage(e, context.l10n);
           _isLoading = false;
         });
         ErrorHandler.logError(e, context: 'LoginScreen._submit');
@@ -195,7 +301,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   const SizedBox(height: 32),
 
                   Text(
-                    'Welcome Back',
+                    context.l10n.loginWelcomeBack,
                     style: Theme.of(context).textTheme.displayMedium?.copyWith(
                       fontSize: 34, // Explicit larger size
                       fontWeight: FontWeight.bold,
@@ -204,7 +310,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Sign in to your account',
+                    context.l10n.loginSubtitle,
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                       fontSize: 18, // Increased from default
                     ),
@@ -272,7 +378,9 @@ class _LoginScreenState extends State<LoginScreen> {
                                   const SizedBox(width: 8),
                                   Expanded(
                                     child: Text(
-                                      '$_remainingAttempts login attempts remaining',
+                                      context.l10n.rateLimitAttemptsRemaining(
+                                        _remainingAttempts,
+                                      ),
                                       style: TextStyle(
                                         color: Colors.orange.shade700,
                                         fontSize: 14,
@@ -283,102 +391,142 @@ class _LoginScreenState extends State<LoginScreen> {
                               ),
                             ),
 
-                          // Email field
-                          CustomTextField(
-                            label: 'Email Address',
-                            controller: _identifierController,
-                            keyboardType: TextInputType.emailAddress,
-                            prefixIcon: const Icon(Icons.email_outlined),
-                            hint: 'email@example.com',
-                            validator: Validators.validateEmail,
-                            enabled: !_isLoading,
-                          ),
+                          if (AuthProvider.phoneAuthEnabled)
+                            _buildMethodToggle(),
+
+                          if (_usePhone)
+                            CustomTextField(
+                              key: const ValueKey('login-phone'),
+                              label: context.l10n.authPhoneNumber,
+                              controller: _identifierController,
+                              keyboardType: TextInputType.phone,
+                              prefixIcon: const Icon(Icons.phone_outlined),
+                              hint: '+234 801 234 5678',
+                              validator: (v) => Validators.validatePhoneNumber(
+                                v,
+                                context.l10n,
+                              ),
+                              enabled: !_isLoading,
+                            )
+                          else
+                            // Email field
+                            CustomTextField(
+                              key: const ValueKey('login-email'),
+                              label: context.l10n.emailAddress,
+                              controller: _identifierController,
+                              keyboardType: TextInputType.emailAddress,
+                              prefixIcon: const Icon(Icons.email_outlined),
+                              hint: 'email@example.com',
+                              // Validated as it is submitted: trimmed (a
+                              // pasted / autofilled address often carries
+                              // a trailing space).
+                              validator: (v) => Validators.validateEmail(
+                                v?.trim(),
+                                context.l10n,
+                              ),
+                              enabled: !_isLoading,
+                            ),
 
                           // Password field
-                          CustomTextField(
-                            label: 'Password',
-                            controller: _passwordController,
-                            obscureText: !_isPasswordVisible,
-                            prefixIcon: const Icon(Icons.lock_outline),
-                            suffixIcon: IconButton(
-                              icon: Icon(
-                                _isPasswordVisible
-                                    ? Icons.visibility
-                                    : Icons.visibility_off,
+                          if (!_usePhone)
+                            CustomTextField(
+                              label: context.l10n.authPassword,
+                              controller: _passwordController,
+                              obscureText: !_isPasswordVisible,
+                              prefixIcon: const Icon(Icons.lock_outline),
+                              suffixIcon: IconButton(
+                                tooltip: _isPasswordVisible
+                                    ? context.l10n.authHidePassword
+                                    : context.l10n.authShowPassword,
+                                icon: Icon(
+                                  _isPasswordVisible
+                                      ? Icons.visibility
+                                      : Icons.visibility_off,
+                                ),
+                                onPressed: () {
+                                  setState(() {
+                                    _isPasswordVisible = !_isPasswordVisible;
+                                  });
+                                },
                               ),
-                              onPressed: () {
-                                setState(() {
-                                  _isPasswordVisible = !_isPasswordVisible;
-                                });
+                              validator: (value) {
+                                if (value == null || value.isEmpty) {
+                                  return context.l10n.validatorPasswordRequired;
+                                }
+                                return null;
                               },
+                              enabled: !_isLoading,
                             ),
-                            validator: (value) {
-                              if (value == null || value.isEmpty) {
-                                return 'Password is required';
-                              }
-                              return null;
-                            },
-                            enabled: !_isLoading,
-                          ),
                           const SizedBox(height: 16),
 
                           // Remember me and Forgot Password
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Row(
-                                children: [
-                                  Checkbox(
-                                    value: _rememberMe,
-                                    activeColor: AppColors.primaryRed,
-                                    onChanged: _isLoading
-                                        ? null
-                                        : (value) {
-                                            setState(() {
-                                              _rememberMe = value ?? false;
-                                            });
-                                          },
-                                  ),
-                                  const Text(
-                                    'Remember Me',
-                                    style: TextStyle(
-                                      fontSize:
-                                          15, // Matched somewhat with other texts
-                                      fontWeight: FontWeight.w500,
+                          // Wraps onto two lines on narrow screens / large
+                          // text instead of overflowing.
+                          if (!_usePhone)
+                            Wrap(
+                              alignment: WrapAlignment.spaceBetween,
+                              crossAxisAlignment: WrapCrossAlignment.center,
+                              children: [
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Checkbox(
+                                      value: _rememberMe,
+                                      activeColor: AppColors.primaryRed,
+                                      onChanged: _isLoading
+                                          ? null
+                                          : (value) {
+                                              setState(() {
+                                                _rememberMe = value ?? false;
+                                              });
+                                            },
+                                    ),
+                                    Flexible(
+                                      child: Text(
+                                        context.l10n.loginRememberMe,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(
+                                          fontSize:
+                                              15, // Matched somewhat with other texts
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                TextButton(
+                                  onPressed: _isLoading
+                                      ? null
+                                      : () => context.push('/forgot-password'),
+                                  child: Text(
+                                    context.l10n.forgotTitle,
+                                    style: const TextStyle(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w600,
                                     ),
                                   ),
-                                ],
-                              ),
-                              TextButton(
-                                onPressed: _isLoading
-                                    ? null
-                                    : () => context.push('/forgot-password'),
-                                child: const Text(
-                                  'Forgot Password?',
-                                  style: TextStyle(
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.w600,
-                                  ),
                                 ),
-                              ),
-                            ],
-                          ),
+                              ],
+                            ),
                           const SizedBox(height: 24),
 
                           // Login button
                           CustomButton(
-                            text: 'Login',
+                            text: _usePhone
+                                ? context.l10n.loginSendCode
+                                : context.l10n.authLogin,
                             onPressed: _isLoading ? null : _submit,
                             isLoading: _isLoading,
                           ),
                           const SizedBox(height: 16),
 
-                          // Sign Up Link
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
+                          // Sign Up Link (wraps instead of overflowing)
+                          Wrap(
+                            alignment: WrapAlignment.center,
+                            crossAxisAlignment: WrapCrossAlignment.center,
                             children: [
                               Text(
-                                "Don't have an account? ",
+                                context.l10n.loginNoAccount,
                                 style: TextStyle(
                                   color: Colors.grey.shade600,
                                   fontSize: 16, // Increased
@@ -388,9 +536,9 @@ class _LoginScreenState extends State<LoginScreen> {
                                 onPressed: _isLoading
                                     ? null
                                     : () => context.push('/register'),
-                                child: const Text(
-                                  'Sign Up',
-                                  style: TextStyle(
+                                child: Text(
+                                  context.l10n.authSignUp,
+                                  style: const TextStyle(
                                     fontSize: 18, // Increased
                                     fontWeight: FontWeight.bold,
                                   ),
@@ -404,88 +552,6 @@ class _LoginScreenState extends State<LoginScreen> {
                   ), // Close GlassCard
 
                   const SizedBox(height: 24),
-
-                  // Biometric login option
-                  FutureBuilder<bool>(
-                    future: Future.wait([
-                      authProvider.isBiometricAvailable(),
-                    ]).then((results) => results[0]),
-                    builder: (context, snapshot) {
-                      if (snapshot.data == true) {
-                        return Column(
-                          children: [
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: Divider(color: Colors.grey.shade300),
-                                ),
-                                Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 16,
-                                  ),
-                                  child: Text(
-                                    'OR',
-                                    style: TextStyle(
-                                      color: Colors.grey.shade600,
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                ),
-                                Expanded(
-                                  child: Divider(color: Colors.grey.shade300),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 16),
-                            CustomButton(
-                              text: 'Login with Biometrics',
-                              onPressed: _isLoading
-                                  ? null
-                                  : () async {
-                                      // Capture router before async gap
-                                      final router = GoRouter.of(context);
-
-                                      setState(() => _isLoading = true);
-                                      final enabled = await authProvider
-                                          .isBiometricEnabled();
-                                      if (!enabled) {
-                                        setState(() {
-                                          _isLoading = false;
-                                          _errorMessage =
-                                              'Biometric login is not enabled. Please login with your email/code once and enable it in Settings.';
-                                        });
-                                        return;
-                                      }
-
-                                      final success = await authProvider
-                                          .authenticateWithBiometrics();
-
-                                      if (!mounted) return;
-
-                                      setState(() => _isLoading = false);
-
-                                      if (!mounted) return;
-
-                                      if (success) {
-                                        router.go('/dashboard');
-                                      } else {
-                                        setState(() {
-                                          _errorMessage =
-                                              'Biometric authentication failed. Please try again or use email login.';
-                                        });
-                                      }
-                                    },
-                              icon: Icons.fingerprint,
-                              type: ButtonType.secondary,
-                            ),
-                            const SizedBox(height: 24),
-                          ],
-                        );
-                      }
-                      return const SizedBox.shrink();
-                    },
-                  ),
 
                   // Security info
                   Container(
@@ -504,7 +570,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         const SizedBox(width: 12),
                         Expanded(
                           child: Text(
-                            'Your data is encrypted and secure',
+                            context.l10n.loginDataSecure,
                             style: TextStyle(
                               color: Colors.blue.shade700,
                               fontSize: 13,
@@ -539,22 +605,25 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
               const SizedBox(height: 24),
               Text(
-                'CRADI Mobile Locked',
+                context.l10n.loginLockedTitle,
                 style: Theme.of(context).textTheme.headlineMedium,
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 12),
-              const Text(
-                'Please authenticate to continue',
+              Text(
+                context.l10n.biometricPromptDefault,
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 48),
               CustomButton(
-                text: 'Unlock with Biometrics',
+                text: context.l10n.loginUnlockBiometrics,
                 onPressed: () async {
-                  final success = await authProvider.unlockApp();
+                  final destination = _destination();
+                  final success = await authProvider.unlockApp(
+                    promptReason: context.l10n.biometricLoginPrompt,
+                  );
                   if (success && mounted) {
-                    context.go('/dashboard');
+                    context.go(destination);
                   }
                 },
                 icon: Icons.fingerprint,
@@ -565,7 +634,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   context.read<ProfileProvider>().clearProfile();
                   authProvider.logout();
                 },
-                child: const Text('Log out and use different account'),
+                child: Text(context.l10n.loginLogoutDifferentAccount),
               ),
             ],
           ),

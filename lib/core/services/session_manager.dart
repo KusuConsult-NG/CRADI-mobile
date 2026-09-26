@@ -1,7 +1,12 @@
 import 'secure_storage_service.dart';
 import 'dart:async';
 
-/// Session manager for handling user sessions and automatic logout
+/// Inactivity timeout on top of the Supabase session.
+///
+/// The expiry is pushed forward by user activity ([recordActivity], wired to
+/// a root pointer listener and route changes in `main.dart`), so it is an
+/// *inactivity* timeout: [onSessionExpired] fires only after [sessionTimeout]
+/// (or [persistentSessionTimeout] with "remember me") without interaction.
 class SessionManager {
   static final SessionManager _instance = SessionManager._internal();
   factory SessionManager() => _instance;
@@ -12,10 +17,14 @@ class SessionManager {
   // Session configuration
   static const Duration sessionTimeout = Duration(minutes: 30);
   static const Duration persistentSessionTimeout = Duration(days: 30);
-  static const Duration sessionExtensionThreshold = Duration(minutes: 5);
+
+  /// Minimum interval between two activity-driven expiry extensions (each
+  /// one writes to secure storage).
+  static const Duration activityThrottle = Duration(minutes: 1);
 
   Timer? _sessionTimer;
   Timer? _activityTimer;
+  DateTime? _lastActivityExtension;
 
   /// Callbacks
   Function? onSessionExpired;
@@ -44,34 +53,37 @@ class SessionManager {
     _startSessionTimer();
   }
 
-  /// Extend current session
+  /// Extend the current session (restarting the expiry timer, which is
+  /// stopped once a session has expired).
   Future<void> extendSession() async {
     final rememberMe = await _storage.getRememberMe();
     final timeout = rememberMe ? persistentSessionTimeout : sessionTimeout;
     final expiry = DateTime.now().add(timeout);
     await _storage.saveSessionExpiry(expiry);
+    _lastActivityExtension = DateTime.now();
+    if (_sessionTimer == null || !_sessionTimer!.isActive) {
+      _startSessionTimer();
+    }
 
     onSessionExtended?.call();
   }
 
-  /// Record user activity to extend session
+  /// Record user activity: pushes the inactivity expiry forward (throttled
+  /// to one storage write per [activityThrottle]).
   void recordActivity() {
-    // Auto-extend session if close to expiry
-    _checkAndExtendSession();
+    final now = DateTime.now();
+    final last = _lastActivityExtension;
+    if (last != null && now.difference(last) < activityThrottle) return;
+    _lastActivityExtension = now;
+    unawaited(_extendIfActive());
   }
 
-  /// Check if session should be extended
-  Future<void> _checkAndExtendSession() async {
+  /// Extends a still-valid session; an expired one stays expired (the
+  /// timer will lock / sign out).
+  Future<void> _extendIfActive() async {
     final expiry = await _storage.getSessionExpiry();
-    if (expiry == null) return;
-
-    final timeUntilExpiry = expiry.difference(DateTime.now());
-
-    // Extend session if within threshold and user is active
-    if (timeUntilExpiry < sessionExtensionThreshold &&
-        timeUntilExpiry > Duration.zero) {
-      await extendSession();
-    }
+    if (expiry == null || !DateTime.now().isBefore(expiry)) return;
+    await extendSession();
   }
 
   /// Start session expiry timer
@@ -109,8 +121,7 @@ class SessionManager {
 
   /// End current session
   Future<void> endSession({bool expired = false}) async {
-    _sessionTimer?.cancel();
-    _activityTimer?.cancel();
+    cancelTimers();
 
     // If just ending session (not full logout), we might want to keep auth data
     // based on implementation. But generally endSession means session is over.
@@ -128,8 +139,7 @@ class SessionManager {
 
   /// Logout and clear all data
   Future<void> logout() async {
-    _sessionTimer?.cancel();
-    _activityTimer?.cancel();
+    cancelTimers();
 
     // Check if biometric is enabled
     final biometricEnabled = await _storage.isBiometricEnabled();
@@ -143,11 +153,16 @@ class SessionManager {
     );
   }
 
-  /// Dispose timers
-  void dispose() {
+  /// Stops the expiry timer (e.g. after a sign-out from elsewhere).
+  void cancelTimers() {
     _sessionTimer?.cancel();
+    _sessionTimer = null;
     _activityTimer?.cancel();
+    _lastActivityExtension = null;
   }
+
+  /// Dispose timers
+  void dispose() => cancelTimers();
 
   /// Get session info
   Future<SessionInfo?> getSessionInfo() async {

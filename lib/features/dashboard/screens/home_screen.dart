@@ -1,7 +1,9 @@
+import 'package:climate_app/features/verification/widgets/verification_request_badge.dart';
+import 'package:climate_app/core/services/remote_config_service.dart';
+import 'package:climate_app/core/constants/hazards.dart';
 import 'package:climate_app/core/theme/app_colors.dart';
 import 'package:climate_app/core/design/animated_card.dart';
 import 'package:climate_app/core/design/typography.dart';
-import 'package:climate_app/core/providers/language_provider.dart';
 import 'package:flutter/material.dart';
 import 'dart:io';
 import 'package:go_router/go_router.dart';
@@ -16,12 +18,22 @@ import 'package:climate_app/features/verification/models/verification_report_mod
 import 'package:climate_app/features/verification/providers/reports_status_provider.dart';
 import 'package:climate_app/features/auth/providers/auth_provider.dart'; // ADDED
 import 'package:climate_app/core/providers/connectivity_provider.dart';
-import 'package:climate_app/core/services/peer_verification_service.dart';
 import 'package:climate_app/core/services/notification_service.dart';
 import 'package:climate_app/features/reporting/providers/reporting_provider.dart';
-import 'package:climate_app/l10n/app_localizations.dart';
 import 'package:climate_app/shared/widgets/shimmer_loading.dart';
 import 'package:climate_app/shared/widgets/animated_list_item.dart';
+import 'package:climate_app/core/l10n/l10n.dart';
+import 'package:climate_app/core/l10n/zone_label.dart';
+
+/// Home feed tab actually shown for [selected] (0 To Verify, 1 Alerts,
+/// 2 My Reports, 3 Nearby): "To Verify" only exists for peer verifiers and
+/// "Nearby" not for plain users; both fall back to My Reports.
+@visibleForTesting
+int effectiveFeedTab(int selected, UserRole? role) {
+  if (selected == 0 && !AuthProvider.verifierRoles.contains(role)) return 2;
+  if (selected == 3 && role == UserRole.user) return 2;
+  return selected;
+}
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -31,6 +43,9 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  /// Reports shown in the home "To Verify" feed.
+  static const int _toVerifyLimit = 20;
+
   int _selectedFilterIndex = 0;
 
   @override
@@ -50,55 +65,24 @@ class _HomeScreenState extends State<HomeScreen> {
       // 1. Zone-filtered reports for To Verify / Alerts / Nearby tabs
       statusProvider.refreshReports();
       // 2. User-specific reports for the "My Reports" tab
-      if (auth.currentUser?.uid != null) {
-        statusProvider.refreshReports(userId: auth.currentUser!.uid);
+      if (auth.currentUser?.id != null) {
+        statusProvider.refreshReports(userId: auth.currentUser!.id);
       }
 
-      final role = auth.userRole;
-      if (role == UserRole.admin ||
-          role == UserRole.ewm ||
-          role == UserRole.ewr ||
-          role == UserRole.ewv ||
-          role == UserRole.techSupport) {
-        PeerVerificationService().checkAndEscalatePendingReports();
-      }
+      // Overdue-report escalation runs on the backend (cron); nothing to do
+      // client-side.
 
-      // Setup connectivity listener for auto-sync
+      // Flush anything left offline once the (logged-in) dashboard opens.
+      // Reconnect-triggered sync is wired once in main.dart (onReconnect);
+      // ReportingProvider.syncPendingReports is re-entrancy guarded.
       try {
-        final connectivity = context.read<ConnectivityProvider>();
-        connectivity.addListener(_onConnectivityChange);
-
-        if (!connectivity.isOffline) {
+        if (!context.read<ConnectivityProvider>().isOffline) {
           context.read<ReportingProvider>().syncPendingReports(context);
         }
       } on Exception catch (e) {
         ErrorHandler.logError(e, context: 'HomeScreen.refresh');
       }
     });
-  }
-
-  late ConnectivityProvider _connectivityProvider;
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    _connectivityProvider = context.read<ConnectivityProvider>();
-  }
-
-  @override
-  void dispose() {
-    try {
-      _connectivityProvider.removeListener(_onConnectivityChange);
-    } on Exception catch (_) {}
-    super.dispose();
-  }
-
-  void _onConnectivityChange() {
-    if (!mounted) return;
-    final connectivity = context.read<ConnectivityProvider>();
-    if (!connectivity.isOffline) {
-      context.read<ReportingProvider>().syncPendingReports(context);
-    }
   }
 
   @override
@@ -117,8 +101,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 // Zone-filtered reports for To Verify / Alerts / Nearby
                 statusProvider.refreshReports(),
                 // User-specific reports for My Reports tab
-                if (auth.currentUser?.uid != null)
-                  statusProvider.refreshReports(userId: auth.currentUser!.uid),
+                if (auth.currentUser?.id != null)
+                  statusProvider.refreshReports(userId: auth.currentUser!.id),
                 context.read<NewsProvider>().fetchNews(),
               ]);
             }
@@ -140,14 +124,15 @@ class _HomeScreenState extends State<HomeScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       // Greeting
-                      Consumer2<LanguageProvider, ProfileProvider>(
-                        builder: (context, language, profile, child) => Column(
+                      Consumer<ProfileProvider>(
+                        builder: (context, profile, child) => Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              language.greeting.replaceAll(
-                                '{name}',
-                                profile.name,
+                              context.l10n.homeGreeting(
+                                profile.name.isNotEmpty
+                                    ? profile.name
+                                    : context.l10n.profileDefaultName,
                               ),
                               style: PremiumTypography.heading1(context),
                             ),
@@ -171,7 +156,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                     MainAxisAlignment.spaceBetween,
                                 children: [
                                   Text(
-                                    AppLocalizations.of(context)!.syncStatus,
+                                    context.l10n.syncStatus,
                                     style: GoogleFonts.lexend(
                                       fontSize: 10,
                                       fontWeight: FontWeight.bold,
@@ -186,7 +171,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                           auth.userRole == UserRole.user;
                                       await reportsProvider.refreshReports(
                                         userId: isUser
-                                            ? auth.currentUser?.uid
+                                            ? auth.currentUser?.id
                                             : null,
                                       );
                                     },
@@ -207,16 +192,12 @@ class _HomeScreenState extends State<HomeScreen> {
                                         const SizedBox(width: 8),
                                         Text(
                                           isOffline
-                                              ? AppLocalizations.of(
-                                                  context,
-                                                )!.offline
+                                              ? context.l10n.offline
                                               : (isSyncing
-                                                    ? AppLocalizations.of(
-                                                        context,
-                                                      )!.syncing
-                                                    : AppLocalizations.of(
-                                                        context,
-                                                      )!.onlineJustNow),
+                                                    ? context.l10n.syncing
+                                                    : context
+                                                          .l10n
+                                                          .onlineJustNow),
                                           style: GoogleFonts.lexend(
                                             fontSize: 10,
                                             fontWeight: FontWeight.bold,
@@ -253,7 +234,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         builder: (context, provider, _) {
                           final auth = context.read<AuthProvider>();
                           final isUser = auth.userRole == UserRole.user;
-                          final uid = isUser ? auth.currentUser?.uid : null;
+                          final uid = isUser ? auth.currentUser?.id : null;
                           // Using total counts from provider (requires fetch to be populated)
                           // Assuming refreshReports() is called in initState
                           final activeCount = provider.getTotal(
@@ -273,10 +254,12 @@ class _HomeScreenState extends State<HomeScreen> {
                             children: [
                               Expanded(
                                 child: GestureDetector(
-                                  onTap: () => context.push('/reports-status'),
+                                  onTap: () => context.push(
+                                    '/reports-status?tab=verified',
+                                  ),
                                   child: _buildStatCard(
                                     count: '$activeCount',
-                                    label: AppLocalizations.of(context)!.active,
+                                    label: context.l10n.active,
                                     icon: Icons.warning_amber,
                                     color: AppColors.warningYellow,
                                     bgColor: AppColors.warningYellow.withValues(
@@ -288,12 +271,12 @@ class _HomeScreenState extends State<HomeScreen> {
                               const SizedBox(width: 12),
                               Expanded(
                                 child: GestureDetector(
-                                  onTap: () => context.push('/reports-status'),
+                                  onTap: () => context.push(
+                                    '/reports-status?tab=pending',
+                                  ),
                                   child: _buildStatCard(
                                     count: '$pendingCount',
-                                    label: AppLocalizations.of(
-                                      context,
-                                    )!.pending,
+                                    label: context.l10n.pending,
                                     icon: Icons.schedule,
                                     color: Colors.orange,
                                     bgColor: Colors.orange.withValues(
@@ -305,12 +288,12 @@ class _HomeScreenState extends State<HomeScreen> {
                               const SizedBox(width: 12),
                               Expanded(
                                 child: GestureDetector(
-                                  onTap: () => context.push('/reports-status'),
+                                  onTap: () => context.push(
+                                    '/reports-status?tab=approved',
+                                  ),
                                   child: _buildStatCard(
                                     count: '$approvedCount',
-                                    label: AppLocalizations.of(
-                                      context,
-                                    )!.approved,
+                                    label: context.l10n.approved,
                                     icon: Icons.check_circle,
                                     color: AppColors.successGreen,
                                     bgColor: AppColors.successGreen.withValues(
@@ -323,11 +306,30 @@ class _HomeScreenState extends State<HomeScreen> {
                           );
                         },
                       ),
+                      const SizedBox(height: 16),
+
+                      // Quick links: own reports, and the verification
+                      // queue for peer verifiers.
+                      _buildQuickLink(
+                        icon: Icons.assignment_outlined,
+                        label: context.l10n.myReports,
+                        onTap: () => context.push('/my-reports'),
+                      ),
+                      if (AuthProvider.verifierRoles.contains(
+                        context.watch<AuthProvider>().userRole,
+                      )) ...[
+                        const SizedBox(height: 8),
+                        _buildQuickLink(
+                          icon: Icons.fact_check_outlined,
+                          label: context.l10n.homeVerifyReportsLink,
+                          onTap: () => context.push('/verification'),
+                        ),
+                      ],
                       const SizedBox(height: 24),
 
                       // Browse Categories
                       _buildSectionHeader(
-                        AppLocalizations.of(context)!.browseCategories,
+                        context.l10n.browseCategories,
                         () => context.push('/alerts'),
                       ),
                       const SizedBox(height: 12),
@@ -335,36 +337,15 @@ class _HomeScreenState extends State<HomeScreen> {
                         scrollDirection: Axis.horizontal,
                         child: Row(
                           children: [
-                            _buildCategoryCard(
-                              AppLocalizations.of(context)!.floodsCategory,
-                              Icons.flood,
-                              Colors.blue,
-                              () => _onCategoryTap('Flooding'),
-                            ),
-                            _buildCategoryCard(
-                              AppLocalizations.of(context)!.droughtsCategory,
-                              Icons.wb_sunny,
-                              Colors.orange,
-                              () => _onCategoryTap('Drought'),
-                            ),
-                            _buildCategoryCard(
-                              AppLocalizations.of(context)!.pestsCategory,
-                              Icons.pest_control,
-                              Colors.green,
-                              () => _onCategoryTap('Pest/Disease'),
-                            ),
-                            _buildCategoryCard(
-                              AppLocalizations.of(context)!.conflictsCategory,
-                              Icons.shield,
-                              Colors.red,
-                              () => _onCategoryTap('Conflict'),
-                            ),
-                            _buildCategoryCard(
-                              AppLocalizations.of(context)!.erosion,
-                              Icons.landscape,
-                              Colors.brown,
-                              () => _onCategoryTap('Erosion'),
-                            ),
+                            // One shortcut per hazard; the stored name is
+                            // the Alerts screen's category filter.
+                            for (final hazard in Hazard.values)
+                              _buildCategoryCard(
+                                hazard.label(context.l10n),
+                                hazard.icon,
+                                hazard.color,
+                                () => _onCategoryTap(hazard.storedName),
+                              ),
                           ],
                         ),
                       ),
@@ -383,19 +364,20 @@ class _HomeScreenState extends State<HomeScreen> {
                         padding: const EdgeInsets.all(6),
                         child: Row(
                           children: [
-                            _buildFilterTab(
-                              0,
-                              AppLocalizations.of(context)!.toVerify,
-                            ),
-                            _buildFilterTab(
-                              1,
-                              AppLocalizations.of(context)!.alerts,
-                            ),
-                            _buildFilterTab(
-                              2,
-                              AppLocalizations.of(context)!.myReports,
-                            ),
-                            _buildFilterTab(3, 'Nearby'),
+                            // Only peer verifiers have anything to verify;
+                            // everyone else starts on My Reports.
+                            if (AuthProvider.verifierRoles.contains(
+                              context.watch<AuthProvider>().userRole,
+                            ))
+                              _buildFilterTab(0, context.l10n.toVerify),
+                            _buildFilterTab(1, context.l10n.alerts),
+                            _buildFilterTab(2, context.l10n.myReports),
+                            // Plain users can only read their own reports
+                            // (RLS), so a "nearby" feed would always be
+                            // empty for them.
+                            if (context.watch<AuthProvider>().userRole !=
+                                UserRole.user)
+                              _buildFilterTab(3, context.l10n.homeTabNearby),
                           ],
                         ),
                       ),
@@ -474,7 +456,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          AppLocalizations.of(context)!.monitoringZone,
+                          context.l10n.monitoringZone,
                           style: GoogleFonts.lexend(
                             fontSize: 10,
                             fontWeight: FontWeight.w600,
@@ -488,7 +470,17 @@ class _HomeScreenState extends State<HomeScreen> {
                             children: [
                               Flexible(
                                 child: Text(
-                                  '${profile.monitoringZone ?? AppLocalizations.of(context)!.selectZone} • ${profile.monitoringZone != null ? AppLocalizations.of(context)!.activeZone : AppLocalizations.of(context)!.notSetZone}',
+                                  context.l10n.homeZoneStatus(
+                                    profile.monitoringZone != null
+                                        ? monitoringZoneLabel(
+                                            context.l10n,
+                                            profile.monitoringZone!,
+                                          )
+                                        : context.l10n.selectZone,
+                                    profile.monitoringZone != null
+                                        ? context.l10n.activeZone
+                                        : context.l10n.notSetZone,
+                                  ),
                                   style: GoogleFonts.lexend(
                                     fontSize: 14,
                                     fontWeight: FontWeight.bold,
@@ -516,42 +508,34 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           Row(
             children: [
-              GestureDetector(
-                onTap: () => context.push('/chat'),
-                child: Container(
-                  width: 40,
-                  height: 40,
-                  margin: const EdgeInsets.only(right: 12),
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: Colors.white,
-                    border: Border.all(color: Colors.grey.shade200),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.05),
-                        blurRadius: 4,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                  child: const Icon(
-                    Icons.chat_bubble_outline,
-                    color: AppColors.textPrimary,
-                    size: 20,
+              if (RemoteConfigService().featureFlagPeerChat)
+                GestureDetector(
+                  onTap: () => context.push('/chat'),
+                  child: Container(
+                    width: 40,
+                    height: 40,
+                    margin: const EdgeInsets.only(right: 12),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.white,
+                      border: Border.all(color: Colors.grey.shade200),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.05),
+                          blurRadius: 4,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: const Icon(
+                      Icons.chat_bubble_outline,
+                      color: AppColors.textPrimary,
+                      size: 20,
+                    ),
                   ),
                 ),
-              ),
               GestureDetector(
-                onTap: () {
-                  // Notification action
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        AppLocalizations.of(context)!.noNewNotifications,
-                      ),
-                    ),
-                  );
-                },
+                onTap: () => context.push('/notifications'),
                 child: Stack(
                   children: [
                     Container(
@@ -599,6 +583,33 @@ class _HomeScreenState extends State<HomeScreen> {
             ],
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildQuickLink({
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(12),
+      child: ListTile(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: BorderSide(color: Colors.grey.shade200),
+        ),
+        leading: Icon(icon, color: AppColors.primaryRed),
+        title: Text(
+          label,
+          style: GoogleFonts.lexend(
+            fontWeight: FontWeight.w600,
+            color: AppColors.textPrimary,
+          ),
+        ),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: onTap,
       ),
     );
   }
@@ -676,7 +687,12 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildFilterTab(int index, String label) {
-    final bool isSelected = _selectedFilterIndex == index;
+    final bool isSelected =
+        effectiveFeedTab(
+          _selectedFilterIndex,
+          context.read<AuthProvider>().userRole,
+        ) ==
+        index;
     return Expanded(
       child: GestureDetector(
         onTap: () => setState(() => _selectedFilterIndex = index),
@@ -714,23 +730,47 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildFeedContent() {
     final statusProvider = context.watch<ReportsStatusProvider>();
+    final auth = context.watch<AuthProvider>();
+    final selected = effectiveFeedTab(_selectedFilterIndex, auth.userRole);
 
-    if (_selectedFilterIndex == 0) {
-      // To Verify
+    if (selected == 0) {
+      // To Verify: pending reports this user may still vote on (never
+      // their own, EWMs only in their LGA + ward, not already voted).
+      // Loaded by fetchToVerify (own reports excluded server-side, with
+      // a large page so the client-side filters below still leave enough).
+      final uid = auth.currentUser?.id;
+      final toVerify = statusProvider
+          .toVerifyReports(uid)
+          .where(
+            (r) => auth.canVoteOn(
+              reporterId: r.reporterId,
+              reportWard: r.ward,
+              reportLga: r.lga,
+            ),
+          )
+          .take(_toVerifyLimit)
+          .toList();
       return _buildListFeed(
-        statusProvider.getReports(ReportStatus.pending),
-        statusProvider.isLoading(ReportStatus.pending),
-        'No reports to verify',
+        toVerify,
+        statusProvider.isLoading(ReportStatus.pending, excludeUserId: uid),
+        context.l10n.noReportsToVerify,
+        error: statusProvider.errorFor(
+          ReportStatus.pending,
+          excludeUserId: uid,
+        ),
+        onRetry: statusProvider.fetchToVerify,
       );
-    } else if (_selectedFilterIndex == 2) {
+    } else if (selected == 2) {
       // My Reports
-      final userId = context.read<AuthProvider>().currentUser?.uid;
+      final userId = auth.currentUser?.id;
       return _buildListFeed(
         statusProvider.getReports(null, userId: userId),
         statusProvider.isLoading(null, userId: userId),
-        'You haven\'t submitted any reports yet',
+        context.l10n.homeEmptyMyReports,
+        error: statusProvider.errorFor(null, userId: userId),
+        onRetry: () => statusProvider.fetchReports(userId: userId),
       );
-    } else if (_selectedFilterIndex == 3) {
+    } else if (selected == 3) {
       // Nearby — use same feed but prompt to see full screen
       return Column(
         children: [
@@ -748,7 +788,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   const SizedBox(width: 6),
                   Text(
-                    'Open Nearby Reports',
+                    context.l10n.homeOpenNearbyReports,
                     style: GoogleFonts.lexend(
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
@@ -768,7 +808,9 @@ class _HomeScreenState extends State<HomeScreen> {
           _buildListFeed(
             statusProvider.getReports(null),
             statusProvider.isLoading(null),
-            'No nearby reports',
+            context.l10n.homeEmptyNearby,
+            error: statusProvider.errorFor(null),
+            onRetry: () => statusProvider.fetchReports(),
           ),
         ],
       );
@@ -777,7 +819,9 @@ class _HomeScreenState extends State<HomeScreen> {
       return _buildListFeed(
         statusProvider.getReports(null),
         statusProvider.isLoading(null),
-        'No recent alerts',
+        context.l10n.noRecentAlerts,
+        error: statusProvider.errorFor(null),
+        onRetry: () => statusProvider.fetchReports(),
       );
     }
   }
@@ -785,8 +829,10 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildListFeed(
     List<VerificationReport> reports,
     bool isLoading,
-    String emptyMessage,
-  ) {
+    String emptyMessage, {
+    LocalizedText? error,
+    VoidCallback? onRetry,
+  }) {
     if (isLoading && reports.isEmpty) {
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 20),
@@ -796,6 +842,37 @@ class _HomeScreenState extends State<HomeScreen> {
             ShimmerSkeletons.listTile(),
             ShimmerSkeletons.listTile(),
           ],
+        ),
+      );
+    }
+
+    if (reports.isEmpty && error != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.cloud_off, size: 48, color: Colors.red.shade200),
+              const SizedBox(height: 12),
+              Text(
+                error(context.l10n),
+                style: GoogleFonts.lexend(
+                  fontSize: 14,
+                  color: AppColors.textSecondary,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              if (onRetry != null) ...[
+                const SizedBox(height: 12),
+                TextButton.icon(
+                  onPressed: onRetry,
+                  icon: const Icon(Icons.refresh),
+                  label: Text(context.l10n.retry),
+                ),
+              ],
+            ],
+          ),
         ),
       );
     }
@@ -863,7 +940,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Icon(
-                _getIconData(report.iconName),
+                Hazard.iconFor(report.type),
                 color: _getIconColor(report.iconColor),
                 size: 20,
               ),
@@ -878,7 +955,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     children: [
                       Expanded(
                         child: Text(
-                          report.title,
+                          report.displayTitle(context.l10n),
                           style: GoogleFonts.lexend(
                             fontSize: 14,
                             fontWeight: FontWeight.bold,
@@ -907,7 +984,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                         ),
                         child: Text(
-                          report.status.displayName,
+                          report.status.label(context.l10n),
                           style: GoogleFonts.lexend(
                             fontSize: 10,
                             fontWeight: FontWeight.w600,
@@ -917,9 +994,16 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ],
                   ),
+                  if (report.isVerificationRequest) ...[
+                    const SizedBox(height: 4),
+                    const VerificationRequestBadge(),
+                  ],
                   const SizedBox(height: 4),
                   Text(
-                    '${report.location} • ${report.time}',
+                    context.l10n.reportLocationAndTime(
+                      report.displayLocation(context.l10n),
+                      report.displayTime(context.l10n),
+                    ),
                     style: GoogleFonts.lexend(
                       fontSize: 12,
                       color: AppColors.textSecondary,
@@ -955,38 +1039,10 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  Color _getIconColor(String colorName) {
-    switch (colorName) {
-      case 'orange':
-        return Colors.orange;
-      case 'blue':
-        return Colors.blue;
-      case 'red':
-        return AppColors.errorRed;
-      case 'green':
-        return AppColors.successGreen;
-      default:
-        return Colors.grey;
-    }
-  }
+  Color _getIconColor(String colorName) => SeverityColors.fromName(colorName);
 
   Color _getIconBgColor(String colorName) {
     return _getIconColor(colorName).withValues(alpha: 0.1);
-  }
-
-  IconData _getIconData(String iconName) {
-    switch (iconName) {
-      case 'pest_control':
-        return Icons.pest_control;
-      case 'water_drop':
-        return Icons.water_drop;
-      case 'water':
-        return Icons.water;
-      case 'local_fire_department':
-        return Icons.local_fire_department;
-      default:
-        return Icons.warning;
-    }
   }
 
   Widget _buildSectionHeader(String title, VoidCallback onViewAll) {
@@ -1007,7 +1063,7 @@ class _HomeScreenState extends State<HomeScreen> {
         GestureDetector(
           onTap: onViewAll,
           child: Text(
-            'See All',
+            context.l10n.seeAll,
             style: GoogleFonts.lexend(
               fontSize: 12,
               fontWeight: FontWeight.w600,
@@ -1062,7 +1118,7 @@ class _HomeScreenState extends State<HomeScreen> {
     // Build zone list: state-level entries + individual LGAs
     final zones = <String>[];
     for (final state in MVPLocationsData.getAllStates()) {
-      zones.add('$state State'); // state-level
+      zones.add('$state$stateZoneSuffix'); // state-level (stored form)
       for (final lga in MVPLocationsData.getLGAsForState(state)) {
         zones.add('$lga, $state'); // LGA-level
       }
@@ -1085,7 +1141,7 @@ class _HomeScreenState extends State<HomeScreen> {
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: Text(
-                  'Select Monitoring Zone',
+                  context.l10n.homeZoneSheetTitle,
                   style: GoogleFonts.lexend(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
@@ -1105,7 +1161,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           color: AppColors.primaryRed,
                         ),
                         title: Text(
-                          'All Zones (No Filter)',
+                          context.l10n.homeZoneAll,
                           style: GoogleFonts.lexend(
                             fontSize: 15,
                             fontWeight: FontWeight.w600,
@@ -1123,13 +1179,20 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                         onTap: () async {
                           final provider = context.read<ProfileProvider>();
-                          await provider.updateMonitoringZone('');
+                          final error = await provider.updateMonitoringZone('');
                           if (context.mounted) {
+                            final l10n = context.l10n;
                             Navigator.pop(context);
                             ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Showing all zones'),
-                                backgroundColor: AppColors.successGreen,
+                              SnackBar(
+                                content: Text(
+                                  error == null
+                                      ? l10n.homeZoneAllSelected
+                                      : l10n.homeZoneAllLocalOnly(error(l10n)),
+                                ),
+                                backgroundColor: error == null
+                                    ? AppColors.successGreen
+                                    : null,
                               ),
                             );
                           }
@@ -1137,7 +1200,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                       const Divider(),
                       ...zones.map((zone) {
-                        final isState = zone.contains('State');
+                        final isState = zone.endsWith(stateZoneSuffix);
                         return ListTile(
                           contentPadding: EdgeInsets.only(
                             left: isState ? 16 : 40,
@@ -1151,7 +1214,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                 )
                               : null,
                           title: Text(
-                            zone,
+                            monitoringZoneLabel(context.l10n, zone),
                             style: GoogleFonts.lexend(
                               fontSize: isState ? 16 : 14,
                               fontWeight: isState
@@ -1175,15 +1238,26 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                           onTap: () async {
                             final provider = context.read<ProfileProvider>();
-                            await provider.updateMonitoringZone(zone);
+                            final error = await provider.updateMonitoringZone(
+                              zone,
+                            );
                             if (context.mounted) {
+                              final l10n = context.l10n;
+                              final zoneLabel = monitoringZoneLabel(l10n, zone);
                               Navigator.pop(context);
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
                                   content: Text(
-                                    'Monitoring zone changed to $zone',
+                                    error == null
+                                        ? l10n.homeZoneChanged(zoneLabel)
+                                        : l10n.homeZoneLocalOnly(
+                                            zoneLabel,
+                                            error(l10n),
+                                          ),
                                   ),
-                                  backgroundColor: AppColors.successGreen,
+                                  backgroundColor: error == null
+                                      ? AppColors.successGreen
+                                      : null,
                                 ),
                               );
                             }

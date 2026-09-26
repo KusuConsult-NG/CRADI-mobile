@@ -1,3 +1,5 @@
+import 'package:climate_app/core/l10n/l10n.dart';
+
 /// Enhanced password validation for security
 ///
 /// Enforces strong password requirements and checks against common passwords
@@ -16,39 +18,40 @@ class PasswordValidator {
     'monkey123',
   ];
 
-  /// Validate password meets all requirements
-  static String? validate(String password) {
+  /// Validate password meets all requirements; the message is in the
+  /// language of [l10n].
+  static String? validate(String password, AppLocalizations l10n) {
     if (password.length < 8) {
-      return 'Password must be at least 8 characters';
+      return l10n.validatorPasswordMinLength(8);
     }
 
     if (password.length > 128) {
-      return 'Password is too long (max 128 characters)';
+      return l10n.passwordErrorTooLong(128);
     }
 
     if (!password.contains(RegExp(r'[A-Z]'))) {
-      return 'Password must contain at least one uppercase letter';
+      return l10n.validatorPasswordUppercase;
     }
 
     if (!password.contains(RegExp(r'[a-z]'))) {
-      return 'Password must contain at least one lowercase letter';
+      return l10n.validatorPasswordLowercase;
     }
 
     if (!password.contains(RegExp(r'[0-9]'))) {
-      return 'Password must contain at least one number';
+      return l10n.validatorPasswordNumber;
     }
 
     if (!password.contains(RegExp(r'[!@#$%^&*(),.?":{}|<>_\-+=\[\]\\;/]'))) {
-      return 'Password must contain at least one special character';
+      return l10n.validatorPasswordSpecial;
     }
 
     if (isCommonPassword(password.toLowerCase())) {
-      return 'This password is too common. Please choose a stronger password';
+      return l10n.passwordErrorCommon;
     }
 
     // Check for sequential characters
     if (_hasSequentialChars(password)) {
-      return 'Password should not contain sequential characters (e.g., 123, abc)';
+      return l10n.passwordErrorSequential;
     }
 
     return null; // Valid password
@@ -96,11 +99,11 @@ class PasswordValidator {
   }
 
   /// Get password strength label
-  static String getStrengthLabel(int score) {
-    if (score < 30) return 'Weak';
-    if (score < 60) return 'Fair';
-    if (score < 80) return 'Good';
-    return 'Strong';
+  static String getStrengthLabel(int score, AppLocalizations l10n) {
+    if (score < 30) return l10n.passwordStrengthWeak;
+    if (score < 60) return l10n.passwordStrengthFair;
+    if (score < 80) return l10n.passwordStrengthGood;
+    return l10n.passwordStrengthStrong;
   }
 
   /// Check for sequential characters
@@ -124,24 +127,33 @@ class PasswordValidator {
   }
 
   /// Get password requirements as a list for UI display
-  static List<PasswordRequirement> getRequirements(String password) {
+  static List<PasswordRequirement> getRequirements(
+    String password,
+    AppLocalizations l10n,
+  ) {
     return [
-      PasswordRequirement('At least 8 characters', password.length >= 8),
       PasswordRequirement(
-        'Uppercase letter',
+        l10n.passwordRequirementLength(8),
+        password.length >= 8,
+      ),
+      PasswordRequirement(
+        l10n.passwordRequirementUppercase,
         password.contains(RegExp(r'[A-Z]')),
       ),
       PasswordRequirement(
-        'Lowercase letter',
+        l10n.passwordRequirementLowercase,
         password.contains(RegExp(r'[a-z]')),
       ),
-      PasswordRequirement('Number', password.contains(RegExp(r'[0-9]'))),
       PasswordRequirement(
-        'Special character',
+        l10n.passwordRequirementNumber,
+        password.contains(RegExp(r'[0-9]')),
+      ),
+      PasswordRequirement(
+        l10n.passwordRequirementSpecial,
         password.contains(RegExp(r'[!@#$%^&*(),.?":{}|<>_\-+=\[\]\\;/]')),
       ),
       PasswordRequirement(
-        'Not a common password',
+        l10n.passwordRequirementNotCommon,
         !isCommonPassword(password.toLowerCase()),
       ),
     ];

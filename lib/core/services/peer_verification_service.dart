@@ -1,31 +1,40 @@
 import 'package:climate_app/core/services/supabase_service.dart';
-import 'package:climate_app/core/services/notification_service.dart';
-import 'package:climate_app/core/services/sms_service.dart';
 import 'package:climate_app/core/constants/app_config.dart';
 import 'package:climate_app/core/services/remote_config_service.dart';
-import 'package:http/http.dart' as http;
-import 'dart:convert';
+import 'package:climate_app/features/auth/providers/auth_provider.dart'
+    show AuthProvider, UserRole;
 import 'dart:developer' as developer;
 import 'dart:math' as math;
+import 'package:climate_app/core/l10n/l10n.dart';
 
-/// Service for managing peer verification workflow.
-/// Handles verification requests, escalation, and notification.
-/// Backed by Supabase. Push notifications via OneSignal REST API.
+/// Client side of the peer verification workflow.
+///
+/// Result maps carry `'message'` as a [LocalizedText] (resolved by the UI in
+/// the current language).
+///
+/// Most of the workflow now runs in the database / backend:
+///   * inserting into `verifications` fires `verifications_after_insert`,
+///     which recounts confirmations and moves a pending report to
+///     'verified' exactly once when the threshold is reached;
+///   * inserting a report schedules its escalation and queues the
+///     peer-verification push (`reports_after_insert`);
+///   * overdue escalations are processed by the backend cron;
+///   * every push / SMS / email is sent by the Railway backend from
+///     `notification_outbox` events.
+///
+/// The client only records verifications and staff overrides.
 class PeerVerificationService {
   static final PeerVerificationService _instance =
       PeerVerificationService._internal();
   factory PeerVerificationService() => _instance;
   PeerVerificationService._internal();
 
-  final SupabaseService _supabase = SupabaseService();
-  final NotificationService _notificationService = NotificationService();
+  final SupabaseService _db = SupabaseService();
 
-  static const Duration escalationTimeout = Duration(minutes: 30);
-
-  /// OneSignal REST API base URL
-  static const String _osBaseUrl = 'https://onesignal.com/api/v1';
-
-  /// Submit a verification (confirm or dispute)
+  /// Submit a verification (confirm or dispute).
+  ///
+  /// [userId] is only used for the client-side self-verification guard; the
+  /// row's `verifier_id` is always `auth.uid()` (database default + RLS).
   Future<Map<String, dynamic>> submitVerification({
     required String reportId,
     required String userId,
@@ -34,48 +43,42 @@ class PeerVerificationService {
     double? userLatitude,
     double? userLongitude,
   }) async {
-    try {
-      // ── Guard 1: Self-verification ─────────────────────────────────
-      final reportDoc = await _supabase.getDocument(
-        collectionId: AppConfig.reportsCollection,
-        documentId: reportId,
-      );
-      final reporterId =
-          reportDoc['user_id'] as String? ??
-          reportDoc['reporterId'] as String? ??
-          '';
-      if (reporterId == userId) {
-        return {
-          'success': false,
-          'message': 'You cannot verify your own report.',
-        };
-      }
+    // ── Guard 1: Self-verification (also enforced by RLS) ──────────────
+    final reportDoc = await _db.getDocument(
+      collectionId: AppConfig.reportsCollection,
+      documentId: reportId,
+    );
+    final reporterId = reportDoc['userId'] as String? ?? '';
+    if (reporterId == userId) {
+      return {
+        'success': false,
+        'message': (AppLocalizations l) => l.verifyErrorOwnReport,
+      };
+    }
 
-      // ── Guard 2: Location proximity (2 km) ────────────────────────
-      if (userLatitude != null && userLongitude != null) {
-        final rLat = (reportDoc['latitude'] as num?)?.toDouble();
-        final rLng = (reportDoc['longitude'] as num?)?.toDouble();
-        if (rLat != null && rLng != null) {
-          final dist = _haversineKm(userLatitude, userLongitude, rLat, rLng);
-          if (dist > 2.0) {
-            return {
-              'success': false,
-              'message':
-                  'You must be within 2 km of the report location to verify. '
-                  'Current distance: ${dist.toStringAsFixed(1)} km.',
-            };
-          }
+    // ── Guard 2: Location proximity (2 km) ────────────────────────────
+    if (userLatitude != null && userLongitude != null) {
+      final rLat = (reportDoc['latitude'] as num?)?.toDouble();
+      final rLng = (reportDoc['longitude'] as num?)?.toDouble();
+      if (rLat != null && rLng != null) {
+        final dist = _haversineKm(userLatitude, userLongitude, rLat, rLng);
+        if (dist > 2.0) {
+          return {
+            'success': false,
+            'message': (AppLocalizations l) =>
+                l.verifyErrorTooFar(dist.toStringAsFixed(1)),
+          };
         }
       }
+    }
 
-      // Supabase auto-generates a UUID for the primary key
-      final result = await _supabase.createDocument(
+    try {
+      final result = await _db.createDocument(
         collectionId: AppConfig.verificationsCollection,
         data: {
-          'report_id': reportId,
-          'verifier_id': userId,
-          'is_confirmed': isConfirmed,
-          'comments': comment ?? '',
+          'reportId': reportId,
+          'isConfirmed': isConfirmed,
+          'comment': comment ?? '',
         },
       );
 
@@ -84,16 +87,36 @@ class PeerVerificationService {
         name: 'PeerVerificationService',
       );
 
-      await _checkAndValidateReport(reportId);
-
       return {
         'success': true,
         'verificationId': result['\$id'],
         'message': isConfirmed
-            ? 'Report confirmed successfully'
-            : 'Report disputed',
+            ? (AppLocalizations l) => l.verifyConfirmedMessage
+            : (AppLocalizations l) => l.verifyDisputedMessage,
       };
     } on Exception catch (e) {
+      if (SupabaseService.isUniqueViolation(e)) {
+        return {
+          'success': false,
+          'alreadyVoted': true,
+          'message': (AppLocalizations l) => l.verifyErrorAlreadyVoted,
+        };
+      }
+      if (SupabaseService.isPermissionDenied(e)) {
+        // RLS also refuses votes on reports that left 'pending' (e.g.
+        // verified or rejected meanwhile): tell those apart.
+        if (await _isNoLongerPending(reportId)) {
+          return {
+            'success': false,
+            'noLongerPending': true,
+            'message': noLongerPendingMessage,
+          };
+        }
+        return {
+          'success': false,
+          'message': (AppLocalizations l) => l.verifyErrorNotPermitted,
+        };
+      }
       developer.log(
         'Error submitting verification: $e',
         name: 'PeerVerificationService',
@@ -102,417 +125,101 @@ class PeerVerificationService {
     }
   }
 
-  /// Check if report has enough confirmations and validate if needed.
-  Future<void> _checkAndValidateReport(String reportId) async {
+  /// Message returned when a vote is refused because the report is no
+  /// longer pending.
+  static String noLongerPendingMessage(AppLocalizations l) =>
+      l.verifyErrorNoLongerPending;
+
+  /// Re-reads the report after a refused vote: true when it is no longer
+  /// pending (also when it is no longer visible: RLS hides reports that
+  /// left 'pending' from peers, or it was deleted). Unknown (read failed)
+  /// counts as still pending.
+  Future<bool> _isNoLongerPending(String reportId) async {
     try {
-      final verifications = await _supabase.listDocuments(
-        collectionId: AppConfig.verificationsCollection,
-        queries: [SQuery.equal('report_id', reportId)],
-        limitCount: 200,
-      );
-
-      final confirmations = verifications
-          .where((v) => v['is_confirmed'] == true)
-          .length;
-      final disputes = verifications
-          .where((v) => v['is_confirmed'] == false)
-          .length;
-
-      developer.log(
-        'Report $reportId: $confirmations confirmations, $disputes disputes',
-        name: 'PeerVerificationService',
-      );
-
-      // Update verification count on report
-      await _supabase.updateDocument(
-        collectionId: AppConfig.reportsCollection,
-        documentId: reportId,
-        data: {'verification_count': verifications.length},
-      );
-
-      // Validate only if minimum confirmations reached
-      if (confirmations >= RemoteConfigService().minimumPeerConfirmations) {
-        await _validateReport(reportId, isAutoValidated: true);
-      }
-
-      // Escalate if there are disputes
-      if (disputes > 0) {
-        await escalateToCoordinator(
-          reportId: reportId,
-          reason: 'Conflicting verifications',
-        );
-      }
-    } on Exception catch (e) {
-      developer.log(
-        'Error checking report validation: $e',
-        name: 'PeerVerificationService',
-      );
-    }
-  }
-
-  /// Mark a report as verified once peer threshold is reached.
-  Future<void> _validateReport(
-    String reportId, {
-    required bool isAutoValidated,
-  }) async {
-    try {
-      await _supabase.updateDocument(
-        collectionId: AppConfig.reportsCollection,
-        documentId: reportId,
-        data: {
-          'status': 'verified',
-          'validated_at': DateTime.now().toUtc().toIso8601String(),
-          'auto_validated': isAutoValidated,
-        },
-      );
-
-      developer.log(
-        'Report verified: $reportId (auto: $isAutoValidated)',
-        name: 'PeerVerificationService',
-      );
-
-      await _triggerAlert(reportId);
-      await _notifyReporter(reportId, status: 'verified');
-    } on Exception catch (e) {
-      developer.log(
-        'Error validating report: $e',
-        name: 'PeerVerificationService',
-      );
-    }
-  }
-
-  /// Send verification requests to peers in the same ward via OneSignal filters.
-  Future<void> sendVerificationRequests({
-    required String reportId,
-    required String ward,
-    required String lga,
-    required String reporterId,
-  }) async {
-    try {
-      // Find EWM peers in the same ward (excluding the reporter)
-      final peers = await _supabase.listDocuments(
-        collectionId: AppConfig.usersCollection,
-        queries: [
-          SQuery.equal('ward', ward.toLowerCase()),
-          SQuery.equal('lga', lga.toLowerCase()),
-          SQuery.equal('role', 'ewm'),
-          SQuery.notEqual('id', reporterId),
-        ],
-        limitCount: 50,
-      );
-
-      if (peers.isNotEmpty) {
-        // Use OneSignal to send targeted push to peers in this ward
-        await _sendOneSignalPush(
-          heading: 'Verification Needed',
-          content: 'A new hazard report needs your verification in $ward.',
-          filters: [
-            {'field': 'tag', 'key': 'ward', 'relation': '=', 'value': ward.toLowerCase()},
-            {'operator': 'AND'},
-            {'field': 'tag', 'key': 'lga', 'relation': '=', 'value': lga.toLowerCase()},
-            {'operator': 'AND'},
-            {'field': 'tag', 'key': 'role', 'relation': '=', 'value': 'ewm'},
-          ],
-          data: {
-            'type': 'verification',
-            'reportId': reportId,
-            'ward': ward,
-            'lga': lga,
-          },
-        );
-
-        developer.log(
-          'OneSignal verification push sent to EWMs in $ward/$lga',
-          name: 'PeerVerificationService',
-        );
-      }
-
-      await _scheduleEscalation(reportId);
-    } on Exception catch (e) {
-      developer.log(
-        'Error sending verification requests: $e',
-        name: 'PeerVerificationService',
-      );
-    }
-  }
-
-  /// Write an escalation schedule entry to Supabase.
-  Future<void> _scheduleEscalation(String reportId) async {
-    try {
-      final escalationTime = DateTime.now().add(escalationTimeout);
-
-      await _supabase.updateDocument(
-        collectionId: AppConfig.reportsCollection,
-        documentId: reportId,
-        data: {
-          'escalation_scheduled_at': escalationTime.toUtc().toIso8601String(),
-          'escalation_status': 'pending',
-        },
-      );
-
-      developer.log(
-        'Escalation scheduled for $reportId at $escalationTime',
-        name: 'PeerVerificationService',
-      );
-    } on Exception catch (e) {
-      developer.log(
-        'Error scheduling escalation: $e',
-        name: 'PeerVerificationService',
-      );
-    }
-  }
-
-  /// Escalate report to coordinators.
-  Future<void> escalateToCoordinator({
-    required String reportId,
-    required String reason,
-  }) async {
-    try {
-      await _supabase.updateDocument(
-        collectionId: AppConfig.reportsCollection,
-        documentId: reportId,
-        data: {
-          'escalated': true,
-          'escalated_at': DateTime.now().toUtc().toIso8601String(),
-          'escalation_reason': reason,
-        },
-      );
-
-      final report = await _supabase.getDocument(
+      final doc = await _db.getDocument(
         collectionId: AppConfig.reportsCollection,
         documentId: reportId,
       );
-      final lga = report['lga'] as String? ?? '';
-
-      // Notify coordinators and project staff via OneSignal
-      await _sendOneSignalPush(
-        heading: 'Report Escalated',
-        content: 'Report in $lga needs coordinator review. Reason: $reason',
-        filters: [
-          {'field': 'tag', 'key': 'role', 'relation': '=', 'value': 'ldp_coordinator'},
-          {'operator': 'OR'},
-          {'field': 'tag', 'key': 'role', 'relation': '=', 'value': 'project_staff'},
-        ],
-        data: {
-          'type': 'report',
-          'reportId': reportId,
-          'reason': reason,
-        },
-      );
-
-      developer.log(
-        'Report escalated: $reportId. OneSignal push sent to coordinators/staff.',
-        name: 'PeerVerificationService',
-      );
+      final status = (doc['status'] as String?)?.toLowerCase();
+      return status != null && status != 'pending';
+    } on DocumentNotFoundException {
+      return true;
     } on Exception catch (e) {
       developer.log(
-        'Error escalating report: $e',
+        'Could not re-read report $reportId: $e',
         name: 'PeerVerificationService',
       );
+      return false;
     }
   }
 
-  /// Manual validation by coordinator/staff.
+  /// Manual approve / reject by senior staff (ewv, ewr, ldp_coordinator,
+  /// project_staff, admin; never one's own report — enforced by the
+  /// `guard_report_update` trigger). The decision is audited into
+  /// `verification_overrides` by the `reports_audit_decision` trigger, and
+  /// the backend notifies from the resulting status-change event.
   Future<Map<String, dynamic>> manualValidation({
     required String reportId,
-    required String validatorId,
     required bool isApproved,
-    required String reason,
+    String reason = '',
   }) async {
-    try {
-      if (isApproved) {
-        await _supabase.updateDocument(
-          collectionId: AppConfig.reportsCollection,
-          documentId: reportId,
-          data: {
-            'status': 'approved',
-            'approved_at': DateTime.now().toUtc().toIso8601String(),
-          },
-        );
-        await _triggerAlert(reportId);
-        await _notifyReporter(reportId, status: 'approved');
-        await _supabase.createDocument(
-          collectionId: AppConfig.verificationsOverrideCollection,
-          data: {
-            'report_id': reportId,
-            'validator_id': validatorId,
-            'action': 'approved',
-            'reason': reason,
-            'created_at': DateTime.now().toUtc().toIso8601String(),
-          },
-        );
-        return {'success': true, 'message': 'Report approved'};
-      } else {
-        await _supabase.updateDocument(
-          collectionId: AppConfig.reportsCollection,
-          documentId: reportId,
-          data: {
-            'status': 'rejected',
-            'rejected_at': DateTime.now().toUtc().toIso8601String(),
-            'rejection_reason': reason,
-          },
-        );
-        await _supabase.createDocument(
-          collectionId: AppConfig.verificationsOverrideCollection,
-          data: {
-            'report_id': reportId,
-            'validator_id': validatorId,
-            'action': 'rejected',
-            'reason': reason,
-            'created_at': DateTime.now().toUtc().toIso8601String(),
-          },
-        );
-        await _notifyReporter(reportId, status: 'rejected', reason: reason);
-        return {'success': true, 'message': 'Report rejected'};
-      }
-    } on Exception catch (e) {
-      developer.log(
-        'Error in manual validation: $e',
-        name: 'PeerVerificationService',
-      );
-      rethrow;
-    }
-  }
-
-  /// Trigger alert distribution after validation via OneSignal geo-tags.
-  Future<void> _triggerAlert(String reportId) async {
-    try {
-      final report = await _supabase.getDocument(
-        collectionId: AppConfig.reportsCollection,
-        documentId: reportId,
-      );
-
-      final lga = report['lga'] as String? ?? '';
-      final ward = report['ward'] as String? ?? '';
-      final hazardType = report['hazard_type'] ?? 'Hazard';
-      final severity = report['severity'] ?? 'HIGH';
-
-      // Send OneSignal push to all users tagged with this LGA
-      await _sendOneSignalPush(
-        heading: '⚠️ Alert: $hazardType',
-        content:
-            'Verified $hazardType alert in $ward, $lga. Severity: $severity.',
-        filters: [
-          {'field': 'tag', 'key': 'lga', 'relation': '=', 'value': lga.toLowerCase()},
-        ],
-        data: {
-          'type': 'alert',
-          'reportId': reportId,
-          'lga': lga,
-          'ward': ward,
-        },
-      );
-
-      developer.log(
-        'Alert OneSignal push sent for report $reportId to LGA: $lga',
-        name: 'PeerVerificationService',
-      );
-
-      // SMS to authorities via Africa's Talking
-      final authorities = await _supabase.listDocuments(
-        collectionId: AppConfig.authoritiesCollection,
-        queries: [if (lga.isNotEmpty) SQuery.equal('coverage_lga', lga)],
-        limitCount: 50,
-      );
-
-      final authorityContacts = authorities
-          .map((doc) => doc['phone'] as String?)
-          .where((phone) => phone != null && phone.isNotEmpty)
-          .cast<String>()
-          .toList();
-
-      if (authorityContacts.isNotEmpty) {
-        final sentCount = await SmsService().sendAlertToAuthorities(
-          alertTitle: hazardType,
-          location: '$lga (Ward: $ward)',
-          severity: severity,
-          authorityContacts: authorityContacts,
-        );
-        developer.log(
-          'SMS Alerts sent to $sentCount/${authorityContacts.length} authorities',
-          name: 'PeerVerificationService',
-        );
-      }
-
-      _notificationService.showLocalNotification(
-        title: 'Alert Triggered',
-        body: 'Alert sent for $hazardType in $lga',
-      );
-    } on Exception catch (e) {
-      developer.log(
-        'Error triggering alert: $e',
-        name: 'PeerVerificationService',
-      );
-    }
-  }
-
-  /// Notify original reporter of verification status via OneSignal external user ID.
-  Future<void> _notifyReporter(
-    String reportId, {
-    required String status,
-    String? reason,
-  }) async {
-    try {
-      final report = await _supabase.getDocument(
-        collectionId: AppConfig.reportsCollection,
-        documentId: reportId,
-      );
-      final reporterId = report['user_id'] as String? ?? '';
-      if (reporterId.isEmpty) return;
-
-      final statusMessages = {
-        'verified': 'Your report has been verified by peers.',
-        'approved': 'Your report has been approved by a coordinator.',
-        'rejected': reason != null
-            ? 'Your report was not approved. Reason: $reason'
-            : 'Your report was not approved.',
-      };
-
-      await _sendOneSignalPushToUser(
-        externalUserId: reporterId,
-        heading: 'Report Status Update',
-        content: statusMessages[status] ?? 'Your report status: $status',
-        data: {
-          'type': 'report',
-          'reportId': reportId,
-          'status': status,
-        },
-      );
-
-      developer.log(
-        'Reporter $reporterId status update sent via OneSignal: $status',
-        name: 'PeerVerificationService',
-      );
-    } on Exception catch (e) {
-      developer.log(
-        'Error notifying reporter: $e',
-        name: 'PeerVerificationService',
-      );
-    }
+    final now = DateTime.now().toUtc();
+    await _db.updateDocument(
+      collectionId: AppConfig.reportsCollection,
+      documentId: reportId,
+      data: isApproved
+          ? {'status': 'approved', 'approvedAt': now}
+          : {
+              'status': 'rejected',
+              'rejectedAt': now,
+              'rejectionReason': reason,
+            },
+    );
+    return {
+      'success': true,
+      'message': isApproved
+          ? (AppLocalizations l) => l.reportResolvedItem
+          : (AppLocalizations l) => l.reportRejectedItem,
+    };
   }
 
   /// Get verification statistics for a report.
-  Future<Map<String, dynamic>> getVerificationStats(String reportId) async {
+  ///
+  /// Verifications are readable by every verifier role and by
+  /// ldp_coordinator / project_staff (`verifications_select`). Pass the
+  /// caller's *effective* role (`AuthProvider.userRole`, which is `user`
+  /// until the account is approved) as [role]: `canValidate` is then only
+  /// true for roles allowed to approve / reject. `readable` is false when
+  /// the votes could not be read (so zero counts are not trusted).
+  Future<Map<String, dynamic>> getVerificationStats(
+    String reportId, {
+    UserRole? role,
+  }) async {
     try {
-      final verifications = await _supabase.listDocuments(
+      final verifications = await _db.listDocuments(
         collectionId: AppConfig.verificationsCollection,
-        queries: [SQuery.equal('report_id', reportId)],
+        queries: [FQuery.equal('reportId', reportId)],
         limitCount: 200,
       );
 
       final confirmations = verifications
-          .where((v) => v['is_confirmed'] == true)
+          .where((v) => v['isConfirmed'] == true)
           .length;
       final disputes = verifications
-          .where((v) => v['is_confirmed'] == false)
+          .where((v) => v['isConfirmed'] == false)
           .length;
 
+      final roleMayValidate =
+          role == null || AuthProvider.statusManagerRoles.contains(role);
       return {
+        'readable': true,
         'totalVerifications': verifications.length,
         'confirmations': confirmations,
         'disputes': disputes,
         'requiresEscalation': disputes > 0 && confirmations == 0,
-        'canValidate': confirmations >= AppConfig.minimumPeerConfirmations,
+        'canValidate':
+            roleMayValidate &&
+            confirmations >= RemoteConfigService().minimumPeerConfirmations,
       };
     } on Exception catch (e) {
       developer.log(
@@ -520,6 +227,7 @@ class PeerVerificationService {
         name: 'PeerVerificationService',
       );
       return {
+        'readable': false,
         'totalVerifications': 0,
         'confirmations': 0,
         'disputes': 0,
@@ -529,133 +237,37 @@ class PeerVerificationService {
     }
   }
 
-  /// Lazy escalation: Check for pending reports older than 30 minutes.
-  Future<void> checkAndEscalatePendingReports() async {
+  /// The peer votes on [reportId] (confirmations and disputes with their
+  /// comments), newest first. Readable by ewm, ewv, ewr, ldp_coordinator,
+  /// project_staff, admin and techSupport (`verifications_select`).
+  ///
+  /// The verifier's name is embedded from `profiles` where the caller may
+  /// read that profile; otherwise it is null (never looked up separately).
+  Future<List<ReportVerification>> getVerifications(String reportId) async {
+    const table = AppConfig.verificationsCollection;
+    List<Map<String, dynamic>> rows;
     try {
-      final reports = await _supabase.listDocuments(
-        collectionId: AppConfig.reportsCollection,
-        queries: [SQuery.equal('status', 'pending')],
-        limitCount: 100,
-      );
-
-      final now = DateTime.now();
-      int escalatedCount = 0;
-
-      for (final doc in reports) {
-        final submittedAtStr = doc['submitted_at'];
-        if (submittedAtStr == null) continue;
-
-        DateTime? submittedAt;
-        if (submittedAtStr is String) {
-          submittedAt = DateTime.tryParse(submittedAtStr);
-        }
-        if (submittedAt == null) continue;
-
-        if (now.difference(submittedAt) > escalationTimeout) {
-          await escalateToCoordinator(
-            reportId: doc['\$id'] as String,
-            reason: 'Auto-escalation: No verification within 30 minutes',
-          );
-          escalatedCount++;
-        }
-      }
-
-      if (escalatedCount > 0) {
-        developer.log(
-          'Lazy Escalation: Escalated $escalatedCount reports.',
-          name: 'PeerVerificationService',
-        );
-      }
+      rows = await _db.client
+          .from(table)
+          .select('*, verifier:profiles!verifier_id(name)')
+          .eq('report_id', reportId)
+          .order('submitted_at', ascending: false)
+          .limit(200);
     } on Exception catch (e) {
+      // Embedding can fail (e.g. relationship not exposed): plain rows.
       developer.log(
-        'Error in checkAndEscalatePendingReports: $e',
+        'Verifier embed failed, loading plain rows: $e',
         name: 'PeerVerificationService',
       );
+      rows = await _db.client
+          .from(table)
+          .select()
+          .eq('report_id', reportId)
+          .order('submitted_at', ascending: false)
+          .limit(200);
     }
+    return rows.map(ReportVerification.fromRow).toList();
   }
-
-  // ── OneSignal REST API helpers ────────────────────────────────────────────
-
-  /// Send a targeted push via OneSignal filter-based segments.
-  Future<void> _sendOneSignalPush({
-    required String heading,
-    required String content,
-    required List<Map<String, dynamic>> filters,
-    Map<String, dynamic>? data,
-  }) async {
-    try {
-      final response = await http.post(
-        Uri.parse('$_osBaseUrl/notifications'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Key ${AppConfig.oneSignalRestKey}',
-        },
-        body: jsonEncode({
-          'app_id': AppConfig.oneSignalAppId,
-          'headings': {'en': heading},
-          'contents': {'en': content},
-          'filters': filters,
-          'data': ?data,
-        }),
-      );
-
-      if (response.statusCode == 200) {
-        developer.log(
-          'OneSignal push sent: $heading',
-          name: 'PeerVerificationService',
-        );
-      } else {
-        developer.log(
-          'OneSignal push failed: ${response.statusCode} ${response.body}',
-          name: 'PeerVerificationService',
-        );
-      }
-    } on Exception catch (e) {
-      developer.log('OneSignal push error: $e', name: 'PeerVerificationService');
-    }
-  }
-
-  /// Send push to a specific user by their external OneSignal user ID.
-  Future<void> _sendOneSignalPushToUser({
-    required String externalUserId,
-    required String heading,
-    required String content,
-    Map<String, dynamic>? data,
-  }) async {
-    try {
-      final response = await http.post(
-        Uri.parse('$_osBaseUrl/notifications'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Key ${AppConfig.oneSignalRestKey}',
-        },
-        body: jsonEncode({
-          'app_id': AppConfig.oneSignalAppId,
-          'headings': {'en': heading},
-          'contents': {'en': content},
-          'include_aliases': {
-            'external_id': [externalUserId],
-          },
-          'target_channel': 'push',
-          'data': ?data,
-        }),
-      );
-
-      if (response.statusCode != 200) {
-        developer.log(
-          'OneSignal user push failed: ${response.statusCode} ${response.body}',
-          name: 'PeerVerificationService',
-        );
-      }
-    } on Exception catch (e) {
-      developer.log(
-        'OneSignal user push error: $e',
-        name: 'PeerVerificationService',
-      );
-    }
-  }
-
-  // ── Haversine ────────────────────────────────────────────────────────────
 
   /// Haversine distance in kilometres.
   static double _haversineKm(
@@ -678,4 +290,35 @@ class PeerVerificationService {
   }
 
   static double _deg2rad(double deg) => deg * (math.pi / 180);
+}
+
+/// One peer vote on a report.
+class ReportVerification {
+  const ReportVerification({
+    required this.verifierId,
+    required this.isConfirmed,
+    this.comment = '',
+    this.verifierName,
+    this.submittedAt,
+  });
+
+  /// Builds a vote from a raw `verifications` row (optionally with an
+  /// embedded `verifier: {name}`).
+  factory ReportVerification.fromRow(Map<String, dynamic> row) {
+    final verifier = row['verifier'];
+    final name = verifier is Map ? verifier['name']?.toString().trim() : null;
+    return ReportVerification(
+      verifierId: row['verifier_id']?.toString() ?? '',
+      isConfirmed: row['is_confirmed'] == true,
+      comment: row['comment']?.toString().trim() ?? '',
+      verifierName: (name == null || name.isEmpty) ? null : name,
+      submittedAt: parseTimestamp(row['submitted_at'] ?? row['created_at']),
+    );
+  }
+
+  final String verifierId;
+  final bool isConfirmed;
+  final String comment;
+  final String? verifierName;
+  final DateTime? submittedAt;
 }

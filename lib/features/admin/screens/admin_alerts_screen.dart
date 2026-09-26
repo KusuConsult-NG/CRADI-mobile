@@ -1,8 +1,17 @@
+import 'dart:async';
+
+import 'package:climate_app/core/constants/app_config.dart';
+import 'package:climate_app/core/data/mvp_locations_data.dart';
+import 'package:climate_app/features/alerts/providers/alerts_provider.dart';
+import 'package:provider/provider.dart';
 import 'package:climate_app/core/services/supabase_service.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:climate_app/core/theme/app_colors.dart';
 import 'dart:developer' as developer;
+import 'package:climate_app/core/l10n/l10n.dart';
+import 'package:climate_app/core/utils/error_handler.dart';
+import 'package:climate_app/features/alerts/screens/alert_severity.dart';
 
 /// Admin Alerts & Broadcast screen.
 /// Allows admins to send emergency alerts to all users or specific LGAs.
@@ -17,36 +26,31 @@ class _AdminAlertsScreenState extends State<AdminAlertsScreen> {
   final _formKey = GlobalKey<FormState>();
   final _titleCtrl = TextEditingController();
   final _messageCtrl = TextEditingController();
-  final SupabaseService _supabase = SupabaseService();
-  List<Map<String, dynamic>> _alerts = [];
-  bool _loadingAlerts = false;
+  late final Stream<List<Map<String, dynamic>>> _alertsStream;
 
   @override
   void initState() {
     super.initState();
-    _loadAlerts();
+    // is_active is mutable, so it must not be a realtime server filter (a
+    // dismissed row would never leave the filtered stream). Subscribe to the
+    // newest rows and filter on the client instead.
+    _alertsStream = SupabaseService().subscribeToCollection(
+      collectionId: AppConfig.alertsCollection,
+      queries: [FQuery.orderDesc('createdAt'), FQuery.limit(100)],
+    );
   }
 
-  Future<void> _loadAlerts() async {
-    setState(() => _loadingAlerts = true);
-    try {
-      final docs = await _supabase.listDocuments(
-        collectionId: 'alerts',
-        queries: [
-          SQuery.equal('is_active', true),
-          SQuery.orderDesc('created_at'),
-          SQuery.limit(20),
-        ],
-      );
-      if (mounted) setState(() => _alerts = docs);
-    } on Exception catch (e) {
-      developer.log('Error loading alerts: $e', name: 'AdminAlertsScreen');
-    } finally {
-      if (mounted) setState(() => _loadingAlerts = false);
-    }
-  }
+  /// Alerts dismissed in this session (hidden before the stream catches up).
+  final Set<String> _dismissedIds = {};
 
   String _severity = 'warning';
+
+  /// Target state (null = every state). LGA names repeat across states
+  /// (Obi is in Benue and in Nasarawa), so the LGA is picked within a state.
+  String? _targetState;
+
+  /// 'All' (every LGA of [_targetState], or everyone without a state) or an
+  /// LGA of [_targetState].
   String _targetLga = 'All';
   bool _sending = false;
 
@@ -62,18 +66,26 @@ class _AdminAlertsScreenState extends State<AdminAlertsScreen> {
     'critical': Icons.crisis_alert,
   };
 
-  // Benue/CRADI LGAs — expand as needed
-  static const _lgas = [
+  static final List<String> _states = MVPLocationsData.getAllStates();
+
+  /// 'All' plus the LGAs of [state] (names must match the profile LGA values
+  /// alerts are matched against).
+  static List<String> _lgasFor(String state) => [
     'All',
-    'Makurdi',
-    'Otukpo',
-    'Gboko',
-    'Katsina-Ala',
-    'Lafia',
-    'Nasarawa',
-    'Akwanga',
-    'Keffi',
+    ...MVPLocationsData.getLGAsForState(state).toSet().toList()..sort(),
   ];
+
+  InputDecoration _dropdownDecoration() => InputDecoration(
+    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+    border: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(8),
+      borderSide: BorderSide(color: Colors.grey.shade300),
+    ),
+    enabledBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(8),
+      borderSide: BorderSide(color: Colors.grey.shade300),
+    ),
+  );
 
   @override
   void dispose() {
@@ -87,45 +99,52 @@ class _AdminAlertsScreenState extends State<AdminAlertsScreen> {
     setState(() => _sending = true);
 
     try {
-      await _supabase.createDocument(
-        collectionId: 'alerts',
+      // created_by defaults to auth.uid(); the backend pushes the alert
+      // from the resulting alert_created event.
+      await SupabaseService().createDocument(
+        collectionId: AppConfig.alertsCollection,
         data: {
           'title': _titleCtrl.text.trim(),
           'message': _messageCtrl.text.trim(),
           'severity': _severity,
-          'target_lga': _targetLga,
-          'created_at': DateTime.now().toUtc().toIso8601String(),
-          'created_by': 'admin',
-          'is_active': true,
+          'targetLga': _targetLga,
+          if (_targetState != null) 'targetState': _targetState,
+          'isActive': true,
         },
       );
 
       developer.log(
-        'Alert broadcast: ${_titleCtrl.text} → $_targetLga',
+        'Alert broadcast: ${_titleCtrl.text} → $_targetLga'
+        '${_targetState == null ? '' : ', $_targetState'}',
         name: 'AdminAlertsScreen',
       );
 
       if (mounted) {
+        unawaited(context.read<AlertsProvider>().fetchAlerts());
         _titleCtrl.clear();
         _messageCtrl.clear();
         setState(() {
           _severity = 'warning';
+          _targetState = null;
           _targetLga = 'All';
         });
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('✅ Alert broadcast successfully'),
+          SnackBar(
+            content: Text(context.l10n.adminAlertBroadcastSuccess),
             backgroundColor: Colors.green,
           ),
         );
-        _loadAlerts();
       }
     } on Exception catch (e) {
       developer.log('Alert send error: $e', name: 'AdminAlertsScreen');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to send alert: $e'),
+            content: Text(
+              context.l10n.adminAlertSendFailed(
+                ErrorHandler.getUserMessage(e, context.l10n),
+              ),
+            ),
             backgroundColor: Colors.red,
           ),
         );
@@ -136,12 +155,25 @@ class _AdminAlertsScreenState extends State<AdminAlertsScreen> {
   }
 
   Future<void> _dismissAlert(String id) async {
-    await _supabase.updateDocument(
-      collectionId: 'alerts',
-      documentId: id,
-      data: {'is_active': false},
-    );
-    _loadAlerts();
+    try {
+      await SupabaseService().updateDocument(
+        collectionId: AppConfig.alertsCollection,
+        documentId: id,
+        data: {'isActive': false},
+      );
+      if (!mounted) return;
+      setState(() => _dismissedIds.add(id));
+      unawaited(context.read<AlertsProvider>().fetchAlerts());
+    } on Exception catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(context.l10n.adminAlertDismissFailed),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   @override
@@ -150,7 +182,7 @@ class _AdminAlertsScreenState extends State<AdminAlertsScreen> {
       backgroundColor: AppColors.background,
       appBar: AppBar(
         title: Text(
-          'Alerts & Broadcast',
+          context.l10n.alertsBroadcast,
           style: GoogleFonts.lexend(fontWeight: FontWeight.bold),
         ),
         backgroundColor: AppColors.primaryRed,
@@ -180,7 +212,7 @@ class _AdminAlertsScreenState extends State<AdminAlertsScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Compose Alert',
+                    context.l10n.adminAlertCompose,
                     style: GoogleFonts.lexend(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
@@ -191,7 +223,7 @@ class _AdminAlertsScreenState extends State<AdminAlertsScreen> {
 
                   // Severity picker
                   Text(
-                    'Severity',
+                    context.l10n.reportViewSeverity,
                     style: GoogleFonts.lexend(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
@@ -232,7 +264,7 @@ class _AdminAlertsScreenState extends State<AdminAlertsScreen> {
                                   ),
                                   const SizedBox(height: 4),
                                   Text(
-                                    s[0].toUpperCase() + s.substring(1),
+                                    alertSeverityLabel(s, context.l10n),
                                     style: GoogleFonts.lexend(
                                       fontSize: 11,
                                       fontWeight: FontWeight.w600,
@@ -252,7 +284,7 @@ class _AdminAlertsScreenState extends State<AdminAlertsScreen> {
 
                   // Target LGA
                   Text(
-                    'Target Area',
+                    context.l10n.adminAlertTargetArea,
                     style: GoogleFonts.lexend(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
@@ -260,39 +292,60 @@ class _AdminAlertsScreenState extends State<AdminAlertsScreen> {
                     ),
                   ),
                   const SizedBox(height: 8),
-                  DropdownButtonFormField<String>(
-                    initialValue: _targetLga,
-                    decoration: InputDecoration(
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 10,
-                      ),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: BorderSide(color: Colors.grey.shade300),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: BorderSide(color: Colors.grey.shade300),
-                      ),
-                    ),
+                  DropdownButtonFormField<String?>(
+                    key: const ValueKey('alert-target-state'),
+                    initialValue: _targetState,
+                    decoration: _dropdownDecoration(),
                     style: GoogleFonts.lexend(
                       fontSize: 14,
                       color: AppColors.textPrimary,
                     ),
-                    items: _lgas
-                        .map(
-                          (l) => DropdownMenuItem(
-                            value: l,
-                            child: Text(
-                              l == 'All' ? '🌍 All Areas' : l,
-                              style: GoogleFonts.lexend(fontSize: 14),
-                            ),
+                    items: [
+                      DropdownMenuItem<String?>(
+                        child: Text(
+                          context.l10n.adminAlertAllAreas,
+                          style: GoogleFonts.lexend(fontSize: 14),
+                        ),
+                      ),
+                      for (final st in _states)
+                        DropdownMenuItem<String?>(
+                          value: st,
+                          child: Text(
+                            st,
+                            style: GoogleFonts.lexend(fontSize: 14),
                           ),
-                        )
-                        .toList(),
-                    onChanged: (v) => setState(() => _targetLga = v!),
+                        ),
+                    ],
+                    onChanged: (v) => setState(() {
+                      _targetState = v;
+                      _targetLga = 'All';
+                    }),
                   ),
+                  if (_targetState != null) ...[
+                    const SizedBox(height: 8),
+                    DropdownButtonFormField<String>(
+                      // A new key per state resets the selection to 'All'.
+                      key: ValueKey('alert-target-lga-$_targetState'),
+                      initialValue: _targetLga,
+                      decoration: _dropdownDecoration(),
+                      style: GoogleFonts.lexend(
+                        fontSize: 14,
+                        color: AppColors.textPrimary,
+                      ),
+                      items: _lgasFor(_targetState!)
+                          .map(
+                            (l) => DropdownMenuItem(
+                              value: l,
+                              child: Text(
+                                l == 'All' ? context.l10n.alertsAllLgas : l,
+                                style: GoogleFonts.lexend(fontSize: 14),
+                              ),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (v) => setState(() => _targetLga = v!),
+                    ),
+                  ],
 
                   const SizedBox(height: 16),
 
@@ -301,15 +354,16 @@ class _AdminAlertsScreenState extends State<AdminAlertsScreen> {
                     controller: _titleCtrl,
                     style: GoogleFonts.lexend(),
                     decoration: InputDecoration(
-                      labelText: 'Alert Title',
+                      labelText: context.l10n.adminAlertTitleLabel,
                       labelStyle: GoogleFonts.lexend(fontSize: 14),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
                       ),
                       prefixIcon: const Icon(Icons.title),
                     ),
-                    validator: (v) =>
-                        (v == null || v.trim().isEmpty) ? 'Required' : null,
+                    validator: (v) => (v == null || v.trim().isEmpty)
+                        ? context.l10n.adminAlertRequired
+                        : null,
                     textCapitalization: TextCapitalization.sentences,
                   ),
 
@@ -321,7 +375,7 @@ class _AdminAlertsScreenState extends State<AdminAlertsScreen> {
                     style: GoogleFonts.lexend(),
                     maxLines: 4,
                     decoration: InputDecoration(
-                      labelText: 'Message',
+                      labelText: context.l10n.adminAlertMessageLabel,
                       labelStyle: GoogleFonts.lexend(fontSize: 14),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
@@ -332,8 +386,9 @@ class _AdminAlertsScreenState extends State<AdminAlertsScreen> {
                         child: Icon(Icons.message_outlined),
                       ),
                     ),
-                    validator: (v) =>
-                        (v == null || v.trim().isEmpty) ? 'Required' : null,
+                    validator: (v) => (v == null || v.trim().isEmpty)
+                        ? context.l10n.adminAlertRequired
+                        : null,
                     textCapitalization: TextCapitalization.sentences,
                   ),
 
@@ -363,7 +418,9 @@ class _AdminAlertsScreenState extends State<AdminAlertsScreen> {
                             )
                           : Icon(_severityIcons[_severity]),
                       label: Text(
-                        _sending ? 'Sending…' : 'Broadcast Alert',
+                        _sending
+                            ? context.l10n.resetSendingCode
+                            : context.l10n.adminAlertBroadcastButton,
                         style: GoogleFonts.lexend(fontWeight: FontWeight.bold),
                       ),
                     ),
@@ -377,7 +434,7 @@ class _AdminAlertsScreenState extends State<AdminAlertsScreen> {
 
           // ── Recent active alerts ──
           Text(
-            'Active Alerts',
+            context.l10n.activeAlertsAdmin,
             style: GoogleFonts.lexend(
               fontSize: 16,
               fontWeight: FontWeight.bold,
@@ -386,98 +443,127 @@ class _AdminAlertsScreenState extends State<AdminAlertsScreen> {
           ),
           const SizedBox(height: 12),
 
-          if (_loadingAlerts)
-            const Center(child: CircularProgressIndicator())
-          else if (_alerts.isEmpty)
-            Center(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 24),
-                child: Text(
-                  'No active alerts',
-                  style: GoogleFonts.lexend(color: AppColors.textSecondary),
-                ),
-              ),
-            )
-          else
-            Column(
-              children: _alerts.map((d) {
-                final id = d['\$id'] as String? ?? d['id'] as String? ?? '';
-                final severity = d['severity'] as String? ?? 'info';
-                final color = _severityColors[severity] ?? Colors.blue;
-                final createdAtStr = d['created_at'] as String?;
-                String timeStr = '';
-                if (createdAtStr != null) {
-                  final dt = DateTime.tryParse(createdAtStr);
-                  if (dt != null) timeStr = '${dt.day}/${dt.month}/${dt.year}';
-                }
-                return Card(
-                  margin: const EdgeInsets.only(bottom: 8),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    side: BorderSide(color: color.withValues(alpha: 0.3)),
-                  ),
-                  child: ListTile(
-                    leading: Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: color.withValues(alpha: 0.12),
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(
-                        _severityIcons[severity] ?? Icons.info_outline,
-                        color: color,
-                        size: 20,
-                      ),
+          StreamBuilder<List<Map<String, dynamic>>>(
+            stream: _alertsStream,
+            builder: (context, snap) {
+              if (snap.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              if (snap.hasError) {
+                return Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Text(
+                      context.l10n.adminAlertsLoadError,
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.lexend(color: Colors.red),
                     ),
-                    title: Text(
-                      d['title'] as String? ?? '',
-                      style: GoogleFonts.lexend(
-                        fontWeight: FontWeight.w600,
-                        fontSize: 14,
-                      ),
-                    ),
-                    subtitle: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          d['message'] as String? ?? '',
-                          style: GoogleFonts.lexend(fontSize: 12),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        const SizedBox(height: 4),
-                        Row(
-                          children: [
-                            _alertChip(
-                              d['target_lga'] as String? ?? 'All',
-                              Colors.teal,
-                            ),
-                            const SizedBox(width: 6),
-                            _alertChip(severity, color),
-                            if (timeStr.isNotEmpty) ...[
-                              const SizedBox(width: 6),
-                              Text(
-                                timeStr,
-                                style: GoogleFonts.lexend(
-                                  fontSize: 10,
-                                  color: AppColors.textSecondary,
-                                ),
-                              ),
-                            ],
-                          ],
-                        ),
-                      ],
-                    ),
-                    trailing: IconButton(
-                      icon: const Icon(Icons.close, size: 18),
-                      tooltip: 'Dismiss alert',
-                      onPressed: () => _dismissAlert(id),
-                    ),
-                    isThreeLine: true,
                   ),
                 );
-              }).toList(),
-            ),
+              }
+              final docs = (snap.data ?? const <Map<String, dynamic>>[])
+                  .where(
+                    (d) =>
+                        d['isActive'] != false &&
+                        !_dismissedIds.contains(d[r'$id']?.toString()),
+                  )
+                  .take(20)
+                  .toList();
+              if (docs.isEmpty) {
+                return Center(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 24),
+                    child: Text(
+                      context.l10n.noActiveAlerts,
+                      style: GoogleFonts.lexend(color: AppColors.textSecondary),
+                    ),
+                  ),
+                );
+              }
+              return Column(
+                children: docs.map((d) {
+                  final severity = d['severity'] as String? ?? 'info';
+                  final color = _severityColors[severity] ?? Colors.blue;
+                  final createdAt = d['createdAt'];
+                  String timeStr = '';
+                  final dt = parseTimestamp(createdAt);
+                  if (dt != null) {
+                    timeStr = localizedDateFormat(context, 'd/M/y').format(dt);
+                  }
+                  return Card(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      side: BorderSide(color: color.withValues(alpha: 0.3)),
+                    ),
+                    child: ListTile(
+                      leading: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: color.withValues(alpha: 0.12),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          _severityIcons[severity] ?? Icons.info_outline,
+                          color: color,
+                          size: 20,
+                        ),
+                      ),
+                      title: Text(
+                        d['title'] as String? ?? '',
+                        style: GoogleFonts.lexend(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14,
+                        ),
+                      ),
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            d['message'] as String? ?? '',
+                            style: GoogleFonts.lexend(fontSize: 12),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 4),
+                          Row(
+                            children: [
+                              _alertChip(
+                                AlertsProvider.targetLabel(d) ??
+                                    context.l10n.alertsAllLgas,
+                                Colors.teal,
+                              ),
+                              const SizedBox(width: 6),
+                              _alertChip(
+                                alertSeverityLabel(severity, context.l10n),
+                                color,
+                              ),
+                              if (timeStr.isNotEmpty) ...[
+                                const SizedBox(width: 6),
+                                Text(
+                                  timeStr,
+                                  style: GoogleFonts.lexend(
+                                    fontSize: 10,
+                                    color: AppColors.textSecondary,
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ],
+                      ),
+                      trailing: IconButton(
+                        icon: const Icon(Icons.close, size: 18),
+                        tooltip: context.l10n.adminAlertDismissTooltip,
+                        onPressed: () => _dismissAlert(d['\$id'] as String),
+                      ),
+                      isThreeLine: true,
+                    ),
+                  );
+                }).toList(),
+              );
+            },
+          ),
         ],
       ),
     );

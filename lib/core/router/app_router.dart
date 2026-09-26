@@ -1,6 +1,6 @@
+import 'package:climate_app/core/services/remote_config_service.dart';
 import 'package:climate_app/features/alerts/screens/alerts_list_screen.dart';
 import 'package:climate_app/features/auth/screens/landing_screen.dart';
-import 'package:climate_app/features/auth/screens/email_verification_screen.dart';
 
 import 'package:climate_app/features/alerts/screens/alert_detail_screen.dart';
 import 'package:climate_app/features/auth/screens/login_screen.dart';
@@ -27,7 +27,6 @@ import 'package:climate_app/features/verification/screens/reports_status_screen.
 import 'package:climate_app/features/verification/screens/verification_request_screen.dart';
 import 'package:climate_app/features/auth/screens/registration_screen.dart';
 import 'package:climate_app/features/auth/screens/pending_approval_screen.dart';
-import 'package:climate_app/features/auth/screens/welcome_screen.dart';
 import 'package:climate_app/features/auth/screens/forgot_password_screen.dart';
 import 'package:climate_app/features/auth/screens/reset_password_screen.dart';
 import 'package:climate_app/features/notifications/screens/notifications_screen.dart';
@@ -40,6 +39,10 @@ import 'package:climate_app/features/auth/providers/auth_provider.dart';
 import 'package:climate_app/features/auth/screens/access_code_verification_screen.dart';
 import 'package:climate_app/features/auth/screens/otp_verification_screen.dart';
 import 'package:climate_app/core/providers/connectivity_provider.dart';
+import 'package:climate_app/core/router/route_guard.dart';
+import 'package:climate_app/core/widgets/route_status_screen.dart';
+import 'package:climate_app/features/alerts/providers/alerts_provider.dart';
+import 'package:climate_app/features/verification/providers/reports_status_provider.dart';
 import 'package:climate_app/features/admin/screens/admin_screen.dart';
 import 'package:climate_app/features/admin/screens/admin_users_screen.dart';
 import 'package:climate_app/features/admin/screens/admin_reports_screen.dart';
@@ -49,6 +52,7 @@ import 'package:climate_app/features/admin/screens/admin_knowledge_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+import 'package:climate_app/core/l10n/l10n.dart';
 
 /// Create router with authentication guards
 GoRouter createRouter(BuildContext context) {
@@ -61,104 +65,19 @@ GoRouter createRouter(BuildContext context) {
   return GoRouter(
     initialLocation: '/splash',
     refreshListenable: Listenable.merge([authProvider, connectivityProvider]),
-    redirect: (BuildContext context, GoRouterState state) {
-      final isInitialized = authProvider.isInitialized;
-      final isAuthenticated = authProvider.isAuthenticated;
-      final isLocked = authProvider.isLocked;
-      final isOffline = connectivityProvider.isOffline;
-      final currentPath = state.matchedLocation;
-
-      // 0. Wait for initialization
-      if (!isInitialized) {
-        // If not initialized, keep showing splash
-        return '/splash';
-      }
-
-      // 1. Offline check
-      // Allow access to Knowledge Base, Settings, and Contacts while offline
-      if (isOffline &&
-          currentPath != '/offline' &&
-          !currentPath.startsWith('/knowledge-base') &&
-          !currentPath.startsWith('/settings') &&
-          !currentPath.startsWith('/contacts') &&
-          !currentPath.startsWith('/report')) {
-        return '/offline';
-      }
-
-      // If back online and on offline screen, go to dashboard
-      if (!isOffline && currentPath == '/offline') {
-        return '/dashboard';
-      }
-
-      // Public routes that don't require authentication
-      const publicRoutes = [
-        '/splash',
-        '/onboarding',
-        '/welcome',
-        '/landing',
-        '/login',
-        '/register',
-        '/forgot-password',
-        '/reset-password',
-        '/pending-approval',
-        '/verify-email',
-        '/verify-otp',
-        '/',
-      ];
-
-      final isPublicRoute = publicRoutes.contains(currentPath);
-
-      // 2. Root/Splash Redirect Logic
-      // Once initialized, move away from splash
-      if (currentPath == '/' || currentPath == '/splash') {
-        if (isAuthenticated) {
-          if (isLocked) return '/login'; // Or stay on lock screen
-          return '/dashboard';
-        }
-
-        if (!authProvider.hasCompletedOnboarding) {
-          return '/onboarding';
-        }
-        return '/landing';
-      }
-
-      // 3. Protected Route Logic
-      // If trying to access protected route while not authenticated
-      if (!isAuthenticated && !isPublicRoute) {
-        return '/login';
-      }
-
-      // If authenticated but app is locked (biometric enabled)
-      if (isAuthenticated && isLocked && !isPublicRoute) {
-        // Force login/unlock screen if not already there
-        // Assuming /login handles the unlock UI or we have a specific /lock screen
-        if (currentPath != '/login') {
-          return '/login';
-        }
-        return null;
-      }
-
-      // 4. Verification Check
-      // If authenticated but NOT verified, force to verification screen
-      final isVerified = authProvider.isVerified;
-
-      if (isAuthenticated &&
-          !isVerified &&
-          currentPath != '/verify-access-code' &&
-          currentPath != '/verify-email' &&
-          !isPublicRoute) {
-        return '/verify-access-code';
-      }
-
-      // If IS verified, but trying to go to verification screen, go to dashboard
-      if (isAuthenticated &&
-          isVerified &&
-          currentPath == '/verify-access-code') {
-        return '/dashboard';
-      }
-
-      return null; // No redirect needed
-    },
+    errorBuilder: (context, state) => const RouteStatusScreen.notFound(),
+    redirect: (BuildContext context, GoRouterState state) => resolveRedirect(
+      RouteGuardState(
+        isInitialized: authProvider.isInitialized,
+        isAuthenticated: authProvider.isAuthenticated,
+        isLocked: authProvider.isLocked,
+        isOffline: connectivityProvider.isOffline,
+        isVerified: authProvider.isVerified,
+        isApproved: authProvider.isApproved,
+        hasCompletedOnboarding: authProvider.hasCompletedOnboarding,
+      ),
+      state.uri,
+    ),
     routes: [
       GoRoute(
         path: '/splash',
@@ -171,19 +90,9 @@ GoRouter createRouter(BuildContext context) {
       GoRoute(path: '/', redirect: (context, state) => '/splash'),
       GoRoute(
         path: '/register',
-        builder: (context, state) {
-          final extra = state.extra as Map<String, dynamic>?;
-          return RegistrationScreen(
-            prefilledEmail: extra?['email'],
-            isVerified: extra?['isVerified'] ?? false,
-          );
-        },
+        builder: (context, state) => const RegistrationScreen(),
       ),
 
-      GoRoute(
-        path: '/welcome',
-        builder: (context, state) => const WelcomeScreen(),
-      ),
       GoRoute(
         path: '/landing',
         builder: (context, state) => const LandingScreen(),
@@ -197,9 +106,10 @@ GoRouter createRouter(BuildContext context) {
       GoRoute(
         path: '/reset-password',
         builder: (context, state) {
-          final userId = state.uri.queryParameters['userId'] ?? '';
-          final secret = state.uri.queryParameters['secret'] ?? '';
-          return ResetPasswordScreen(userId: userId, secret: secret);
+          // Recovery uses the 6-digit code Supabase emails; the screen
+          // collects it together with the new password.
+          final email = state.uri.queryParameters['email'] ?? '';
+          return ResetPasswordScreen(email: email);
         },
       ),
       GoRoute(
@@ -209,14 +119,6 @@ GoRouter createRouter(BuildContext context) {
       GoRoute(
         path: '/verify-access-code',
         builder: (context, state) => const AccessCodeVerificationScreen(),
-      ),
-      GoRoute(
-        path: '/verify-email',
-        builder: (context, state) {
-          final userId = state.uri.queryParameters['userId'] ?? '';
-          final secret = state.uri.queryParameters['secret'] ?? '';
-          return EmailVerificationScreen(userId: userId, secret: secret);
-        },
       ),
       GoRoute(
         path: '/verify-otp',
@@ -244,18 +146,18 @@ GoRouter createRouter(BuildContext context) {
           ),
           GoRoute(
             path: '/verification',
-            redirect: (context, state) => _requireRole(context, [
-              UserRole.ewv,
-              UserRole.ewr,
-              UserRole.admin,
-              UserRole.techSupport,
-            ]),
+            // Peer verifiers (is_verifier()) — the list is for casting votes.
+            redirect: (context, state) =>
+                _requireRole(context, AuthProvider.verifierRoles.toList()),
             builder: (context, state) => const VerificationListScreen(),
           ),
           GoRoute(
             path: '/alerts',
             pageBuilder: (context, state) {
-              final category = state.extra as String?;
+              // go_router shares `extra` with parent matches: a push to
+              // /alerts/detail hands this page the alert Map.
+              final extra = state.extra;
+              final category = extra is String ? extra : null;
               return _buildTransitionPage(
                 context: context,
                 state: state,
@@ -264,17 +166,24 @@ GoRouter createRouter(BuildContext context) {
             },
             routes: [
               GoRoute(
+                path: 'manage',
+                // Compose / dismiss broadcasts: every role the alerts
+                // insert / update policies allow, not only admins.
+                redirect: (context, state) => _requireRole(
+                  context,
+                  AuthProvider.alertManagerRoles.toList(),
+                ),
+                builder: (context, state) => const AdminAlertsScreen(),
+              ),
+              GoRoute(
                 path: 'detail',
-                builder: (context, state) {
-                  // From in-app navigation, alert is passed via extra.
-                  // From deep-links, extra is null — redirect handled below.
-                  final alert = state.extra as Map<String, dynamic>?;
-                  if (alert == null) {
-                    // Deep-link without data — show the alerts list
-                    return const AlertsListScreen();
-                  }
-                  return AlertDetailScreen(alert: alert);
-                },
+                // In-app navigation passes the alert via extra; deep links /
+                // state restoration arrive without it.
+                redirect: (context, state) =>
+                    state.extra is Map<String, dynamic> ? null : '/alerts',
+                builder: (context, state) => AlertDetailScreen(
+                  alert: state.extra as Map<String, dynamic>,
+                ),
               ),
             ],
           ),
@@ -288,11 +197,15 @@ GoRouter createRouter(BuildContext context) {
             routes: [
               GoRoute(
                 path: 'severity',
-                builder: (context, state) => const SeveritySelectionScreen(),
+                builder: (context, state) => SeveritySelectionScreen(
+                  returnToReview: isReviewEdit(state.uri),
+                ),
               ),
               GoRoute(
                 path: 'location',
-                builder: (context, state) => const LocationPickerScreen(),
+                builder: (context, state) => LocationPickerScreen(
+                  returnToReview: isReviewEdit(state.uri),
+                ),
               ),
               GoRoute(
                 path: 'details',
@@ -340,11 +253,13 @@ GoRouter createRouter(BuildContext context) {
             routes: [
               GoRoute(
                 path: 'users',
-                redirect: (context, state) => _requireRole(context, [
-                  UserRole.admin,
-                  UserRole.techSupport,
-                ]),
-                builder: (context, state) => const AdminUsersScreen(),
+                // Profile writes (approve / role / disable) are admin-only
+                // in the database.
+                redirect: (context, state) =>
+                    _requireRole(context, [UserRole.admin]),
+                builder: (context, state) => AdminUsersScreen(
+                  pendingOnly: state.uri.queryParameters['filter'] == 'pending',
+                ),
               ),
               GoRoute(
                 path: 'reports',
@@ -388,8 +303,12 @@ GoRouter createRouter(BuildContext context) {
           ),
           GoRoute(
             path: 'detail',
+            // Deep links / state restoration arrive without `extra`.
+            redirect: (context, state) =>
+                state.extra is Map<String, dynamic> ? null : '/knowledge-base',
             builder: (context, state) {
-              final guide = state.extra as Map<String, dynamic>;
+              final guide = state.extra as Map<String, dynamic>?;
+              if (guide == null) return const KnowledgeBaseScreen();
               return KnowledgeDetailScreen(guide: guide);
             },
           ),
@@ -407,26 +326,36 @@ GoRouter createRouter(BuildContext context) {
       ),
       GoRoute(
         path: '/verification/request',
-        redirect: (context, state) => _requireRole(context, [
-          UserRole.ewv,
-          UserRole.ewr,
-          UserRole.admin,
-          UserRole.techSupport,
-        ]),
+        // Reached from the verification list (verifier roles only).
+        redirect: (context, state) => _requireRole(
+          context,
+          AuthProvider.verificationRequestRoles.toList(),
+        ),
         builder: (context, state) => const VerificationRequestScreen(),
       ),
       GoRoute(
         path: '/reports-status',
-        builder: (context, state) => const ReportsStatusScreen(),
+        builder: (context, state) =>
+            ReportsStatusScreen(initialTab: state.uri.queryParameters['tab']),
       ),
       GoRoute(
         path: '/report-view',
+        // Deep links / state restoration arrive without `extra`.
+        redirect: (context, state) =>
+            state.extra is VerificationReport ? null : '/reports-status',
         builder: (context, state) {
-          final report = state.extra as VerificationReport;
+          final report = state.extra as VerificationReport?;
+          if (report == null) return const ReportsStatusScreen();
           return ReportViewScreen(report: report);
         },
       ),
-      GoRoute(path: '/chat', builder: (context, state) => const ChatScreen()),
+      GoRoute(
+        path: '/chat',
+        // Peer chat can be switched off remotely (feature flag).
+        redirect: (context, state) =>
+            RemoteConfigService().featureFlagPeerChat ? null : '/dashboard',
+        builder: (context, state) => const ChatScreen(),
+      ),
       GoRoute(
         path: '/offline',
         builder: (context, state) => const OfflineHomeScreen(),
@@ -444,25 +373,36 @@ GoRouter createRouter(BuildContext context) {
         builder: (context, state) => const AboutAppScreen(),
       ),
       // ── Deep Link Routes ───────────────────────────────────────────────────
-      // FCM push notifications may include type and id in the payload.
-      // These routes resolve the ID and redirect to the appropriate screen.
+      // Push notifications (OneSignal additionalData) and shared links
+      // (cradi://report/<id>) open a specific report / alert. Sign-in is
+      // enforced by the top-level redirect.
       GoRoute(
         path: '/report/:reportId',
-        redirect: (context, state) {
-          final auth = Provider.of<AuthProvider>(context, listen: false);
-          if (!auth.isAuthenticated) return '/login';
-          // Deep-link with a report ID — go to reports status screen
-          // (cannot pass extra data via URL, so we show the list)
-          return '/reports-status';
+        builder: (context, state) {
+          final id = state.pathParameters['reportId']!;
+          return DeepLinkLoader<VerificationReport>(
+            key: ValueKey('report-$id'),
+            load: () =>
+                context.read<ReportsStatusProvider>().fetchReportById(id),
+            builder: (context, report) => ReportViewScreen(report: report),
+            notFoundTitle: context.l10n.routeReportNotFound,
+            fallbackLocation: '/reports-status',
+            fallbackLabel: context.l10n.routeViewReports,
+          );
         },
       ),
       GoRoute(
         path: '/alert/:alertId',
-        redirect: (context, state) {
-          final auth = Provider.of<AuthProvider>(context, listen: false);
-          if (!auth.isAuthenticated) return '/login';
-          // Deep-link with an alert ID — go to alerts list
-          return '/alerts';
+        builder: (context, state) {
+          final id = state.pathParameters['alertId']!;
+          return DeepLinkLoader<Map<String, dynamic>>(
+            key: ValueKey('alert-$id'),
+            load: () => context.read<AlertsProvider>().fetchAlertById(id),
+            builder: (context, alert) => AlertDetailScreen(alert: alert),
+            notFoundTitle: context.l10n.routeAlertNotFound,
+            fallbackLocation: '/alerts',
+            fallbackLabel: context.l10n.routeViewAlerts,
+          );
         },
       ),
     ],
@@ -514,7 +454,9 @@ CustomTransitionPage<T> _buildTransitionPage<T>({
   required Widget child,
 }) {
   return CustomTransitionPage<T>(
-    key: ValueKey(state.matchedLocation),
+    // Unique per navigation: pushing the same location twice must not
+    // produce duplicate page keys.
+    key: state.pageKey,
     child: child,
     transitionsBuilder: _buildPageTransition,
     transitionDuration: const Duration(milliseconds: 300),

@@ -1,15 +1,18 @@
-import 'package:supabase_flutter/supabase_flutter.dart';
-
+import 'package:climate_app/core/constants/hazards.dart';
+import 'package:climate_app/core/services/supabase_service.dart';
 import 'package:climate_app/core/utils/error_handler.dart';
 import 'package:climate_app/core/utils/validators.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+import 'package:climate_app/features/verification/models/verification_report_model.dart';
 import 'package:climate_app/features/verification/providers/reports_status_provider.dart';
 import 'package:climate_app/core/widgets/location_selector_widget.dart';
+import 'package:climate_app/core/l10n/l10n.dart';
+import 'package:climate_app/core/l10n/severity_label.dart';
 
 /// Verification request screen - submit verification request
-/// This is a simplified stub implementation using Appwrite
+/// Submits a verification request backed by Supabase.
 class VerificationRequestScreen extends StatefulWidget {
   const VerificationRequestScreen({super.key});
 
@@ -21,29 +24,17 @@ class VerificationRequestScreen extends StatefulWidget {
 class _VerificationRequestScreenState extends State<VerificationRequestScreen> {
   final _formKey = GlobalKey<FormState>();
   final _descriptionController = TextEditingController();
-  String _selectedHazard = 'Flooding';
+  String _selectedHazard = Hazard.flooding.storedName;
   String _selectedSeverity = 'medium';
   String? _selectedState;
   String? _selectedLGA;
   String? _selectedWard;
 
-  final List<String> _hazards = [
-    'Flooding',
-    'Extreme Heat',
-    'Drought',
-    'Windstorms',
-    'Wildfires',
-    'Erosion',
-    'Pest Outbreak',
-    'Crop Disease',
-  ];
+  /// Stored hazard names (same values as the reporting flow).
+  final List<String> _hazards = [for (final h in Hazard.values) h.storedName];
 
-  final List<Map<String, String>> _severities = [
-    {'value': 'low', 'label': 'Low'},
-    {'value': 'medium', 'label': 'Medium'},
-    {'value': 'high', 'label': 'High'},
-    {'value': 'critical', 'label': 'Critical'},
-  ];
+  /// Stored severity values (labels come from [severityLabel]).
+  static const List<String> _severities = ['low', 'medium', 'high', 'critical'];
 
   @override
   void dispose() {
@@ -62,74 +53,70 @@ class _VerificationRequestScreenState extends State<VerificationRequestScreen> {
         _selectedWard == null) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please select State, LGA, and Ward')),
+          SnackBar(content: Text(context.l10n.pleaseSelectStateLgaWard)),
         );
       }
       return;
     }
 
     try {
-      final user = Supabase.instance.client.auth.currentUser;
+      final user = SupabaseService().getCurrentUser();
 
       if (user == null) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('User not authenticated')),
+            SnackBar(content: Text(context.l10n.authErrorNotLoggedIn)),
           );
         }
         return;
       }
 
-      if (mounted) {
-        context
-            .read<ReportsStatusProvider>()
-            .submitVerificationRequest(
-              userId: user.id,
-              hazardType: _selectedHazard,
-              severity: _selectedSeverity,
-              description: _descriptionController.text,
-              state: _selectedState!,
-              lga: _selectedLGA!,
-              ward: _selectedWard!,
-              locationDetails: 'Verification Request',
-            )
-            .then((_) {
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text(
-                      'Verification request submitted successfully',
-                    ),
-                  ),
-                );
-                Navigator.of(context).pop();
-              }
-            })
-            .catchError((e) {
-              if (mounted) {
-                String message = 'Submission failed';
-                if (e.toString().contains('offline_queued')) {
-                  message = 'Offline: Request saved to sync queue';
-                  // Still pop as it is "saved"
-                  Navigator.of(context).pop();
-                } else {
-                  message = ErrorHandler.handleError(
-                    e,
-                    context: 'Verification',
-                  );
-                }
+      if (!mounted) return;
+      final messenger = ScaffoldMessenger.of(context);
+      final l10n = context.l10n;
+      final router = GoRouter.of(context);
+      // Deep-linked (nothing below): go to the verification list instead.
+      void leave() {
+        if (router.canPop()) {
+          router.pop();
+        } else {
+          router.go('/verification');
+        }
+      }
 
-                ScaffoldMessenger.of(
-                  context,
-                ).showSnackBar(SnackBar(content: Text(message)));
-              }
-            });
+      try {
+        await context.read<ReportsStatusProvider>().submitVerificationRequest(
+          userId: user.id,
+          hazardType: _selectedHazard,
+          severity: _selectedSeverity,
+          description: _descriptionController.text,
+          state: _selectedState!,
+          lga: _selectedLGA!,
+          ward: _selectedWard!,
+          // Fixed marker (shown localised via displayLocation).
+          locationDetails: VerificationReport.verificationRequestLocation,
+        );
+        messenger.showSnackBar(
+          SnackBar(content: Text(l10n.verificationRequestSubmitted)),
+        );
+        if (mounted) leave();
+      } on OfflineQueuedException catch (e) {
+        // Saved to the sync queue: it will be uploaded automatically.
+        messenger.showSnackBar(SnackBar(content: Text(e.message(l10n))));
+        if (mounted) leave();
       }
     } on Exception catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(ErrorHandler.handleError(e, context: 'Verification')),
+            content: Text(
+              ErrorHandler.handleError(
+                e,
+                context.l10n,
+                context: 'Verification',
+              ),
+            ),
+            backgroundColor: Colors.red,
           ),
         );
       }
@@ -140,8 +127,9 @@ class _VerificationRequestScreenState extends State<VerificationRequestScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Request Verification'),
+        title: Text(context.l10n.verificationRequestTitle),
         leading: IconButton(
+          tooltip: context.l10n.back,
           icon: const Icon(
             Icons.arrow_back_ios_new,
             size: 20,
@@ -165,27 +153,32 @@ class _VerificationRequestScreenState extends State<VerificationRequestScreen> {
             const SizedBox(height: 16),
             DropdownButtonFormField<String>(
               initialValue: _selectedHazard,
-              decoration: const InputDecoration(
-                labelText: 'Hazard Type',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: context.l10n.hazardType,
+                border: const OutlineInputBorder(),
               ),
               items: _hazards
-                  .map((h) => DropdownMenuItem(value: h, child: Text(h)))
+                  .map(
+                    (h) => DropdownMenuItem(
+                      value: h,
+                      child: Text(Hazard.labelFor(h, context.l10n)),
+                    ),
+                  )
                   .toList(),
               onChanged: (val) => setState(() => _selectedHazard = val!),
             ),
             const SizedBox(height: 16),
             DropdownButtonFormField<String>(
               initialValue: _selectedSeverity,
-              decoration: const InputDecoration(
-                labelText: 'Severity',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: context.l10n.reportViewSeverity,
+                border: const OutlineInputBorder(),
               ),
               items: _severities
                   .map(
                     (s) => DropdownMenuItem(
-                      value: s['value'],
-                      child: Text(s['label']!),
+                      value: s,
+                      child: Text(severityLabel(context.l10n, s)),
                     ),
                   )
                   .toList(),
@@ -194,14 +187,17 @@ class _VerificationRequestScreenState extends State<VerificationRequestScreen> {
             const SizedBox(height: 16),
             TextFormField(
               controller: _descriptionController,
-              decoration: const InputDecoration(
-                labelText: 'Description',
-                hintText: 'Describe what needs verification...',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: context.l10n.descriptionLabel,
+                hintText: context.l10n.verificationRequestDescriptionHint,
+                border: const OutlineInputBorder(),
               ),
               maxLines: 5,
-              validator: (value) =>
-                  Validators.validateDescription(value, maxLength: 500),
+              validator: (value) => Validators.validateDescription(
+                value,
+                context.l10n,
+                maxLength: 500,
+              ),
             ),
             const SizedBox(height: 16),
             LocationSelectorWidget(
@@ -231,7 +227,7 @@ class _VerificationRequestScreenState extends State<VerificationRequestScreen> {
                           width: 20,
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
-                      : const Text('Submit Request'),
+                      : Text(context.l10n.verificationRequestSubmit),
                 );
               },
             ),

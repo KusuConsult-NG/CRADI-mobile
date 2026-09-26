@@ -114,20 +114,3 @@ class PremiumTypography {
     );
   }
 }
-
-/// Extension for quick access to premium typography
-extension PremiumTextStyles on BuildContext {
-  TextStyle get h1 => PremiumTypography.heading1(this);
-  TextStyle get h2 => PremiumTypography.heading2(this);
-  TextStyle get h3 => PremiumTypography.heading3(this);
-  TextStyle get h4 => PremiumTypography.heading4(this);
-
-  TextStyle get bodyL => PremiumTypography.bodyLarge(this);
-  TextStyle get bodyM => PremiumTypography.bodyMedium(this);
-  TextStyle get bodyS => PremiumTypography.bodySmall(this);
-
-  TextStyle get buttonText => PremiumTypography.button(this);
-  TextStyle get labelText => PremiumTypography.label(this);
-  TextStyle get captionText => PremiumTypography.caption(this);
-  TextStyle get subtitle => PremiumTypography.subtitle(this);
-}

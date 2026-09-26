@@ -1,12 +1,16 @@
+import 'package:climate_app/features/verification/widgets/verification_request_badge.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
+import 'package:climate_app/core/constants/hazards.dart';
 import 'package:climate_app/core/theme/app_colors.dart';
 import 'package:climate_app/features/auth/providers/auth_provider.dart';
 import 'package:climate_app/features/verification/providers/reports_status_provider.dart';
 import 'package:climate_app/features/verification/models/verification_report_model.dart';
 import 'package:climate_app/shared/widgets/shimmer_loading.dart';
+import 'package:climate_app/core/l10n/l10n.dart';
+import 'package:climate_app/core/utils/screen_security.dart';
 
 /// My Reports screen with Active / History tabs.
 /// Active = pending + verified | History = approved + rejected
@@ -18,23 +22,38 @@ class MyReportsScreen extends StatefulWidget {
 }
 
 class _MyReportsScreenState extends State<MyReportsScreen>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, ScreenSecurityMixin<MyReportsScreen> {
   late TabController _tabController;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
+  }
 
+  /// User and [ReportsStatusProvider.userDataGeneration] the list was last
+  /// loaded for. The list is (re)loaded on first build, when another user
+  /// signs in, and after the provider dropped its cached lists (sign-in /
+  /// sign-out), which would otherwise leave this screen empty.
+  String? _loadedUid;
+  int? _loadedGen;
+
+  void _reloadIfStale(ReportsStatusProvider provider, String uid) {
+    final gen = provider.userDataGeneration;
+    if (uid == _loadedUid && gen == _loadedGen) return;
+    _loadedUid = uid;
+    _loadedGen = gen;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _refreshMyReports();
+      if (mounted) _refreshMyReports();
     });
   }
 
-  void _refreshMyReports() {
-    final uid = context.read<AuthProvider>().currentUser?.uid;
+  /// Loads every page of the user's reports (the Active / History split
+  /// is done client-side, so a single page would hide older reports).
+  Future<void> _refreshMyReports() async {
+    final uid = context.read<AuthProvider>().currentUser?.id;
     if (uid != null) {
-      context.read<ReportsStatusProvider>().refreshReports(userId: uid);
+      await context.read<ReportsStatusProvider>().fetchAllPages(userId: uid);
     }
   }
 
@@ -50,7 +69,7 @@ class _MyReportsScreenState extends State<MyReportsScreen>
       backgroundColor: AppColors.background,
       appBar: AppBar(
         title: Text(
-          'My Reports',
+          context.l10n.myReports,
           style: GoogleFonts.lexend(
             fontWeight: FontWeight.bold,
             color: AppColors.textPrimary,
@@ -68,27 +87,30 @@ class _MyReportsScreenState extends State<MyReportsScreen>
             fontWeight: FontWeight.w600,
             fontSize: 14,
           ),
-          tabs: const [
-            Tab(text: 'Active'),
-            Tab(text: 'History'),
+          tabs: [
+            Tab(text: context.l10n.myReportsTabActive),
+            Tab(text: context.l10n.myReportsTabHistory),
           ],
         ),
       ),
       body: Consumer2<ReportsStatusProvider, AuthProvider>(
         builder: (context, provider, auth, _) {
-          final uid = auth.currentUser?.uid;
+          final uid = auth.currentUser?.id;
           if (uid == null) {
             return Center(
               child: Text(
-                'Please sign in to view your reports.',
+                context.l10n.myReportsSignIn,
                 style: GoogleFonts.lexend(color: AppColors.textSecondary),
               ),
             );
           }
 
+          _reloadIfStale(provider, uid);
+
           // Get ALL user reports (status: null means all)
           final allReports = provider.getReports(null, userId: uid);
           final isLoading = provider.isLoading(null, userId: uid);
+          final error = provider.errorFor(null, userId: uid);
 
           final activeReports = allReports.where((r) => r.isActive).toList();
           final historyReports = allReports.where((r) => r.isHistory).toList();
@@ -99,14 +121,16 @@ class _MyReportsScreenState extends State<MyReportsScreen>
               _buildReportList(
                 activeReports,
                 isLoading,
-                'No active reports',
-                'Reports you submit will appear here while being verified.',
+                context.l10n.myReportsEmptyActiveTitle,
+                context.l10n.myReportsEmptyActiveBody,
+                error,
               ),
               _buildReportList(
                 historyReports,
                 isLoading,
-                'No report history',
-                'Your approved and rejected reports will appear here.',
+                context.l10n.myReportsEmptyHistoryTitle,
+                context.l10n.myReportsEmptyHistoryBody,
+                error,
               ),
             ],
           );
@@ -118,7 +142,7 @@ class _MyReportsScreenState extends State<MyReportsScreen>
         backgroundColor: AppColors.successGreen,
         icon: const Icon(Icons.add, color: Colors.black),
         label: Text(
-          'New Report',
+          context.l10n.myReportsNewReport,
           style: GoogleFonts.lexend(
             fontWeight: FontWeight.w600,
             color: Colors.black,
@@ -133,6 +157,7 @@ class _MyReportsScreenState extends State<MyReportsScreen>
     bool isLoading,
     String emptyTitle,
     String emptySubtitle,
+    LocalizedText? error,
   ) {
     if (isLoading && reports.isEmpty) {
       return Padding(
@@ -143,6 +168,32 @@ class _MyReportsScreenState extends State<MyReportsScreen>
             ShimmerSkeletons.card(height: 90),
             ShimmerSkeletons.card(height: 90),
           ],
+        ),
+      );
+    }
+
+    if (reports.isEmpty && error != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.cloud_off, size: 56, color: Colors.red.shade200),
+              const SizedBox(height: 12),
+              Text(
+                error(context.l10n),
+                textAlign: TextAlign.center,
+                style: GoogleFonts.lexend(color: AppColors.textSecondary),
+              ),
+              const SizedBox(height: 16),
+              ElevatedButton.icon(
+                onPressed: _refreshMyReports,
+                icon: const Icon(Icons.refresh),
+                label: Text(context.l10n.retry),
+              ),
+            ],
+          ),
         ),
       );
     }
@@ -192,12 +243,34 @@ class _MyReportsScreenState extends State<MyReportsScreen>
     }
 
     return RefreshIndicator(
-      onRefresh: () async => _refreshMyReports(),
+      onRefresh: _refreshMyReports,
       child: ListView.separated(
         padding: const EdgeInsets.all(16),
-        itemCount: reports.length,
+        physics: const AlwaysScrollableScrollPhysics(),
+        itemCount: reports.length + (error != null ? 1 : 0),
         separatorBuilder: (_, index) => const SizedBox(height: 12),
         itemBuilder: (context, index) {
+          if (index == reports.length) {
+            return Row(
+              children: [
+                Icon(Icons.error_outline, color: Colors.red.shade300),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    error!(context.l10n),
+                    style: GoogleFonts.lexend(
+                      fontSize: 12,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ),
+                TextButton(
+                  onPressed: _refreshMyReports,
+                  child: Text(context.l10n.retry),
+                ),
+              ],
+            );
+          }
           final report = reports[index];
           return _buildReportCard(report);
         },
@@ -251,7 +324,7 @@ class _MyReportsScreenState extends State<MyReportsScreen>
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              report.title,
+                              report.displayTitle(context.l10n),
                               style: GoogleFonts.lexend(
                                 fontSize: 15,
                                 fontWeight: FontWeight.w600,
@@ -260,6 +333,10 @@ class _MyReportsScreenState extends State<MyReportsScreen>
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
+                            if (report.isVerificationRequest) ...[
+                              const SizedBox(height: 4),
+                              const VerificationRequestBadge(),
+                            ],
                             const SizedBox(height: 4),
                             Row(
                               children: [
@@ -271,7 +348,7 @@ class _MyReportsScreenState extends State<MyReportsScreen>
                                 const SizedBox(width: 4),
                                 Expanded(
                                   child: Text(
-                                    report.location,
+                                    report.displayLocation(context.l10n),
                                     style: GoogleFonts.lexend(
                                       fontSize: 12,
                                       color: AppColors.textSecondary,
@@ -282,6 +359,21 @@ class _MyReportsScreenState extends State<MyReportsScreen>
                                 ),
                               ],
                             ),
+                            if (report.status == ReportStatus.rejected &&
+                                report.rejectionReason != null) ...[
+                              const SizedBox(height: 4),
+                              Text(
+                                context.l10n.myReportsRejectionReason(
+                                  report.rejectionReason!,
+                                ),
+                                style: GoogleFonts.lexend(
+                                  fontSize: 12,
+                                  color: Colors.red.shade700,
+                                ),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
                           ],
                         ),
                       ),
@@ -299,18 +391,26 @@ class _MyReportsScreenState extends State<MyReportsScreen>
                               color: statusColor.withValues(alpha: 0.1),
                               borderRadius: BorderRadius.circular(10),
                             ),
-                            child: Text(
-                              report.status.displayName,
-                              style: GoogleFonts.lexend(
-                                fontSize: 10,
-                                fontWeight: FontWeight.w600,
-                                color: statusColor,
+                            // The chip's colour also encodes the status, so
+                            // the screen reader is given the meaning in words.
+                            child: Semantics(
+                              label: context.l10n.a11yStatusLabel(
+                                report.status.label(context.l10n),
+                              ),
+                              excludeSemantics: true,
+                              child: Text(
+                                report.status.label(context.l10n),
+                                style: GoogleFonts.lexend(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w600,
+                                  color: statusColor,
+                                ),
                               ),
                             ),
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            report.time,
+                            report.displayTime(context.l10n),
                             style: GoogleFonts.lexend(
                               fontSize: 10,
                               color: Colors.grey.shade500,
@@ -344,47 +444,7 @@ class _MyReportsScreenState extends State<MyReportsScreen>
     }
   }
 
-  Color _getHazardColor(String type) {
-    switch (type.toLowerCase()) {
-      case 'flooding':
-      case 'flood':
-        return AppColors.hazardFlood;
-      case 'drought':
-        return AppColors.hazardDrought;
-      case 'fire':
-      case 'wildfire':
-        return AppColors.hazardFire;
-      case 'pest/disease':
-      case 'pest':
-        return AppColors.hazardPest;
-      case 'erosion':
-        return AppColors.hazardErosion;
-      case 'conflict':
-        return Colors.red;
-      default:
-        return Colors.orange;
-    }
-  }
+  Color _getHazardColor(String type) => Hazard.colorFor(type);
 
-  IconData _getHazardIcon(String type) {
-    switch (type.toLowerCase()) {
-      case 'flooding':
-      case 'flood':
-        return Icons.flood;
-      case 'drought':
-        return Icons.wb_sunny;
-      case 'fire':
-      case 'wildfire':
-        return Icons.local_fire_department;
-      case 'pest/disease':
-      case 'pest':
-        return Icons.bug_report;
-      case 'erosion':
-        return Icons.landscape;
-      case 'conflict':
-        return Icons.shield;
-      default:
-        return Icons.warning;
-    }
-  }
+  IconData _getHazardIcon(String type) => Hazard.iconFor(type);
 }

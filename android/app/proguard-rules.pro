@@ -3,34 +3,11 @@
 -dontwarn com.google.android.play.core.**
 
 # ============================================
-# Appwrite SDK
+# OneSignal (push) — the SDK ships its own consumer rules; these are a
+# belt-and-braces keep for reflection-based handlers.
 # ============================================
--keep class io.appwrite.** { *; }
--keep class io.appwrite.models.** { *; }
--keep class io.appwrite.services.** { *; }
--dontwarn io.appwrite.**
-
-# ============================================
-# Firebase (FCM, Crashlytics, Analytics)
-# ============================================
--keep class com.google.firebase.** { *; }
--keep class com.google.android.gms.** { *; }
--dontwarn com.google.firebase.**
--dontwarn com.google.android.gms.**
-
-# Firebase Messaging
--keep class com.google.firebase.messaging.** { *; }
--keep class com.google.firebase.iid.** { *; }
-
-# ============================================
-# Hive Database
-# ============================================
--keep class hive.** { *; }
--keep class hive_flutter.** { *; }
--dontwarn hive.**
-
-# Keep Hive TypeAdapters
--keep class * extends hive.TypeAdapter { *; }
+-keep class com.onesignal.** { *; }
+-dontwarn com.onesignal.**
 
 # ============================================
 # Flutter & Dart
@@ -82,7 +59,7 @@
 # ============================================
 -keepattributes *Annotation*,Signature,Exception
 
-# OkHttp (used by Appwrite)
+# OkHttp — pulled in transitively (Sentry/OneSignal); Appwrite is long gone.
 -dontwarn okhttp3.**
 -dontwarn okio.**
 -keep class okhttp3.** { *; }

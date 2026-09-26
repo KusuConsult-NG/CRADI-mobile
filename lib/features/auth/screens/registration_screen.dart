@@ -1,3 +1,4 @@
+import 'package:climate_app/core/constants/privacy_notice.dart';
 import 'package:climate_app/core/theme/app_colors.dart';
 import 'package:climate_app/features/auth/providers/auth_provider.dart';
 import 'package:climate_app/shared/widgets/custom_button.dart';
@@ -5,7 +6,6 @@ import 'package:climate_app/shared/widgets/custom_text_field.dart';
 import 'package:climate_app/core/utils/error_handler.dart';
 import 'package:climate_app/core/utils/validators.dart';
 import 'package:climate_app/core/utils/input_sanitizer.dart';
-import 'package:climate_app/core/services/supabase_service.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -14,22 +14,18 @@ import 'package:climate_app/shared/widgets/custom_toast.dart';
 import 'package:climate_app/core/design/glass_container.dart';
 import 'package:climate_app/core/widgets/location_selector_widget.dart';
 import 'dart:developer' as developer;
+import 'package:climate_app/core/l10n/l10n.dart';
+import 'package:climate_app/core/utils/screen_security.dart';
 
 class RegistrationScreen extends StatefulWidget {
-  final String? prefilledEmail;
-  final bool isVerified;
-
-  const RegistrationScreen({
-    super.key,
-    this.prefilledEmail,
-    this.isVerified = false,
-  });
+  const RegistrationScreen({super.key});
 
   @override
   State<RegistrationScreen> createState() => _RegistrationScreenState();
 }
 
-class _RegistrationScreenState extends State<RegistrationScreen> {
+class _RegistrationScreenState extends State<RegistrationScreen>
+    with ScreenSecurityMixin<RegistrationScreen> {
   // Form Controllers
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _addressController = TextEditingController();
@@ -52,32 +48,11 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
   bool _isPhoneAuth = false;
   bool _ndpaConsented = false;
 
-  static const String _ndpaPolicyVersion = '1.0.0';
+  static const String _ndpaPolicyVersion = kNdpaPolicyVersion;
 
-  /// Set to false to hide Phone Auth until Termii is configured.
-  /// Toggle back to true once TERMII_API_KEY is confirmed in --dart-define.
-  static const bool _phoneAuthEnabled = false;
-  static const String _ndpaPolicyText = '''
-Nigeria Data Protection Act (NDPA) — Data Processing Notice
-
-Your data is processed by EWER Mobile (a CRADI / KusuConsult-NG service) for climate hazard early warning purposes.
-
-• Data collected: name, phone, email, location (state/LGA/ward), hazard reports, and FCM device tokens.
-• Purpose: community hazard reporting, peer verification, and emergency alerts.
-• Storage: Firebase Cloud Firestore hosted on Google's us-central1 (Iowa, USA) servers.
-• US residency: Pursuant to NDPA Article 24, we disclose that your data is transferred to and stored in the United States of America. This transfer is necessary to provide the service. You have the right to withdraw consent at any time by deleting your account.
-• Retention: Data is retained for 5 years after your last activity, then anonymised.
-• Your rights: access, rectification, erasure, and data portability under the NDPA 2023.
-
-By tapping "I Agree", you consent to these terms and the international transfer of your personal data.''';
-
-  @override
-  void initState() {
-    super.initState();
-    if (widget.prefilledEmail != null) {
-      _emailController.text = widget.prefilledEmail!;
-    }
-  }
+  /// Phone Auth stays hidden until an SMS provider is configured for phone
+  /// OTP in the Supabase dashboard (shared with the login screen).
+  static const bool _phoneAuthEnabled = AuthProvider.phoneAuthEnabled;
 
   @override
   void dispose() {
@@ -116,7 +91,7 @@ By tapping "I Agree", you consent to these terms and the international transfer 
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  'Data Privacy Notice',
+                  context.l10n.registrationPrivacyTitle,
                   style: GoogleFonts.lexend(
                     fontWeight: FontWeight.bold,
                     fontSize: 16,
@@ -128,7 +103,7 @@ By tapping "I Agree", you consent to these terms and the international transfer 
               width: double.maxFinite,
               child: SingleChildScrollView(
                 child: Text(
-                  _ndpaPolicyText,
+                  context.l10n.privacyNoticeText,
                   style: GoogleFonts.lexend(fontSize: 13, height: 1.6),
                 ),
               ),
@@ -137,7 +112,7 @@ By tapping "I Agree", you consent to these terms and the international transfer 
               TextButton(
                 onPressed: () => Navigator.pop(context, false),
                 child: Text(
-                  'Decline',
+                  context.l10n.registrationDecline,
                   style: GoogleFonts.lexend(color: Colors.grey),
                 ),
               ),
@@ -151,7 +126,7 @@ By tapping "I Agree", you consent to these terms and the international transfer 
                 ),
                 onPressed: () => Navigator.pop(context, true),
                 child: Text(
-                  'I Agree',
+                  context.l10n.registrationAgree,
                   style: GoogleFonts.lexend(fontWeight: FontWeight.bold),
                 ),
               ),
@@ -159,35 +134,6 @@ By tapping "I Agree", you consent to these terms and the international transfer 
           ),
         ) ??
         false;
-  }
-
-  /// Records the consent in Supabase for NDPA audit trail.
-  Future<void> _recordNdpaConsent(String uid) async {
-    try {
-      await SupabaseService().createDocument(
-        collectionId: 'ndpa_consents',
-        documentId: uid,
-        data: {
-          'id': uid,
-          'uid': uid,
-          'consented_at': DateTime.now().toUtc().toIso8601String(),
-          'policy_version': _ndpaPolicyVersion,
-          'data_residency': 'eu-central-1',
-          'platform': 'mobile',
-          'method': 'registration_screen',
-        },
-      );
-      developer.log(
-        'NDPA consent recorded for $uid',
-        name: 'RegistrationScreen',
-      );
-    } on Exception catch (e) {
-      // Non-fatal: log but don't block registration. Retry on next launch.
-      developer.log(
-        'NDPA consent record failed: $e',
-        name: 'RegistrationScreen',
-      );
-    }
   }
 
   Future<void> _handleRegister() async {
@@ -198,10 +144,7 @@ By tapping "I Agree", you consent to these terms and the international transfer 
       final agreed = await _showNdpaConsentDialog();
       if (!mounted) return;
       if (!agreed) {
-        _showToast(
-          'You must accept the Data Privacy Notice to register.',
-          isError: true,
-        );
+        _showToast(context.l10n.registrationMustAccept, isError: true);
         return;
       }
       setState(() => _ndpaConsented = true);
@@ -210,11 +153,15 @@ By tapping "I Agree", you consent to these terms and the international transfer 
     // Additional validation for Dropdowns
 
     if (_selectedState == null) {
-      _showToast('Please select a state', isError: true);
+      _showToast(context.l10n.registrationSelectState, isError: true);
       return;
     }
     if (_selectedLga == null) {
-      _showToast('Please select an LGA', isError: true);
+      _showToast(context.l10n.registrationSelectLga, isError: true);
+      return;
+    }
+    if (_selectedWard == null || _selectedWard!.trim().isEmpty) {
+      _showToast(context.l10n.registrationSelectWard, isError: true);
       return;
     }
 
@@ -223,8 +170,10 @@ By tapping "I Agree", you consent to these terms and the international transfer 
     try {
       final authProvider = context.read<AuthProvider>();
 
-      final name = InputSanitizer.sanitize(_nameController.text.trim());
-      final address = InputSanitizer.sanitize(_addressController.text.trim());
+      // Stored as typed: trimmed, whitespace/control characters normalised,
+      // never HTML-escaped (escaping turned "O'Brien" into "O&#x27;Brien").
+      final name = InputSanitizer.cleanForStorage(_nameController.text);
+      final address = InputSanitizer.cleanForStorage(_addressController.text);
       final phone = InputSanitizer.sanitizePhoneNumber(
         _phoneController.text.trim(),
       );
@@ -233,38 +182,40 @@ By tapping "I Agree", you consent to these terms and the international transfer 
         // Custom Phone Auth Flow
         setState(() => _isLoading = true);
         try {
-          final success = await authProvider.sendOtpForPhone(phone);
+          final registrationData = <String, dynamic>{
+            'name': name,
+            'address': address,
+            'role': UserRole.user,
+            'state': _selectedState,
+            'lga': _selectedLga,
+            'ward': _selectedWard,
+            'phone': phone,
+            'ndpaPolicyVersion': _ndpaPolicyVersion,
+          };
+          final success = await authProvider.sendOtpForPhone(
+            phone,
+            registrationData: registrationData,
+          );
           if (mounted) {
             setState(() => _isLoading = false);
             if (success) {
-              final registrationData = {
-                'name': name,
-                'address': address,
-                'role': UserRole.user,
-                'state': _selectedState,
-                'lga': _selectedLga,
-                'ward': _selectedWard,
-                'phone': phone,
-              };
-
               showDialog(
                 context: context,
                 barrierDismissible: false,
-                builder: (context) => AlertDialog(
-                  title: const Text('Verify Your Phone Number'),
-                  content: Text(
-                    'A 6-digit verification code has been sent to $phone.\n\nPlease enter the code to activate your account.',
-                  ),
+                builder: (dialogContext) => AlertDialog(
+                  title: Text(context.l10n.registrationVerifyPhoneTitle),
+                  content: Text(context.l10n.registrationPhoneCodeSent(phone)),
                   actions: [
                     TextButton(
                       onPressed: () {
-                        context.pop(); // Close dialog
+                        Navigator.of(dialogContext).pop(); // Close dialog
+                        // The screen's context: the dialog's is gone now.
                         context.push(
                           '/verify-otp?phone=${Uri.encodeComponent(phone)}',
                           extra: registrationData,
                         );
                       },
-                      child: const Text('Enter Code'),
+                      child: Text(context.l10n.accessCodeEnterCode),
                     ),
                   ],
                 ),
@@ -274,19 +225,22 @@ By tapping "I Agree", you consent to these terms and the international transfer 
         } on AuthException catch (e) {
           if (mounted) {
             setState(() => _isLoading = false);
-            _showToast(e.userMessage, isError: true);
+            _showToast(e.userMessage(context.l10n), isError: true);
           }
         } on Exception catch (e) {
           if (mounted) {
             setState(() => _isLoading = false);
-            _showToast(ErrorHandler.getUserMessage(e), isError: true);
+            _showToast(
+              ErrorHandler.getUserMessage(e, context.l10n),
+              isError: true,
+            );
           }
         }
         return;
       }
 
       // Traditional Email Auth Flow
-      final email = InputSanitizer.sanitize(_emailController.text.trim());
+      final email = _emailController.text.trim();
       final password = _passwordController.text;
 
       developer.log(
@@ -303,22 +257,18 @@ By tapping "I Agree", you consent to these terms and the international transfer 
         state: _selectedState, // Pass selected state
         lga: _selectedLga, // Pass selected LGA
         ward: _selectedWard, // Pass selected Ward
-        isVerified: widget.isVerified,
         phoneNumber: phone,
+        // Recorded in ndpa_consents once the account has a session.
+        ndpaPolicyVersion: _ndpaPolicyVersion,
       );
 
       if (mounted) {
         setState(() => _isLoading = false);
 
         if (success) {
-          // Record NDPA consent in Firestore (uid captured synchronously — safe)
-          final uid = context.read<AuthProvider>().currentUser?.uid;
-          if (uid != null) await _recordNdpaConsent(uid);
-          if (!mounted) return;
-
-          // If already verified (pre-signup), go straight to dashboard
-          if (widget.isVerified) {
-            _showToast('Account created!');
+          // Email confirmation disabled in Supabase → already signed in.
+          if (context.read<AuthProvider>().isAuthenticated) {
+            _showToast(context.l10n.registrationAccountCreated);
             context.go('/dashboard');
             return; // Stop here
           }
@@ -331,48 +281,45 @@ By tapping "I Agree", you consent to these terms and the international transfer 
             'state': _selectedState,
             'lga': _selectedLga,
             'ward': _selectedWard,
-            'email': email
-                .trim()
-                .toLowerCase(), // normalised to match Firestore doc ID
+            'email': email.trim().toLowerCase(),
           };
 
           if (mounted) {
             showDialog(
               context: context,
               barrierDismissible: false,
-              builder: (context) => AlertDialog(
-                title: const Text('Verify Your Email Address'),
-                content: Text(
-                  'Account created successfully!\n\nA 6-digit verification code has been sent to $email.\n\nPlease enter the code to activate your account.',
-                ),
+              builder: (dialogContext) => AlertDialog(
+                title: Text(context.l10n.registrationVerifyEmailTitle),
+                content: Text(context.l10n.registrationEmailCodeSent(email)),
                 actions: [
                   TextButton(
                     onPressed: () {
-                      context.pop(); // Close dialog
+                      Navigator.of(dialogContext).pop(); // Close dialog
+                      // The screen's context: the dialog's is gone now.
                       context.push(
                         '/verify-otp?phone=${Uri.encodeComponent(email)}',
                         extra: registrationData,
                       ); // Go to verification screen
                     },
-                    child: const Text('Enter Code'),
+                    child: Text(context.l10n.accessCodeEnterCode),
                   ),
                 ],
               ),
             );
           }
         } else {
-          _showToast('Registration failed. Please try again.', isError: true);
+          _showToast(context.l10n.authErrorRegistrationFailed, isError: true);
         }
       }
     } on AuthException catch (e) {
       if (mounted) {
         setState(() => _isLoading = false);
-        _showToast(e.userMessage, isError: true);
+        _showToast(e.userMessage(context.l10n), isError: true);
       }
     } on Exception catch (e) {
       if (mounted) {
         setState(() => _isLoading = false);
-        _showToast(ErrorHandler.getUserMessage(e), isError: true);
+        _showToast(ErrorHandler.getUserMessage(e, context.l10n), isError: true);
       }
       ErrorHandler.logError(e, context: 'RegistrationScreen._handleRegister');
     }
@@ -400,24 +347,33 @@ By tapping "I Agree", you consent to these terms and the international transfer 
                       // Header
                       Row(
                         children: [
-                          GestureDetector(
-                            onTap: () => context.go('/login'),
-                            child: Container(
-                              width: 40,
-                              height: 40,
-                              decoration: const BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: Colors.transparent,
-                              ),
-                              child: const Icon(
-                                Icons.arrow_back,
-                                color: AppColors.textPrimary,
+                          Semantics(
+                            button: true,
+                            label: context.l10n.back,
+                            child: Tooltip(
+                              message: context.l10n.back,
+                              child: GestureDetector(
+                                onTap: () => context.go('/login'),
+                                child: Container(
+                                  width: 48,
+                                  height: 48,
+                                  decoration: const BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: Colors.transparent,
+                                  ),
+                                  child: const ExcludeSemantics(
+                                    child: Icon(
+                                      Icons.arrow_back,
+                                      color: AppColors.textPrimary,
+                                    ),
+                                  ),
+                                ),
                               ),
                             ),
                           ),
                           Expanded(
                             child: Text(
-                              'Create Account',
+                              context.l10n.registrationCreateAccount,
                               textAlign: TextAlign.center,
                               style: GoogleFonts.lexend(
                                 fontSize: 20, // Increased from 18
@@ -434,7 +390,7 @@ By tapping "I Agree", you consent to these terms and the international transfer 
 
                       // Title
                       Text(
-                        'Join the Network',
+                        context.l10n.registrationJoinNetwork,
                         style: GoogleFonts.lexend(
                           fontSize: 34, // Increased from 30
                           fontWeight: FontWeight.bold,
@@ -444,7 +400,7 @@ By tapping "I Agree", you consent to these terms and the international transfer 
                       ),
                       const SizedBox(height: 12),
                       Text(
-                        'Select your location to get started.',
+                        context.l10n.registrationSelectLocation,
                         style: GoogleFonts.lexend(
                           fontSize: 18, // Increased from 16
                           color: AppColors.textSecondary,
@@ -461,7 +417,7 @@ By tapping "I Agree", you consent to these terms and the international transfer 
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'Registration Method',
+                              context.l10n.registrationMethod,
                               style: GoogleFonts.lexend(
                                 fontSize: 16,
                                 fontWeight: FontWeight.bold,
@@ -495,7 +451,7 @@ By tapping "I Agree", you consent to these terms and the international transfer 
                                           ),
                                           alignment: Alignment.center,
                                           child: Text(
-                                            'Email',
+                                            context.l10n.authMethodEmail,
                                             style: GoogleFonts.lexend(
                                               color: !_isPhoneAuth
                                                   ? Colors.white
@@ -521,7 +477,7 @@ By tapping "I Agree", you consent to these terms and the international transfer 
                                           ),
                                           alignment: Alignment.center,
                                           child: Text(
-                                            'Phone Number',
+                                            context.l10n.authPhoneNumber,
                                             style: GoogleFonts.lexend(
                                               color: _isPhoneAuth
                                                   ? Colors.white
@@ -537,7 +493,7 @@ By tapping "I Agree", you consent to these terms and the international transfer 
                               ),
                             const SizedBox(height: 24),
                             Text(
-                              'Personal Information',
+                              context.l10n.registrationPersonalInfo,
                               style: GoogleFonts.lexend(
                                 fontSize: 18, // Increased from 16
                                 fontWeight: FontWeight.bold,
@@ -547,12 +503,15 @@ By tapping "I Agree", you consent to these terms and the international transfer 
                             const SizedBox(height: 16),
                             // Full Name
                             CustomTextField(
-                              label: 'Full Name',
+                              label: context.l10n.fullName,
                               controller: _nameController,
-                              hint: 'John Doe',
+                              hint: context.l10n.registrationNameHint,
                               prefixIcon: const Icon(Icons.person_outline),
-                              validator: (v) =>
-                                  Validators.validateRequired(v, 'Name'),
+                              validator: (v) => Validators.validateRequired(
+                                v?.trim(),
+                                context.l10n.registrationNameField,
+                                context.l10n,
+                              ),
                               enabled: !_isLoading,
                             ),
                             const SizedBox(height: 16),
@@ -560,48 +519,54 @@ By tapping "I Agree", you consent to these terms and the international transfer 
                             // Email (conditional)
                             if (!_isPhoneAuth) ...[
                               CustomTextField(
-                                label: 'Email Address',
+                                label: context.l10n.emailAddress,
                                 controller: _emailController,
                                 hint: 'name@example.com',
                                 prefixIcon: const Icon(Icons.email_outlined),
                                 keyboardType: TextInputType.emailAddress,
-                                validator: Validators.validateEmail,
-                                enabled:
-                                    !_isLoading &&
-                                    widget.prefilledEmail == null,
+                                validator: (v) => Validators.validateEmail(
+                                  v?.trim(),
+                                  context.l10n,
+                                ),
+                                enabled: !_isLoading,
                               ),
                               const SizedBox(height: 16),
                             ],
 
                             // Phone Number
                             CustomTextField(
-                              label: 'Phone Number',
+                              label: context.l10n.authPhoneNumber,
                               controller: _phoneController,
                               hint: '+234...',
                               prefixIcon: const Icon(Icons.phone_outlined),
                               keyboardType: TextInputType.phone,
-                              validator: (v) =>
-                                  Validators.validatePhoneNumber(v),
+                              validator: (v) => Validators.validatePhoneNumber(
+                                v,
+                                context.l10n,
+                              ),
                               enabled: !_isLoading,
                             ),
                             const SizedBox(height: 16),
 
                             // Address
                             CustomTextField(
-                              label: 'Address Description',
+                              label: context.l10n.registrationAddressLabel,
                               controller: _addressController,
-                              hint: 'e.g., No 5, Main Street',
+                              hint: context.l10n.registrationAddressHint,
                               prefixIcon: const Icon(
                                 Icons.location_on_outlined,
                               ),
-                              validator: (v) =>
-                                  Validators.validateRequired(v, 'Address'),
+                              validator: (v) => Validators.validateRequired(
+                                v?.trim(),
+                                context.l10n.registrationAddressField,
+                                context.l10n,
+                              ),
                               enabled: !_isLoading,
                             ),
                             const SizedBox(height: 24),
 
                             Text(
-                              'Location',
+                              context.l10n.locationLabel,
                               style: GoogleFonts.lexend(
                                 fontSize: 16,
                                 fontWeight: FontWeight.bold,
@@ -629,7 +594,7 @@ By tapping "I Agree", you consent to these terms and the international transfer 
 
                             if (!_isPhoneAuth) ...[
                               Text(
-                                'Security',
+                                context.l10n.registrationSecurity,
                                 style: GoogleFonts.lexend(
                                   fontSize: 16,
                                   fontWeight: FontWeight.bold,
@@ -639,12 +604,15 @@ By tapping "I Agree", you consent to these terms and the international transfer 
                               const SizedBox(height: 16),
                               // Password
                               CustomTextField(
-                                label: 'Password',
+                                label: context.l10n.authPassword,
                                 controller: _passwordController,
-                                hint: 'Create a password',
+                                hint: context.l10n.registrationPasswordHint,
                                 obscureText: !_isPasswordVisible,
                                 prefixIcon: const Icon(Icons.lock_outline),
                                 suffixIcon: IconButton(
+                                  tooltip: _isPasswordVisible
+                                      ? context.l10n.authHidePassword
+                                      : context.l10n.authShowPassword,
                                   icon: Icon(
                                     _isPasswordVisible
                                         ? Icons.visibility
@@ -658,19 +626,27 @@ By tapping "I Agree", you consent to these terms and the international transfer 
                                   },
                                 ),
                                 validator: (value) =>
-                                    Validators.validatePassword(value),
+                                    Validators.validatePassword(
+                                      value,
+                                      context.l10n,
+                                    ),
                                 enabled: !_isLoading,
                               ),
                               const SizedBox(height: 16),
 
                               // Confirm Password
                               CustomTextField(
-                                label: 'Confirm Password',
+                                label: context.l10n.registrationConfirmPassword,
                                 controller: _confirmPasswordController,
-                                hint: 'Re-enter your password',
+                                hint: context
+                                    .l10n
+                                    .registrationConfirmPasswordHint,
                                 obscureText: !_isConfirmPasswordVisible,
                                 prefixIcon: const Icon(Icons.lock_outline),
                                 suffixIcon: IconButton(
+                                  tooltip: _isConfirmPasswordVisible
+                                      ? context.l10n.authHidePassword
+                                      : context.l10n.authShowPassword,
                                   icon: Icon(
                                     _isConfirmPasswordVisible
                                         ? Icons.visibility
@@ -686,10 +662,14 @@ By tapping "I Agree", you consent to these terms and the international transfer 
                                 ),
                                 validator: (value) {
                                   if (value == null || value.isEmpty) {
-                                    return 'Please confirm your password';
+                                    return context
+                                        .l10n
+                                        .registrationConfirmPasswordRequired;
                                   }
                                   if (value != _passwordController.text) {
-                                    return 'Passwords do not match';
+                                    return context
+                                        .l10n
+                                        .registrationPasswordsMismatch;
                                   }
                                   return null;
                                 },
@@ -702,8 +682,8 @@ By tapping "I Agree", you consent to these terms and the international transfer 
                             // Register Button
                             CustomButton(
                               text: _isPhoneAuth
-                                  ? 'Send OTP & Register'
-                                  : 'Create Account',
+                                  ? context.l10n.registrationSendOtp
+                                  : context.l10n.registrationCreateAccount,
                               onPressed: _isLoading ? null : _handleRegister,
                               isLoading: _isLoading,
                             ),
@@ -713,12 +693,13 @@ By tapping "I Agree", you consent to these terms and the international transfer 
 
                       const SizedBox(height: 24),
 
-                      // Login Link
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
+                      // Login Link (wraps instead of overflowing)
+                      Wrap(
+                        alignment: WrapAlignment.center,
+                        crossAxisAlignment: WrapCrossAlignment.center,
                         children: [
                           Text(
-                            "Already have an account? ",
+                            context.l10n.registrationHaveAccount,
                             style: GoogleFonts.lexend(
                               color: AppColors.textSecondary,
                               fontSize: 16, // Large size
@@ -727,7 +708,7 @@ By tapping "I Agree", you consent to these terms and the international transfer 
                           TextButton(
                             onPressed: () => context.go('/login'),
                             child: Text(
-                              'Login',
+                              context.l10n.authLogin,
                               style: GoogleFonts.lexend(
                                 fontSize: 18, // Large bold size
                                 fontWeight: FontWeight.bold,
@@ -765,7 +746,7 @@ By tapping "I Agree", you consent to these terms and the international transfer 
                       ),
                       const SizedBox(height: 16),
                       Text(
-                        'Creating account...',
+                        context.l10n.registrationCreating,
                         style: GoogleFonts.lexend(
                           fontSize: 16,
                           color: AppColors.textPrimary,

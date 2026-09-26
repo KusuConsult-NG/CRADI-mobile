@@ -1,44 +1,49 @@
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:climate_app/core/services/supabase_service.dart';
 import 'package:climate_app/features/contacts/models/emergency_contact_model.dart';
 import 'package:climate_app/core/constants/app_config.dart';
 import 'dart:developer' as developer;
+import 'package:climate_app/core/utils/error_handler.dart' show AuthException;
 
 class EmergencyContactsProvider extends ChangeNotifier {
-  final SupabaseService _supabase = SupabaseService();
+  final SupabaseService _db = SupabaseService();
 
+  /// The signed-in user's contacts; [] on error. Use [fetchContacts] when a
+  /// load failure must be told apart from "no contacts".
   Future<List<EmergencyContact>> getContacts() async {
     try {
-      final user = Supabase.instance.client.auth.currentUser;
-      if (user == null) return [];
-
-      final docs = await _supabase.listDocuments(
-        collectionId: AppConfig.contactsCollection,
-        queries: [SQuery.orderAsc('name')],
-      );
-
-      return docs
-          .map(
-            (data) =>
-                EmergencyContact.fromFirestore(data, data['\$id'] as String),
-          )
-          .toList();
+      return await fetchContacts();
     } on Exception catch (e) {
       developer.log('Error getting contacts: $e');
       return [];
     }
   }
 
+  /// Like [getContacts] but throws when the contacts could not be loaded
+  /// (e.g. offline). Returns [] only when there really are none (or no one
+  /// is signed in).
+  Future<List<EmergencyContact>> fetchContacts() async {
+    final user = _db.getCurrentUser();
+    if (user == null) return [];
+
+    // Only the signed-in user's own contacts (RLS enforces this too).
+    final docs = await _db.listDocuments(
+      collectionId: AppConfig.contactsCollection,
+      queries: [FQuery.equal('userId', user.id)],
+    );
+
+    return _toSortedContacts(docs);
+  }
+
   Future<void> addContact(EmergencyContact contact) async {
     try {
-      final user = Supabase.instance.client.auth.currentUser;
-      if (user == null) throw Exception('User not logged in');
+      final user = _db.getCurrentUser();
+      if (user == null) throw AuthException((l) => l.authErrorNotLoggedIn);
 
-      final data = contact.toFirestore();
-      data['user_id'] = user.id;
+      final data = contact.toMap();
+      data['userId'] = user.id;
 
-      await _supabase.createDocument(
+      await _db.createDocument(
         collectionId: AppConfig.contactsCollection,
         data: data,
       );
@@ -52,10 +57,10 @@ class EmergencyContactsProvider extends ChangeNotifier {
 
   Future<void> updateContact(String id, EmergencyContact contact) async {
     try {
-      await _supabase.updateDocument(
+      await _db.updateDocument(
         collectionId: AppConfig.contactsCollection,
         documentId: id,
-        data: contact.toFirestore(),
+        data: contact.toMap(),
       );
       developer.log('Contact updated: $id');
       notifyListeners();
@@ -67,7 +72,7 @@ class EmergencyContactsProvider extends ChangeNotifier {
 
   Future<void> deleteContact(String id) async {
     try {
-      await _supabase.deleteDocument(
+      await _db.deleteDocument(
         collectionId: AppConfig.contactsCollection,
         documentId: id,
       );
@@ -96,43 +101,36 @@ class EmergencyContactsProvider extends ChangeNotifier {
     }
   }
 
-  /// Real-time stream via Supabase Realtime.
+  /// Real-time stream of the signed-in user's contacts.
   Stream<List<EmergencyContact>> getContactsStream() {
-    return _supabase
+    final user = _db.getCurrentUser();
+    if (user == null) return Stream.value(const []);
+    return _db
         .subscribeToCollection(
           collectionId: AppConfig.contactsCollection,
-          queries: [SQuery.orderAsc('name')],
+          queries: [FQuery.equal('userId', user.id)],
         )
-        .map(
-          (docs) => docs
-              .map(
-                (data) => EmergencyContact.fromFirestore(
-                  data,
-                  data['\$id'] as String,
-                ),
-              )
-              .toList(),
-        );
+        .map(_toSortedContacts);
   }
 
   Stream<List<EmergencyContact>> getContactsByCategory(String category) {
-    return _supabase
+    final user = _db.getCurrentUser();
+    if (user == null) return Stream.value(const []);
+    return _db
         .subscribeToCollection(
           collectionId: AppConfig.contactsCollection,
           queries: [
-            SQuery.equal('category', category),
-            SQuery.orderAsc('name'),
+            FQuery.equal('userId', user.id),
+            FQuery.equal('category', category),
           ],
         )
-        .map(
-          (docs) => docs
-              .map(
-                (data) => EmergencyContact.fromFirestore(
-                  data,
-                  data['\$id'] as String,
-                ),
-              )
-              .toList(),
-        );
+        .map(_toSortedContacts);
+  }
+
+  List<EmergencyContact> _toSortedContacts(List<Map<String, dynamic>> docs) {
+    return docs
+        .map((data) => EmergencyContact.fromMap(data, data['\$id'] as String))
+        .toList()
+      ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
   }
 }

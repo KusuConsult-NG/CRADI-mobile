@@ -1,13 +1,17 @@
+import 'package:climate_app/features/verification/widgets/verification_request_badge.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:go_router/go_router.dart';
+import 'package:climate_app/core/constants/hazards.dart';
 import 'package:climate_app/core/theme/app_colors.dart';
 import 'package:climate_app/features/auth/providers/auth_provider.dart';
 import 'package:climate_app/features/verification/providers/reports_status_provider.dart';
 import 'package:climate_app/features/verification/models/verification_report_model.dart';
 import 'package:climate_app/features/profile/providers/profile_provider.dart';
 import 'package:climate_app/shared/widgets/shimmer_loading.dart';
+import 'package:climate_app/core/l10n/l10n.dart';
 
 /// Nearby Reports feed — shows reports from the user's LGA/monitoring zone
 /// and, when coordinates are available, sorts by proximity.
@@ -21,6 +25,12 @@ class NearbyReportsScreen extends StatefulWidget {
 class _NearbyReportsScreenState extends State<NearbyReportsScreen> {
   List<_NearbyEntry> _nearbyReports = [];
   bool _isLoading = true;
+  LocalizedText? _error;
+
+  /// Plain users may only read their own reports (RLS), so a feed of
+  /// other people's reports is not available to them.
+  bool get _isPlainUser =>
+      context.read<AuthProvider>().userRole == UserRole.user;
 
   @override
   void initState() {
@@ -28,42 +38,128 @@ class _NearbyReportsScreenState extends State<NearbyReportsScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadNearby());
   }
 
+  /// Reports within this radius of the user's position count as nearby.
+  static const double _nearbyRadiusKm = 25;
+
   Future<void> _loadNearby() async {
-    setState(() => _isLoading = true);
+    if (_isPlainUser) {
+      setState(() => _isLoading = false);
+      return;
+    }
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
 
     final profile = context.read<ProfileProvider>();
-    final uid = context.read<AuthProvider>().currentUser?.uid;
+    final uid = context.read<AuthProvider>().currentUser?.id;
 
-    // Fetch all reports
+    // Load every page (the area filter below is client-side, so the first
+    // page alone would miss older nearby reports).
     final provider = context.read<ReportsStatusProvider>();
-    await provider.fetchReports(status: null);
+    await provider.fetchAllPages(status: null, maxRows: 2000);
+    final userPosition = await _tryGetUserPosition();
+    if (!mounted) return;
     final allReports = provider.getReports(null);
+    final fetchError = provider.errorFor(null);
 
-    // Filter: exclude user's own, then match by location area
-    final userLga = profile.lga?.toLowerCase();
-    final userState = profile.state?.toLowerCase();
-    final userZone = profile.monitoringZone?.toLowerCase();
+    // Resolve the user's area. Monitoring zones look like
+    // "Makurdi, Benue" (LGA, State) or "Benue State".
+    String? norm(String? v) {
+      final t = v?.trim().toLowerCase();
+      return (t == null || t.isEmpty) ? null : t;
+    }
 
-    final filtered = allReports.where((r) {
+    final zone = norm(profile.monitoringZone);
+    String? userLga = norm(profile.lga);
+    String? userState = norm(profile.state);
+    if (zone != null && !zone.contains('all zone')) {
+      if (zone.contains(',')) {
+        userLga ??= norm(zone.split(',').first);
+        userState ??= norm(
+          zone.split(',').last.replaceAll(RegExp(r'\s+state$'), ''),
+        );
+      } else {
+        userState ??= norm(zone.replaceAll(RegExp(r'\s+state$'), ''));
+      }
+    }
+
+    final entries = <_NearbyEntry>[];
+    for (final r in allReports) {
       // Exclude own reports
-      if (r.reporterId == uid) return false;
+      if (uid != null && r.reporterId == uid) continue;
 
-      // Match by location text — check if the report location
-      // contains user's LGA, zone, or state
-      final loc = r.location.toLowerCase();
-      if (userLga != null && loc.contains(userLga)) return true;
-      if (userZone != null && loc.contains(userZone)) return true;
-      if (userState != null && loc.contains(userState)) return true;
+      // Distance, when both the user and the report have real coordinates
+      double? distanceKm;
+      final lat = r.latitude, lng = r.longitude;
+      if (userPosition != null &&
+          lat != null &&
+          lng != null &&
+          !(lat == 0 && lng == 0)) {
+        distanceKm =
+            Geolocator.distanceBetween(
+              userPosition.latitude,
+              userPosition.longitude,
+              lat,
+              lng,
+            ) /
+            1000;
+      }
 
-      return false;
-    }).toList();
+      final reportLga = norm(r.lga);
+      final reportState = norm(r.state);
+      final bool isNearby;
+      if (distanceKm != null && distanceKm <= _nearbyRadiusKm) {
+        isNearby = true;
+      } else if (userLga != null && reportLga != null) {
+        // LGA names repeat across states: the state must match too.
+        isNearby =
+            reportLga == userLga &&
+            (userState == null ||
+                reportState == null ||
+                reportState == userState);
+      } else if (userState != null && reportState != null) {
+        isNearby = reportState == userState;
+      } else {
+        isNearby = false;
+      }
 
-    // Build entries (compute distance if both have coordinates)
-    _nearbyReports = filtered.map((r) {
-      return _NearbyEntry(report: r, distanceKm: null);
-    }).toList();
+      if (isNearby) {
+        entries.add(_NearbyEntry(report: r, distanceKm: distanceKm));
+      }
+    }
 
-    if (mounted) setState(() => _isLoading = false);
+    // Closest first; reports without a distance keep their (recency) order.
+    final withDistance = entries.where((e) => e.distanceKm != null).toList()
+      ..sort((a, b) => a.distanceKm!.compareTo(b.distanceKm!));
+    _nearbyReports = [
+      ...withDistance,
+      ...entries.where((e) => e.distanceKm == null),
+    ];
+    if (mounted) {
+      setState(() {
+        _isLoading = false;
+        _error = fetchError;
+      });
+    }
+  }
+
+  /// Best-effort user position without prompting for permission.
+  Future<Position?> _tryGetUserPosition() async {
+    try {
+      final permission = await Geolocator.checkPermission();
+      if (permission != LocationPermission.always &&
+          permission != LocationPermission.whileInUse) {
+        return null;
+      }
+      return await Geolocator.getLastKnownPosition() ??
+          await Geolocator.getCurrentPosition().timeout(
+            const Duration(seconds: 5),
+          );
+    } on Object catch (_) {
+      // Location unavailable (disabled, timeout, unsupported platform).
+      return null;
+    }
   }
 
   @override
@@ -72,7 +168,7 @@ class _NearbyReportsScreenState extends State<NearbyReportsScreen> {
       backgroundColor: AppColors.background,
       appBar: AppBar(
         title: Text(
-          'Nearby Reports',
+          context.l10n.nearbyTitle,
           style: GoogleFonts.lexend(
             fontWeight: FontWeight.bold,
             color: AppColors.textPrimary,
@@ -84,6 +180,7 @@ class _NearbyReportsScreenState extends State<NearbyReportsScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh, color: AppColors.textPrimary),
+            tooltip: context.l10n.refresh,
             onPressed: _loadNearby,
           ),
         ],
@@ -97,6 +194,13 @@ class _NearbyReportsScreenState extends State<NearbyReportsScreen> {
   }
 
   Widget _buildBody() {
+    if (_isPlainUser) {
+      return _buildMessage(
+        icon: Icons.lock_outline,
+        title: context.l10n.nearbyNotAvailableTitle,
+        message: context.l10n.nearbyNotAvailableBody,
+      );
+    }
     if (_isLoading) {
       return Padding(
         padding: const EdgeInsets.all(16),
@@ -134,7 +238,7 @@ class _NearbyReportsScreenState extends State<NearbyReportsScreen> {
               ),
               const SizedBox(height: 24),
               Text(
-                'Location Not Set',
+                context.l10n.nearbyLocationNotSetTitle,
                 style: GoogleFonts.lexend(
                   fontSize: 20,
                   fontWeight: FontWeight.bold,
@@ -143,7 +247,7 @@ class _NearbyReportsScreenState extends State<NearbyReportsScreen> {
               ),
               const SizedBox(height: 12),
               Text(
-                'Set your LGA or monitoring zone in\nyour profile to see reports near you.',
+                context.l10n.nearbyLocationNotSetBody,
                 textAlign: TextAlign.center,
                 style: GoogleFonts.lexend(
                   fontSize: 14,
@@ -154,6 +258,15 @@ class _NearbyReportsScreenState extends State<NearbyReportsScreen> {
             ],
           ),
         ),
+      );
+    }
+
+    if (_nearbyReports.isEmpty && _error != null) {
+      return _buildMessage(
+        icon: Icons.cloud_off,
+        title: context.l10n.nearbyLoadErrorTitle,
+        message: _error!(context.l10n),
+        onRetry: _loadNearby,
       );
     }
 
@@ -178,7 +291,7 @@ class _NearbyReportsScreenState extends State<NearbyReportsScreen> {
               ),
               const SizedBox(height: 24),
               Text(
-                'No Nearby Reports',
+                context.l10n.nearbyEmptyTitle,
                 style: GoogleFonts.lexend(
                   fontSize: 20,
                   fontWeight: FontWeight.bold,
@@ -187,7 +300,7 @@ class _NearbyReportsScreenState extends State<NearbyReportsScreen> {
               ),
               const SizedBox(height: 12),
               Text(
-                'There are no reports from your\narea at this time.',
+                context.l10n.nearbyEmptyBody,
                 textAlign: TextAlign.center,
                 style: GoogleFonts.lexend(
                   fontSize: 14,
@@ -212,7 +325,7 @@ class _NearbyReportsScreenState extends State<NearbyReportsScreen> {
             return Padding(
               padding: const EdgeInsets.only(bottom: 4),
               child: Text(
-                '${_nearbyReports.length} report${_nearbyReports.length == 1 ? '' : 's'} in your area',
+                context.l10n.nearbyReportsInAreaCount(_nearbyReports.length),
                 style: GoogleFonts.lexend(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
@@ -275,7 +388,7 @@ class _NearbyReportsScreenState extends State<NearbyReportsScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              report.title,
+                              report.displayTitle(context.l10n),
                               style: GoogleFonts.lexend(
                                 fontSize: 15,
                                 fontWeight: FontWeight.w600,
@@ -284,6 +397,10 @@ class _NearbyReportsScreenState extends State<NearbyReportsScreen> {
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
+                            if (report.isVerificationRequest) ...[
+                              const SizedBox(height: 4),
+                              const VerificationRequestBadge(),
+                            ],
                             const SizedBox(height: 4),
                             Row(
                               children: [
@@ -295,7 +412,7 @@ class _NearbyReportsScreenState extends State<NearbyReportsScreen> {
                                 const SizedBox(width: 4),
                                 Expanded(
                                   child: Text(
-                                    report.location,
+                                    report.displayLocation(context.l10n),
                                     style: GoogleFonts.lexend(
                                       fontSize: 12,
                                       color: AppColors.textSecondary,
@@ -323,18 +440,24 @@ class _NearbyReportsScreenState extends State<NearbyReportsScreen> {
                               color: statusColor.withValues(alpha: 0.1),
                               borderRadius: BorderRadius.circular(10),
                             ),
-                            child: Text(
-                              report.status.displayName,
-                              style: GoogleFonts.lexend(
-                                fontSize: 10,
-                                fontWeight: FontWeight.w600,
-                                color: statusColor,
+                            child: Semantics(
+                              label: context.l10n.a11yStatusLabel(
+                                report.status.label(context.l10n),
+                              ),
+                              excludeSemantics: true,
+                              child: Text(
+                                report.status.label(context.l10n),
+                                style: GoogleFonts.lexend(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w600,
+                                  color: statusColor,
+                                ),
                               ),
                             ),
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            report.time,
+                            report.displayTime(context.l10n),
                             style: GoogleFonts.lexend(
                               fontSize: 10,
                               color: Colors.grey.shade500,
@@ -368,48 +491,55 @@ class _NearbyReportsScreenState extends State<NearbyReportsScreen> {
     }
   }
 
-  Color _getHazardColor(String type) {
-    switch (type.toLowerCase()) {
-      case 'flooding':
-      case 'flood':
-        return AppColors.hazardFlood;
-      case 'drought':
-        return AppColors.hazardDrought;
-      case 'fire':
-      case 'wildfire':
-        return AppColors.hazardFire;
-      case 'pest/disease':
-      case 'pest':
-        return AppColors.hazardPest;
-      case 'erosion':
-        return AppColors.hazardErosion;
-      case 'conflict':
-        return Colors.red;
-      default:
-        return Colors.orange;
-    }
-  }
+  Color _getHazardColor(String type) => Hazard.colorFor(type);
 
-  IconData _getHazardIcon(String type) {
-    switch (type.toLowerCase()) {
-      case 'flooding':
-      case 'flood':
-        return Icons.flood;
-      case 'drought':
-        return Icons.wb_sunny;
-      case 'fire':
-      case 'wildfire':
-        return Icons.local_fire_department;
-      case 'pest/disease':
-      case 'pest':
-        return Icons.bug_report;
-      case 'erosion':
-        return Icons.landscape;
-      case 'conflict':
-        return Icons.shield;
-      default:
-        return Icons.warning;
-    }
+  IconData _getHazardIcon(String type) => Hazard.iconFor(type);
+
+  Widget _buildMessage({
+    required IconData icon,
+    required String title,
+    required String message,
+    VoidCallback? onRetry,
+  }) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(40),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 56, color: Colors.grey.shade400),
+            const SizedBox(height: 20),
+            Text(
+              title,
+              textAlign: TextAlign.center,
+              style: GoogleFonts.lexend(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: AppColors.textPrimary,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: GoogleFonts.lexend(
+                fontSize: 14,
+                color: AppColors.textSecondary,
+                height: 1.5,
+              ),
+            ),
+            if (onRetry != null) ...[
+              const SizedBox(height: 16),
+              ElevatedButton.icon(
+                onPressed: onRetry,
+                icon: const Icon(Icons.refresh),
+                label: Text(context.l10n.retry),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
   }
 }
 

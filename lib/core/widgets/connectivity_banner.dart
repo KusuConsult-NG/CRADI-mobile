@@ -1,6 +1,7 @@
 import 'package:climate_app/core/providers/connectivity_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:climate_app/core/l10n/l10n.dart';
 
 /// Banner widget that displays connectivity status
 class ConnectivityBanner extends StatelessWidget {
@@ -35,7 +36,7 @@ class ConnectivityBanner extends StatelessWidget {
                       const SizedBox(width: 12),
                       Expanded(
                         child: Text(
-                          'Offline - Some features may be unavailable',
+                          context.l10n.connectivityOfflineBanner,
                           style: TextStyle(
                             color: Colors.orange.shade900,
                             fontSize: 14,

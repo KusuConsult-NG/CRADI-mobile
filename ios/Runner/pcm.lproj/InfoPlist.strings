@@ -1,0 +1,8 @@
+/* Nigerian Pidgin (pcm) — iOS permission prompts. Register follows
+   lib/l10n/app_pcm.arb. */
+"NSLocationWhenInUseUsageDescription" = "Dis app need your location when e dey open, so e fit mark di exact place wey di incident happen.";
+"NSSpeechRecognitionUsageDescription" = "Dis app need to understand wetin you talk so e fit write di hazard description.";
+"NSMicrophoneUsageDescription" = "Dis app need microphone so e fit hear your voice when you dey report hazard.";
+"NSPhotoLibraryUsageDescription" = "Dis app need to enter your gallery so you fit upload evidence of di hazard.";
+"NSCameraUsageDescription" = "Dis app need camera so you fit snap evidence of di hazard.";
+"NSFaceIDUsageDescription" = "We dey use Face ID to open di app and protect your account.";

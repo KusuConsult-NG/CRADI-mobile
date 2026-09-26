@@ -21,7 +21,7 @@ void main() {
   final testReport = VerificationReport(
     id: 'report-001',
     title: 'Extreme Temperatures',
-    type: 'Drought',
+    type: 'Extreme Temperatures',
     reporter: 'Community Report',
     reporterId: 'user-123',
     location: 'Kuru B, Jos South LGA, Plateau',
@@ -43,6 +43,19 @@ void main() {
     when(mockAuthProvider.userRole).thenReturn(UserRole.user);
     when(mockAuthProvider.currentUser).thenReturn(null);
     when(mockAuthProvider.hasListeners).thenReturn(false);
+    // Permission helpers (mirror the DB rules; unit-tested separately).
+    when(
+      mockAuthProvider.canVoteOn(
+        reporterId: anyNamed('reporterId'),
+        reportWard: anyNamed('reportWard'),
+        reportLga: anyNamed('reportLga'),
+      ),
+    ).thenReturn(false);
+    when(
+      mockAuthProvider.canManageReportStatus(
+        reporterId: anyNamed('reporterId'),
+      ),
+    ).thenReturn(false);
 
     // ReportsStatusProvider default stubs
     when(mockReportsProvider.hasListeners).thenReturn(false);
@@ -58,6 +71,10 @@ void main() {
     when(
       mockReportsProvider.hasMore(any, userId: anyNamed('userId')),
     ).thenReturn(false);
+    when(
+      mockReportsProvider.errorFor(any, userId: anyNamed('userId')),
+    ).thenReturn(null);
+    when(mockReportsProvider.hasVotedOn(any)).thenReturn(false);
     when(
       mockReportsProvider.fetchReports(
         status: anyNamed('status'),
@@ -149,7 +166,8 @@ void main() {
 
       await tester.pumpWidget(buildScreen());
       await tester.pumpAndSettle();
-      expect(find.text('Extreme Temperatures'), findsOneWidget);
+      // The card headline is the localised hazard title of the type.
+      expect(find.text('Temperature Extreme'), findsOneWidget);
       expect(find.text('Kuru B, Jos South LGA, Plateau'), findsOneWidget);
       expect(find.text('9m ago'), findsOneWidget);
     });
@@ -240,6 +258,15 @@ void main() {
     testWidgets('should display Verify and Reject buttons for non-owner', (
       tester,
     ) async {
+      // Only verifier roles may verify.
+      when(mockAuthProvider.userRole).thenReturn(UserRole.ewm);
+      when(
+        mockAuthProvider.canVoteOn(
+          reporterId: anyNamed('reporterId'),
+          reportWard: anyNamed('reportWard'),
+          reportLga: anyNamed('reportLga'),
+        ),
+      ).thenReturn(true);
       // testReport has reporterId 'user-123', currentUser is null
       when(
         mockReportsProvider.getReports(
@@ -251,9 +278,122 @@ void main() {
       await tester.pumpWidget(buildScreen());
       await tester.pumpAndSettle();
 
-      // reporterId 'user-123' != currentUserId null => show buttons
+      // reporterId 'user-123' != currentUserId null => show buttons. The
+      // peer "no" vote is labelled Dispute (it does not reject the report).
       expect(find.text('Verify'), findsOneWidget);
+      expect(find.text('Dispute'), findsOneWidget);
+      expect(find.text('Reject'), findsNothing);
+    });
+
+    testWidgets('hides vote buttons once the user has voted', (tester) async {
+      when(mockAuthProvider.userRole).thenReturn(UserRole.ewm);
+      when(
+        mockAuthProvider.canVoteOn(
+          reporterId: anyNamed('reporterId'),
+          reportWard: anyNamed('reportWard'),
+          reportLga: anyNamed('reportLga'),
+        ),
+      ).thenReturn(true);
+      when(mockReportsProvider.hasVotedOn('report-001')).thenReturn(true);
+      when(
+        mockReportsProvider.getReports(
+          ReportStatus.pending,
+          userId: anyNamed('userId'),
+        ),
+      ).thenReturn([testReport]);
+
+      await tester.pumpWidget(buildScreen());
+      await tester.pumpAndSettle();
+
+      expect(find.text('Verify'), findsNothing);
+      expect(find.text('Dispute'), findsNothing);
+    });
+
+    testWidgets('senior staff get a real Reject on pending reports', (
+      tester,
+    ) async {
+      when(mockAuthProvider.userRole).thenReturn(UserRole.ewv);
+      when(
+        mockAuthProvider.canManageReportStatus(
+          reporterId: anyNamed('reporterId'),
+        ),
+      ).thenReturn(true);
+      when(
+        mockReportsProvider.getReports(
+          ReportStatus.pending,
+          userId: anyNamed('userId'),
+        ),
+      ).thenReturn([testReport]);
+
+      await tester.pumpWidget(buildScreen());
+      await tester.pumpAndSettle();
+
       expect(find.text('Reject'), findsOneWidget);
+      expect(find.text('Dispute'), findsNothing);
+    });
+
+    testWidgets('shows error with retry instead of an empty list', (
+      tester,
+    ) async {
+      when(
+        mockReportsProvider.errorFor(any, userId: anyNamed('userId')),
+      ).thenReturn((_) => 'Could not reach the server.');
+
+      await tester.pumpWidget(buildScreen());
+      await tester.pumpAndSettle();
+
+      expect(find.text('Could not reach the server.'), findsOneWidget);
+      expect(find.text('Retry'), findsOneWidget);
+      expect(find.byIcon(Icons.inbox_outlined), findsNothing);
+    });
+
+    testWidgets('Reopen awaits the provider and reports failures', (
+      tester,
+    ) async {
+      when(mockAuthProvider.userRole).thenReturn(UserRole.ewv);
+      when(
+        mockAuthProvider.canManageReportStatus(
+          reporterId: anyNamed('reporterId'),
+        ),
+      ).thenReturn(true);
+      when(
+        mockReportsProvider.getReports(
+          ReportStatus.pending,
+          userId: anyNamed('userId'),
+        ),
+      ).thenReturn([testReport.copyWith(status: ReportStatus.approved)]);
+      when(
+        mockReportsProvider.moveBackToPending(any),
+      ).thenAnswer((_) async => throw Exception('denied'));
+
+      await tester.pumpWidget(buildScreen());
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Reopen'));
+      await tester.pumpAndSettle();
+
+      verify(mockReportsProvider.moveBackToPending('report-001')).called(1);
+      // Error snackbar, not the success message.
+      expect(find.byType(SnackBar), findsOneWidget);
+      expect(find.text('Report reopened and moved to Pending'), findsNothing);
+    });
+
+    testWidgets('should not show Verify/Reject for non-verifier roles', (
+      tester,
+    ) async {
+      when(mockAuthProvider.userRole).thenReturn(UserRole.user);
+      when(
+        mockReportsProvider.getReports(
+          ReportStatus.pending,
+          userId: anyNamed('userId'),
+        ),
+      ).thenReturn([testReport]);
+
+      await tester.pumpWidget(buildScreen());
+      await tester.pumpAndSettle();
+
+      expect(find.text('Verify'), findsNothing);
+      expect(find.text('Reject'), findsNothing);
     });
 
     testWidgets('should display back arrow', (tester) async {

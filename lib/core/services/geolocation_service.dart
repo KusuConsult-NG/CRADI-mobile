@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
 import 'dart:developer' as developer;
 import 'package:climate_app/core/data/mvp_locations_data.dart';
+import 'package:climate_app/core/l10n/l10n.dart';
 
 /// Service for handling geolocation operations
 class GeolocationService {
@@ -30,38 +32,109 @@ class GeolocationService {
     return true;
   }
 
-  /// Get current position
+  /// How long to wait for a fresh fix before falling back to the last known
+  /// position. Without a limit the request can hang forever indoors.
+  static const Duration positionTimeLimit = Duration(seconds: 20);
+
+  /// Human-readable reason of the last [getCurrentPosition] failure (or of a
+  /// fallback to a stale position); null when the last call got a fresh fix.
+  /// Resolved in the current language by the UI.
+  LocalizedText? lastErrorMessage;
+
+  /// A fix older than this is not "current" (e.g. a cached OS position).
+  static const Duration maxFixAge = Duration(minutes: 2);
+
+  /// True when the position returned by the last [getCurrentPosition] /
+  /// [fetchPositionWithFallback] call is not a fresh GPS fix (the service
+  /// fell back to the last known position, or the fix is stale). Such a
+  /// position must be treated as approximate.
+  bool lastPositionApproximate = false;
+
+  /// Whether [position] is older than [maxFixAge] relative to [now].
+  static bool isStaleFix(Position position, {DateTime? now}) {
+    final age = (now ?? DateTime.now()).difference(position.timestamp);
+    return age > maxFixAge;
+  }
+
+  /// Get current position.
+  ///
+  /// Waits at most [positionTimeLimit] for a fix, then falls back to the
+  /// device's last known position. Returns null (with [lastErrorMessage]
+  /// set) when neither is available.
   Future<Position?> getCurrentPosition() async {
+    lastErrorMessage = null;
+    lastPositionApproximate = false;
     try {
       // Check if location service is enabled
       final serviceEnabled = await isLocationServiceEnabled();
       if (!serviceEnabled) {
         developer.log('Location services are disabled');
+        lastErrorMessage = (l) => l.geoErrorServicesOff;
         return null;
       }
 
       // Check permissions
       final hasPermission = await checkAndRequestPermission();
       if (!hasPermission) {
+        lastErrorMessage = (l) => l.geoErrorPermissionDenied;
         return null;
       }
+    } on Exception catch (e) {
+      developer.log('Error checking location availability: $e');
+      lastErrorMessage = (l) => l.geoErrorServicesUnavailable;
+      return null;
+    }
 
-      // Get position
-      final position = await Geolocator.getCurrentPosition(
+    return fetchPositionWithFallback(
+      current: () => Geolocator.getCurrentPosition(
         locationSettings: const LocationSettings(
           accuracy: LocationAccuracy.high,
           distanceFilter: 10,
+          timeLimit: positionTimeLimit,
         ),
-      );
+      ),
+      lastKnown: () => Geolocator.getLastKnownPosition(),
+    );
+  }
 
+  /// Fetches a fresh position via [current] (which must enforce its own time
+  /// limit); on failure/timeout falls back to [lastKnown]. Exposed for tests.
+  Future<Position?> fetchPositionWithFallback({
+    required Future<Position> Function() current,
+    required Future<Position?> Function() lastKnown,
+  }) async {
+    lastErrorMessage = null;
+    lastPositionApproximate = false;
+    Object? failure;
+    try {
+      final position = await current().timeout(
+        positionTimeLimit + const Duration(seconds: 5),
+      );
       developer.log(
         'Got position: ${position.latitude}, ${position.longitude}',
       );
+      lastPositionApproximate = isStaleFix(position);
       return position;
     } on Exception catch (e) {
+      failure = e;
       developer.log('Error getting position: $e');
-      return null;
     }
+
+    try {
+      final last = await lastKnown();
+      if (last != null) {
+        lastErrorMessage = (l) => l.geoNoticeLastKnown;
+        lastPositionApproximate = true;
+        return last;
+      }
+    } on Exception catch (e) {
+      developer.log('Error getting last known position: $e');
+    }
+
+    lastErrorMessage = failure is TimeoutException
+        ? (l) => l.geoErrorTimeout
+        : (l) => l.geoErrorUndetermined;
+    return null;
   }
 
   /// Format coordinates for display
@@ -72,7 +145,8 @@ class GeolocationService {
     return '${latitude.abs().toStringAsFixed(4)}° $latDirection | ${longitude.abs().toStringAsFixed(4)}° $lonDirection';
   }
 
-  /// Get location details using reverse geocoding.
+  /// Get location details using reverse geocoding. `lga` / `ward` are
+  /// empty when unknown (the UI shows a localised placeholder).
   /// Validates LGA against MVP location data to avoid showing
   /// non-LGA locality names (e.g., village names like "Bar Jirgi Summa").
   Future<Map<String, String>> getLocationDetails(
@@ -100,7 +174,7 @@ class GeolocationService {
         ];
 
         // Try to match against known MVP LGAs for this state
-        String resolvedLga = 'Select LGA';
+        String resolvedLga = '';
         if (stateName.isNotEmpty) {
           final knownLGAs = MVPLocationsData.getLGAsForState(stateName);
           if (knownLGAs.isNotEmpty) {
@@ -131,12 +205,12 @@ class GeolocationService {
         }
 
         // If no MVP match, fall back to best available geocoded value
-        if (resolvedLga == 'Select LGA' && candidates.isNotEmpty) {
+        if (resolvedLga.isEmpty && candidates.isNotEmpty) {
           // Use subAdministrativeArea as it's more likely to be an LGA
-          resolvedLga = place.subAdministrativeArea ?? 'Select LGA';
+          resolvedLga = place.subAdministrativeArea ?? '';
         }
 
-        final ward = place.subLocality ?? place.thoroughfare ?? 'Select Ward';
+        final ward = place.subLocality ?? place.thoroughfare ?? '';
 
         developer.log(
           'Reverse geocode: state=$stateName, '
@@ -154,8 +228,8 @@ class GeolocationService {
       }
 
       return {
-        'lga': 'Select LGA',
-        'ward': 'Select Ward',
+        'lga': '',
+        'ward': '',
         'state': '',
         'address':
             'Lat: ${latitude.toStringAsFixed(4)}, Lon: ${longitude.toStringAsFixed(4)}',
@@ -163,8 +237,8 @@ class GeolocationService {
     } on Exception catch (e) {
       developer.log('Error in reverse geocoding: $e');
       return {
-        'lga': 'Select LGA',
-        'ward': 'Select Ward',
+        'lga': '',
+        'ward': '',
         'state': '',
         'address':
             'Lat: ${latitude.toStringAsFixed(4)}, Lon: ${longitude.toStringAsFixed(4)}',

@@ -3,76 +3,137 @@ import 'package:climate_app/core/utils/error_handler.dart';
 import 'package:climate_app/features/auth/providers/auth_provider.dart';
 import 'package:climate_app/shared/widgets/custom_toast.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import 'package:climate_app/core/utils/validators.dart';
+import 'package:climate_app/core/l10n/l10n.dart';
+import 'package:climate_app/core/utils/screen_security.dart';
 
+/// Password reset screen.
+///
+/// Supabase emails a 6-digit recovery code (see [ForgotPasswordScreen]).
+/// The user enters that code with a new password here; the reset is
+/// completed by [AuthProvider.confirmPasswordReset]. A new code can be
+/// requested from this screen as well.
 class ResetPasswordScreen extends StatefulWidget {
-  final String userId;
-  final String secret;
+  /// Pre-filled email address (from the forgot-password step).
+  final String email;
 
-  const ResetPasswordScreen({
-    super.key,
-    required this.userId,
-    required this.secret,
-  });
+  const ResetPasswordScreen({super.key, this.email = ''});
 
   @override
   State<ResetPasswordScreen> createState() => _ResetPasswordScreenState();
 }
 
-class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
+class _ResetPasswordScreenState extends State<ResetPasswordScreen>
+    with ScreenSecurityMixin<ResetPasswordScreen> {
+  late final TextEditingController _emailController = TextEditingController(
+    text: widget.email,
+  );
+  final _codeController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
   bool _isLoading = false;
+  bool _isSendingCode = false;
   bool _isSuccess = false;
   bool _obscurePassword = true;
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _codeController.dispose();
+    _passwordController.dispose();
+    _confirmPasswordController.dispose();
+    super.dispose();
+  }
+
+  String? _validateEmail(String? value) {
+    if (value == null || value.trim().isEmpty) {
+      return context.l10n.authEmailRequired;
+    }
+    if (!value.contains('@')) return context.l10n.authEmailInvalid;
+    return null;
+  }
+
+  Future<void> _sendCode() async {
+    final emailError = _validateEmail(_emailController.text);
+    if (emailError != null) {
+      CustomToast.showError(context, emailError);
+      return;
+    }
+    setState(() => _isSendingCode = true);
+    try {
+      await context.read<AuthProvider>().sendPasswordResetEmail(
+        _emailController.text.trim(),
+      );
+      if (mounted) {
+        CustomToast.showSuccess(context, context.l10n.resetCodeResent);
+      }
+    } on AuthException catch (e) {
+      if (mounted) CustomToast.showError(context, e.userMessage(context.l10n));
+    } on Exception catch (e) {
+      if (mounted) {
+        CustomToast.showError(
+          context,
+          ErrorHandler.handleError(e, context.l10n, context: 'Password Reset'),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSendingCode = false);
+    }
+  }
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
 
     if (_passwordController.text != _confirmPasswordController.text) {
-      CustomToast.showError(context, 'Passwords do not match');
+      CustomToast.showError(
+        context,
+        context.l10n.registrationPasswordsMismatch,
+      );
       return;
     }
 
-    setState(() {
-      _isLoading = true;
-    });
+    setState(() => _isLoading = true);
 
     try {
-      // Firebase password resets are handled via a secure link sent by Firebase.
-      // Once the user clicks the link and resets their password on Firebase's page,
-      // they can sign in with the new password.
-      // This fallback form re-sends the reset email if the user arrives without a valid link.
-      final authProvider = context.read<AuthProvider>();
-      final user = authProvider.currentUser;
-      if (user?.email != null) {
-        await authProvider.sendPasswordResetEmail(user!.email!);
-        if (mounted) {
-          setState(() {
-            _isSuccess = true;
-            _isLoading = false;
-          });
-        }
-      } else {
-        throw Exception(
-          'No email associated with this session. Please use Forgot Password from the login screen.',
-        );
+      await context.read<AuthProvider>().confirmPasswordReset(
+        email: _emailController.text.trim(),
+        code: _codeController.text.trim(),
+        newPassword: _passwordController.text,
+      );
+      if (mounted) {
+        setState(() {
+          _isSuccess = true;
+          _isLoading = false;
+        });
+      }
+    } on AuthException catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        CustomToast.showError(context, e.userMessage(context.l10n));
       }
     } on Exception catch (e) {
       if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
+        setState(() => _isLoading = false);
         CustomToast.showError(
           context,
-          ErrorHandler.handleError(e, context: 'Password Reset'),
+          ErrorHandler.handleError(e, context.l10n, context: 'Password Reset'),
         );
       }
     }
   }
+
+  InputDecoration _decoration(String label, IconData icon, {Widget? suffix}) =>
+      InputDecoration(
+        labelText: label,
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+        prefixIcon: Icon(icon),
+        suffixIcon: suffix,
+      );
 
   @override
   Widget build(BuildContext context) {
@@ -82,6 +143,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
+          tooltip: context.l10n.close,
           icon: const Icon(Icons.close, color: Colors.black),
           onPressed: () => context.go('/login'),
         ),
@@ -98,26 +160,27 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
   Widget _buildFormView() {
     return Form(
       key: _formKey,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+      child: ListView(
         children: [
-          const SizedBox(height: 20),
-          Container(
-            width: 80,
-            height: 80,
-            decoration: BoxDecoration(
-              color: AppColors.primaryRed.withValues(alpha: 0.1),
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(
-              Icons.lock_reset,
-              size: 40,
-              color: AppColors.primaryRed,
+          const SizedBox(height: 12),
+          Center(
+            child: Container(
+              width: 80,
+              height: 80,
+              decoration: BoxDecoration(
+                color: AppColors.primaryRed.withValues(alpha: 0.1),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.lock_reset,
+                size: 40,
+                color: AppColors.primaryRed,
+              ),
             ),
           ),
-          const SizedBox(height: 32),
+          const SizedBox(height: 24),
           Text(
-            'Create New Password',
+            context.l10n.resetTitle,
             style: GoogleFonts.lexend(
               fontSize: 28,
               fontWeight: FontWeight.bold,
@@ -127,66 +190,89 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
           ),
           const SizedBox(height: 12),
           Text(
-            'Enter a new secure password for your account.',
+            context.l10n.resetBody,
             style: GoogleFonts.lexend(
               fontSize: 16,
               color: Colors.grey.shade600,
             ),
             textAlign: TextAlign.center,
           ),
-          const SizedBox(height: 48),
+          const SizedBox(height: 32),
           TextFormField(
-            controller: _passwordController,
-            obscureText: _obscurePassword,
-            decoration: InputDecoration(
-              labelText: 'New Password',
-              hintText: 'Enter new password',
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              prefixIcon: const Icon(Icons.lock_outline),
-              suffixIcon: IconButton(
-                icon: Icon(
-                  _obscurePassword ? Icons.visibility_off : Icons.visibility,
-                  color: Colors.grey,
+            controller: _emailController,
+            keyboardType: TextInputType.emailAddress,
+            decoration: _decoration(
+              context.l10n.emailAddress,
+              Icons.email_outlined,
+            ),
+            validator: _validateEmail,
+          ),
+          const SizedBox(height: 16),
+          TextFormField(
+            controller: _codeController,
+            keyboardType: TextInputType.number,
+            inputFormatters: [
+              FilteringTextInputFormatter.digitsOnly,
+              LengthLimitingTextInputFormatter(10),
+            ],
+            decoration: _decoration(
+              context.l10n.resetCodeLabel,
+              Icons.pin_outlined,
+              suffix: TextButton(
+                onPressed: _isSendingCode ? null : _sendCode,
+                child: Text(
+                  _isSendingCode
+                      ? context.l10n.resetSendingCode
+                      : context.l10n.resetSendCode,
                 ),
-                onPressed: () {
-                  setState(() {
-                    _obscurePassword = !_obscurePassword;
-                  });
-                },
               ),
             ),
             validator: (value) {
-              if (value == null || value.isEmpty) {
-                return 'Please enter a password';
-              }
-              if (value.length < 8) {
-                return 'Password must be at least 8 characters';
+              if (value == null || value.trim().length < 6) {
+                return context.l10n.resetCodeRequired;
               }
               return null;
             },
           ),
           const SizedBox(height: 16),
           TextFormField(
+            controller: _passwordController,
+            obscureText: _obscurePassword,
+            decoration: _decoration(
+              context.l10n.resetNewPassword,
+              Icons.lock_outline,
+              suffix: IconButton(
+                tooltip: _obscurePassword
+                    ? context.l10n.authShowPassword
+                    : context.l10n.authHidePassword,
+                icon: Icon(
+                  _obscurePassword ? Icons.visibility_off : Icons.visibility,
+                  color: Colors.grey,
+                ),
+                onPressed: () =>
+                    setState(() => _obscurePassword = !_obscurePassword),
+              ),
+            ),
+            // Same rules as registration, checked before the single-use
+            // recovery code is spent.
+            validator: (v) => Validators.validatePassword(v, context.l10n),
+          ),
+          const SizedBox(height: 16),
+          TextFormField(
             controller: _confirmPasswordController,
             obscureText: _obscurePassword,
-            decoration: InputDecoration(
-              labelText: 'Confirm Password',
-              hintText: 'Config new password',
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              prefixIcon: const Icon(Icons.lock_outline),
+            decoration: _decoration(
+              context.l10n.registrationConfirmPassword,
+              Icons.lock_outline,
             ),
             validator: (value) {
               if (value == null || value.isEmpty) {
-                return 'Please confirm your password';
+                return context.l10n.registrationConfirmPasswordRequired;
               }
               return null;
             },
           ),
-          const Spacer(),
+          const SizedBox(height: 32),
           ElevatedButton(
             onPressed: _isLoading ? null : _submit,
             style: ElevatedButton.styleFrom(
@@ -207,9 +293,12 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                       strokeWidth: 2,
                     ),
                   )
-                : const Text(
-                    'Reset Passsword',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                : Text(
+                    context.l10n.resetSubmit,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
           ),
           const SizedBox(height: 20),
@@ -237,7 +326,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
         ),
         const SizedBox(height: 32),
         Text(
-          'Password Reset!',
+          context.l10n.resetSuccessTitle,
           style: GoogleFonts.lexend(
             fontSize: 24,
             fontWeight: FontWeight.bold,
@@ -246,7 +335,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
         ),
         const SizedBox(height: 16),
         Text(
-          'Your password has been reset successfully. You can now login with your new password.',
+          context.l10n.resetSuccessBody,
           style: GoogleFonts.lexend(
             fontSize: 16,
             color: Colors.grey.shade600,
@@ -265,9 +354,9 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
               borderRadius: BorderRadius.circular(12),
             ),
           ),
-          child: const Text(
-            'Continue to Login',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+          child: Text(
+            context.l10n.resetContinueToLogin,
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
           ),
         ),
       ],

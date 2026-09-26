@@ -2,10 +2,10 @@ import 'package:climate_app/core/theme/app_colors.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:climate_app/l10n/app_localizations.dart';
 import 'package:provider/provider.dart';
 import 'package:climate_app/features/reporting/providers/reporting_provider.dart';
 import 'package:climate_app/shared/widgets/custom_button.dart';
+import 'package:climate_app/core/l10n/l10n.dart';
 
 class HazardSelectionScreen extends StatefulWidget {
   const HazardSelectionScreen({super.key});
@@ -21,55 +21,55 @@ class _HazardSelectionScreenState extends State<HazardSelectionScreen> {
     return [
       {
         'id': 'Flooding',
-        'name': l10n.flooding,
+        'name': l10n.hazardFlooding,
         'icon': Icons.flood,
         'color': AppColors.hazardFlood,
       },
       {
         'id': 'Extreme Temperatures',
-        'name': l10n.extremeHeat,
+        'name': l10n.hazardExtremeTemperatures,
         'icon': Icons.thermostat,
         'color': AppColors.hazardTemp,
       },
       {
         'id': 'Drought',
-        'name': l10n.drought,
+        'name': l10n.hazardDrought,
         'icon': Icons.wb_sunny_rounded,
         'color': AppColors.hazardDrought,
       },
       {
         'id': 'Windstorms',
-        'name': l10n.windstorms,
+        'name': l10n.hazardWindstorms,
         'icon': Icons.air,
         'color': AppColors.hazardWind,
       },
       {
         'id': 'Wildfires',
-        'name': l10n.wildfires,
+        'name': l10n.hazardWildfires,
         'icon': Icons.local_fire_department,
         'color': AppColors.hazardFire,
       },
       {
         'id': 'Erosion',
-        'name': l10n.erosion,
+        'name': l10n.hazardErosion,
         'icon': Icons.landslide,
         'color': AppColors.hazardErosion,
       },
       {
         'id': 'Pest Outbreak',
-        'name': l10n.pestOutbreak,
+        'name': l10n.hazardPestOutbreak,
         'icon': Icons.pest_control,
         'color': AppColors.hazardPest,
       },
       {
         'id': 'Crop Disease',
-        'name': l10n.cropDisease,
+        'name': l10n.hazardCropDisease,
         'icon': Icons.coronavirus_rounded,
         'color': Colors.green,
       },
       {
         'id': 'Conflict',
-        'name': l10n.conflict,
+        'name': l10n.hazardConflict,
         'icon': Icons.warning_amber_rounded,
         'color': AppColors.primaryRed,
       },
@@ -87,13 +87,14 @@ class _HazardSelectionScreenState extends State<HazardSelectionScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
+    final l10n = context.l10n;
     final hazards = _getHazards(l10n);
 
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
         leading: IconButton(
+          tooltip: context.l10n.back,
           icon: const Icon(Icons.arrow_back, color: AppColors.textPrimary),
           onPressed: () {
             if (context.canPop()) {
@@ -174,85 +175,99 @@ class _HazardSelectionScreenState extends State<HazardSelectionScreen> {
     int index,
     bool isSelected,
   ) {
-    return GestureDetector(
-      onTap: () => setState(() => _selectedindex = index),
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: isSelected ? AppColors.primaryRed : Colors.transparent,
-            width: 2,
+    // The card's selected state is shown only by a border colour and a
+    // checkmark, so it is also exposed as a selectable button.
+    return MergeSemantics(
+      child: Semantics(
+        button: true,
+        selected: isSelected,
+        child: GestureDetector(
+          onTap: () => setState(() => _selectedindex = index),
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: isSelected ? AppColors.primaryRed : Colors.transparent,
+                width: 2,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.05),
+                  blurRadius: 4,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Stack(
+              children: [
+                // Selected Overlay
+                if (isSelected)
+                  Positioned.fill(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: AppColors.primaryRed.withValues(alpha: 0.05),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                  ),
+
+                // Content
+                Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: (hazard['color'] as Color).withValues(
+                            alpha: 0.1,
+                          ),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          hazard['icon'] as IconData,
+                          size: 32,
+                          color: hazard['color'] as Color,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        hazard['name'] as String,
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.lexend(
+                          fontSize: 14,
+                          fontWeight: isSelected
+                              ? FontWeight.bold
+                              : FontWeight.w500,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                // Selection Checkmark
+                if (isSelected)
+                  Positioned(
+                    top: 8,
+                    right: 8,
+                    child: Container(
+                      padding: const EdgeInsets.all(4),
+                      decoration: const BoxDecoration(
+                        color: AppColors.primaryRed,
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.check,
+                        size: 12,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
           ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.05),
-              blurRadius: 4,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-        child: Stack(
-          children: [
-            // Selected Overlay
-            if (isSelected)
-              Positioned.fill(
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: AppColors.primaryRed.withValues(alpha: 0.05),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                ),
-              ),
-
-            // Content
-            Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: (hazard['color'] as Color).withValues(alpha: 0.1),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(
-                      hazard['icon'] as IconData,
-                      size: 32,
-                      color: hazard['color'] as Color,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    hazard['name'] as String,
-                    textAlign: TextAlign.center,
-                    style: GoogleFonts.lexend(
-                      fontSize: 14,
-                      fontWeight: isSelected
-                          ? FontWeight.bold
-                          : FontWeight.w500,
-                      color: AppColors.textPrimary,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            // Selection Checkmark
-            if (isSelected)
-              Positioned(
-                top: 8,
-                right: 8,
-                child: Container(
-                  padding: const EdgeInsets.all(4),
-                  decoration: const BoxDecoration(
-                    color: AppColors.primaryRed,
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(Icons.check, size: 12, color: Colors.white),
-                ),
-              ),
-          ],
         ),
       ),
     );

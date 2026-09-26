@@ -1,0 +1,8 @@
+/* Yoruba (yo) — iOS permission prompts. Terminology follows lib/l10n/app_yo.arb
+   (áàpù, ibi, ewu, ẹ̀rí, kámẹ́rà, àkójọ àwòrán). */
+"NSLocationWhenInUseUsageDescription" = "Áàpù yìí nílò ibi tí o wà nígbà tí ó bá ṣí, láti fi ibi tí ìṣẹ̀lẹ̀ náà ti wáyé hàn ní pàtó.";
+"NSSpeechRecognitionUsageDescription" = "Áàpù yìí nílò láti dá ohùn rẹ mọ̀ kí ó lè kọ àpèjúwe ewu náà sílẹ̀.";
+"NSMicrophoneUsageDescription" = "Áàpù yìí nílò gbohùngbohùn láti gbọ́ ohùn rẹ nígbà tí o bá ń ròyìn ewu.";
+"NSPhotoLibraryUsageDescription" = "Áàpù yìí nílò àkójọ àwòrán rẹ láti gbé ẹ̀rí ewu sókè.";
+"NSCameraUsageDescription" = "Áàpù yìí nílò kámẹ́rà láti ya àwòrán ẹ̀rí ewu.";
+"NSFaceIDUsageDescription" = "A ń lo Face ID láti ṣí áàpù náà àti láti dáàbò bo àkáǹtì rẹ.";

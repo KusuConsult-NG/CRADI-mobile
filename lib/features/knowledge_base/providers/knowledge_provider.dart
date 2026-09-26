@@ -1,136 +1,193 @@
 import 'package:climate_app/core/services/supabase_service.dart';
-import 'package:climate_app/core/services/emergency_guides_service.dart';
 import 'package:climate_app/core/services/offline_storage_service.dart';
 import 'package:climate_app/core/constants/app_config.dart';
+import 'package:climate_app/features/knowledge_base/knowledge_categories.dart';
 import 'package:flutter/material.dart';
 import 'dart:developer' as developer;
+import 'package:climate_app/core/l10n/l10n.dart';
 
+/// Loads the knowledge_base rows (app-shaped maps, newest first).
+///
+/// [category] is a category label / hazard type, or null (and
+/// [allKnowledgeCategories]) for the unfiltered list.
+typedef GuideRowsFetcher =
+    Future<List<Map<String, dynamic>>> Function({String? category});
+
+/// Guides are admin-managed in the `knowledge_base` table. The last
+/// successful unfiltered list is cached on the device (Hive) and served,
+/// marked `isOffline`, when the server cannot be reached.
 class KnowledgeProvider extends ChangeNotifier {
-  final SupabaseService _supabase = SupabaseService();
-  final EmergencyGuidesService _fallbackService = EmergencyGuidesService();
-  final OfflineStorageService _offlineStorage = OfflineStorageService();
+  KnowledgeProvider({
+    GuideRowsFetcher? fetchRows,
+    Future<void> Function(List<Map<String, dynamic>> guides)? writeCache,
+    List<Map<String, dynamic>>? Function()? readCache,
+  }) : _fetchRows = fetchRows ?? _fetchFromSupabase,
+       _writeCache = writeCache ?? OfflineStorageService().cacheGuides,
+       _readCache = readCache ?? OfflineStorageService().getCachedGuides;
 
-  List<Map<String, dynamic>> _guides = [];
-  bool _isLoading = false;
-  String? _error;
+  final GuideRowsFetcher _fetchRows;
+  final Future<void> Function(List<Map<String, dynamic>> guides) _writeCache;
+  final List<Map<String, dynamic>>? Function() _readCache;
 
-  List<Map<String, dynamic>> get guides => _guides;
-  bool get isLoading => _isLoading;
-  String? get error => _error;
+  /// How many guides a single fetch loads. The knowledge base is a
+  /// hand-curated admin table (tens of guides), so one page is enough and
+  /// the reader screens stay a plain list; the ceiling is generous so the
+  /// unfiltered 'All' list does not silently truncate as it grows.
+  static const int fetchLimit = 500;
 
+  static Future<List<Map<String, dynamic>>> _fetchFromSupabase({
+    String? category,
+  }) {
+    // Server-side category filter: `hazard_type in (…)` over every spelling
+    // of the category (hazard type, label and aliases, in each case), so a
+    // category tab sees every one of its guides and not just the ones in
+    // the newest [fetchLimit] rows. Unknown / 'All' categories fall back to
+    // the unfiltered list.
+    final values = knowledgeCategoryQueryValues(category);
+    return SupabaseService().listDocuments(
+      collectionId: AppConfig.knowledgeBaseCollection,
+      queries: <QueryFilter>[
+        if (values.isNotEmpty) FQuery.isIn('hazardType', values),
+        FQuery.orderDesc('updatedAt'),
+      ],
+      limitCount: fetchLimit,
+    );
+  }
+
+  /// Guides per category key ('All' = unfiltered). Kept separately so opening
+  /// a category tab never replaces the featured (unfiltered) list.
+  final Map<String, List<Map<String, dynamic>>> _guidesByCategory = {};
+  final Set<String> _loading = {};
+
+  /// Load failures per category key, resolved in the current language by
+  /// the UI.
+  final Map<String, LocalizedText?> _errors = {};
+
+  static String _key(String? category) {
+    if (category == null || category == allKnowledgeCategories) {
+      return allKnowledgeCategories;
+    }
+    return knowledgeCategoryFor(category)?.label ?? category;
+  }
+
+  /// All (unfiltered) guides.
+  List<Map<String, dynamic>> get guides =>
+      _guidesByCategory[allKnowledgeCategories] ?? const [];
+
+  /// Guides loaded for [category] (label or hazard type).
+  List<Map<String, dynamic>> guidesFor(String? category) =>
+      _guidesByCategory[_key(category)] ?? const [];
+
+  /// Whether the unfiltered list is loading.
+  bool get isLoading => _loading.contains(allKnowledgeCategories);
+
+  bool isLoadingCategory(String? category) => _loading.contains(_key(category));
+
+  LocalizedText? get error => _errors[allKnowledgeCategories];
+
+  LocalizedText? errorFor(String? category) => _errors[_key(category)];
+
+  /// Latest request per category key; results of superseded (overlapping)
+  /// requests are dropped.
+  final Map<String, int> _requestIds = {};
+
+  /// Loads the guides of [category] (default: all).
+  ///
+  /// A category tab is filtered on the server by `hazard_type in (…)` over
+  /// every spelling of the category (see [knowledgeCategoryQueryValues]), so
+  /// a row stored as e.g. 'Flooding' is still found. The result is narrowed
+  /// once more with [guideMatchesCategory], which is also what the offline
+  /// cache (always the unfiltered list) is filtered with.
   Future<void> fetchGuides({String? category}) async {
+    final key = _key(category);
+    final requestId = (_requestIds[key] ?? 0) + 1;
+    _requestIds[key] = requestId;
+    bool isLatest() => _requestIds[key] == requestId;
+
+    _loading.add(key);
+    _errors[key] = null;
+    notifyListeners();
+
     try {
-      _isLoading = true;
-      _error = null;
-      notifyListeners();
-
-      try {
-        final queries = <QueryFilter>[];
-        if (category != null && category != 'All') {
-          queries.add(SQuery.equal('category', category.toLowerCase()));
+      final docs = await _fetchRows(category: key);
+      if (!isLatest()) return;
+      final result = docs.map(_fromRow).toList();
+      // Only the unfiltered list is cached (so the offline fallback can
+      // serve every category from it). An empty result is cached too, so
+      // guides an admin deleted also disappear offline.
+      if (key == allKnowledgeCategories) {
+        try {
+          await _writeCache(result);
+        } on Object catch (e) {
+          developer.log('Guide cache failed: $e', name: 'KnowledgeProvider');
         }
-
-        final docs = await _supabase.listDocuments(
-          collectionId: AppConfig.knowledgeBaseCollection,
-          queries: queries,
-          limitCount: 100,
-        );
-
-        if (docs.isNotEmpty) {
-          _guides = docs.map((data) {
-            final rawUrl = data['thumbnail_url']?.toString() ?? '';
-            final imageUrl = (rawUrl.isNotEmpty && rawUrl.startsWith('http'))
-                ? rawUrl
-                : _getImageForType(data['hazard_type'] ?? data['category']);
-            return <String, dynamic>{
-              'id': data['\$id'],
-              'title': data['title'] ?? '',
-              'subtitle': data['category'] ?? 'Manual',
-              'content': data['content'] ?? '',
-              'category': data['category'] ?? 'General',
-              'hazardType': data['hazard_type'],
-              'tag': (data['hazard_type'] as String?)?.toUpperCase() ?? 'GUIDE',
-              'imageUrl': imageUrl,
-              'source': data['source'] ?? 'EWER Admin',
-              'updatedAt': data['updated_at'],
-              'isOffline': false,
-            };
-          }).toList();
-
-          await _offlineStorage.cacheGuides(_guides);
-          developer.log(
-            'Fetched ${_guides.length} guides from Supabase',
-            name: 'KnowledgeProvider',
-          );
-        } else {
-          final fallbackData = await _fallbackService.fetchGuides(
-            hazardType: category,
-          );
-          _guides = fallbackData
-              .map(
-                (doc) => <String, dynamic>{
-                  ...doc,
-                  'imageUrl':
-                      doc['imageUrl'] ??
-                      _getImageForType(doc['hazardType'] ?? doc['category']),
-                  'isOffline': true,
-                },
-              )
-              .toList();
-        }
-      } on Exception catch (e) {
-        developer.log(
-          'Supabase fetch failed, using fallback: $e',
-          name: 'KnowledgeProvider',
-        );
-        final cached = _offlineStorage.getCachedGuides();
-        if (cached.isNotEmpty) {
-          _guides = cached;
-          developer.log(
-            'Loaded ${_guides.length} guides from cache',
-            name: 'KnowledgeProvider',
-          );
-        } else {
-          final fallbackData = await _fallbackService.fetchGuides(
-            hazardType: category,
-          );
-          _guides = fallbackData
-              .map(
-                (doc) => <String, dynamic>{
-                  ...doc,
-                  'imageUrl':
-                      doc['imageUrl'] ??
-                      _getImageForType(doc['hazardType'] ?? doc['category']),
-                  'isOffline': true,
-                },
-              )
-              .toList();
-        }
+        if (!isLatest()) return;
       }
-
-      _isLoading = false;
-      notifyListeners();
+      developer.log(
+        'Fetched ${result.length} guides ($key) from Supabase',
+        name: 'KnowledgeProvider',
+      );
+      _guidesByCategory[key] = result
+          .where((g) => guideMatchesCategory(g, key))
+          .toList();
     } on Exception catch (e) {
-      _error = 'Failed to fetch guides: $e';
-      _isLoading = false;
-      notifyListeners();
+      if (!isLatest()) return;
+      developer.log(
+        'Guide fetch failed, trying the offline cache: $e',
+        name: 'KnowledgeProvider',
+      );
+      List<Map<String, dynamic>>? cached;
+      try {
+        cached = _readCache();
+      } on Object catch (e) {
+        developer.log('Guide cache unavailable: $e', name: 'KnowledgeProvider');
+      }
+      if (cached != null) {
+        _guidesByCategory[key] = cached
+            .where((g) => guideMatchesCategory(g, key))
+            .map((g) => <String, dynamic>{...g, 'isOffline': true})
+            .toList();
+      } else {
+        _errors[key] = (l) => l.knowledgeLoadError;
+      }
+    } finally {
+      // Only the latest request ends the loading state.
+      if (isLatest()) {
+        _loading.remove(key);
+        notifyListeners();
+      }
     }
   }
 
-  /// Search guides by title, content, tag, or seeded searchKeywords.
-  /// Pass [language] to restrict to 'en' or 'ha' guides.
-  List<Map<String, dynamic>> searchGuides(String query, {String? language}) {
-    var results = _guides;
+  Map<String, dynamic> _fromRow(Map<String, dynamic> data) {
+    final rawUrl = data['imageUrl']?.toString().trim() ?? '';
+    // No image: the UI shows a placeholder with the category icon.
+    final imageUrl = rawUrl.startsWith('http') ? rawUrl : null;
+    final category = knowledgeCategoryFor(data['hazardType']);
+    return <String, dynamic>{
+      'id': data[r'$id'],
+      'title': data['title'] ?? '',
+      // Display text is derived in the UI (knowledgeCategoryDisplay).
+      'subtitle': data['category'],
+      'content': data['content'] ?? '',
+      'category': data['category'] ?? category?.label ?? 'General',
+      'hazardType': data['hazardType'],
+      'tag':
+          (category?.label ?? data['hazardType'] as String?)?.toUpperCase() ??
+          'GUIDE',
+      'imageUrl': imageUrl,
+      'source': data['source'] ?? '',
+      'updatedAt': data['updatedAt'],
+      'isOffline': false,
+    };
+  }
 
-    // Filter by language if specified
-    if (language != null && language.isNotEmpty) {
-      results = results
-          .where((g) => (g['language'] as String?)?.toLowerCase() == language)
-          .toList();
-    }
-
-    if (query.isEmpty) return results;
-    final lowerQuery = query.toLowerCase();
+  /// Search guides (of [category], default all) by title, content, tag, or
+  /// seeded searchKeywords.
+  List<Map<String, dynamic>> searchGuides(String query, {String? category}) {
+    final results = guidesFor(category);
+    if (query.trim().isEmpty) return results;
+    final lowerQuery = query.trim().toLowerCase();
 
     return results.where((guide) {
       final title = (guide['title'] as String?)?.toLowerCase() ?? '';
@@ -146,47 +203,5 @@ class KnowledgeProvider extends ChangeNotifier {
           tag.contains(lowerQuery) ||
           keywords.contains(lowerQuery);
     }).toList();
-  }
-
-  /// Fetch guides for a specific language ('en' or 'ha').
-  Future<void> fetchGuidesByLanguage(
-    String language, {
-    String? category,
-  }) async {
-    await fetchGuides(category: category);
-    _guides = _guides
-        .where((g) => (g['language'] as String?)?.toLowerCase() == language)
-        .toList();
-    notifyListeners();
-  }
-
-  List<String> getDisasterTypes() => _fallbackService.getDisasterTypes();
-
-  String _getImageForType(String? type) {
-    switch (type?.toLowerCase()) {
-      case 'flood':
-        return 'https://images.unsplash.com/photo-1504701954957-2010ec3bcec1?auto=format&fit=crop&q=80&w=800';
-      case 'fire':
-      case 'wildfires':
-        return 'https://images.unsplash.com/photo-1516912481808-3406841bd33c?auto=format&fit=crop&q=80&w=800';
-      case 'accident':
-        return 'https://images.unsplash.com/photo-1544636331-e26879cd4d9b?auto=format&fit=crop&q=80&w=800';
-      case 'erosion':
-        return 'https://images.unsplash.com/photo-1591700608620-4cdcf1d47898?auto=format&fit=crop&q=80&w=800';
-      case 'disease':
-      case 'epidemic':
-        return 'https://images.unsplash.com/photo-1584036561566-b93a50208c3c?auto=format&fit=crop&q=80&w=800';
-      case 'conflict':
-        return 'https://images.unsplash.com/photo-1599059813005-11265ba4b4ce?auto=format&fit=crop&q=80&w=800';
-      case 'storm':
-        return 'https://images.unsplash.com/photo-1535350356005-fd52b3b524fb?auto=format&fit=crop&q=80&w=800';
-      case 'earthquake':
-        return 'https://images.unsplash.com/photo-1548337138-e87d889cc369?auto=format&fit=crop&q=80&w=800';
-      case 'extreme heat':
-      case 'drought':
-        return 'https://images.unsplash.com/photo-1504192010706-dd7f569ee2be?auto=format&fit=crop&q=80&w=800';
-      default:
-        return 'https://images.unsplash.com/photo-1496247749665-49cf5b1022e9?auto=format&fit=crop&q=80&w=800';
-    }
   }
 }

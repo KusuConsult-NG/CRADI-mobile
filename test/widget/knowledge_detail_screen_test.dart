@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mockito/annotations.dart';
 import 'package:mockito/mockito.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import 'package:climate_app/features/knowledge_base/screens/knowledge_detail_screen.dart';
+import 'package:climate_app/features/knowledge_base/knowledge_categories.dart';
 import 'package:climate_app/features/knowledge_base/providers/knowledge_provider.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:climate_app/l10n/app_localizations.dart';
@@ -99,10 +101,34 @@ void main() {
       expect(find.text('Updated March 2026'), findsOneWidget);
     });
 
-    testWidgets('should display reading time', (tester) async {
+    testWidgets('formats updatedAt supplied by the provider', (tester) async {
+      final updated = DateTime.utc(2026, 2, 14, 12);
+      await tester.pumpWidget(
+        buildScreen(
+          guide: {
+            ...testGuide,
+            'lastUpdated': null,
+            'updatedAt': updated.toIso8601String(),
+          },
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.text(
+          'Updated ${DateFormat('d MMM yyyy').format(updated.toLocal())}',
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('should display reading time estimated from the content', (
+      tester,
+    ) async {
       await tester.pumpWidget(buildScreen());
       await tester.pumpAndSettle();
-      expect(find.text('5 min read'), findsOneWidget);
+      // The short test content reads in under a minute.
+      expect(find.text('1 min read'), findsOneWidget);
+      expect(find.text('5 min read'), findsNothing);
     });
 
     testWidgets('should display share button', (tester) async {
@@ -182,14 +208,28 @@ void main() {
     });
 
     testWidgets(
-      'should show "coming soon" fallback when content is empty/null',
+      'should show "coming soon" fallback when content and description are empty',
       (tester) async {
-        final guideNoContent = {...testGuide, 'content': null};
+        final guideNoContent = {
+          ...testGuide,
+          'content': null,
+          'description': null,
+        };
         await tester.pumpWidget(buildScreen(guide: guideNoContent));
         await tester.pumpAndSettle();
         expect(find.text('Detailed content coming soon.'), findsOneWidget);
       },
     );
+
+    testWidgets('should fall back to the description when content is empty', (
+      tester,
+    ) async {
+      final guideNoContent = {...testGuide, 'content': ''};
+      await tester.pumpWidget(buildScreen(guide: guideNoContent));
+      await tester.pumpAndSettle();
+      expect(find.text('Detailed content coming soon.'), findsNothing);
+      expect(find.text('How to stay safe during floods.'), findsWidgets);
+    });
 
     testWidgets('should display Related Topics section', (tester) async {
       await tester.pumpWidget(buildScreen());
@@ -216,12 +256,10 @@ void main() {
       expect(find.byIcon(Icons.arrow_back_ios_new), findsOneWidget);
     });
 
-    testWidgets('should show security icon for Safety category', (
-      tester,
-    ) async {
+    testWidgets('should show the shared Safety category icon', (tester) async {
       await tester.pumpWidget(buildScreen());
       await tester.pumpAndSettle();
-      expect(find.byIcon(Icons.security), findsWidgets);
+      expect(find.byIcon(knowledgeCategoryFor('Safety')!.icon), findsWidgets);
     });
   });
 }

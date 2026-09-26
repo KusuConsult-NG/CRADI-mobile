@@ -1,7 +1,8 @@
 /// MVP Location Data for CRADI Mobile
 ///
 /// Covers 3 target states: Benue, Nasarawa, and Plateau
-/// Total: 53 LGAs across 3 states, 613 wards
+/// Total: 53 LGAs across 3 states (Benue 23, Nasarawa 13, Plateau 17),
+/// 584 wards
 ///
 /// Data Source: Independent National Electoral Commission (INEC) Nigeria
 /// Last Updated: 2025-12-30
@@ -975,33 +976,91 @@ class MVPLocationsData {
         .toList();
   }
 
-  /// Get wards for a specific LGA
-  static List<String> getWardsForLGA(String lgaName) {
-    final lga = allLGAs.firstWhere(
-      (lga) => lga.name == lgaName,
-      orElse: () => const MVPLocationLGA(name: '', state: '', wards: []),
-    );
-    return lga.wards.map((ward) => ward.name).toList();
+  /// Finds the LGA record, disambiguated by [state] when given.
+  ///
+  /// LGA names are not unique across states ('Obi' exists in both Benue and
+  /// Nasarawa), so callers that know the state must pass it. Without a state
+  /// an ambiguous name resolves to null.
+  static MVPLocationLGA? findLGA(String lgaName, {String? state}) {
+    final name = lgaName.trim().toLowerCase();
+    final wantedState = state?.trim().toLowerCase();
+    final matches = allLGAs
+        .where(
+          (lga) =>
+              lga.name.toLowerCase() == name &&
+              (wantedState == null ||
+                  wantedState.isEmpty ||
+                  lga.state.toLowerCase() == wantedState),
+        )
+        .toList();
+    return matches.length == 1 ? matches.first : null;
   }
 
-  /// Get state for a specific LGA
-  static String getStateForLGA(String lgaName) {
-    final lga = allLGAs.firstWhere(
-      (lga) => lga.name == lgaName,
-      orElse: () => const MVPLocationLGA(name: '', state: 'Unknown', wards: []),
-    );
-    return lga.state;
+  /// All states that contain an LGA named [lgaName].
+  static List<String> getStatesForLGA(String lgaName) {
+    final name = lgaName.trim().toLowerCase();
+    return allLGAs
+        .where((lga) => lga.name.toLowerCase() == name)
+        .map((lga) => lga.state)
+        .toSet()
+        .toList();
   }
+
+  /// Whether [lgaName] exists in more than one state.
+  static bool isAmbiguousLGA(String lgaName) =>
+      getStatesForLGA(lgaName).length > 1;
+
+  /// Get wards for an LGA. Pass [state] to disambiguate LGA names that
+  /// exist in several states; for an ambiguous name without a state the
+  /// first match is used (legacy behaviour).
+  static List<String> getWardsForLGA(String lgaName, {String? state}) {
+    final lga =
+        findLGA(lgaName, state: state) ??
+        (state == null
+            ? allLGAs.cast<MVPLocationLGA?>().firstWhere(
+                (l) => l!.name == lgaName,
+                orElse: () => null,
+              )
+            : null);
+    return lga?.wards.map((ward) => ward.name).toList() ?? const [];
+  }
+
+  /// The state for [lgaName], or null when it is unknown or ambiguous
+  /// (e.g. 'Obi'). [preferredState] is returned when it contains the LGA.
+  static String? resolveStateForLGA(String lgaName, {String? preferredState}) {
+    final states = getStatesForLGA(lgaName);
+    if (preferredState != null) {
+      for (final s in states) {
+        if (s.toLowerCase() == preferredState.trim().toLowerCase()) return s;
+      }
+    }
+    return states.length == 1 ? states.first : null;
+  }
+
+  /// Get state for a specific LGA.
+  ///
+  /// Returns 'Unknown' when the LGA is unknown or exists in several states.
+  @Deprecated(
+    'Ambiguous for LGA names shared by states; use resolveStateForLGA',
+  )
+  static String getStateForLGA(String lgaName) =>
+      resolveStateForLGA(lgaName) ?? 'Unknown';
 
   /// Get formatted location string
-  static String getLocationString({required String ward, required String lga}) {
-    final state = getStateForLGA(lga);
-    return '$ward, $lga LGA, $state State';
+  static String getLocationString({
+    required String ward,
+    required String lga,
+    String? state,
+  }) {
+    final resolved = state ?? resolveStateForLGA(lga);
+    return resolved == null
+        ? '$ward, $lga LGA'
+        : '$ward, $lga LGA, $resolved State';
   }
 
   /// Validate if a ward exists for a given LGA
-  static bool isValidWardForLGA(String ward, String lgaName) {
-    final wards = getWardsForLGA(lgaName);
+  static bool isValidWardForLGA(String ward, String lgaName, {String? state}) {
+    final wards = getWardsForLGA(lgaName, state: state);
     return wards.contains(ward);
   }
 
@@ -1069,15 +1128,17 @@ class MVPLocationsData {
     }
   }
 
-  /// Get Wards for a given LGA by name (safe lookup)
-  static List<String> getWardsForLGASafe(String lgaName) {
-    try {
-      final lga = allLGAs.firstWhere(
-        (lga) => lga.name.toLowerCase() == lgaName.toLowerCase(),
-      );
-      return lga.wards.map((w) => w.name).toList();
-    } on StateError catch (_) {
-      return [];
-    }
+  /// Get Wards for a given LGA by name (case-insensitive lookup). Pass
+  /// [state] to disambiguate LGA names shared by several states.
+  static List<String> getWardsForLGASafe(String lgaName, {String? state}) {
+    final lga =
+        findLGA(lgaName, state: state) ??
+        (state == null
+            ? allLGAs.cast<MVPLocationLGA?>().firstWhere(
+                (l) => l!.name.toLowerCase() == lgaName.toLowerCase(),
+                orElse: () => null,
+              )
+            : null);
+    return lga?.wards.map((w) => w.name).toList() ?? const [];
   }
 }
