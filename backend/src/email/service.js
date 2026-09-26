@@ -1,4 +1,5 @@
 // POST /email: authenticated transactional email via Resend.
+import { HTTP_TIMEOUT_MS } from '../http.js';
 import { errMessage, log as defaultLog } from '../log.js';
 import { templates, validateTemplateData } from './templates.js';
 
@@ -67,6 +68,7 @@ export function createResendSender({ apiKey, fromEmail, fromName, fetchImpl = gl
       method: 'POST',
       headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ from: `${fromName} <${fromEmail}>`, to: [to], subject, html }),
+      signal: AbortSignal.timeout(HTTP_TIMEOUT_MS),
     });
     let json = {};
     try {

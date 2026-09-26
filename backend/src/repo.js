@@ -81,7 +81,7 @@ export function createRepo(supabase) {
         check(
           await supabase
             .from('scheduled_escalations')
-            .select('id, report_id, escalate_at')
+            .select('id, report_id, escalate_at, reason')
             .eq('status', 'pending')
             .lte('escalate_at', new Date().toISOString())
             .order('escalate_at', { ascending: true })
@@ -105,11 +105,14 @@ export function createRepo(supabase) {
       return (rows ?? []).length > 0;
     },
 
-    async noteEscalationError(id, message) {
+    /** Records a failure on a still-pending escalation; `retryAt` (ISO) reschedules it. */
+    async noteEscalationError(id, message, retryAt = null) {
+      const patch = { reason: String(message).slice(0, 500) };
+      if (retryAt) patch.escalate_at = retryAt;
       check(
         await supabase
           .from('scheduled_escalations')
-          .update({ reason: String(message).slice(0, 500) })
+          .update(patch)
           .eq('id', id)
           .eq('status', 'pending'),
         'note escalation error',

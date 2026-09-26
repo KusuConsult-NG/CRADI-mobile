@@ -14,6 +14,39 @@ import {
 } from './notifications.js';
 
 export const ESCALATION_BATCH = 100;
+export const MAX_ESCALATION_ATTEMPTS = 5;
+export const RETRY_BASE_MS = 60_000;
+export const RETRY_MAX_MS = 60 * 60_000;
+
+// scheduled_escalations has no attempts column, so failures are counted in
+// `reason` as "attempt N: <error>".
+const ATTEMPT_RE = /^attempt (\d+):/;
+
+export function failedAttempts(reason) {
+  const m = ATTEMPT_RE.exec(reason ?? '');
+  return m ? Number(m[1]) : 0;
+}
+
+/** Exponential backoff for the Nth failure (1-based): 1m, 2m, 4m, ... capped at 1h. */
+export function retryDelayMs(attempt) {
+  return Math.min(RETRY_BASE_MS * 2 ** (attempt - 1), RETRY_MAX_MS);
+}
+
+/**
+ * Records a failure. Pushes escalate_at forward so a persistently failing row
+ * does not keep the head of the (escalate_at-ordered) queue, and gives up
+ * (status 'skipped') after MAX_ESCALATION_ATTEMPTS.
+ */
+async function recordFailure(esc, message, { repo, now }) {
+  const attempt = failedAttempts(esc.reason) + 1;
+  if (attempt >= MAX_ESCALATION_ATTEMPTS) {
+    await repo.finishEscalation(esc.id, 'skipped', `Gave up after ${attempt} attempts: ${message}`.slice(0, 500));
+    return { attempt, gaveUp: true };
+  }
+  const retryAt = new Date(now() + retryDelayMs(attempt)).toISOString();
+  await repo.noteEscalationError(esc.id, `attempt ${attempt}: ${message}`, retryAt);
+  return { attempt, gaveUp: false };
+}
 
 export async function processEscalation(esc, { repo, push, logger = defaultLog }) {
   const report = await repo.getReport(esc.report_id);
@@ -38,7 +71,7 @@ export async function processEscalation(esc, { repo, push, logger = defaultLog }
   return 'processed';
 }
 
-export async function runEscalations({ repo, push, logger = defaultLog, limit = ESCALATION_BATCH }) {
+export async function runEscalations({ repo, push, logger = defaultLog, limit = ESCALATION_BATCH, now = Date.now }) {
   const due = await repo.dueEscalations(limit);
   const summary = { processed: 0, skipped: 0, failed: 0 };
   for (const esc of due) {
@@ -46,12 +79,14 @@ export async function runEscalations({ repo, push, logger = defaultLog, limit = 
       summary[await processEscalation(esc, { repo, push, logger })]++;
     } catch (err) {
       summary.failed++;
-      logger.error('escalation.failed', { escalation_id: esc.id, report_id: esc.report_id, error: errMessage(err) });
+      const error = errMessage(err);
+      let outcome = {};
       try {
-        await repo.noteEscalationError(esc.id, `Last error: ${errMessage(err)}`);
+        outcome = await recordFailure(esc, error, { repo, now });
       } catch {
         /* best effort; retried next tick */
       }
+      logger.error('escalation.failed', { escalation_id: esc.id, report_id: esc.report_id, error, ...outcome });
     }
   }
   if (due.length) logger.info('escalation.run', { due: due.length, ...summary });

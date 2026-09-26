@@ -11,6 +11,8 @@ import { parseArgs } from 'node:util';
 import {
   loadDotEnv, firebaseClients, supabaseClient, readCollection, listFirebaseAuthUsers,
 } from './clients.js';
+import { IN_CHUNK, must, selectAll } from './db.js';
+import { BACKEND_STOPPED_FLAG, applyPreflight, suppressSideEffects } from './sideEffects.js';
 import { MigrationState } from './state.js';
 import {
   isUuid, isPhoneEmail, rewriteUrl, storageTargetFor, FIREBASE_STORAGE_PREFIXES,
@@ -32,13 +34,13 @@ const STEPS = [
 
 const BAN_FOREVER = '876000h';
 const CHUNK = 200;
-const IN_CHUNK = 100; // ids per .in() filter, keeps request URLs short
 
 // ── CLI ──────────────────────────────────────────────────────────────────────
 
 const { values: args } = parseArgs({
   options: {
     apply: { type: 'boolean', default: false },
+    [BACKEND_STOPPED_FLAG]: { type: 'boolean', default: false },
     only: { type: 'string' },
     'skip-storage': { type: 'boolean', default: false },
     'send-password-resets': { type: 'boolean', default: false },
@@ -49,13 +51,21 @@ const { values: args } = parseArgs({
 });
 
 if (args.help) {
-  console.log(`Usage: node src/migrate.js [--apply] [--only=users,reports,...] [--skip-storage]
+  console.log(`Usage: node src/migrate.js [--apply --${BACKEND_STOPPED_FLAG}] [--only=users,reports,...] [--skip-storage]
                            [--send-password-resets] [--state-file=path] [--samples=N]
 
 Steps (in order): ${STEPS.join(', ')}
 --only=none runs no import step (use with --send-password-resets).
-Without --apply nothing is written (dry run).`);
+Without --apply nothing is written (dry run).
+--apply requires --${BACKEND_STOPPED_FLAG}: the backend worker must be stopped
+(Railway: scaled to 0) during the import.`);
   process.exit(0);
+}
+
+const preflightError = applyPreflight(args);
+if (preflightError) {
+  console.error(preflightError);
+  process.exit(2);
 }
 
 loadDotEnv(ROOT);
@@ -141,21 +151,6 @@ class RunReport {
 }
 
 // ── Supabase helpers ─────────────────────────────────────────────────────────
-
-function must({ data, error }, what) {
-  if (error) throw new Error(`${what}: ${error.message ?? JSON.stringify(error)}`);
-  return data;
-}
-
-async function selectAll(sb, table, columns, apply = (q) => q) {
-  const out = [];
-  for (let from = 0; ; from += 1000) {
-    const data = must(await apply(sb.from(table).select(columns)).range(from, from + 999), `select ${table}`);
-    out.push(...data);
-    if (data.length < 1000) break;
-  }
-  return out;
-}
 
 async function countRows(sb, table, apply = (q) => q) {
   const { count, error } = await apply(sb.from(table).select('*', { count: 'exact', head: true }));
@@ -276,6 +271,17 @@ async function main() {
   // ── Side-effect baseline ───────────────────────────────────────────────────
   let outboxBaseline = null;
   const touchedReportIds = new Set();
+  const touchedAlertIds = new Set();
+  const suppressed = { outbox: 0, escalations: 0 };
+  // Run after every writing step (and in `finally`), so events queued for
+  // imported rows are neutralised within one step, not only at the very end.
+  const suppress = async () => {
+    if (!APPLY) return;
+    const res = await suppressSideEffects(sb, { baseline: outboxBaseline, reportIds: touchedReportIds, alertIds: touchedAlertIds });
+    suppressed.outbox += res.outbox;
+    suppressed.escalations += res.escalations;
+    res.errors.forEach((e) => console.error(`!! ${e}`));
+  };
   if (APPLY) {
     const rows = must(await sb.from('notification_outbox').select('id').order('id', { ascending: false }).limit(1), 'outbox baseline');
     outboxBaseline = rows[0]?.id ?? 0;
@@ -341,15 +347,22 @@ async function main() {
     if (inScope('reports') && APPLY) {
       report.t('reports').written += await upsertEntries(sb, report, 'reports', reportEntries, { onConflict: 'id' });
       reportEntries.forEach((e) => touchedReportIds.add(e.row.id));
+      await suppress();
     }
 
-    if (inScope('alerts')) await importAlerts({ fb, sb, state, report, ctx });
+    if (inScope('alerts')) {
+      await importAlerts({ fb, sb, state, report, ctx, touched: touchedAlertIds });
+      await suppress();
+    }
 
     if (inScope('verifications')) {
-      await importCollection({ fb, sb, state, report, ctx, source: 'verifications', table: 'verifications',
+      const entries = await importCollection({ fb, sb, state, report, ctx, source: 'verifications', table: 'verifications',
         transform: transformVerification, strategy: 'natural',
         upsert: { onConflict: 'report_id,verifier_id', ignoreDuplicates: true },
         key: (r) => `${r.report_id}|${r.verifier_id}` });
+      // The verification trigger can change a report's status (→ report_status_changed).
+      if (APPLY) entries.forEach((e) => touchedReportIds.add(e.row.report_id));
+      await suppress();
     }
 
     // Final report state: the verification trigger recounts and may flip
@@ -357,6 +370,7 @@ async function main() {
     // the Firestore values to every report that exists in Supabase.
     if (APPLY && reportEntries) {
       await finalizeReports(sb, report, reportEntries, touchedReportIds);
+      await suppress();
     }
 
     if (inScope('verification_overrides')) {
@@ -389,7 +403,9 @@ async function main() {
   } finally {
     if (APPLY) {
       state.save();
-      await suppressSideEffects(sb, report, outboxBaseline, touchedReportIds);
+      await suppress();
+      report.notes.push(`Marked ${suppressed.outbox} notification_outbox event(s) for imported reports/alerts as processed (last_error 'migration import').`);
+      report.notes.push(`Marked ${suppressed.escalations} scheduled_escalations created for imported reports as skipped.`);
     }
   }
 
@@ -607,7 +623,7 @@ async function importCollection({ fb, sb, state, report, ctx, source, table, tra
   return entries;
 }
 
-async function importAlerts({ fb, sb, state, report, ctx }) {
+async function importAlerts({ fb, sb, state, report, ctx, touched }) {
   // The insert trigger only enqueues 'alert_created' for active alerts, and
   // alerts have no update trigger: write every alert inactive, then restore
   // is_active on the ones that were active in Firestore.
@@ -616,34 +632,13 @@ async function importAlerts({ fb, sb, state, report, ctx }) {
     (d, row) => ({ id: state.idFor('alerts', d.id), ...row }));
   if (!APPLY) return;
   state.save();
+  entries.forEach((e) => touched.add(e.row.id));
   const inactive = entries.map((e) => ({ ...e, row: { ...e.row, is_active: false } }));
   report.t('alerts').written += await upsertEntries(sb, report, 'alerts', inactive, { onConflict: 'id' });
   const activeIds = entries.filter((e) => e.row.is_active).map((e) => e.row.id);
   for (let i = 0; i < activeIds.length; i += IN_CHUNK) {
     must(await sb.from('alerts').update({ is_active: true }).in('id', activeIds.slice(i, i + IN_CHUNK)), 'reactivate alerts');
   }
-}
-
-// ── Side effects ─────────────────────────────────────────────────────────────
-
-async function suppressSideEffects(sb, report, baseline, reportIds) {
-  if (baseline === null) return;
-  const outbox = await sb.from('notification_outbox')
-    .update({ processed_at: new Date().toISOString(), last_error: 'migration import' })
-    .gt('id', baseline).is('processed_at', null).select('id');
-  if (outbox.error) console.error(`!! Could not neutralise notification_outbox rows > ${baseline}: ${outbox.error.message}`);
-  else report.notes.push(`Marked ${outbox.data.length} notification_outbox event(s) created during import as processed (last_error 'migration import').`);
-
-  const ids = [...reportIds];
-  let skipped = 0;
-  for (let i = 0; i < ids.length; i += IN_CHUNK) {
-    const res = await sb.from('scheduled_escalations')
-      .update({ status: 'skipped', reason: 'migration import', processed_at: new Date().toISOString() })
-      .in('report_id', ids.slice(i, i + IN_CHUNK)).eq('status', 'pending').select('id');
-    if (res.error) console.error(`!! Could not skip scheduled_escalations: ${res.error.message}`);
-    else skipped += res.data.length;
-  }
-  report.notes.push(`Marked ${skipped} scheduled_escalations created for imported reports as skipped.`);
 }
 
 // ── Password resets ──────────────────────────────────────────────────────────

@@ -14,15 +14,21 @@ function readBody(req) {
   return new Promise((resolve, reject) => {
     let size = 0;
     const chunks = [];
-    req.on('data', (c) => {
+    const onData = (c) => {
       size += c.length;
       if (size > MAX_BODY_BYTES) {
+        // Stop buffering and discard the rest; don't destroy the socket here,
+        // or the client never receives the 413 (the response sets
+        // Connection: close so the socket is closed after it is sent).
+        req.off('data', onData);
+        req.resume();
+        chunks.length = 0;
         reject(Object.assign(new Error('Payload too large'), { status: 413 }));
-        req.destroy();
         return;
       }
       chunks.push(c);
-    });
+    };
+    req.on('data', onData);
     req.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
     req.on('error', reject);
   });
@@ -73,8 +79,8 @@ export function createHttpServer({ health, handleEmail, corsOrigins = [], logger
           const raw = await readBody(req);
           body = raw ? JSON.parse(raw) : {};
         } catch (err) {
-          const status = err?.status === 413 ? 413 : 400;
-          return send(res, status, { success: false, error: status === 413 ? 'Payload too large' : 'Invalid JSON' }, cors);
+          if (err?.status === 413) return send(res, 413, { success: false, error: 'Payload too large' }, { ...cors, Connection: 'close' });
+          return send(res, 400, { success: false, error: 'Invalid JSON' }, cors);
         }
         const result = await handleEmail({ authorization: req.headers.authorization, body });
         return send(res, result.status, result.body, cors);

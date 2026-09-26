@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { HTTP_TIMEOUT_MS } from './http.js';
 import { log as defaultLog } from './log.js';
 
 export const ONESIGNAL_API_URL = 'https://api.onesignal.com/notifications';
@@ -10,11 +11,12 @@ export function chunk(list, size) {
   return out;
 }
 
-// Deterministic UUID (v5-shaped) from a string. Used as OneSignal's
-// idempotency_key so a retried outbox event / escalation never double-sends.
+// Deterministic UUID from a string, formatted as v4 (version nibble 4, RFC 4122
+// variant) because OneSignal validates idempotency_key as a UUID v4. Hash-based,
+// so a retried outbox event / escalation gets the same key and never double-sends.
 export function idempotencyUuid(name) {
-  const h = createHash('sha1').update(name).digest();
-  h[6] = (h[6] & 0x0f) | 0x50;
+  const h = createHash('sha256').update(name).digest();
+  h[6] = (h[6] & 0x0f) | 0x40;
   h[8] = (h[8] & 0x3f) | 0x80;
   const hex = h.subarray(0, 16).toString('hex');
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
@@ -59,6 +61,7 @@ export function createOneSignal({
         Accept: 'application/json',
       },
       body: JSON.stringify(body),
+      signal: AbortSignal.timeout(HTTP_TIMEOUT_MS),
     });
     let json = {};
     try {

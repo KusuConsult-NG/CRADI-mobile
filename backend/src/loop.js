@@ -1,11 +1,37 @@
 import { errMessage, log as defaultLog } from './log.js';
 
+export const STALE_INTERVALS = 5;
+
+/**
+ * Health of a loop for /health. A loop is unhealthy if its last tick failed or
+ * if it has not completed a tick for more than STALE_INTERVALS × its interval
+ * (e.g. a tick hung on a request, or the timer chain died).
+ */
+export function loopHealth(state, now = Date.now()) {
+  const last = Date.parse(state.lastRunAt ?? state.startedAt);
+  const stale = !Number.isFinite(last) || now - last > STALE_INTERVALS * state.intervalMs;
+  return {
+    lastRunAt: state.lastRunAt,
+    lastSuccessAt: state.lastSuccessAt,
+    stale,
+    healthy: !state.lastError && !stale,
+  };
+}
+
 /**
  * Runs `task` repeatedly, never overlapping. `task` may return true to run
  * again immediately (e.g. a full outbox batch), otherwise waits `intervalMs`.
  */
 export function startLoop(name, task, intervalMs, { logger = defaultLog } = {}) {
-  const state = { name, lastRunAt: null, lastSuccessAt: null, lastError: null, running: false };
+  const state = {
+    name,
+    intervalMs,
+    startedAt: new Date().toISOString(),
+    lastRunAt: null,
+    lastSuccessAt: null,
+    lastError: null,
+    running: false,
+  };
   let timer = null;
   let stopped = false;
   let current = Promise.resolve();

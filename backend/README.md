@@ -155,8 +155,8 @@ Handlers:
 - **alert_created**: title/message of the alert to everyone (`All`) or to the
   LGA tag.
 
-Each OneSignal request carries an `idempotency_key` derived from the outbox id
-(or escalation id), so retries never double-notify.
+Each OneSignal request carries an `idempotency_key` (a UUID v4-formatted SHA-256
+hash of the outbox id or escalation id), so retries never double-notify.
 
 Stuck events: `select * from notification_outbox where processed_at is null and attempts >= 8;`
 
@@ -171,15 +171,22 @@ Every `ESCALATION_POLL_MS` it loads up to 100 `scheduled_escalations` with
   enabled `ldp_coordinator`/`ewr` in the report's LGA plus `project_staff`/`ewv`
   anywhere (max 50 each, deduplicated) get "⏰ Unverified Report Escalated", and
   the escalation is marked `processed`;
-- if the push fails the escalation stays `pending` (error noted in `reason`)
-  and is retried next tick.
+- if the push fails the escalation stays `pending`, `reason` becomes
+  `attempt N: <error>` and `escalate_at` moves forward with exponential backoff
+  (1, 2, 4, 8 min, capped at 60), so a failing row cannot starve newer ones;
+  after 5 failed attempts it is marked `skipped` (`Gave up after 5 attempts: …`).
+
+Outbound requests (Supabase, OneSignal, Resend) time out after 15 s.
 
 ## HTTP API
 
 ### `GET /health`
 
 `200 {ok: true, config: {supabase, onesignal, resend}, workers: {...}}`, or
-`503` with `ok: false` when required config is missing.
+`503` with `ok: false` when required config is missing. Each entry in
+`workers` has `lastRunAt`, `lastSuccessAt`, `stale` and `healthy`; a loop is
+unhealthy when its last tick failed or it has not completed a tick for more
+than 5× its poll interval.
 
 ### `POST /email`
 

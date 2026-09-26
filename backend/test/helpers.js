@@ -69,8 +69,12 @@ export function fakeRepo({ reports = [], alerts = [], profiles = [], events = []
         )
         .slice(0, q.limit);
     },
-    async dueEscalations(limit) {
-      return state.escalations.filter((e) => e.status === 'pending').slice(0, limit).map((e) => ({ ...e }));
+    async dueEscalations(limit, now = new Date().toISOString()) {
+      return state.escalations
+        .filter((e) => e.status === 'pending' && (e.escalate_at ?? '') <= now)
+        .sort((a, b) => (a.escalate_at ?? '').localeCompare(b.escalate_at ?? ''))
+        .slice(0, limit)
+        .map((e) => ({ ...e }));
     },
     async finishEscalation(id, status, reason = null) {
       const e = state.escalations.find((x) => x.id === id);
@@ -78,9 +82,11 @@ export function fakeRepo({ reports = [], alerts = [], profiles = [], events = []
       Object.assign(e, { status, reason, processed_at: 'now' });
       return true;
     },
-    async noteEscalationError(id, message) {
+    async noteEscalationError(id, message, retryAt = null) {
       const e = state.escalations.find((x) => x.id === id);
-      if (e.status === 'pending') e.reason = message;
+      if (e.status !== 'pending') return;
+      e.reason = message;
+      if (retryAt) e.escalate_at = retryAt;
     },
     async markReportEscalated(reportId, reason) {
       const r = state.reports.find((x) => x.id === reportId);

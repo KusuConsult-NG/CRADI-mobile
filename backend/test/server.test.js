@@ -1,7 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { loadConfig } from '../src/config.js';
-import { corsHeadersFor, createHttpServer } from '../src/server.js';
+import { request } from 'node:http';
+import { MAX_BODY_BYTES, corsHeadersFor, createHttpServer } from '../src/server.js';
 import { logger } from './helpers.js';
 
 test('loadConfig: defaults, missing required, feature flags', () => {
@@ -71,4 +72,38 @@ test('HTTP: /health, /email routing, bad JSON, 404', async (t) => {
 
   assert.equal((await fetch(`${base}/email`)).status, 405);
   assert.equal((await fetch(`${base}/nope`)).status, 404);
+});
+
+test('HTTP: oversized /email body gets a 413 response (not a reset) and handler is not called', async (t) => {
+  let called = false;
+  const server = createHttpServer({
+    health: () => ({ status: 200, body: {} }),
+    handleEmail: async () => {
+      called = true;
+      return { status: 200, body: {} };
+    },
+    logger,
+  });
+  await new Promise((r) => server.listen(0, r));
+  t.after(() => server.close());
+  const { port } = server.address();
+
+  const big = Buffer.alloc(MAX_BODY_BYTES * 4, 'a');
+  const res = await new Promise((resolve, reject) => {
+    const req = request({ port, path: '/email', method: 'POST', headers: { 'Content-Type': 'application/json' } }, (r) => {
+      let data = '';
+      r.on('data', (c) => (data += c));
+      r.on('end', () => resolve({ status: r.statusCode, headers: r.headers, body: data }));
+    });
+    req.on('error', reject);
+    req.end(big);
+  });
+  assert.equal(res.status, 413);
+  assert.equal(res.headers.connection, 'close');
+  assert.deepEqual(JSON.parse(res.body), { success: false, error: 'Payload too large' });
+  assert.equal(called, false);
+
+  // fetch() sees the 413 as well.
+  const f = await fetch(`http://127.0.0.1:${port}/email`, { method: 'POST', body: big });
+  assert.equal(f.status, 413);
 });

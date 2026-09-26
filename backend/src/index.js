@@ -5,7 +5,8 @@ import { loadConfig } from './config.js';
 import { createEmailHandler, createRateLimiter, createResendSender } from './email/service.js';
 import { runEscalations } from './escalations.js';
 import { log } from './log.js';
-import { startLoop } from './loop.js';
+import { withTimeout } from './http.js';
+import { loopHealth, startLoop } from './loop.js';
 import { createOneSignal } from './onesignal.js';
 import { BATCH_SIZE, createHandlers, runOutboxBatch } from './outbox.js';
 import { createRepo } from './repo.js';
@@ -25,6 +26,7 @@ if (!status.resend) log.warn('config.resend_missing', { hint: 'RESEND_API_KEY un
 const supabase = status.supabase
   ? createClient(config.supabaseUrl, config.supabaseServiceRoleKey, {
       auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+      global: { fetch: withTimeout() },
     })
   : null;
 const repo = supabase ? createRepo(supabase) : null;
@@ -70,7 +72,7 @@ function health() {
       ok,
       config: { ...status },
       workers: Object.fromEntries(
-        loops.map((l) => [l.state.name, { lastRunAt: l.state.lastRunAt, lastSuccessAt: l.state.lastSuccessAt, healthy: !l.state.lastError }]),
+        loops.map((l) => [l.state.name, loopHealth(l.state)]),
       ),
     },
   };

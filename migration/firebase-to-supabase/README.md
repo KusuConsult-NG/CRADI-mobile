@@ -54,10 +54,13 @@ unit-tested in [`test/transform.test.js`](test/transform.test.js).
 1. **Node.js 22+**.
 2. **Supabase schema applied** to the target project. From the repo root:
    `supabase link --project-ref <ref>` and then `supabase db push`. This also creates the storage buckets.
-3. **The backend must NOT be running during the import, or OneSignal must not be configured
-   yet.** Database triggers queue `report_created`, `report_status_changed` and `alert_created` events in
-   `notification_outbox` while rows are inserted. The script marks those events as processed when
-   it finishes, but a worker running at the same time could send them first.
+3. **Stop the backend during the import.** In Railway, scale the backend service to **0 replicas**
+   (or remove its active deployment) before `--apply`, and scale it back up afterwards. Database
+   triggers queue `report_created`, `report_status_changed` and `alert_created` events in
+   `notification_outbox` while rows are inserted, and create `scheduled_escalations` for pending
+   reports. The script neutralises those after every step, but a running worker polls every few
+   seconds and would push them to real users first. `--apply` is refused unless you also pass
+   `--i-stopped-the-backend` to confirm this.
 4. **A Firebase service-account key** for `ewer-8f788`, from Firebase console → Project settings →
    Service accounts → Generate new private key. It needs to read Auth, Firestore and Storage.
    Keep the key outside git. `.gitignore` already excludes common key filenames.
@@ -83,13 +86,15 @@ node src/migrate.js --only=reports,verifications --samples=5
 # 2. Review the output: counts, sample rows, skipped rows and warnings.
 #    The full detail is also written to migration-report-<timestamp>.json.
 
-# 3. Apply.
-node src/migrate.js --apply
+# 3. Stop the backend (Railway: scale to 0), then apply.
+node src/migrate.js --apply --i-stopped-the-backend
 
 # 4. Check the validation report printed at the end. Spot-check in the Supabase dashboard.
 
 # 5. Optional: email users a link to set a new password (see below).
-node src/migrate.js --apply --only=none --send-password-resets
+node src/migrate.js --apply --i-stopped-the-backend --only=none --send-password-resets
+
+# 6. Scale the backend back up.
 ```
 
 ### Flags
@@ -97,7 +102,8 @@ node src/migrate.js --apply --only=none --send-password-resets
 | Flag | Meaning |
 | --- | --- |
 | *(none)* | Dry run: no writes to Supabase, Storage or the state file |
-| `--apply` | Perform the writes |
+| `--apply` | Perform the writes. Requires `--i-stopped-the-backend` |
+| `--i-stopped-the-backend` | Confirms the backend worker is stopped (Railway: scaled to 0) for the import |
 | `--only=a,b,c` | Run only these steps: `users` (alias `profiles`), `storage`, `knowledge_base`, `authorities`, `reports`, `alerts`, `verifications`, `verification_overrides`, `messages`, `contacts`, `trusted_devices`, `login_history`, `ndpa_consents`, or `none` |
 | `--skip-storage` | Don't copy Storage objects. URLs of objects not copied by an earlier run keep pointing at Firebase |
 | `--send-password-resets` | After the import, send a Supabase password-reset email to every migrated, non-disabled email user (throttled by `RESET_THROTTLE_MS`). Sent addresses are recorded, so re-runs don't send again |
@@ -161,11 +167,17 @@ email and no phone are skipped.
    rewrites `escalation_scheduled_at` and `escalation_status`. After verifications are imported, each
    report's workflow columns (status, verification_count, verified_at, auto_validated,
    approved/rejected/escalated fields) are set back to the Firestore values with plain `UPDATE`s.
-4. At the end (in a `finally` block, so this also runs after a failure):
-   - every `notification_outbox` row with `id > baseline` that is not yet processed gets
-     `processed_at = now()` and `last_error = 'migration import'`;
+4. After **each** writing step (reports, alerts, verifications, report finalize) and once more at the
+   end (in a `finally` block, so this also runs after a failure):
+   - every not-yet-processed `notification_outbox` row with `id > baseline` **whose payload
+     `report_id` / `alert_id` is an imported report or alert** gets `processed_at = now()` and
+     `last_error = 'migration import'`. Events of real users created during the import are left alone;
    - every `pending` `scheduled_escalations` row for an imported report becomes
      `status = 'skipped'`, `reason = 'migration import'`.
+
+   This narrows the window but does not close it, which is why the backend must be stopped (see
+   Prerequisites). The logic is in [`src/sideEffects.js`](src/sideEffects.js), tested in
+   [`test/sideEffects.test.js`](test/sideEffects.test.js).
 
 ### Storage
 

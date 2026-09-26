@@ -20,11 +20,11 @@ test('chunk splits lists', () => {
   assert.deepEqual(chunk([1, 2, 3, 4, 5], 2), [[1, 2], [3, 4], [5]]);
 });
 
-test('idempotencyUuid is deterministic and UUID-shaped', () => {
+test('idempotencyUuid is deterministic and a valid UUID v4 (version 4, RFC variant)', () => {
   const a = idempotencyUuid('outbox:1:x');
   assert.equal(a, idempotencyUuid('outbox:1:x'));
   assert.notEqual(a, idempotencyUuid('outbox:2:x'));
-  assert.match(a, /^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+  assert.match(a, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
 });
 
 test('sendToUsers posts external_id aliases with Key auth, chunked at 2000', async () => {
@@ -44,6 +44,8 @@ test('sendToUsers posts external_id aliases with Key auth, chunked at 2000', asy
   assert.equal(first.body.include_aliases.external_id.length, 2000);
   assert.equal(fetchImpl.calls[2].body.include_aliases.external_id.length, 500);
   assert.notEqual(first.body.idempotency_key, fetchImpl.calls[1].body.idempotency_key);
+  assert.equal(first.body.idempotency_key, idempotencyUuid('k:0'));
+  assert.ok(first.init.signal instanceof AbortSignal, 'request has a timeout signal');
 });
 
 test('sendToTag uses a tag filter; sendToAll uses Total Subscriptions', async () => {
