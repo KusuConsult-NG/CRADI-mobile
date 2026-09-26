@@ -31,6 +31,9 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  /// Reports shown in the home "To Verify" feed.
+  static const int _toVerifyLimit = 20;
+
   int _selectedFilterIndex = 0;
 
   @override
@@ -749,25 +752,29 @@ class _HomeScreenState extends State<HomeScreen> {
     if (selected == 0) {
       // To Verify: pending reports this user may still vote on (never
       // their own, EWMs only in their LGA + ward, not already voted).
+      // Loaded by fetchToVerify (own reports excluded server-side, with
+      // a large page so the client-side filters below still leave enough).
+      final uid = auth.currentUser?.id;
       final toVerify = statusProvider
-          .getReports(ReportStatus.pending)
+          .toVerifyReports(uid)
           .where(
-            (r) =>
-                !statusProvider.hasVotedOn(r.id) &&
-                auth.canVoteOn(
-                  reporterId: r.reporterId,
-                  reportWard: r.ward,
-                  reportLga: r.lga,
-                ),
+            (r) => auth.canVoteOn(
+              reporterId: r.reporterId,
+              reportWard: r.ward,
+              reportLga: r.lga,
+            ),
           )
+          .take(_toVerifyLimit)
           .toList();
       return _buildListFeed(
         toVerify,
-        statusProvider.isLoading(ReportStatus.pending),
+        statusProvider.isLoading(ReportStatus.pending, excludeUserId: uid),
         'No reports to verify',
-        error: statusProvider.errorFor(ReportStatus.pending),
-        onRetry: () =>
-            statusProvider.fetchReports(status: ReportStatus.pending),
+        error: statusProvider.errorFor(
+          ReportStatus.pending,
+          excludeUserId: uid,
+        ),
+        onRetry: statusProvider.fetchToVerify,
       );
     } else if (selected == 2) {
       // My Reports

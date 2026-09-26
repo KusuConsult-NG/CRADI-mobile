@@ -118,6 +118,12 @@ class MockReportingProvider extends _i1.Mock implements _i2.ReportingProvider {
   );
 
   @override
+  void setReportState(String? state) => super.noSuchMethod(
+    Invocation.method(#setReportState, [state]),
+    returnValueForMissingStub: null,
+  );
+
+  @override
   _i4.Future<void> pickImage(_i3.ImageSource? source) =>
       (super.noSuchMethod(
             Invocation.method(#pickImage, [source]),

@@ -58,6 +58,12 @@ class MockReportsStatusProvider extends _i1.Mock
       );
 
   @override
+  void clearUserData() => super.noSuchMethod(
+    Invocation.method(#clearUserData, []),
+    returnValueForMissingStub: null,
+  );
+
+  @override
   List<_i4.VerificationReport> getReports(
     _i4.ReportStatus? status, {
     String? userId,
@@ -210,11 +216,29 @@ class MockReportsStatusProvider extends _i1.Mock
           as _i5.Future<void>);
 
   @override
+  _i5.Future<void> fetchToVerify() =>
+      (super.noSuchMethod(
+            Invocation.method(#fetchToVerify, []),
+            returnValue: _i5.Future<void>.value(),
+            returnValueForMissingStub: _i5.Future<void>.value(),
+          )
+          as _i5.Future<void>);
+
+  @override
+  List<_i4.VerificationReport> toVerifyReports(String? uid) =>
+      (super.noSuchMethod(
+            Invocation.method(#toVerifyReports, [uid]),
+            returnValue: <_i4.VerificationReport>[],
+          )
+          as List<_i4.VerificationReport>);
+
+  @override
   _i5.Future<void> fetchReports({
     bool? loadMore = false,
     _i4.ReportStatus? status,
     String? userId,
     String? excludeUserId,
+    int? pageSize = 20,
   }) =>
       (super.noSuchMethod(
             Invocation.method(#fetchReports, [], {
@@ -222,6 +246,7 @@ class MockReportsStatusProvider extends _i1.Mock
               #status: status,
               #userId: userId,
               #excludeUserId: excludeUserId,
+              #pageSize: pageSize,
             }),
             returnValue: _i5.Future<void>.value(),
             returnValueForMissingStub: _i5.Future<void>.value(),
@@ -465,6 +490,18 @@ class MockAuthProvider extends _i1.Mock implements _i8.AuthProvider {
   @override
   void removeSignInListener(_i7.VoidCallback? listener) => super.noSuchMethod(
     Invocation.method(#removeSignInListener, [listener]),
+    returnValueForMissingStub: null,
+  );
+
+  @override
+  void addSignOutListener(_i7.VoidCallback? listener) => super.noSuchMethod(
+    Invocation.method(#addSignOutListener, [listener]),
+    returnValueForMissingStub: null,
+  );
+
+  @override
+  void removeSignOutListener(_i7.VoidCallback? listener) => super.noSuchMethod(
+    Invocation.method(#removeSignOutListener, [listener]),
     returnValueForMissingStub: null,
   );
 

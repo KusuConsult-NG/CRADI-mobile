@@ -30,12 +30,16 @@ class VerificationRefusedException implements Exception {
 /// Page size used for report lists.
 const int _pageSize = 20;
 
+/// Page size used by [ReportsStatusProvider.fetchAllPages].
+const int _bulkPageSize = 250;
+
 /// Parameters identifying one cached report list.
 class _ListKey {
-  const _ListKey(this.status, this.userId, this.excludeUserId);
+  const _ListKey(this.status, this.userId, this.excludeUserId, this.pageSize);
   final ReportStatus? status;
   final String? userId;
   final String? excludeUserId;
+  final int pageSize;
 }
 
 class ReportsStatusProvider extends ChangeNotifier {
@@ -77,6 +81,66 @@ class ReportsStatusProvider extends ChangeNotifier {
   Set<String> _votedReportIds = {};
   String? _votesUserId;
   Future<void>? _votesInFlight;
+
+  /// Reporter names looked up from `profiles` for rows without a stored
+  /// reporter name, cached per user id (one lookup per reporter).
+  final Map<String, Future<String?>> _reporterNames = {};
+
+  /// Incremented by [clearUserData]; responses started before it are
+  /// dropped.
+  int _userGen = 0;
+
+  /// Rows fetched for the "To Verify" list: pending reports are filtered
+  /// client-side (already voted, ward / LGA eligibility), so one page of
+  /// the default size could leave the list empty while more exist.
+  static const int toVerifyPageSize = 200;
+
+  /// Monitoring-zone column filters: "Benue State" → state, "Makurdi,
+  /// Benue" (LGA, State) → LGA and state, a bare state name → state.
+  /// Empty when there is no zone, "All Zones" or an unrecognized zone.
+  @visibleForTesting
+  static Map<String, String> zoneFilterFor(String? zone) {
+    final z = zone?.trim();
+    if (z == null || z.isEmpty) return const {};
+    final lower = z.toLowerCase();
+    if (lower.contains('all zone')) return const {};
+    String stripState(String v) =>
+        v.replaceAll(RegExp(r'\s+state$', caseSensitive: false), '').trim();
+    if (z.contains(',')) {
+      final parts = z.split(',');
+      final lga = parts.first.trim();
+      final state = stripState(parts.last.trim());
+      return {
+        if (lga.isNotEmpty) 'lga': lga,
+        if (state.isNotEmpty) 'state': state,
+      };
+    }
+    if (lower.endsWith(' state')) return {'state': stripState(z)};
+    if (MVPLocationsData.getAllStates().any((s) => s.toLowerCase() == lower)) {
+      return {'state': z};
+    }
+    return const {};
+  }
+
+  /// Drops every cached list, count, vote and error, e.g. on sign-out or
+  /// before another account signs in on a shared device.
+  void clearUserData() {
+    _userGen++;
+    // Bump (not reset) the request tokens so in-flight responses are dropped.
+    _requestTokens.updateAll((_, token) => token + 1);
+    _reportsMap.clear();
+    _offsetMap.clear();
+    _hasMoreMap.clear();
+    _loadingMap.clear();
+    _totalCounts.clear();
+    _errorMap.clear();
+    _keyParams.clear();
+    _votedReportIds = {};
+    _votesUserId = null;
+    _votesInFlight = null;
+    _reporterNames.clear();
+    notifyListeners();
+  }
 
   List<VerificationReport> getReports(
     ReportStatus? status, {
@@ -190,6 +254,8 @@ class ReportsStatusProvider extends ChangeNotifier {
         excludeUserId: excludeUserId,
         userId: userId,
       ),
+      // The "To Verify" list of the signed-in user.
+      if (userId == null && excludeUserId == null) fetchToVerify(),
       fetchReports(
         status: ReportStatus.verified,
         excludeUserId: excludeUserId,
@@ -217,6 +283,7 @@ class ReportsStatusProvider extends ChangeNotifier {
           status: k.status,
           userId: k.userId,
           excludeUserId: k.excludeUserId,
+          pageSize: k.pageSize,
         ),
       ),
     );
@@ -232,12 +299,15 @@ class ReportsStatusProvider extends ChangeNotifier {
       return Future.value();
     }
     if (!force && _votesUserId == uid) return Future.value();
-    return _votesInFlight ??= _loadMyVotes(uid).whenComplete(() {
-      _votesInFlight = null;
+    late final Future<void> load;
+    load = _votesInFlight ??= _loadMyVotes(uid).whenComplete(() {
+      if (identical(_votesInFlight, load)) _votesInFlight = null;
     });
+    return load;
   }
 
   Future<void> _loadMyVotes(String uid) async {
+    final gen = _userGen;
     try {
       final ids = <String>{};
       const page = 500;
@@ -256,6 +326,7 @@ class ReportsStatusProvider extends ChangeNotifier {
         if (rows.length < page) break;
         offset += rows.length;
       }
+      if (gen != _userGen) return;
       _votedReportIds = ids;
       _votesUserId = uid;
       notifyListeners();
@@ -279,6 +350,7 @@ class ReportsStatusProvider extends ChangeNotifier {
       status: status,
       userId: userId,
       excludeUserId: excludeUserId,
+      pageSize: _bulkPageSize,
     );
     while (hasMore(status, userId: userId, excludeUserId: excludeUserId) &&
         errorFor(status, userId: userId, excludeUserId: excludeUserId) ==
@@ -299,6 +371,7 @@ class ReportsStatusProvider extends ChangeNotifier {
         status: status,
         userId: userId,
         excludeUserId: excludeUserId,
+        pageSize: _bulkPageSize,
       );
       final after = getReports(
         status,
@@ -309,14 +382,35 @@ class ReportsStatusProvider extends ChangeNotifier {
     }
   }
 
+  /// Pending reports not submitted by the signed-in user (the "To Verify"
+  /// list, read with [toVerifyReports]), with a larger page than the
+  /// default lists.
+  Future<void> fetchToVerify() {
+    final uid = SupabaseService.isReady ? _db.currentUserId : null;
+    if (uid == null) return Future.value();
+    return fetchReports(
+      status: ReportStatus.pending,
+      excludeUserId: uid,
+      pageSize: toVerifyPageSize,
+    );
+  }
+
+  /// Rows loaded by [fetchToVerify] for [uid], without reports the user
+  /// already voted on.
+  List<VerificationReport> toVerifyReports(String? uid) => getReports(
+    ReportStatus.pending,
+    excludeUserId: uid,
+  ).where((r) => !hasVotedOn(r.id)).toList();
+
   Future<void> fetchReports({
     bool loadMore = false,
     ReportStatus? status,
     String? userId,
     String? excludeUserId,
+    int pageSize = _pageSize,
   }) async {
     final key = _getKey(status, userId, excludeUserId: excludeUserId);
-    _keyParams[key] = _ListKey(status, userId, excludeUserId);
+    _keyParams[key] = _ListKey(status, userId, excludeUserId, pageSize);
 
     if (loadMore &&
         ((_hasMoreMap[key] == false) || (_loadingMap[key] == true))) {
@@ -373,7 +467,7 @@ class ReportsStatusProvider extends ChangeNotifier {
         docs = await _db.listDocuments(
           collectionId: AppConfig.reportsCollection,
           queries: queries,
-          limitCount: _pageSize,
+          limitCount: pageSize,
           offset: offset,
         );
       } on Exception catch (primaryError) {
@@ -401,7 +495,7 @@ class ReportsStatusProvider extends ChangeNotifier {
         docs = await _db.listDocuments(
           collectionId: AppConfig.reportsCollection,
           queries: fallbackQueries,
-          limitCount: _pageSize,
+          limitCount: pageSize,
           offset: offset,
         );
       }
@@ -415,7 +509,7 @@ class ReportsStatusProvider extends ChangeNotifier {
       );
 
       if (total != null) _totalCounts[key] = total;
-      _hasMoreMap[key] = docs.length >= _pageSize;
+      _hasMoreMap[key] = docs.length >= pageSize;
       _reportsMap[key] = loadMore
           ? [...(_reportsMap[key] ?? []), ...newReports]
           : newReports;
@@ -444,23 +538,34 @@ class ReportsStatusProvider extends ChangeNotifier {
   /// Monitoring-zone filter for staff-wide lists.
   List<QueryFilter> _zoneQueries() {
     final zone = _profileProvider?.monitoringZone;
-    if (zone == null) return const [];
-    final lower = zone.toLowerCase();
-    if (lower.contains('all zone')) return const [];
-    if (lower.contains('state')) {
-      return [FQuery.equal('state', zone.replaceAll(' State', '').trim())];
+    final filter = zoneFilterFor(zone);
+    if (filter.isEmpty && zone != null && zone.trim().isNotEmpty) {
+      developer.log(
+        'Skipping zone filter for zone "$zone"',
+        name: 'ReportsStatusProvider',
+      );
     }
-    if (zone.contains(',')) {
-      return [FQuery.equal('lga', zone.split(',').first.trim())];
-    }
-    if (MVPLocationsData.getAllStates().any((s) => s.toLowerCase() == lower)) {
-      return [FQuery.equal('state', zone)];
-    }
-    developer.log(
-      'Skipping zone filter for unrecognized zone "$zone"',
-      name: 'ReportsStatusProvider',
-    );
-    return const [];
+    return [
+      for (final e in filter.entries) FQuery.equal(e.key, e.value),
+    ];
+  }
+
+  /// Name from the reporter's profile (readable by staff), cached per user.
+  Future<String?> _lookupReporterName(String userId) {
+    return _reporterNames[userId] ??= () async {
+      try {
+        final userDoc = await _db.getDocument(
+          collectionId: AppConfig.usersCollection,
+          documentId: userId,
+        );
+        final n = userDoc['name'] as String?;
+        return (n != null && n.trim().isNotEmpty) ? n : null;
+      } on Exception catch (_) {
+        // Do not cache failures (offline, transient errors).
+        _reporterNames.remove(userId);
+        return null;
+      }
+    }();
   }
 
   /// Maps a `reports` document to a display-ready [VerificationReport].
@@ -473,15 +578,9 @@ class ReportsStatusProvider extends ChangeNotifier {
     final storedName = data['reporterName'] as String?;
     if (storedName != null && storedName.trim().isNotEmpty) {
       reporterName = storedName;
-    } else if (data['userId'] != null) {
-      try {
-        final userDoc = await _db.getDocument(
-          collectionId: AppConfig.usersCollection,
-          documentId: data['userId'] as String,
-        );
-        final n = userDoc['name'] as String?;
-        if (n != null && n.trim().isNotEmpty) reporterName = n;
-      } on Exception catch (_) {}
+    } else if (data['userId'] is String) {
+      reporterName =
+          await _lookupReporterName(data['userId'] as String) ?? reporterName;
     }
 
     // fromMap populates reporterId, coordinates, description,
@@ -585,6 +684,10 @@ class ReportsStatusProvider extends ChangeNotifier {
     if (result['alreadyVoted'] == true) {
       _votedReportIds = {..._votedReportIds, reportId};
       notifyListeners();
+    }
+    if (result['noLongerPending'] == true) {
+      // The report moved on (verified / rejected): refresh stale lists.
+      unawaited(refreshLoadedLists());
     }
     if (result['success'] != true) {
       throw VerificationRefusedException(

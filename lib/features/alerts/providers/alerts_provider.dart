@@ -42,6 +42,10 @@ class AlertsProvider extends ChangeNotifier {
       _alerts.where((a) => targetsLga(a, lga)).toList();
 
   Future<void> fetchAlerts() async {
+    // Alerts are only readable when signed in: a fetch before sign-in would
+    // return nothing and overwrite the offline cache with an empty list.
+    // The sign-in hook in main.dart fetches again once a session exists.
+    if (_db.currentUserId == null) return;
     _isLoading = true;
     _error = null;
     notifyListeners();

@@ -46,6 +46,7 @@ class ReportsStatusScreen extends StatefulWidget {
 class _ReportsStatusScreenState extends State<ReportsStatusScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
+  final GlobalKey _exportButtonKey = GlobalKey();
 
   @override
   void initState() {
@@ -134,6 +135,7 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
         },
       ),
       floatingActionButton: FloatingActionButton.extended(
+        key: _exportButtonKey,
         heroTag: 'reports_status_fab',
         onPressed: _showReportGenerationDialog,
         backgroundColor: AppColors.primaryRed,
@@ -739,6 +741,21 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
     );
   }
 
+  /// Popover anchor of the share sheet (required on iPad): the export
+  /// button, or the middle of the screen when it is not laid out.
+  Rect _shareOrigin() {
+    final box = _exportButtonKey.currentContext?.findRenderObject();
+    if (box is RenderBox && box.hasSize && box.attached) {
+      return box.localToGlobal(Offset.zero) & box.size;
+    }
+    final size = MediaQuery.sizeOf(context);
+    return Rect.fromCenter(
+      center: size.center(Offset.zero),
+      width: 1,
+      height: 1,
+    );
+  }
+
   /// Generates the CSV, saves it to the app documents directory and opens
   /// the share sheet (on web the CSV is copied to the clipboard).
   Future<void> _exportCsv(
@@ -772,16 +789,30 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
             duration: const Duration(seconds: 6),
           ),
         );
+      if (!mounted) return;
       try {
         await SharePlus.instance.share(
           ShareParams(
             files: [XFile(file.path, mimeType: 'text/csv')],
             subject: 'CRADI reports export',
+            sharePositionOrigin: _shareOrigin(),
           ),
         );
       } on Exception catch (e) {
-        // Saved already; sharing is optional.
+        // Saved already; tell the user where to find it.
         ErrorHandler.logError(e, context: 'ReportsExport.share');
+        messenger
+          ..hideCurrentSnackBar()
+          ..showSnackBar(
+            SnackBar(
+              content: Text(
+                'Could not open the share sheet. '
+                'The report is saved to ${file.path}',
+              ),
+              backgroundColor: Colors.orange,
+              duration: const Duration(seconds: 6),
+            ),
+          );
       }
     } on Exception catch (e) {
       messenger

@@ -81,7 +81,10 @@ class _AlertsListScreenState extends State<AlertsListScreen>
     // Initial fetch
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      context.read<ReportsStatusProvider>().fetchReports(status: null);
+      final reports = context.read<ReportsStatusProvider>();
+      reports.fetchReports(status: null);
+      // Needed to hide the vote buttons on reports already voted on.
+      reports.loadMyVotes();
       context.read<AlertsProvider>().fetchAlerts();
     });
   }
@@ -735,7 +738,11 @@ class _AlertsListScreenState extends State<AlertsListScreen>
       reportWard: report.ward,
       reportLga: report.lga,
     );
-    final isPending = report.status == ReportStatus.pending && canVerify;
+    // One vote per user: hide the actions once this user has voted.
+    final isPending =
+        report.status == ReportStatus.pending &&
+        canVerify &&
+        !provider.hasVotedOn(report.id);
 
     return Container(
       clipBehavior: Clip.antiAlias,

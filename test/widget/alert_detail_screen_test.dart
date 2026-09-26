@@ -1,5 +1,6 @@
 import 'package:climate_app/features/alerts/screens/alert_detail_screen.dart';
 import 'package:climate_app/features/auth/providers/auth_provider.dart';
+import 'package:climate_app/features/verification/providers/reports_status_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -27,8 +28,13 @@ void main() {
         ),
       ],
     );
-    return ChangeNotifierProvider<AuthProvider>(
-      create: (_) => AuthProvider(),
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider<AuthProvider>(create: (_) => AuthProvider()),
+        ChangeNotifierProvider<ReportsStatusProvider>(
+          create: (_) => ReportsStatusProvider(),
+        ),
+      ],
       child: MaterialApp.router(routerConfig: router),
     );
   }

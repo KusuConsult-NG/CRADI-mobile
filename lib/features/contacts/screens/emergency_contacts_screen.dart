@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:climate_app/core/theme/app_colors.dart';
 import 'package:climate_app/core/utils/error_handler.dart';
 import 'package:climate_app/features/contacts/models/emergency_contact_model.dart';
@@ -28,38 +30,65 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
   String _selectedCategory = 'all';
   String _query = '';
 
-  /// The realtime stream is created once (and again on pull-to-refresh), not
-  /// in build, so typing in the search box or switching categories does not
-  /// resubscribe. Category and search filters are applied to its rows.
-  late Stream<List<EmergencyContact>> _contactsStream;
+  /// The realtime subscription is created once (and again on
+  /// pull-to-refresh), not in build, so typing in the search box or
+  /// switching categories does not resubscribe. It is owned by this state
+  /// and cancelled on refresh / dispose, which closes the realtime channel.
+  /// Category and search filters are applied to its rows.
+  StreamSubscription<List<EmergencyContact>>? _contactsSub;
+  List<EmergencyContact>? _contacts;
+  Object? _contactsError;
+  Completer<void>? _nextEvent;
 
   @override
   void initState() {
     super.initState();
-    _contactsStream = _createStream();
+    _subscribe();
     _searchController.addListener(() {
       final q = _searchController.text.trim().toLowerCase();
       if (q != _query) setState(() => _query = q);
     });
   }
 
-  Stream<List<EmergencyContact>> _createStream() => context
-      .read<EmergencyContactsProvider>()
-      .getContactsStream()
-      .asBroadcastStream();
+  void _subscribe() {
+    unawaited(_contactsSub?.cancel());
+    final next = _nextEvent = Completer<void>();
+    void settle() {
+      if (!next.isCompleted) next.complete();
+    }
+
+    _contactsSub = context
+        .read<EmergencyContactsProvider>()
+        .getContactsStream()
+        .listen(
+          (contacts) {
+            settle();
+            if (!mounted) return;
+            setState(() {
+              _contacts = contacts;
+              _contactsError = null;
+            });
+          },
+          onError: (Object e) {
+            settle();
+            if (!mounted) return;
+            setState(() => _contactsError = e);
+          },
+        );
+  }
 
   Future<void> _refresh() async {
-    final stream = _createStream();
-    setState(() => _contactsStream = stream);
+    _subscribe();
     try {
-      await stream.first.timeout(const Duration(seconds: 10));
-    } on Object catch (_) {
-      // Errors are rendered by the StreamBuilder.
+      await _nextEvent!.future.timeout(const Duration(seconds: 10));
+    } on TimeoutException catch (_) {
+      // The list keeps showing the last rows.
     }
   }
 
   @override
   void dispose() {
+    unawaited(_contactsSub?.cancel());
     _searchController.dispose();
     super.dispose();
   }
@@ -287,27 +316,27 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
           Expanded(
             child: RefreshIndicator(
               onRefresh: _refresh,
-              child: StreamBuilder<List<EmergencyContact>>(
-                stream: _contactsStream,
-                builder: (context, snapshot) {
-                  if (snapshot.hasError) {
+              child: Builder(
+                builder: (context) {
+                  final error = _contactsError;
+                  if (error != null) {
                     return _scrollableMessage(
                       Padding(
                         padding: const EdgeInsets.all(24),
                         child: Text(
-                          ErrorHandler.getUserMessage(snapshot.error),
+                          ErrorHandler.getUserMessage(error),
                           textAlign: TextAlign.center,
                         ),
                       ),
                     );
                   }
 
-                  if (snapshot.connectionState == ConnectionState.waiting &&
-                      !snapshot.hasData) {
+                  final loaded = _contacts;
+                  if (loaded == null) {
                     return const Center(child: CircularProgressIndicator());
                   }
 
-                  final contacts = _filter(snapshot.data ?? const []);
+                  final contacts = _filter(loaded);
 
                   if (contacts.isEmpty) {
                     return _scrollableMessage(

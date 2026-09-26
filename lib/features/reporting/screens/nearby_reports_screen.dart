@@ -74,9 +74,11 @@ class _NearbyReportsScreenState extends State<NearbyReportsScreen> {
     if (zone != null && !zone.contains('all zone')) {
       if (zone.contains(',')) {
         userLga ??= norm(zone.split(',').first);
-        userState ??= norm(zone.split(',').last.replaceAll(' state', ''));
+        userState ??= norm(
+          zone.split(',').last.replaceAll(RegExp(r'\s+state$'), ''),
+        );
       } else {
-        userState ??= norm(zone.replaceAll(' state', ''));
+        userState ??= norm(zone.replaceAll(RegExp(r'\s+state$'), ''));
       }
     }
 
@@ -108,7 +110,12 @@ class _NearbyReportsScreenState extends State<NearbyReportsScreen> {
       if (distanceKm != null && distanceKm <= _nearbyRadiusKm) {
         isNearby = true;
       } else if (userLga != null && reportLga != null) {
-        isNearby = reportLga == userLga;
+        // LGA names repeat across states: the state must match too.
+        isNearby =
+            reportLga == userLga &&
+            (userState == null ||
+                reportState == null ||
+                reportState == userState);
       } else if (userState != null && reportState != null) {
         isNearby = reportState == userState;
       } else {

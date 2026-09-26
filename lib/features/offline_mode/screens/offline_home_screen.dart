@@ -33,13 +33,15 @@ class _OfflineHomeScreenState extends State<OfflineHomeScreen> {
     if (!storage.isInitialized) return const [];
     final uid = context.read<AuthProvider>().currentUser?.id;
     final items = <_PendingItem>[
-      for (final d in storage.getAllDrafts())
+      for (final d in storage.getDraftsFor(uid))
         _PendingItem(
           title: Hazard.labelFor(d['hazardType']),
           subtitle: (d['locationDetails'] ?? '').toString(),
           date: d['createdAt'],
           failed: d['status'] == OfflineStorageService.statusRejected,
           error: d['lastError']?.toString(),
+          draftId: d['id'] as String?,
+          ownerless: OfflineStorageService.draftOwner(d) == null,
         ),
       for (final q in storage.getUnsyncedItems(userId: uid))
         _PendingItem(
@@ -74,6 +76,56 @@ class _OfflineHomeScreenState extends State<OfflineHomeScreen> {
       await storage.discardQueueItem(queueId);
     }
     if (mounted) setState(() {});
+  }
+
+  /// Retry (a refused draft), submit as the signed-in user (an ownerless
+  /// draft of an older build) or discard a draft.
+  Future<void> _onDraftAction(String action, String draftId) async {
+    final storage = OfflineStorageService();
+    final uid = context.read<AuthProvider>().currentUser?.id;
+    final connectivity = context.read<ConnectivityProvider>();
+    switch (action) {
+      case 'discard':
+        await storage.deleteDraft(draftId);
+      case 'retry':
+        await storage.updateDraft(draftId, {'status': 'draft'});
+      case 'submit':
+        if (uid == null) return;
+        await storage.updateDraft(draftId, {'userId': uid, 'status': 'draft'});
+    }
+    if (!mounted) return;
+    setState(() {});
+    if (action != 'discard' && connectivity.isOnline) {
+      await _sync();
+      if (mounted) setState(() {});
+    }
+  }
+
+  Widget? _itemActions(_PendingItem item, bool isSignedIn) {
+    final draftId = item.draftId;
+    if (draftId != null && (item.failed || item.ownerless)) {
+      return PopupMenuButton<String>(
+        onSelected: (action) => _onDraftAction(action, draftId),
+        itemBuilder: (_) => [
+          if (item.ownerless && isSignedIn)
+            const PopupMenuItem(value: 'submit', child: Text('Submit as me'))
+          else if (item.failed && !item.ownerless)
+            const PopupMenuItem(value: 'retry', child: Text('Retry')),
+          const PopupMenuItem(value: 'discard', child: Text('Discard')),
+        ],
+      );
+    }
+    final queueId = item.queueId;
+    if (item.failed && queueId != null) {
+      return PopupMenuButton<String>(
+        onSelected: (action) => _onFailedItemAction(action, queueId),
+        itemBuilder: (_) => const [
+          PopupMenuItem(value: 'retry', child: Text('Retry')),
+          PopupMenuItem(value: 'discard', child: Text('Discard')),
+        ],
+      );
+    }
+    return null;
   }
 
   @override
@@ -118,7 +170,7 @@ class _OfflineHomeScreenState extends State<OfflineHomeScreen> {
               ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 16),
-            Expanded(child: _buildPendingList()),
+            Expanded(child: _buildPendingList(isSignedIn)),
             const SizedBox(height: 16),
 
             CustomButton(
@@ -205,7 +257,7 @@ class _OfflineHomeScreenState extends State<OfflineHomeScreen> {
     );
   }
 
-  Widget _buildPendingList() {
+  Widget _buildPendingList(bool isSignedIn) {
     final items = _pendingItems();
     if (items.isEmpty) {
       return Center(
@@ -246,7 +298,9 @@ class _OfflineHomeScreenState extends State<OfflineHomeScreen> {
         itemCount: items.length,
         itemBuilder: (context, index) {
           final item = items[index];
-          final status = item.failed
+          final status = item.ownerless
+              ? 'Saved by an earlier version: submit or discard it'
+              : item.failed
               ? 'Failed, will not sync automatically'
                     '${item.error != null ? ': ${item.error}' : ''}'
               : 'Waiting to sync';
@@ -255,7 +309,11 @@ class _OfflineHomeScreenState extends State<OfflineHomeScreen> {
             child: AppCard(
               child: ListTile(
                 leading: Icon(
-                  item.failed ? Icons.error_outline : Icons.schedule,
+                  item.failed
+                      ? Icons.error_outline
+                      : item.ownerless
+                      ? Icons.help_outline
+                      : Icons.schedule,
                   color: item.failed ? Colors.red : AppColors.primaryRed,
                 ),
                 title: Text(
@@ -268,19 +326,7 @@ class _OfflineHomeScreenState extends State<OfflineHomeScreen> {
                   overflow: TextOverflow.ellipsis,
                 ),
                 isThreeLine: true,
-                trailing: item.failed && item.queueId != null
-                    ? PopupMenuButton<String>(
-                        onSelected: (action) =>
-                            _onFailedItemAction(action, item.queueId!),
-                        itemBuilder: (_) => const [
-                          PopupMenuItem(value: 'retry', child: Text('Retry')),
-                          PopupMenuItem(
-                            value: 'discard',
-                            child: Text('Discard'),
-                          ),
-                        ],
-                      )
-                    : null,
+                trailing: _itemActions(item, isSignedIn),
               ),
             ),
           );
@@ -299,6 +345,8 @@ class _PendingItem {
     required this.failed,
     this.error,
     this.queueId,
+    this.draftId,
+    this.ownerless = false,
   });
 
   final String title;
@@ -307,4 +355,11 @@ class _PendingItem {
   final bool failed;
   final String? error;
   final String? queueId;
+
+  /// Set for drafts (null for sync-queue items).
+  final String? draftId;
+
+  /// A draft saved by an older build without an author: never synced
+  /// automatically; the user submits it as their own or discards it.
+  final bool ownerless;
 }

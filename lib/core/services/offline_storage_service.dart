@@ -103,8 +103,10 @@ class OfflineStorageService {
     }
   }
 
-  /// Save a draft report
+  /// Save a draft report. [userId] (the signed-in author) is stored so the
+  /// draft is only ever uploaded as that user.
   Future<String> saveDraft({
+    String? userId,
     required String hazardType,
     required String severity,
     required String locationDetails,
@@ -127,6 +129,7 @@ class OfflineStorageService {
     final draftId = DateTime.now().millisecondsSinceEpoch.toString();
     final draft = {
       'id': draftId,
+      'userId': userId,
       'hazardType': hazardType,
       'severity': severity,
       'locationDetails': locationDetails,
@@ -163,6 +166,28 @@ class OfflineStorageService {
             b['createdAt'].toString().compareTo(a['createdAt'].toString()),
       );
   }
+
+  /// Author of a draft; null for drafts saved by older builds, whose owner
+  /// is unknown.
+  static String? draftOwner(Map draft) {
+    final owner = draft['userId'];
+    return owner is String && owner.isNotEmpty ? owner : null;
+  }
+
+  /// Drafts shown to [userId]: their own, plus ownerless (legacy) drafts
+  /// that the user may submit as their own or discard.
+  List<Map<String, dynamic>> getDraftsFor(String? userId) => getAllDrafts()
+      .where((d) {
+        final owner = draftOwner(d);
+        return owner == null || owner == userId;
+      })
+      .toList();
+
+  /// Whether [draft] may be uploaded automatically for [userId]: only the
+  /// author's own drafts, never ownerless ones (the author is unknown on a
+  /// shared device) nor drafts the server refused permanently.
+  static bool isAutoSyncableDraft(Map draft, String userId) =>
+      draftOwner(draft) == userId && draft['status'] != statusRejected;
 
   /// Get a specific draft by ID
   Map<String, dynamic>? getDraft(String draftId) {

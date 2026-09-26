@@ -1,10 +1,10 @@
 import 'package:climate_app/core/theme/app_colors.dart';
 import 'package:climate_app/core/utils/error_handler.dart';
-import 'package:climate_app/core/services/peer_verification_service.dart';
 import 'package:climate_app/core/services/supabase_service.dart';
 
 import 'package:climate_app/features/alerts/screens/alert_severity.dart';
 import 'package:climate_app/features/auth/providers/auth_provider.dart';
+import 'package:climate_app/features/verification/providers/reports_status_provider.dart';
 
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -32,6 +32,16 @@ class _AlertDetailScreenState extends State<AlertDetailScreen> {
   final TextEditingController _commentController = TextEditingController();
   bool _isSubmitting = false;
   bool _hasVerified = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Votes of the signed-in user (cached per user), to hide the vote
+    // actions on a report already voted on.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) context.read<ReportsStatusProvider>().loadMyVotes();
+    });
+  }
 
   @override
   void dispose() {
@@ -101,21 +111,8 @@ class _AlertDetailScreenState extends State<AlertDetailScreen> {
 
     setState(() => _isSubmitting = true);
 
+    final reports = context.read<ReportsStatusProvider>();
     try {
-      final currentUser = SupabaseService().getCurrentUser();
-
-      if (currentUser == null) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Please log in to continue.'),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
-        return;
-      }
-
       final reportId = _reportId;
       if (reportId == null || reportId.isEmpty) {
         if (mounted) {
@@ -129,35 +126,27 @@ class _AlertDetailScreenState extends State<AlertDetailScreen> {
         return;
       }
 
-      final result = await PeerVerificationService().submitVerification(
-        reportId: reportId,
-        userId: currentUser.id,
-        isConfirmed: isConfirmed,
-        comment: _commentController.text.trim().isEmpty
-            ? null
-            : _commentController.text.trim(),
-      );
+      // Through the provider so the voted-on cache and the lists refresh.
+      final comment = _commentController.text.trim();
+      if (isConfirmed) {
+        await reports.verifyReport(
+          reportId,
+          comment: comment.isEmpty ? null : comment,
+        );
+      } else {
+        await reports.disputeReport(
+          reportId,
+          comment: comment.isEmpty ? null : comment,
+        );
+      }
 
       if (!mounted) return;
-      if (result['success'] != true) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              result['message']?.toString() ??
-                  'Your verification could not be recorded.',
-            ),
-            backgroundColor: Colors.red,
-          ),
-        );
-        return;
-      }
       setState(() => _hasVerified = true);
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            result['message']?.toString() ??
-                'Verification submitted successfully',
+            isConfirmed ? 'Report confirmed successfully' : 'Report disputed',
           ),
           backgroundColor: isConfirmed ? Colors.green : Colors.orange,
           duration: const Duration(seconds: 3),
@@ -168,6 +157,12 @@ class _AlertDetailScreenState extends State<AlertDetailScreen> {
       Future.delayed(const Duration(seconds: 2), () {
         if (mounted) _close();
       });
+    } on VerificationRefusedException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.message), backgroundColor: Colors.red),
+        );
+      }
     } on Exception catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -191,11 +186,15 @@ class _AlertDetailScreenState extends State<AlertDetailScreen> {
     final severityColor = _severityColor;
     final status = _status;
     final auth = context.watch<AuthProvider>();
+    final reports = context.watch<ReportsStatusProvider>();
+    final reportId = _reportId;
     // Peer verification only applies to a report-backed alert the user may
-    // vote on (mirrors the verifications_insert policy).
+    // vote on (mirrors the verifications_insert policy) and has not voted
+    // on yet.
     final isPendingVerification =
         status.toLowerCase() == 'pending' &&
-        _reportId != null &&
+        reportId != null &&
+        !reports.hasVotedOn(reportId) &&
         auth.canVoteOn(
           reporterId: _str(['reporterId']),
           reportWard: _str(['ward']),

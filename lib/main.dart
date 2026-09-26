@@ -132,6 +132,7 @@ class _ClimateAppState extends State<ClimateApp> {
   GoRouter? _router;
   AuthProvider? _auth;
   VoidCallback? _onSignedIn;
+  VoidCallback? _onSignedOut;
 
   @override
   void initState() {
@@ -148,6 +149,8 @@ class _ClimateAppState extends State<ClimateApp> {
     _router?.routerDelegate.removeListener(_recordActivity);
     final onSignedIn = _onSignedIn;
     if (onSignedIn != null) _auth?.removeSignInListener(onSignedIn);
+    final onSignedOut = _onSignedOut;
+    if (onSignedOut != null) _auth?.removeSignOutListener(onSignedOut);
     super.dispose();
   }
 
@@ -155,15 +158,32 @@ class _ClimateAppState extends State<ClimateApp> {
   void _recordActivity() => _auth?.recordActivity();
 
   /// Refreshes data that providers loaded before it could be seen:
-  /// alerts fetched before sign-in (RLS returned nothing) and zone-filtered
-  /// report lists after the monitoring zone changes.
+  /// alerts, profile and report lists fetched before sign-in (RLS returned
+  /// nothing, or they belong to the previous account on a shared device),
+  /// and zone-filtered report lists after the monitoring zone changes.
+  /// On sign-out the previous user's cached lists, votes and profile are
+  /// dropped.
   void _wireDataRefresh() {
     _auth = context.read<AuthProvider>();
     final alerts = context.read<AlertsProvider>();
     final reports = context.read<ReportsStatusProvider>();
-    _onSignedIn = () => unawaited(alerts.fetchAlerts());
-    _auth!.addSignInListener(_onSignedIn!);
-    context.read<ProfileProvider>().onMonitoringZoneChanged = (_) =>
+    final profile = context.read<ProfileProvider>();
+    _onSignedIn = () {
+      reports.clearUserData();
+      unawaited(alerts.fetchAlerts());
+      // Zone-filtered lists need the new user's monitoring zone first.
+      unawaited(
+        profile.loadProfile().then((_) => reports.refreshReports()),
+      );
+    };
+    _onSignedOut = () {
+      reports.clearUserData();
+      unawaited(profile.clearProfile());
+    };
+    _auth!
+      ..addSignInListener(_onSignedIn!)
+      ..addSignOutListener(_onSignedOut!);
+    profile.onMonitoringZoneChanged = (_) =>
         unawaited(reports.refreshReports());
   }
 

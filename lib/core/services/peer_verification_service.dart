@@ -100,6 +100,15 @@ class PeerVerificationService {
         };
       }
       if (SupabaseService.isPermissionDenied(e)) {
+        // RLS also refuses votes on reports that left 'pending' (e.g.
+        // verified or rejected meanwhile): tell those apart.
+        if (await _isNoLongerPending(reportId)) {
+          return {
+            'success': false,
+            'noLongerPending': true,
+            'message': noLongerPendingMessage,
+          };
+        }
         return {
           'success': false,
           'message':
@@ -112,6 +121,30 @@ class PeerVerificationService {
         name: 'PeerVerificationService',
       );
       rethrow;
+    }
+  }
+
+  /// Message returned when a vote is refused because the report is no
+  /// longer pending.
+  static const String noLongerPendingMessage =
+      'This report is no longer pending.';
+
+  /// Re-reads the report after a refused vote: true when it is no longer
+  /// pending. Unknown (read failed) counts as still pending.
+  Future<bool> _isNoLongerPending(String reportId) async {
+    try {
+      final doc = await _db.getDocument(
+        collectionId: AppConfig.reportsCollection,
+        documentId: reportId,
+      );
+      final status = (doc['status'] as String?)?.toLowerCase();
+      return status != null && status != 'pending';
+    } on Exception catch (e) {
+      developer.log(
+        'Could not re-read report $reportId: $e',
+        name: 'PeerVerificationService',
+      );
+      return false;
     }
   }
 

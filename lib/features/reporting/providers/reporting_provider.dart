@@ -199,6 +199,7 @@ class ReportingProvider extends ChangeNotifier {
 
       if (!hasInternet) {
         final draftId = await OfflineStorageService().saveDraft(
+          userId: _db.currentUserId,
           hazardType: _hazardType!,
           severity: _severity!,
           locationDetails: _locationDetails!,
@@ -346,11 +347,14 @@ class ReportingProvider extends ChangeNotifier {
       failCount +=
           (queueResult['failed'] ?? 0) + (queueResult['rejected'] ?? 0);
 
-      // Process drafts
-      final drafts = offlineService.getAllDrafts();
+      // Process drafts. Only the signed-in user's own drafts are uploaded:
+      // drafts of another account and ownerless drafts of older builds wait
+      // for their author / an explicit choice, and drafts refused
+      // permanently by the server wait for the user to retry or discard.
+      final drafts = offlineService
+          .getAllDrafts()
+          .where((d) => OfflineStorageService.isAutoSyncableDraft(d, uid));
       for (final draft in drafts) {
-        // Refused permanently by the server; kept for the user to review.
-        if (draft['status'] == OfflineStorageService.statusRejected) continue;
         try {
           final draftId = draft['id'] as String;
           // Drafts have millisecond ids; derive a stable UUID so a retried

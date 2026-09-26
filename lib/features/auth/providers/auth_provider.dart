@@ -241,6 +241,28 @@ class AuthProvider extends ChangeNotifier {
   void removeSignInListener(VoidCallback listener) =>
       _signInListeners.remove(listener);
 
+  /// Called after the user state was cleared on sign-out (including a
+  /// signed-out cold start) — e.g. to drop caches of the previous account.
+  final List<VoidCallback> _signOutListeners = [];
+  void addSignOutListener(VoidCallback listener) =>
+      _signOutListeners.add(listener);
+  void removeSignOutListener(VoidCallback listener) =>
+      _signOutListeners.remove(listener);
+
+  /// Incremented whenever the user state is reset or a new sign-in starts;
+  /// an in-flight [_handleSignedIn] stops once it no longer matches.
+  int _authGen = 0;
+
+  static void _notifyAll(List<VoidCallback> listeners, String kind) {
+    for (final listener in List.of(listeners)) {
+      try {
+        listener();
+      } on Exception catch (e) {
+        developer.log('$kind listener error: $e', name: 'AuthProvider');
+      }
+    }
+  }
+
   // ─────────────────────────── Initialization ───────────────────────────────
 
   void _onInitTimeout() {
@@ -309,7 +331,19 @@ class AuthProvider extends ChangeNotifier {
     final inFlight = _signInFuture;
     if (_signInUid == user.id && inFlight != null) return inFlight;
     _signInUid = user.id;
-    return _signInFuture = _handleSignedIn(user);
+    // Supersede any sign-in still running for another user.
+    final gen = ++_authGen;
+    return _signInFuture = _handleSignedIn(user).catchError((
+      Object e,
+      StackTrace st,
+    ) {
+      // Do not cache a failed sign-in: a later auth event must retry it.
+      if (gen == _authGen && _signInUid == user.id) {
+        _signInFuture = null;
+        _signInUid = null;
+      }
+      Error.throwWithStackTrace(e, st);
+    });
   }
 
   Future<void> _handleSignedOut() async {
@@ -332,11 +366,13 @@ class AuthProvider extends ChangeNotifier {
     await _loadOnboardingStatus();
     _isInitialized = true;
     notifyListeners();
+    _notifyAll(_signOutListeners, 'Sign-out');
   }
 
   /// Clears everything tied to the signed-in user (logout / sign-out).
   /// Pending registration data (email / phone OTP in progress) is kept.
   void _resetUserState() {
+    _authGen++;
     _signInFuture = null;
     _signInUid = null;
     _currentUser = null;
@@ -356,6 +392,10 @@ class AuthProvider extends ChangeNotifier {
       (user.emailConfirmedAt != null || user.phoneConfirmedAt != null);
 
   Future<void> _handleSignedIn(sb.User user) async {
+    // A sign-out (or another sign-in) during any await below cancels this
+    // run: nothing may be applied for a user who is no longer signed in.
+    final gen = _authGen;
+    bool stale() => gen != _authGen;
     final isNewUser = _currentUser?.id != user.id || !_isAuthenticated;
     if (_currentUser != null && _currentUser!.id != user.id) {
       // A different account without an intervening sign-out: drop the
@@ -376,10 +416,12 @@ class AuthProvider extends ChangeNotifier {
     if (_authConfirmed(user)) _isVerified = true;
 
     await _loadOnboardingStatus();
+    if (stale()) return;
 
     // Biometric lock only on cold start / resume with a persisted session,
     // not right after an explicit sign-in.
     final bioEnabled = await _storage.isBiometricEnabled();
+    if (stale()) return;
     if (bioEnabled && !_justLoggedIn) {
       _isLocked = true;
     }
@@ -393,7 +435,9 @@ class AuthProvider extends ChangeNotifier {
         collectionId: AppConfig.usersCollection,
         documentId: user.id,
       );
+      if (stale()) return;
       await _applyProfile(profile);
+      if (stale()) return;
 
       // Self-heal: Auth confirmed the email/phone but the row lags behind.
       if (_authConfirmed(user) && profile['isVerified'] != true) {
@@ -410,8 +454,10 @@ class AuthProvider extends ChangeNotifier {
     } on Exception catch (e) {
       developer.log('Error fetching profile: $e', name: 'AuthProvider');
       final cachedRole = await _storage.getUserRole();
+      if (stale()) return;
       if (cachedRole != null) _userRole = _parseUserRole(cachedRole);
     }
+    if (stale()) return;
 
     if (_accountDisabled) {
       developer.log('Account is disabled — signing out', name: 'AuthProvider');
@@ -421,25 +467,21 @@ class AuthProvider extends ChangeNotifier {
 
     // Record a consent given during registration, now that a session exists.
     await _flushPendingNdpaConsent();
+    if (stale()) return;
 
     _startProfileListener(user.id);
 
     _syncPushIdentity(user.id, profile);
 
-    _phoneNumber = await _storage.getPhoneNumber();
+    final phone = await _storage.getPhoneNumber();
+    if (stale()) return;
+    _phoneNumber = phone;
     // (Re)start the inactivity timeout for this session.
     await _sessionManager.extendSession();
+    if (stale()) return;
     _isInitialized = true;
     notifyListeners();
-    if (isNewUser) {
-      for (final listener in List.of(_signInListeners)) {
-        try {
-          listener();
-        } on Exception catch (e) {
-          developer.log('Sign-in listener error: $e', name: 'AuthProvider');
-        }
-      }
-    }
+    if (isNewUser) _notifyAll(_signInListeners, 'Sign-in');
   }
 
   /// Identifies this device to OneSignal with the user id and targeting
@@ -1352,6 +1394,8 @@ class AuthProvider extends ChangeNotifier {
   // ─────────────────────────── Logout ──────────────────────────────────────
 
   Future<void> logout() async {
+    // Cancel any sign-in still in flight right away.
+    _authGen++;
     try {
       _isLoading = true;
       notifyListeners();

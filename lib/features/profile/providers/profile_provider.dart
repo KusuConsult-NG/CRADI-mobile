@@ -165,7 +165,7 @@ class ProfileProvider extends ChangeNotifier {
           }
         }
       } else {
-        clearProfile();
+        await clearProfile();
       }
     } on Exception catch (e) {
       developer.log('Error loading profile: $e');
@@ -175,7 +175,11 @@ class ProfileProvider extends ChangeNotifier {
     }
   }
 
-  /// Resets all profile data to default values (called on logout)
+  /// Resets all profile data to default values (called on logout).
+  ///
+  /// Only the cached profile is removed. Offline drafts and the sync queue
+  /// are owner-tagged and filtered per user, so they are kept: wiping them
+  /// here would destroy reports that have not been uploaded yet.
   Future<void> clearProfile() async {
     _name = 'User';
     _email = '';
@@ -189,7 +193,12 @@ class ProfileProvider extends ChangeNotifier {
     _registrationDate = null;
     _biometricsEnabled = false;
     _userProfile = null;
-    await _offlineStorage.clearUserData();
+    try {
+      await _offlineStorage.clearUserProfile();
+    } on Exception catch (e) {
+      // Hive may not be initialised yet (e.g. signed-out cold start).
+      developer.log('Could not clear cached profile: $e');
+    }
     notifyListeners();
   }
 
