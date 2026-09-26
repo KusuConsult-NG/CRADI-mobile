@@ -28,6 +28,11 @@ records created since the last run. Re-running does not duplicate rows.
 | `login_history` | `login_history` | `timestamp` → `occurred_at` |
 | `ndpa_consents` | `ndpa_consents` | `uid` (or the doc id) → `user_id` |
 
+The Supabase schema already seeds the 10 standard safety guides the app used to
+bundle (migration `20260927040000_builtin_content.sql`, rows without a legacy id).
+If the Firebase `knowledge_base` held copies of them, review the Knowledge Base page
+after importing and delete any duplicates.
+
 The following are **not migrated**:
 - `scheduled_escalations`. These are historic, and old reports must not escalate.
 - `otp_verifications`, `chats` and `_ping`.

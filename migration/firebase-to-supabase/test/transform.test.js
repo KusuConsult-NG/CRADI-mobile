@@ -319,6 +319,9 @@ describe('other collections', () => {
     assert.equal(transformAuthority('au1', { name: 'SEMA', phone: '+234', coverageLGA: 'Makurdi' }, ctx).row.coverage_lga, 'Makurdi');
     assert.equal(transformAuthority('au2', { phone: '+234', lga: 'Gboko' }, ctx).row.coverage_lga, 'Gboko');
     assert.ok(transformAuthority('au3', { phone: '+234' }, ctx).skip);
+    assert.equal(transformAuthority('au4', { phone: '+234', lga: 'Obi', state: 'Benue State' }, ctx).row.coverage_state, 'Benue');
+    assert.equal(transformAuthority('au5', { phone: '+234', lga: 'Makurdi' }, ctx).row.coverage_state, null);
+    assert.equal(transformAuthority('au6', { phone: '+234', lga: 'Obi' }, ctx).warnings.length, 1);
   });
   test('trusted devices and login history (timestamp → occurred_at)', () => {
     const td = transformTrustedDevice('t1', { userId: 'alice', deviceFingerprint: 'fp', deviceName: 'Pixel', lastUsed: { _seconds: 1700000000 } }, ctx).row;

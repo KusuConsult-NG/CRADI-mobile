@@ -205,3 +205,21 @@ update profiles set is_disabled=true where id='00000000-0000-0000-0000-000000000
 update profiles set is_disabled=false where id='00000000-0000-0000-0000-000000000013';
 select count(*) as access_events from notification_outbox where event_type='user_access_changed' and payload->>'user_id'='00000000-0000-0000-0000-000000000013';
 select count(*) as dead_settings from app_settings where key in ('sms_dedup_window_minutes','content_cache_ttl_hours','max_report_image_mb','feature_flag_voice_reports');
+
+\echo '=== round 9: admin-managed built-in content ==='
+reset role;
+select count(*) as seeded_guides from knowledge_base where hazard_type in ('flood','erosion','extreme_heat','fire','conflict','accident','storm','earthquake','disease','safety');
+select count(*) as seeded_news_links from news_links;
+update news_links set is_active=false where source='UNDRR';
+set role authenticated;
+select as_user('00000000-0000-0000-0000-00000000000a');
+\echo '--- plain user sees only active links (expect 3)'
+select count(*) as visible_news_links from news_links;
+\echo '--- plain user adds a link (expect ERROR rls)'
+insert into news_links(title,url) values ('x','https://example.org');
+\echo '--- admin adds a link with a non-http url (expect ERROR check)'
+select as_user('00000000-0000-0000-0000-00000000000d');
+insert into news_links(title,url) values ('x','javascript:alert(1)');
+\echo '--- admin sees the inactive link too (expect 4)'
+select count(*) as admin_news_links from news_links;
+reset role;

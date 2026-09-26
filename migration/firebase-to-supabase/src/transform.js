@@ -595,14 +595,26 @@ export function transformAuthority(id, d, ctx) {
   if (!phone) return skipped('missing phone');
   const lga = asText(d.coverageLGA ?? d.coverageLga ?? d.coverage_lga ?? d.lga);
   if (!lga) return skipped('missing coverage LGA');
+  // "Benue State" → "Benue", matching reports.state.
+  const state = asText(d.coverageState ?? d.coverage_state ?? d.state).replace(/\s+state$/i, '').trim() || null;
+  const warnings = [];
+  // LGA names that exist in more than one state: without a state the
+  // authority is texted for reports from every one of them.
+  if (!state && AMBIGUOUS_LGAS.has(lga.toLowerCase())) {
+    warnings.push(`LGA '${lga}' exists in more than one state; set its state on the Authorities page`);
+  }
   return result({
     name: asText(d.name),
     organization: asNullableText(d.organization),
     phone,
     coverage_lga: lga,
+    coverage_state: state,
     created_at: toIso(d.createdAt) ?? ctx.now,
-  });
+  }, warnings);
 }
+
+// Among the covered states (Benue, Nasarawa, Plateau), Obi is in both Benue and Nasarawa.
+const AMBIGUOUS_LGAS = new Set(['obi']);
 
 export function transformTrustedDevice(id, d, ctx) {
   const ownerFb = refId(d.userId);
