@@ -11,6 +11,7 @@
 //     counted on successful sends, day boundary in Africa/Lagos (UTC+1).
 import { errMessage, log as defaultLog } from '../log.js';
 import { normalizeNigerianPhone } from './phone.js';
+import { isPermanentSmsError } from './providers.js';
 
 export const SMS_MAX_CHARS = 320;
 export const DEFAULT_MAX_SMS_PER_ALERT_EVENT = 20;
@@ -47,12 +48,14 @@ export function lagosDay(ms) {
 export function createAuthoritySms({ repo, sms, logger = defaultLog, now = Date.now }) {
   const daily = new Map(); // `${day}|${lga}` -> successful sends
   const completed = new Map(); // report id -> completion time
-  const delivered = new Map(); // report id -> Set(phone) (current round)
+  const delivered = new Map(); // report id -> { at, phones: Set(phone) } (current round)
 
   function sweep(t) {
     const today = lagosDay(t);
     for (const key of daily.keys()) if (!key.startsWith(`${today}|`)) daily.delete(key);
     for (const [id, at] of completed) if (t - at > DEDUPE_TTL_MS) completed.delete(id);
+    // Rounds that never completed (event dead-lettered) must not leak.
+    for (const [id, round] of delivered) if (t - round.at > DEDUPE_TTL_MS) delivered.delete(id);
   }
 
   async function notifyApproved(report) {
@@ -72,10 +75,11 @@ export function createAuthoritySms({ repo, sms, logger = defaultLog, now = Date.
 
     const text = authoritySmsText(report);
     const capKey = `${lagosDay(t)}|${oneLine(report.lga).toLowerCase()}`;
-    const done = delivered.get(report.id) ?? new Set();
-    delivered.set(report.id, done);
+    const round = delivered.get(report.id) ?? { at: t, phones: new Set() };
+    delivered.set(report.id, round);
+    const done = round.phones;
     const seen = new Set();
-    const summary = { sent: 0, failed: 0, invalid: 0, capped: 0 };
+    const summary = { sent: 0, failed: 0, rejected: 0, invalid: 0, capped: 0 };
 
     for (const a of authorities) {
       const phone = normalizeNigerianPhone(a.phone);
@@ -97,6 +101,14 @@ export function createAuthoritySms({ repo, sms, logger = defaultLog, now = Date.
         daily.set(capKey, (daily.get(capKey) ?? 0) + 1);
         summary.sent++;
       } catch (err) {
+        if (isPermanentSmsError(err)) {
+          // The provider refuses this number: retrying the whole event would
+          // fail the same way forever. Remember it as done and move on.
+          done.add(phone);
+          summary.rejected++;
+          logger.error('sms.recipient_rejected', { report_id: report.id, authority_id: a.id, provider: sms.name, error: errMessage(err) });
+          continue;
+        }
         summary.failed++;
         logger.error('sms.send_failed', { report_id: report.id, authority_id: a.id, provider: sms.name, error: errMessage(err) });
       }

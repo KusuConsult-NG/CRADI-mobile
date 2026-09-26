@@ -17,7 +17,16 @@ async function readJson(res) {
 
 function providerError(name, res, json) {
   const detail = json?.message ?? json?.error ?? JSON.stringify(json);
-  return new Error(`${name} HTTP ${res.status}: ${detail}`.slice(0, 500));
+  const err = new Error(`${name} HTTP ${res.status}: ${detail}`.slice(0, 500));
+  err.status = res.status;
+  return err;
+}
+
+/** A client error the provider will repeat for this number (bad/blocked
+ * recipient); timeouts and rate limits are worth retrying. */
+export function isPermanentSmsError(err) {
+  const status = err?.status;
+  return Number.isInteger(status) && status >= 400 && status < 500 && status !== 408 && status !== 429;
 }
 
 /** Termii (Nigeria). `to` is international format without '+', e.g. 2348031234567. */

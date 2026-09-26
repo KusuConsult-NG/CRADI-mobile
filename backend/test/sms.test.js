@@ -189,6 +189,53 @@ test('authority SMS: dedupe per report; retry after partial failure sends only t
   assert.deepEqual(sms.sent.map((m) => m.to), ['+2348030000001', '+2348030000002']);
 });
 
+test('authority SMS: a number the provider permanently rejects does not block completion', async () => {
+  const repo = fakeRepo({ authorities: [authority('a1', '08030000001'), authority('a2', '08030000002')] });
+  const sms = fakeSms();
+  sms.send = async (to, text) => {
+    if (to === '+2348030000002') {
+      const err = new Error('Termii HTTP 400: invalid number');
+      err.status = 400;
+      throw err;
+    }
+    sms.sent.push({ to, text });
+  };
+  const svc = createAuthoritySms({ repo, sms, logger });
+  const done = await svc.notifyApproved(report);
+  assert.deepEqual({ sent: done.sent, failed: done.failed, rejected: done.rejected }, { sent: 1, failed: 0, rejected: 1 });
+  assert.deepEqual(await svc.notifyApproved(report), { sent: 0, note: 'sms already sent for report' });
+});
+
+test('authority SMS: rate limits (429) are retried, not treated as permanent', async () => {
+  const repo = fakeRepo({ authorities: [authority('a1', '08030000001')] });
+  const sms = fakeSms();
+  sms.send = async () => {
+    const err = new Error('Termii HTTP 429');
+    err.status = 429;
+    throw err;
+  };
+  await assert.rejects(createAuthoritySms({ repo, sms, logger }).notifyApproved(report), /SMS to authorities failed/);
+});
+
+test('authority SMS: an unfinished round is forgotten after the dedupe TTL', async () => {
+  const repo = fakeRepo({ authorities: [authority('a1', '08030000001'), authority('a2', '08030000002')] });
+  let t = Date.parse('2026-09-01T09:00:00Z');
+  const sms = fakeSms();
+  const attempts = [];
+  sms.send = async (to, text) => {
+    attempts.push(to);
+    if (to === '+2348030000002') throw new Error('boom');
+    sms.sent.push({ to, text });
+  };
+  const svc = createAuthoritySms({ repo, sms, logger, now: () => t });
+  await assert.rejects(svc.notifyApproved(report));
+  // Eight days later the stale round is swept, so both numbers are tried again.
+  t += 8 * 24 * 60 * 60_000;
+  attempts.length = 0;
+  await assert.rejects(svc.notifyApproved(report));
+  assert.deepEqual(attempts, ['+2348030000001', '+2348030000002']);
+});
+
 test('outbox: partial SMS failure leaves the event unprocessed; retry texts only the missing authority', async () => {
   const repo = fakeRepo({
     reports: [{ ...report }],
