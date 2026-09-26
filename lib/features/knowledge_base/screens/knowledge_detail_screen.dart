@@ -105,7 +105,8 @@ class _KnowledgeDetailScreenState extends State<KnowledgeDetailScreen> {
             color: AppColors.textPrimary,
             size: 20,
           ),
-          onPressed: () => Navigator.pop(context),
+          onPressed: () =>
+              context.canPop() ? context.pop() : context.go('/knowledge-base'),
         ),
         title: Text(
           'Guide Detail',
@@ -242,6 +243,17 @@ class _KnowledgeDetailScreenState extends State<KnowledgeDetailScreen> {
             if (guide['content'] != null &&
                 guide['content'].toString().isNotEmpty)
               _buildDynamicContent(guide['content'])
+            else if (guide['description'] != null &&
+                guide['description'].toString().trim().isNotEmpty)
+              // No body yet: show the summary rather than an empty state.
+              Text(
+                guide['description'].toString(),
+                style: GoogleFonts.lexend(
+                  fontSize: 15,
+                  color: AppColors.textSecondary,
+                  height: 1.6,
+                ),
+              )
             else
               Center(
                 child: Padding(

@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:climate_app/core/providers/connectivity_provider.dart';
+import 'package:climate_app/features/auth/providers/auth_provider.dart';
 
 class OfflineHomeScreen extends StatefulWidget {
   const OfflineHomeScreen({super.key});
@@ -26,6 +27,11 @@ class _OfflineHomeScreenState extends State<OfflineHomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Reporting, settings and guides are signed-in features; a logged-out
+    // user would just be bounced to the login screen.
+    final isSignedIn = context.select<AuthProvider, bool>(
+      (a) => a.isAuthenticated && !a.isLocked,
+    );
     return Scaffold(
       appBar: AppBar(
         title: const Text('Offline Mode'),
@@ -45,7 +51,9 @@ class _OfflineHomeScreenState extends State<OfflineHomeScreen> {
             ),
             const SizedBox(height: 8),
             Text(
-              'You can still view your saved guides and draft reports.',
+              isSignedIn
+                  ? 'You can still view your saved guides and draft reports.'
+                  : 'Reconnect to sign in.',
               style: Theme.of(context).textTheme.bodyMedium,
               textAlign: TextAlign.center,
             ),
@@ -170,11 +178,18 @@ class _OfflineHomeScreenState extends State<OfflineHomeScreen> {
                           'Offline Mode is enabled in Settings.',
                         ),
                         backgroundColor: Colors.orange,
-                        action: SnackBarAction(
-                          label: 'Settings',
-                          onPressed: () => context.push('/settings'),
-                          textColor: Colors.white,
-                        ),
+                        action: isSignedIn
+                            ? SnackBarAction(
+                                label: 'Settings',
+                                onPressed: () => context.push('/settings'),
+                                textColor: Colors.white,
+                              )
+                            : SnackBarAction(
+                                label: 'Go online',
+                                onPressed: () => connectivityProvider
+                                    .setManualOffline(false),
+                                textColor: Colors.white,
+                              ),
                       ),
                     );
                   }
@@ -211,26 +226,28 @@ class _OfflineHomeScreenState extends State<OfflineHomeScreen> {
                 }
               },
             ),
-            const SizedBox(height: 16),
-            CustomButton(
-              text: 'Create New Report',
-              onPressed: () => context.push('/report'),
-              icon: Icons.add_circle_outline,
-            ),
-            const SizedBox(height: 16),
-            CustomButton(
-              text: 'Open Settings',
-              type: ButtonType.secondary,
-              onPressed: () => context.push('/settings'),
-              icon: Icons.settings,
-            ),
-            const SizedBox(height: 16),
-            CustomButton(
-              text: 'View Saved Guides',
-              type: ButtonType.secondary,
-              onPressed: () => context.push('/knowledge-base'),
-              icon: Icons.menu_book,
-            ),
+            if (isSignedIn) ...[
+              const SizedBox(height: 16),
+              CustomButton(
+                text: 'Create New Report',
+                onPressed: () => context.push('/report'),
+                icon: Icons.add_circle_outline,
+              ),
+              const SizedBox(height: 16),
+              CustomButton(
+                text: 'Open Settings',
+                type: ButtonType.secondary,
+                onPressed: () => context.push('/settings'),
+                icon: Icons.settings,
+              ),
+              const SizedBox(height: 16),
+              CustomButton(
+                text: 'View Saved Guides',
+                type: ButtonType.secondary,
+                onPressed: () => context.push('/knowledge-base'),
+                icon: Icons.menu_book,
+              ),
+            ],
           ],
         ),
       ),

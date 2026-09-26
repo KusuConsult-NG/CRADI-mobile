@@ -1,4 +1,6 @@
 import 'package:climate_app/core/services/supabase_service.dart';
+import 'package:climate_app/features/auth/providers/auth_provider.dart';
+import 'package:provider/provider.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -29,6 +31,10 @@ class AdminScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
+    // Profile writes (approve / role / disable) are admin-only in the
+    // database, so tech support gets no user management.
+    final canManageUsers =
+        context.watch<AuthProvider>().userRole == UserRole.admin;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -78,7 +84,7 @@ class AdminScreen extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 16),
-                _SummaryGrid(counts: counts),
+                _SummaryGrid(counts: counts, canManageUsers: canManageUsers),
                 const SizedBox(height: 28),
 
                 // ── Quick Actions ──
@@ -92,13 +98,14 @@ class AdminScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 12),
 
-                _ActionTile(
-                  icon: Icons.supervised_user_circle_outlined,
-                  title: l10n.userManagement,
-                  subtitle: l10n.userManagementDesc,
-                  badge: counts[0] > 0 ? counts[0] : null,
-                  onTap: () => context.push('/admin/users'),
-                ),
+                if (canManageUsers)
+                  _ActionTile(
+                    icon: Icons.supervised_user_circle_outlined,
+                    title: l10n.userManagement,
+                    subtitle: l10n.userManagementDesc,
+                    badge: counts[0] > 0 ? counts[0] : null,
+                    onTap: () => context.push('/admin/users'),
+                  ),
                 _ActionTile(
                   icon: Icons.assessment_outlined,
                   title: l10n.reportsOverview,
@@ -147,7 +154,8 @@ class AdminScreen extends StatelessWidget {
 // ── Summary Grid ───────────────────────────────────────────────────────────────
 class _SummaryGrid extends StatelessWidget {
   final List<int> counts;
-  const _SummaryGrid({required this.counts});
+  final bool canManageUsers;
+  const _SummaryGrid({required this.counts, required this.canManageUsers});
 
   @override
   Widget build(BuildContext context) {
@@ -165,7 +173,9 @@ class _SummaryGrid extends StatelessWidget {
           counts[0],
           Colors.orange,
           Icons.hourglass_top,
-          onTap: () => context.push('/admin/users'),
+          onTap: canManageUsers
+              ? () => context.push('/admin/users?filter=pending')
+              : null,
         ),
         _StatCard(
           l10n.pendingReports,
@@ -186,7 +196,7 @@ class _SummaryGrid extends StatelessWidget {
           counts[3],
           Colors.teal,
           Icons.group_outlined,
-          onTap: () => context.push('/admin/users'),
+          onTap: canManageUsers ? () => context.push('/admin/users') : null,
         ),
         _StatCard(
           l10n.activeAlertsAdmin,

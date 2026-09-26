@@ -1,3 +1,4 @@
+import 'package:climate_app/core/router/route_guard.dart';
 import 'package:climate_app/core/theme/app_colors.dart';
 import 'package:climate_app/features/auth/providers/auth_provider.dart';
 import 'package:climate_app/features/profile/providers/profile_provider.dart';
@@ -53,13 +54,22 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+  /// Where to continue after sign-in / unlock: the page that sent the user
+  /// here (`from`, e.g. a notification tap) or the dashboard.
+  String _destination() {
+    final from = GoRouterState.of(context).uri.queryParameters['from'];
+    return sanitizeRedirectTarget(from) ?? '/dashboard';
+  }
+
   Future<void> _submit() async {
     // Clear previous error
     setState(() => _errorMessage = null);
 
     if (_formKey.currentState!.validate()) {
-      // Read provider before any async operations
+      // Read providers before any async operations
       final authProvider = context.read<AuthProvider>();
+      final profileProvider = context.read<ProfileProvider>();
+      final destination = _destination();
 
       setState(() => _isLoading = true);
 
@@ -85,19 +95,19 @@ class _LoginScreenState extends State<LoginScreen> {
           rememberMe: _rememberMe,
         );
 
-        if (!mounted) return;
-
-        setState(() => _isLoading = false);
+        if (mounted) setState(() => _isLoading = false);
 
         if (success) {
-          // Reload profile to get fresh user data
-          if (!mounted) return;
-          await context.read<ProfileProvider>().loadProfile();
+          // Reload profile to get fresh user data. The router may already
+          // have left this screen (signed-in users are redirected away from
+          // /login), so this must not depend on `mounted`.
+          await profileProvider.loadProfile();
 
-          // Route directly to dashboard since approval is removed
+          // Same destination the router redirect picks.
           if (!mounted) return;
-          context.go('/dashboard');
+          context.go(destination);
         } else {
+          if (!mounted) return;
           setState(() {
             _errorMessage = 'Login failed. Please check your credentials.';
           });
@@ -561,9 +571,10 @@ class _LoginScreenState extends State<LoginScreen> {
               CustomButton(
                 text: 'Unlock with Biometrics',
                 onPressed: () async {
+                  final destination = _destination();
                   final success = await authProvider.unlockApp();
                   if (success && mounted) {
-                    context.go('/dashboard');
+                    context.go(destination);
                   }
                 },
                 icon: Icons.fingerprint,

@@ -11,19 +11,45 @@ class MainShellScreen extends StatefulWidget {
   final Widget child;
   const MainShellScreen({super.key, required this.child});
 
+  /// Bottom-nav index for [location]. Always a valid index for a bar with
+  /// [destinationCount] entries: a location whose tab is not rendered (e.g.
+  /// /admin right after a role change) falls back to Home.
+  static int selectedIndexFor(
+    String location, {
+    required int destinationCount,
+  }) {
+    bool under(String p) => location == p || location.startsWith('$p/');
+    final int index;
+    if (under('/dashboard')) {
+      index = 0;
+    } else if (under('/alerts')) {
+      index = 1;
+    } else if (under('/report')) {
+      index = 2;
+    } else if (under('/settings')) {
+      index = 3;
+    } else if (under('/admin')) {
+      index = 4;
+    } else {
+      index = 0;
+    }
+    return index < destinationCount ? index : 0;
+  }
+
   @override
   State<MainShellScreen> createState() => _MainShellScreenState();
 }
 
 class _MainShellScreenState extends State<MainShellScreen> {
+  bool _showAdminTab(AuthProvider auth) =>
+      auth.userRole == UserRole.admin || auth.userRole == UserRole.techSupport;
+
   int _calculateSelectedIndex(BuildContext context) {
-    final String location = GoRouterState.of(context).uri.path;
-    if (location.startsWith('/dashboard')) return 0;
-    if (location.startsWith('/alerts')) return 1;
-    if (location.startsWith('/report')) return 2;
-    if (location.startsWith('/admin')) return 4;
-    if (location.startsWith('/settings')) return 3;
-    return 0;
+    final showAdmin = _showAdminTab(context.read<AuthProvider>());
+    return MainShellScreen.selectedIndexFor(
+      GoRouterState.of(context).uri.path,
+      destinationCount: showAdmin ? 5 : 4,
+    );
   }
 
   void _onItemTapped(int index) {
@@ -142,11 +168,12 @@ class _MainShellScreenState extends State<MainShellScreen> {
         body: ConnectivityBanner(child: widget.child),
         bottomNavigationBar: Consumer2<LanguageProvider, AuthProvider>(
           builder: (context, langProvider, authProvider, _) {
-            final isAdmin =
-                authProvider.userRole == UserRole.admin ||
-                authProvider.userRole == UserRole.techSupport;
+            final isAdmin = _showAdminTab(authProvider);
             return NavigationBar(
-              selectedIndex: _calculateSelectedIndex(context),
+              selectedIndex: MainShellScreen.selectedIndexFor(
+                GoRouterState.of(context).uri.path,
+                destinationCount: isAdmin ? 5 : 4,
+              ),
               onDestinationSelected: _onItemTapped,
               destinations: [
                 NavigationDestination(

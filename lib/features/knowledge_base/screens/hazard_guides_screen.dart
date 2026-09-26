@@ -66,7 +66,8 @@ class _HazardGuidesScreenState extends State<HazardGuidesScreen> {
             size: 20,
             color: AppColors.textPrimary,
           ),
-          onPressed: () => context.pop(),
+          onPressed: () =>
+              context.canPop() ? context.pop() : context.go('/knowledge-base'),
         ),
         title: Column(
           children: [

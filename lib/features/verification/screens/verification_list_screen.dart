@@ -7,6 +7,7 @@ import 'package:climate_app/features/auth/providers/auth_provider.dart';
 import 'package:climate_app/features/reporting/providers/reporting_provider.dart'
     show normalizeSeverity;
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
@@ -97,6 +98,13 @@ class _VerificationListScreenState extends State<VerificationListScreen> {
     }
   }
 
+  /// Roles allowed on /verification/request (see app_router).
+  static bool _canRequestVerification(UserRole? role) =>
+      role == UserRole.ewv ||
+      role == UserRole.ewr ||
+      role == UserRole.admin ||
+      role == UserRole.techSupport;
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -105,6 +113,14 @@ class _VerificationListScreenState extends State<VerificationListScreen> {
           'Verify Reports',
           style: GoogleFonts.lexend(fontWeight: FontWeight.bold),
         ),
+        actions: [
+          if (_canRequestVerification(context.watch<AuthProvider>().userRole))
+            IconButton(
+              tooltip: 'Request verification',
+              icon: const Icon(Icons.add_task),
+              onPressed: () => context.push('/verification/request'),
+            ),
+        ],
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())

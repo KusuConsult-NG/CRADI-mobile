@@ -3,10 +3,23 @@ import 'package:climate_app/core/utils/error_handler.dart';
 import 'package:climate_app/core/services/peer_verification_service.dart';
 import 'package:climate_app/core/services/supabase_service.dart';
 
+import 'package:climate_app/features/auth/providers/auth_provider.dart';
+import 'package:climate_app/features/reporting/providers/reporting_provider.dart'
+    show normalizeSeverity;
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 
+/// Detail view for an alert.
+///
+/// Accepts either a report-derived map from the alerts list (title, type,
+/// severity, location, time, status, description, reportId, reporterId,
+/// ward, color, icon) or an `alerts` row created by staff (title, message,
+/// severity, targetLga, reportId?, isActive, createdAt). Every field is
+/// optional.
 class AlertDetailScreen extends StatefulWidget {
   final Map<String, dynamic> alert;
 
@@ -25,6 +38,72 @@ class _AlertDetailScreenState extends State<AlertDetailScreen> {
   void dispose() {
     _commentController.dispose();
     super.dispose();
+  }
+
+  /// Non-empty string value of the first present key, else null.
+  String? _str(List<String> keys) {
+    for (final k in keys) {
+      final v = widget.alert[k];
+      if (v == null) continue;
+      final s = v.toString().trim();
+      if (s.isNotEmpty) return s;
+    }
+    return null;
+  }
+
+  String? get _reportId => _str(['reportId', 'report_id']);
+
+  String get _title => _str(['title']) ?? 'Alert';
+
+  String? get _severity => _str(['severity']);
+
+  String get _location =>
+      _str(['location', 'targetLga', 'target_lga']) ?? 'Not specified';
+
+  String get _time {
+    final t = _str(['time']);
+    if (t != null) return t;
+    final created = parseTimestamp(
+      widget.alert['createdAt'] ?? widget.alert['created_at'],
+    );
+    return created == null
+        ? 'Just now'
+        : DateFormat('MMM d, yyyy • h:mm a').format(created.toLocal());
+  }
+
+  String get _status {
+    final s = _str(['status']);
+    if (s != null) return s;
+    final active = widget.alert['isActive'] ?? widget.alert['is_active'];
+    return active == false ? 'Inactive' : 'Active';
+  }
+
+  Color get _severityColor {
+    final c = widget.alert['color'];
+    if (c is Color) return c;
+    switch (normalizeSeverity(_severity)) {
+      case 'low':
+        return AppColors.successGreen;
+      case 'medium':
+        return Colors.orange;
+      case 'high':
+        return Colors.deepOrange;
+      default:
+        return AppColors.primaryRed;
+    }
+  }
+
+  IconData get _icon {
+    final i = widget.alert['icon'];
+    return i is IconData ? i : Icons.warning;
+  }
+
+  void _close() {
+    if (context.canPop()) {
+      context.pop();
+    } else {
+      context.go('/alerts');
+    }
   }
 
   Future<void> _submitVerification(bool isConfirmed) async {
@@ -47,7 +126,7 @@ class _AlertDetailScreenState extends State<AlertDetailScreen> {
         return;
       }
 
-      final reportId = widget.alert['reportId'] as String?;
+      final reportId = _reportId;
       if (reportId == null || reportId.isEmpty) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -84,9 +163,7 @@ class _AlertDetailScreenState extends State<AlertDetailScreen> {
 
         // Wait a bit then go back
         Future.delayed(const Duration(seconds: 2), () {
-          if (mounted) {
-            context.pop();
-          }
+          if (mounted) _close();
         });
       }
     } on Exception catch (e) {
@@ -109,17 +186,26 @@ class _AlertDetailScreenState extends State<AlertDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final severityColor =
-        widget.alert['color'] as Color? ?? AppColors.primaryRed;
-    final status = widget.alert['status'] as String? ?? 'Active';
-    final isPendingVerification = status.toLowerCase() == 'pending';
+    final severityColor = _severityColor;
+    final status = _status;
+    final auth = context.watch<AuthProvider>();
+    // Peer verification only applies to a report-backed alert the user may
+    // vote on (mirrors the verifications_insert policy).
+    final isPendingVerification =
+        status.toLowerCase() == 'pending' &&
+        _reportId != null &&
+        auth.canVoteOn(
+          reporterId: _str(['reporterId']),
+          reportWard: _str(['ward']),
+        );
+    final description = _str(['description', 'message']);
 
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new, size: 20),
-          onPressed: () => context.pop(),
+          onPressed: _close,
         ),
         title: Text(
           'Alert Details',
@@ -159,11 +245,7 @@ class _AlertDetailScreenState extends State<AlertDetailScreen> {
                           color: severityColor.withValues(alpha: 0.1),
                           shape: BoxShape.circle,
                         ),
-                        child: Icon(
-                          widget.alert['icon'] as IconData? ?? Icons.warning,
-                          color: severityColor,
-                          size: 32,
-                        ),
+                        child: Icon(_icon, color: severityColor, size: 32),
                       ),
                       const SizedBox(width: 16),
                       Expanded(
@@ -171,7 +253,7 @@ class _AlertDetailScreenState extends State<AlertDetailScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              widget.alert['title'] ?? 'Unknown Alert',
+                              _title,
                               style: GoogleFonts.lexend(
                                 fontSize: 20,
                                 fontWeight: FontWeight.bold,
@@ -180,7 +262,7 @@ class _AlertDetailScreenState extends State<AlertDetailScreen> {
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              widget.alert['severity'] ?? 'Normal Severity',
+                              _severity ?? 'Normal Severity',
                               style: GoogleFonts.lexend(
                                 fontSize: 14,
                                 color: severityColor,
@@ -193,17 +275,9 @@ class _AlertDetailScreenState extends State<AlertDetailScreen> {
                     ],
                   ),
                   const Divider(height: 32),
-                  _buildInfoRow(
-                    Icons.location_on,
-                    'Location',
-                    widget.alert['location'] ?? 'Not specified',
-                  ),
+                  _buildInfoRow(Icons.location_on, 'Location', _location),
                   const SizedBox(height: 16),
-                  _buildInfoRow(
-                    Icons.schedule,
-                    'Reported Time',
-                    widget.alert['time'] ?? 'Just now',
-                  ),
+                  _buildInfoRow(Icons.schedule, 'Reported Time', _time),
                   const SizedBox(height: 16),
                   _buildInfoRow(Icons.info_outline, 'Status', status),
                 ],
@@ -222,7 +296,7 @@ class _AlertDetailScreenState extends State<AlertDetailScreen> {
             ),
             const SizedBox(height: 12),
             Text(
-              widget.alert['description'] ??
+              description ??
                   'No additional description provided for this alert. Please take necessary precautions and follow local guidelines.',
               style: GoogleFonts.lexend(
                 fontSize: 15,
@@ -469,7 +543,7 @@ class _AlertDetailScreenState extends State<AlertDetailScreen> {
             width: double.infinity,
             height: 56,
             child: ElevatedButton(
-              onPressed: () => context.pop(),
+              onPressed: _close,
               style: ElevatedButton.styleFrom(
                 backgroundColor: _hasVerified
                     ? Colors.grey.shade600
@@ -499,25 +573,27 @@ class _AlertDetailScreenState extends State<AlertDetailScreen> {
       children: [
         Icon(icon, size: 20, color: Colors.grey.shade400),
         const SizedBox(width: 12),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              label,
-              style: GoogleFonts.lexend(
-                fontSize: 12,
-                color: Colors.grey.shade500,
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: GoogleFonts.lexend(
+                  fontSize: 12,
+                  color: Colors.grey.shade500,
+                ),
               ),
-            ),
-            Text(
-              value,
-              style: GoogleFonts.lexend(
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-                color: AppColors.textPrimary,
+              Text(
+                value,
+                style: GoogleFonts.lexend(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  color: AppColors.textPrimary,
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ],
     );

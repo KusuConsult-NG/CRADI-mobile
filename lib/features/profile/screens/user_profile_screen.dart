@@ -5,11 +5,11 @@ import 'package:climate_app/core/utils/error_handler.dart';
 import 'package:climate_app/features/auth/providers/auth_provider.dart'
     as app_auth;
 import 'package:climate_app/features/profile/providers/profile_provider.dart';
-import 'package:climate_app/features/chat/screens/chat_screen.dart';
 import 'package:climate_app/core/providers/language_provider.dart';
 import 'package:climate_app/core/services/biometric_service.dart';
 import 'package:climate_app/features/contacts/providers/emergency_contacts_provider.dart';
 import 'package:climate_app/core/widgets/location_selector_widget.dart';
+import 'package:climate_app/core/widgets/language_selector_sheet.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
@@ -690,7 +690,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                           children: [
                             Expanded(
                               child: GestureDetector(
-                                onTap: () => context.push('/reports-status'),
+                                onTap: () => context.push('/my-reports'),
                                 child: _buildStatCard(
                                   '$totalReports',
                                   'Reports',
@@ -813,7 +813,12 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                           Icons.language,
                           'Language Preference',
                           subtitle: languageProvider.selectedLanguage,
-                          onTap: () => context.push('/settings'),
+                          // A sheet, not push('/settings'): Profile is often
+                          // opened from Settings already.
+                          onTap: () => showLanguageSelectorSheet(
+                            context,
+                            languageProvider,
+                          ),
                         ),
                   ),
                   const SizedBox(height: 8),
@@ -851,44 +856,21 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                   ),
                   const SizedBox(height: 8),
                   _buildSettingsTile(
+                    Icons.assignment_outlined,
+                    'My Reports',
+                    onTap: () => context.push('/my-reports'),
+                  ),
+                  const SizedBox(height: 8),
+                  _buildSettingsTile(
                     Icons.chat_bubble_outline,
                     'Support Chat',
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => const ChatScreen(),
-                        ),
-                      );
-                    },
+                    onTap: () => context.push('/chat'),
                   ),
                   const SizedBox(height: 8),
                   _buildSettingsTile(
                     Icons.help,
                     'Help & Support',
-                    onTap: () {
-                      showDialog(
-                        context: context,
-                        builder: (c) => AlertDialog(
-                          title: Text(
-                            'Help & Support',
-                            style: GoogleFonts.lexend(
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          content: Text(
-                            'Email: support@climateapp.org\nPhone: +234 800 1234 567',
-                            style: GoogleFonts.lexend(),
-                          ),
-                          actions: [
-                            TextButton(
-                              onPressed: () => Navigator.pop(c),
-                              child: Text(AppLocalizations.of(context)!.close),
-                            ),
-                          ],
-                        ),
-                      );
-                    },
+                    onTap: () => context.push('/help'),
                   ),
                 ],
               ),

@@ -5,6 +5,9 @@ import 'package:climate_app/features/auth/providers/auth_provider.dart';
 import 'package:climate_app/core/utils/error_handler.dart';
 import 'package:climate_app/core/theme/app_colors.dart';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+import 'package:climate_app/features/reporting/providers/reporting_provider.dart'
+    show SeverityLevel, normalizeSeverity;
 
 import 'package:climate_app/shared/widgets/custom_button.dart';
 import 'package:climate_app/shared/widgets/shimmer_loading.dart';
@@ -23,6 +26,9 @@ class AlertsListScreen extends StatefulWidget {
 
 class _AlertsListScreenState extends State<AlertsListScreen> {
   int _selectedFilterIndex = 0;
+
+  /// Canonical severity to show (see [normalizeSeverity]); null = all.
+  String? _severityFilter;
   final List<String> _filters = [
     'All Alerts',
     'Floods',
@@ -55,6 +61,12 @@ class _AlertsListScreenState extends State<AlertsListScreen> {
   }
 
   List<VerificationReport> _filterReports(List<VerificationReport> allReports) {
+    final severity = _severityFilter;
+    if (severity != null) {
+      allReports = allReports
+          .where((r) => normalizeSeverity(r.severity) == severity)
+          .toList();
+    }
     if (_selectedFilterIndex == 0) return allReports;
     final filter = _filters[_selectedFilterIndex];
     return allReports.where((report) {
@@ -83,9 +95,27 @@ class _AlertsListScreenState extends State<AlertsListScreen> {
         ),
         centerTitle: true,
         actions: [
-          IconButton(
-            icon: const Icon(Icons.filter_list, color: AppColors.textPrimary),
-            onPressed: () {},
+          PopupMenuButton<String>(
+            tooltip: 'Filter by severity',
+            icon: Icon(
+              _severityFilter == null ? Icons.filter_list : Icons.filter_alt,
+              color: _severityFilter == null
+                  ? AppColors.textPrimary
+                  : AppColors.primaryRed,
+            ),
+            initialValue: _severityFilter ?? 'all',
+            onSelected: (v) =>
+                setState(() => _severityFilter = v == 'all' ? null : v),
+            itemBuilder: (context) => [
+              const PopupMenuItem(value: 'all', child: Text('All severities')),
+              for (final level in SeverityLevel.values)
+                PopupMenuItem(
+                  value: level.name,
+                  child: Text(
+                    '${level.name[0].toUpperCase()}${level.name.substring(1)}',
+                  ),
+                ),
+            ],
           ),
         ],
         backgroundColor: AppColors.background.withValues(alpha: 0.95),
@@ -257,7 +287,8 @@ class _AlertsListScreenState extends State<AlertsListScreen> {
                                   shape: BoxShape.circle,
                                 ),
                                 child: Icon(
-                                  _selectedFilterIndex == 0
+                                  _selectedFilterIndex == 0 &&
+                                          _severityFilter == null
                                       ? Icons.notifications_off_outlined
                                       : Icons.filter_list_off,
                                   size: 64,
@@ -266,7 +297,9 @@ class _AlertsListScreenState extends State<AlertsListScreen> {
                               ),
                               const SizedBox(height: 24),
                               Text(
-                                _selectedFilterIndex == 0
+                                _severityFilter != null
+                                    ? 'No matching alerts'
+                                    : _selectedFilterIndex == 0
                                     ? 'No Alerts Yet'
                                     : 'No ${_filters[_selectedFilterIndex]}',
                                 style: GoogleFonts.lexend(
@@ -277,7 +310,8 @@ class _AlertsListScreenState extends State<AlertsListScreen> {
                               ),
                               const SizedBox(height: 12),
                               Text(
-                                _selectedFilterIndex == 0
+                                _selectedFilterIndex == 0 &&
+                                        _severityFilter == null
                                     ? 'When hazards are reported in your area,\nthey\'ll appear here'
                                     : 'No ${_filters[_selectedFilterIndex].toLowerCase()} alerts\nfound in this area',
                                 textAlign: TextAlign.center,
@@ -371,16 +405,36 @@ class _AlertsListScreenState extends State<AlertsListScreen> {
     }
     if (report.status == ReportStatus.rejected) statusColor = Colors.red;
 
-    return _buildAlertCard(
-      title: report.title,
-      time: report.time,
-      location: report.location,
-      icon: icon,
-      color: color,
-      status: statusStr,
-      statusColor: statusColor,
-      report: report,
-      provider: provider,
+    return GestureDetector(
+      onTap: () => context.push(
+        '/alerts/detail',
+        extra: <String, dynamic>{
+          'title': report.title,
+          'type': report.type,
+          'severity': report.severity,
+          'location': report.location,
+          'time': report.time,
+          'status': report.status.name,
+          'description': report.description,
+          'reportId': report.id,
+          'reporterId': report.reporterId,
+          'ward': report.ward,
+          'color': color,
+          'icon': icon,
+        },
+      ),
+      child: _buildAlertCard(
+        title: report.title,
+        time: report.time,
+        location: report.location,
+        icon: icon,
+        color: color,
+        severity: report.severity,
+        status: statusStr,
+        statusColor: statusColor,
+        report: report,
+        provider: provider,
+      ),
     );
   }
 

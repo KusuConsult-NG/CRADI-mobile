@@ -1,5 +1,7 @@
 import 'package:climate_app/core/constants/app_config.dart';
 import 'package:climate_app/core/services/supabase_service.dart';
+import 'package:climate_app/features/auth/providers/auth_provider.dart';
+import 'package:provider/provider.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:climate_app/core/theme/app_colors.dart';
@@ -90,6 +92,11 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
     final imageUrls =
         (data['imageUrls'] as List<dynamic>?)?.cast<String>() ?? [];
     final status = data['status'] as String? ?? 'pending';
+    // Status changes are refused by the database for tech support (and for
+    // staff on their own reports) — mirror guard_report_update.
+    final canChangeStatus = context.read<AuthProvider>().canManageReportStatus(
+      reporterId: data['userId'] as String?,
+    );
     final createdAt = data['createdAt'];
     String timeStr = '';
     final dt = parseTimestamp(createdAt);
@@ -213,76 +220,77 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
                   ),
                 ),
                 // Actions Footer
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: const BoxDecoration(
-                    color: Colors.white,
-                    boxShadow: [
-                      BoxShadow(
-                        color: Color.fromRGBO(0, 0, 0, 0.05),
-                        blurRadius: 10,
-                        offset: Offset(0, -5),
-                      ),
-                    ],
-                  ),
-                  child: SafeArea(
-                    child: Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      alignment: WrapAlignment.center,
-                      children: [
-                        if (status != 'approved')
-                          ElevatedButton.icon(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.green,
-                              foregroundColor: Colors.white,
-                            ),
-                            onPressed: () {
-                              _updateStatus(id, 'approved');
-                              Navigator.pop(context);
-                            },
-                            icon: const Icon(Icons.check, size: 18),
-                            label: const Text('Approve'),
-                          ),
-                        if (status != 'rejected')
-                          ElevatedButton.icon(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.red,
-                              foregroundColor: Colors.white,
-                            ),
-                            onPressed: () {
-                              _updateStatus(id, 'rejected');
-                              Navigator.pop(context);
-                            },
-                            icon: const Icon(Icons.close, size: 18),
-                            label: const Text('Reject'),
-                          ),
-                        if (status != 'verified')
-                          ElevatedButton.icon(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.orange,
-                              foregroundColor: Colors.white,
-                            ),
-                            onPressed: () {
-                              _updateStatus(id, 'verified');
-                              Navigator.pop(context);
-                            },
-                            icon: const Icon(Icons.verified, size: 18),
-                            label: const Text('Mark Verified'),
-                          ),
-                        if (status != 'pending')
-                          OutlinedButton.icon(
-                            onPressed: () {
-                              _updateStatus(id, 'pending');
-                              Navigator.pop(context);
-                            },
-                            icon: const Icon(Icons.refresh, size: 18),
-                            label: const Text('Reset'),
-                          ),
+                if (canChangeStatus)
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: const BoxDecoration(
+                      color: Colors.white,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Color.fromRGBO(0, 0, 0, 0.05),
+                          blurRadius: 10,
+                          offset: Offset(0, -5),
+                        ),
                       ],
                     ),
+                    child: SafeArea(
+                      child: Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        alignment: WrapAlignment.center,
+                        children: [
+                          if (status != 'approved')
+                            ElevatedButton.icon(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.green,
+                                foregroundColor: Colors.white,
+                              ),
+                              onPressed: () {
+                                _updateStatus(id, 'approved');
+                                Navigator.pop(context);
+                              },
+                              icon: const Icon(Icons.check, size: 18),
+                              label: const Text('Approve'),
+                            ),
+                          if (status != 'rejected')
+                            ElevatedButton.icon(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.red,
+                                foregroundColor: Colors.white,
+                              ),
+                              onPressed: () {
+                                _updateStatus(id, 'rejected');
+                                Navigator.pop(context);
+                              },
+                              icon: const Icon(Icons.close, size: 18),
+                              label: const Text('Reject'),
+                            ),
+                          if (status != 'verified')
+                            ElevatedButton.icon(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.orange,
+                                foregroundColor: Colors.white,
+                              ),
+                              onPressed: () {
+                                _updateStatus(id, 'verified');
+                                Navigator.pop(context);
+                              },
+                              icon: const Icon(Icons.verified, size: 18),
+                              label: const Text('Mark Verified'),
+                            ),
+                          if (status != 'pending')
+                            OutlinedButton.icon(
+                              onPressed: () {
+                                _updateStatus(id, 'pending');
+                                Navigator.pop(context);
+                              },
+                              icon: const Icon(Icons.refresh, size: 18),
+                              label: const Text('Reset'),
+                            ),
+                        ],
+                      ),
+                    ),
                   ),
-                ),
               ],
             );
           },

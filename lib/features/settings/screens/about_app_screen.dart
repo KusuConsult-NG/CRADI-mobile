@@ -1,3 +1,4 @@
+import 'package:climate_app/core/constants/privacy_notice.dart';
 import 'package:climate_app/core/theme/app_colors.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
@@ -101,25 +102,34 @@ class AboutAppScreen extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 16),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  TextButton(
-                    onPressed: () {},
-                    child: Text(
+              // No Terms of Service text exists in the app yet; only the
+              // NDPA privacy notice is shown.
+              TextButton(
+                onPressed: () => showDialog<void>(
+                  context: context,
+                  builder: (dialogContext) => AlertDialog(
+                    title: Text(
                       'Privacy Policy',
-                      style: GoogleFonts.lexend(color: AppColors.primaryRed),
+                      style: GoogleFonts.lexend(fontWeight: FontWeight.bold),
                     ),
-                  ),
-                  Text('•', style: TextStyle(color: Colors.grey.shade400)),
-                  TextButton(
-                    onPressed: () {},
-                    child: Text(
-                      'Terms of Service',
-                      style: GoogleFonts.lexend(color: AppColors.primaryRed),
+                    content: SingleChildScrollView(
+                      child: Text(
+                        kNdpaPolicyText,
+                        style: GoogleFonts.lexend(fontSize: 13, height: 1.5),
+                      ),
                     ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.of(dialogContext).pop(),
+                        child: const Text('Close'),
+                      ),
+                    ],
                   ),
-                ],
+                ),
+                child: Text(
+                  'Privacy Policy',
+                  style: GoogleFonts.lexend(color: AppColors.primaryRed),
+                ),
               ),
             ],
           ),

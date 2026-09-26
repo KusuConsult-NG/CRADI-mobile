@@ -177,6 +177,16 @@ class _ReportReviewScreenState extends State<ReportReviewScreen> {
     );
   }
 
+  /// Date/time, notes and photos are edited on the details step, which is
+  /// the page right below this one in the wizard stack.
+  void _backToDetails() {
+    if (context.canPop()) {
+      context.pop();
+    } else {
+      context.go('/report/details');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -188,7 +198,8 @@ class _ReportReviewScreenState extends State<ReportReviewScreen> {
             size: 20,
             color: AppColors.textPrimary,
           ),
-          onPressed: () => context.pop(),
+          onPressed: () =>
+              context.canPop() ? context.pop() : context.go('/report'),
         ),
         title: Text(
           AppLocalizations.of(context)!.reviewReportTitle,
@@ -226,7 +237,7 @@ class _ReportReviewScreenState extends State<ReportReviewScreen> {
                   // Hazard Details
                   _buildSectionHeader(
                     AppLocalizations.of(context)!.hazardDetails,
-                    onEdit: () => context.go('/report/severity'),
+                    onEdit: () => context.push('/report/severity'),
                     context: context,
                   ),
                   Consumer<ReportingProvider>(
@@ -271,7 +282,7 @@ class _ReportReviewScreenState extends State<ReportReviewScreen> {
                   // Date & Time
                   _buildSectionHeader(
                     AppLocalizations.of(context)!.dateTimeLabel,
-                    onEdit: () => context.go('/report/details'),
+                    onEdit: _backToDetails,
                     context: context,
                   ),
                   Consumer<ReportingProvider>(
@@ -301,7 +312,7 @@ class _ReportReviewScreenState extends State<ReportReviewScreen> {
                   // Location
                   _buildSectionHeader(
                     AppLocalizations.of(context)!.locationLabel,
-                    onEdit: () => context.pop(),
+                    onEdit: () => context.push('/report/location'),
                     context: context,
                   ),
                   Consumer<ReportingProvider>(
@@ -372,7 +383,7 @@ class _ReportReviewScreenState extends State<ReportReviewScreen> {
                   // Description
                   _buildSectionHeader(
                     AppLocalizations.of(context)!.monitorNotes,
-                    onEdit: () => context.pop(),
+                    onEdit: _backToDetails,
                     context: context,
                   ),
                   Consumer<ReportingProvider>(
@@ -399,7 +410,7 @@ class _ReportReviewScreenState extends State<ReportReviewScreen> {
                   // Evidence
                   _buildSectionHeader(
                     AppLocalizations.of(context)!.evidenceLabel,
-                    onEdit: () => context.pop(),
+                    onEdit: _backToDetails,
                     context: context,
                   ),
                   Consumer<ReportingProvider>(

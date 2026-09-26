@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:climate_app/core/theme/app_colors.dart';
 import 'package:climate_app/features/verification/models/verification_report_model.dart';
@@ -21,7 +22,9 @@ class ReportViewScreen extends StatelessWidget {
             size: 20,
             color: AppColors.textPrimary,
           ),
-          onPressed: () => Navigator.of(context).pop(),
+          // Opened from a notification / deep link there is nothing to pop.
+          onPressed: () =>
+              context.canPop() ? context.pop() : context.go('/reports-status'),
         ),
         title: Text(
           'Report Details',

@@ -8,7 +8,10 @@ import 'dart:developer' as developer;
 /// Admin User Management screen.
 /// Lists all users with approval status, allows role changes and approval.
 class AdminUsersScreen extends StatefulWidget {
-  const AdminUsersScreen({super.key});
+  const AdminUsersScreen({super.key, this.pendingOnly = false});
+
+  /// Open with the "pending approval" filter on (Admin → Pending approvals).
+  final bool pendingOnly;
 
   @override
   State<AdminUsersScreen> createState() => _AdminUsersScreenState();
@@ -25,6 +28,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
   @override
   void initState() {
     super.initState();
+    _pendingOnly = widget.pendingOnly;
     _usersStream = SupabaseService().subscribeToCollection(
       collectionId: AppConfig.usersCollection,
     );

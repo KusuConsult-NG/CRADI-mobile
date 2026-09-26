@@ -1,5 +1,6 @@
 import 'package:climate_app/core/theme/app_colors.dart';
 import 'package:climate_app/core/providers/language_provider.dart';
+import 'package:climate_app/core/widgets/language_selector_sheet.dart';
 import 'package:climate_app/features/auth/providers/auth_provider.dart';
 import 'package:climate_app/core/providers/connectivity_provider.dart';
 import 'package:climate_app/features/profile/providers/profile_provider.dart';
@@ -316,14 +317,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       value: _criticalAlerts,
                       onChanged: (v) => setState(() => _criticalAlerts = v),
                     ),
-                    Divider(height: 1, color: Colors.grey.shade100, indent: 60),
-                    _buildNavTile(
-                      icon: Icons.do_not_disturb_on,
-                      color: Colors.purple,
-                      title: provider.dnd,
-                      trailingText: 'Off',
-                      onTap: () {},
-                    ),
                   ],
                 ),
               ),
@@ -453,7 +446,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       color: Colors.grey,
                       title: provider.language,
                       trailingText: provider.selectedLanguage,
-                      onTap: () => _showLanguageSelector(context, provider),
+                      onTap: () => showLanguageSelectorSheet(context, provider),
                     ),
                     Divider(height: 1, color: Colors.grey.shade100, indent: 60),
 
@@ -734,46 +727,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
           offset: const Offset(0, 2),
         ),
       ],
-    );
-  }
-
-  void _showLanguageSelector(BuildContext context, LanguageProvider provider) {
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) {
-        final languages = ['English', 'Hausa', 'Yoruba', 'Igbo', 'Pidgin'];
-        return Container(
-          padding: const EdgeInsets.symmetric(vertical: 20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                'Select Language',
-                style: GoogleFonts.lexend(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 16),
-              ...languages.map(
-                (lang) => ListTile(
-                  title: Text(lang, style: GoogleFonts.lexend(fontSize: 16)),
-                  trailing: provider.selectedLanguage == lang
-                      ? const Icon(Icons.check, color: AppColors.primaryRed)
-                      : null,
-                  onTap: () {
-                    provider.setLanguage(lang);
-                    Navigator.pop(context);
-                  },
-                ),
-              ),
-            ],
-          ),
-        );
-      },
     );
   }
 }

@@ -1,3 +1,4 @@
+import 'package:climate_app/core/constants/privacy_notice.dart';
 import 'package:climate_app/core/theme/app_colors.dart';
 import 'package:climate_app/features/auth/providers/auth_provider.dart';
 import 'package:climate_app/shared/widgets/custom_button.dart';
@@ -51,26 +52,12 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
   bool _isPhoneAuth = false;
   bool _ndpaConsented = false;
 
-  // Bumped for the Supabase / OneSignal migration (processors changed).
-  // TODO(legal): confirm the storage region wording below before release.
-  static const String _ndpaPolicyVersion = '1.1.0';
+  static const String _ndpaPolicyVersion = kNdpaPolicyVersion;
 
   /// Set to false to hide Phone Auth until an SMS provider is configured
   /// for phone OTP in the Supabase dashboard (Auth → Providers → Phone).
   static const bool _phoneAuthEnabled = false;
-  static const String _ndpaPolicyText = '''
-Nigeria Data Protection Act (NDPA) — Data Processing Notice
-
-Your data is processed by EWER Mobile (a CRADI / KusuConsult-NG service) for climate hazard early warning purposes.
-
-• Data collected: name, phone, email, location (state/LGA/ward), hazard reports, and a push-notification device identifier.
-• Purpose: community hazard reporting, peer verification, and emergency alerts.
-• Storage: Supabase (PostgreSQL) cloud database; push notifications are delivered via OneSignal and crash diagnostics may be sent to Sentry.
-• International transfer: Pursuant to NDPA Article 24, we disclose that your data may be transferred to and stored on servers outside Nigeria. This transfer is necessary to provide the service. You have the right to withdraw consent at any time by deleting your account.
-• Retention: Data is retained for 5 years after your last activity, then anonymised.
-• Your rights: access, rectification, erasure, and data portability under the NDPA 2023.
-
-By tapping "I Agree", you consent to these terms and the international transfer of your personal data.''';
+  static const String _ndpaPolicyText = kNdpaPolicyText;
 
   @override
   void initState() {
@@ -225,7 +212,7 @@ By tapping "I Agree", you consent to these terms and the international transfer 
               showDialog(
                 context: context,
                 barrierDismissible: false,
-                builder: (context) => AlertDialog(
+                builder: (dialogContext) => AlertDialog(
                   title: const Text('Verify Your Phone Number'),
                   content: Text(
                     'A 6-digit verification code has been sent to $phone.\n\nPlease enter the code to activate your account.',
@@ -233,7 +220,8 @@ By tapping "I Agree", you consent to these terms and the international transfer 
                   actions: [
                     TextButton(
                       onPressed: () {
-                        context.pop(); // Close dialog
+                        Navigator.of(dialogContext).pop(); // Close dialog
+                        // The screen's context: the dialog's is gone now.
                         context.push(
                           '/verify-otp?phone=${Uri.encodeComponent(phone)}',
                           extra: registrationData,
@@ -309,7 +297,7 @@ By tapping "I Agree", you consent to these terms and the international transfer 
             showDialog(
               context: context,
               barrierDismissible: false,
-              builder: (context) => AlertDialog(
+              builder: (dialogContext) => AlertDialog(
                 title: const Text('Verify Your Email Address'),
                 content: Text(
                   'Account created successfully!\n\nA 6-digit verification code has been sent to $email.\n\nPlease enter the code to activate your account.',
@@ -317,7 +305,8 @@ By tapping "I Agree", you consent to these terms and the international transfer 
                 actions: [
                   TextButton(
                     onPressed: () {
-                      context.pop(); // Close dialog
+                      Navigator.of(dialogContext).pop(); // Close dialog
+                      // The screen's context: the dialog's is gone now.
                       context.push(
                         '/verify-otp?phone=${Uri.encodeComponent(email)}',
                         extra: registrationData,

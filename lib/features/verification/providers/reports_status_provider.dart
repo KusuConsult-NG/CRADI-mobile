@@ -293,46 +293,7 @@ class ReportsStatusProvider extends ChangeNotifier {
         _hasMoreMap[key] = false;
       }
 
-      final newReports = await Future.wait(
-        docs.map((data) async {
-          final reportStatus = _parseStatus(data['status']);
-
-          // reporter_name is filled in by the database on insert; fall
-          // back to the profile (readable by staff) for older rows.
-          String reporterName = 'Community Report';
-          final storedName = data['reporterName'] as String?;
-          if (storedName != null && storedName.trim().isNotEmpty) {
-            reporterName = storedName;
-          } else if (data['userId'] != null) {
-            try {
-              final userDoc = await _db.getDocument(
-                collectionId: AppConfig.usersCollection,
-                documentId: data['userId'] as String,
-              );
-              final n = userDoc['name'] as String?;
-              if (n != null && n.trim().isNotEmpty) reporterName = n;
-            } on Exception catch (_) {}
-          }
-
-          // fromMap populates reporterId, coordinates, description,
-          // severity, imageUrls, etc.; display fields are overridden below.
-          return VerificationReport.fromMap(
-            data,
-            data['id'] as String? ?? data['\$id'] as String? ?? '',
-          ).copyWith(
-            title: _formatTitle(data['hazardType'] ?? 'Unknown Hazard'),
-            type: data['hazardType'] ?? 'Unknown',
-            reporter: reporterName,
-            location: data['locationDetails'] ?? 'Unknown Location',
-            time: _formatTimeAgo(data['submittedAt']),
-            status: reportStatus,
-            iconName: _getIconName(data['hazardType']),
-            iconColor: _getIconColor(data['severity']),
-            bgIconColor: '${_getIconColor(data['severity'])}_50',
-            severity: normalizeSeverity(data['severity']),
-          );
-        }),
-      );
+      final newReports = await Future.wait(docs.map(_toReport));
 
       if (loadMore) {
         _reportsMap[key] = [...(_reportsMap[key] ?? []), ...newReports];
@@ -352,6 +313,68 @@ class ReportsStatusProvider extends ChangeNotifier {
     } finally {
       _loadingMap[key] = false;
       notifyListeners();
+    }
+  }
+
+  /// Maps a `reports` document to a display-ready [VerificationReport].
+  Future<VerificationReport> _toReport(Map<String, dynamic> data) async {
+    final reportStatus = _parseStatus(data['status']);
+
+    // reporter_name is filled in by the database on insert; fall
+    // back to the profile (readable by staff) for older rows.
+    String reporterName = 'Community Report';
+    final storedName = data['reporterName'] as String?;
+    if (storedName != null && storedName.trim().isNotEmpty) {
+      reporterName = storedName;
+    } else if (data['userId'] != null) {
+      try {
+        final userDoc = await _db.getDocument(
+          collectionId: AppConfig.usersCollection,
+          documentId: data['userId'] as String,
+        );
+        final n = userDoc['name'] as String?;
+        if (n != null && n.trim().isNotEmpty) reporterName = n;
+      } on Exception catch (_) {}
+    }
+
+    // fromMap populates reporterId, coordinates, description,
+    // severity, imageUrls, etc.; display fields are overridden below.
+    return VerificationReport.fromMap(
+      data,
+      data['id'] as String? ?? data['\$id'] as String? ?? '',
+    ).copyWith(
+      title: _formatTitle(data['hazardType'] ?? 'Unknown Hazard'),
+      type: data['hazardType'] ?? 'Unknown',
+      reporter: reporterName,
+      location: data['locationDetails'] ?? 'Unknown Location',
+      time: _formatTimeAgo(data['submittedAt']),
+      status: reportStatus,
+      iconName: _getIconName(data['hazardType']),
+      iconColor: _getIconColor(data['severity']),
+      bgIconColor: '${_getIconColor(data['severity'])}_50',
+      severity: normalizeSeverity(data['severity']),
+    );
+  }
+
+  /// Loads a single report by id (deep links / notification taps).
+  /// Returns null when it does not exist or is not readable.
+  Future<VerificationReport?> fetchReportById(String reportId) async {
+    try {
+      final data = await _db.getDocument(
+        collectionId: AppConfig.reportsCollection,
+        documentId: reportId,
+      );
+      return await _toReport({...data, 'id': data['id'] ?? reportId});
+    } on DocumentNotFoundException catch (_) {
+      return null;
+    } on Exception catch (_) {
+      // Offline / transient failure: fall back to an already-loaded copy.
+      for (final list in _reportsMap.values) {
+        for (final r in list) {
+          if (r.id == reportId) return r;
+        }
+      }
+      rethrow;
     }
   }
 

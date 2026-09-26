@@ -213,6 +213,9 @@ class NotificationService {
       _pendingNavigation = data;
       return;
     }
+    // Safe before auth is ready: the router's top-level redirect parks the
+    // navigation on /splash?from=<route> (or /login?from=<route> while the
+    // app is locked / signed out) and resumes it once the user may see it.
     router.go(route);
   }
 

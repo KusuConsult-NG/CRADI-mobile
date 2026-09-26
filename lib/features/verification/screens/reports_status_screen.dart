@@ -10,7 +10,25 @@ import 'package:climate_app/features/auth/providers/auth_provider.dart';
 import 'package:climate_app/l10n/app_localizations.dart';
 
 class ReportsStatusScreen extends StatefulWidget {
-  const ReportsStatusScreen({super.key});
+  const ReportsStatusScreen({super.key, this.initialTab});
+
+  /// Tab to open on: 'pending' | 'verified' | 'approved' | 'rejected'
+  /// (e.g. from the `tab` query parameter). Unknown values open Pending.
+  final String? initialTab;
+
+  /// Tab order, matching [ReportStatus] names.
+  static const List<String> tabs = [
+    'pending',
+    'verified',
+    'approved',
+    'rejected',
+  ];
+
+  /// Index of [tab] in [tabs], defaulting to 0.
+  static int tabIndexFor(String? tab) {
+    final i = tabs.indexOf((tab ?? '').toLowerCase());
+    return i < 0 ? 0 : i;
+  }
 
   @override
   State<ReportsStatusScreen> createState() => _ReportsStatusScreenState();
@@ -23,7 +41,11 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
+    _tabController = TabController(
+      length: ReportsStatusScreen.tabs.length,
+      vsync: this,
+      initialIndex: ReportsStatusScreen.tabIndexFor(widget.initialTab),
+    );
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final auth = context.read<AuthProvider>();
       final isUser = auth.userRole == UserRole.user;

@@ -70,4 +70,29 @@ class AlertsProvider extends ChangeNotifier {
       notifyListeners();
     }
   }
+
+  /// Loads one alert by id (deep links / notification taps). Returns null
+  /// when it does not exist or is not readable.
+  Future<Map<String, dynamic>?> fetchAlertById(String alertId) async {
+    try {
+      return await _db.getDocument(
+        collectionId: AppConfig.alertsCollection,
+        documentId: alertId,
+      );
+    } on DocumentNotFoundException catch (_) {
+      return null;
+    } on Exception catch (_) {
+      // Offline / transient failure: fall back to the loaded or cached list.
+      List<Map<String, dynamic>> known = _alerts;
+      if (known.isEmpty) {
+        try {
+          known = _offlineStorage.getCachedAlerts();
+        } on Object catch (_) {}
+      }
+      for (final a in known) {
+        if ((a['id'] ?? a[r'$id'])?.toString() == alertId) return a;
+      }
+      rethrow;
+    }
+  }
 }

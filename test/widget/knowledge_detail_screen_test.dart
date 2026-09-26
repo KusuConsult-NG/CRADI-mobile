@@ -182,14 +182,28 @@ void main() {
     });
 
     testWidgets(
-      'should show "coming soon" fallback when content is empty/null',
+      'should show "coming soon" fallback when content and description are empty',
       (tester) async {
-        final guideNoContent = {...testGuide, 'content': null};
+        final guideNoContent = {
+          ...testGuide,
+          'content': null,
+          'description': null,
+        };
         await tester.pumpWidget(buildScreen(guide: guideNoContent));
         await tester.pumpAndSettle();
         expect(find.text('Detailed content coming soon.'), findsOneWidget);
       },
     );
+
+    testWidgets('should fall back to the description when content is empty', (
+      tester,
+    ) async {
+      final guideNoContent = {...testGuide, 'content': ''};
+      await tester.pumpWidget(buildScreen(guide: guideNoContent));
+      await tester.pumpAndSettle();
+      expect(find.text('Detailed content coming soon.'), findsNothing);
+      expect(find.text('How to stay safe during floods.'), findsWidgets);
+    });
 
     testWidgets('should display Related Topics section', (tester) async {
       await tester.pumpWidget(buildScreen());

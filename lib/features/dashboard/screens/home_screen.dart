@@ -241,7 +241,9 @@ class _HomeScreenState extends State<HomeScreen> {
                             children: [
                               Expanded(
                                 child: GestureDetector(
-                                  onTap: () => context.push('/reports-status'),
+                                  onTap: () => context.push(
+                                    '/reports-status?tab=verified',
+                                  ),
                                   child: _buildStatCard(
                                     count: '$activeCount',
                                     label: AppLocalizations.of(context)!.active,
@@ -256,7 +258,9 @@ class _HomeScreenState extends State<HomeScreen> {
                               const SizedBox(width: 12),
                               Expanded(
                                 child: GestureDetector(
-                                  onTap: () => context.push('/reports-status'),
+                                  onTap: () => context.push(
+                                    '/reports-status?tab=pending',
+                                  ),
                                   child: _buildStatCard(
                                     count: '$pendingCount',
                                     label: AppLocalizations.of(
@@ -273,7 +277,9 @@ class _HomeScreenState extends State<HomeScreen> {
                               const SizedBox(width: 12),
                               Expanded(
                                 child: GestureDetector(
-                                  onTap: () => context.push('/reports-status'),
+                                  onTap: () => context.push(
+                                    '/reports-status?tab=approved',
+                                  ),
                                   child: _buildStatCard(
                                     count: '$approvedCount',
                                     label: AppLocalizations.of(
@@ -291,6 +297,25 @@ class _HomeScreenState extends State<HomeScreen> {
                           );
                         },
                       ),
+                      const SizedBox(height: 16),
+
+                      // Quick links: own reports, and the verification
+                      // queue for peer verifiers.
+                      _buildQuickLink(
+                        icon: Icons.assignment_outlined,
+                        label: 'My Reports',
+                        onTap: () => context.push('/my-reports'),
+                      ),
+                      if (AuthProvider.verifierRoles.contains(
+                        context.watch<AuthProvider>().userRole,
+                      )) ...[
+                        const SizedBox(height: 8),
+                        _buildQuickLink(
+                          icon: Icons.fact_check_outlined,
+                          label: 'Verify Reports',
+                          onTap: () => context.push('/verification'),
+                        ),
+                      ],
                       const SizedBox(height: 24),
 
                       // Browse Categories
@@ -567,6 +592,33 @@ class _HomeScreenState extends State<HomeScreen> {
             ],
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildQuickLink({
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(12),
+      child: ListTile(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: BorderSide(color: Colors.grey.shade200),
+        ),
+        leading: Icon(icon, color: AppColors.primaryRed),
+        title: Text(
+          label,
+          style: GoogleFonts.lexend(
+            fontWeight: FontWeight.w600,
+            color: AppColors.textPrimary,
+          ),
+        ),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: onTap,
       ),
     );
   }
