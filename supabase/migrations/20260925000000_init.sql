@@ -35,9 +35,13 @@ insert into public.app_settings (key, value) values
   ('app_min_version_message', '"Please update the EWER app to continue."');
 
 create or replace function public.setting_int(p_key text, p_default int)
-returns int language sql stable security definer set search_path = public as $$
-  select coalesce((select (value #>> '{}')::int from app_settings where key = p_key), p_default)
-$$;
+returns int language plpgsql stable security definer set search_path = public as $$
+begin
+  return coalesce((select (value #>> '{}')::int from app_settings where key = p_key), p_default);
+exception when others then
+  -- A malformed setting must never break report inserts.
+  return p_default;
+end $$;
 
 -- ── Generic updated_at trigger ──────────────────────────────────────────────
 
@@ -116,6 +120,14 @@ returns text language sql stable security definer set search_path = public as $$
   select ward from profiles where id = auth.uid()
 $$;
 
+create or replace function public.auth_user_confirmed(p_user_id uuid)
+returns boolean language sql stable security definer set search_path = public as $$
+  select exists (
+    select 1 from auth.users u
+     where u.id = p_user_id
+       and (u.email_confirmed_at is not null or u.phone_confirmed_at is not null))
+$$;
+
 -- Non-admins may not change privileged columns on their own profile.
 create or replace function public.guard_profile_update()
 returns trigger language plpgsql as $$
@@ -128,15 +140,22 @@ begin
        or new.is_disabled is distinct from old.is_disabled
        or new.email is distinct from old.email
        or new.legacy_firebase_uid is distinct from old.legacy_firebase_uid
+       or new.registration_code is distinct from old.registration_code
        or new.id is distinct from old.id then
       raise exception 'Only an admin can change role, approval, disabled status or email'
         using errcode = '42501';
     end if;
+    -- Approved staff are scoped by location (ward-level report access and
+    -- verification requests), so only an admin may move them.
+    if old.is_approved and old.role <> 'user'
+       and (new.ward is distinct from old.ward
+            or new.lga is distinct from old.lga
+            or new.state is distinct from old.state) then
+      raise exception 'Ask an admin to change the location of a staff account'
+        using errcode = '42501';
+    end if;
     -- is_verified may only be raised once Supabase Auth has confirmed the user.
-    if new.is_verified and not old.is_verified and not exists (
-         select 1 from auth.users u
-          where u.id = new.id
-            and (u.email_confirmed_at is not null or u.phone_confirmed_at is not null)) then
+    if new.is_verified and not old.is_verified and not public.auth_user_confirmed(new.id) then
       raise exception 'Account is not verified yet' using errcode = '42501';
     end if;
   end if;
@@ -161,7 +180,10 @@ begin
   values (
     new.id,
     new.email,
-    coalesce(new.phone, meta ->> 'phone', ''),
+    coalesce(case when new.phone is null or new.phone = '' then null
+                  when left(new.phone, 1) = '+' then new.phone
+                  else '+' || new.phone end,
+             meta ->> 'phone', ''),
     coalesce(nullif(meta ->> 'name', ''), 'User'),
     requested_role,
     coalesce(meta ->> 'address', ''),
@@ -183,7 +205,11 @@ returns trigger language plpgsql security definer set search_path = public as $$
 begin
   update profiles
      set email = new.email,
-         phone = case when new.phone is not null and new.phone <> '' then new.phone else phone end,
+         phone = case
+                   when new.phone is null or new.phone = '' then phone
+                   when left(new.phone, 1) = '+' then new.phone
+                   else '+' || new.phone
+                 end,
          is_verified = is_verified
                        or new.email_confirmed_at is not null
                        or new.phone_confirmed_at is not null
@@ -315,17 +341,46 @@ create trigger reports_before_insert before insert on public.reports
 -- Non-staff owners may edit a pending report's content, but not its workflow state.
 create or replace function public.guard_report_update()
 returns trigger language plpgsql as $$
+declare
+  r text;
+  workflow_changed boolean;
 begin
-  if auth.uid() is not null and pg_trigger_depth() = 1 and not public.is_staff() then
-    if new.status is distinct from old.status
-       or new.verification_count is distinct from old.verification_count
+  -- Service role (auth.uid() null) and our own nested triggers are trusted.
+  if auth.uid() is not null and pg_trigger_depth() = 1 then
+    r := public.app_role();
+    workflow_changed :=
+         new.status is distinct from old.status
+      or new.approved_at is distinct from old.approved_at
+      or new.rejected_at is distinct from old.rejected_at
+      or new.rejection_reason is distinct from old.rejection_reason;
+
+    if new.user_id is distinct from old.user_id
        or new.escalated is distinct from old.escalated
        or new.escalation_status is distinct from old.escalation_status
-       or new.user_id is distinct from old.user_id
+       or new.escalated_at is distinct from old.escalated_at then
+      if r <> 'admin' then
+        raise exception 'Only an admin can change report ownership or escalation'
+          using errcode = '42501';
+      end if;
+    end if;
+
+    -- Peer verification is counted by the verifications trigger, never by hand.
+    if new.verification_count is distinct from old.verification_count
        or new.verified_at is distinct from old.verified_at
-       or new.approved_at is distinct from old.approved_at
-       or new.rejected_at is distinct from old.rejected_at then
-      raise exception 'Only staff can change a report''s workflow state' using errcode = '42501';
+       or new.auto_validated is distinct from old.auto_validated
+       or (new.status = 'verified' and old.status <> 'verified') then
+      if r <> 'admin' then
+        raise exception 'Reports are verified by peer confirmations' using errcode = '42501';
+      end if;
+    end if;
+
+    if workflow_changed then
+      if r not in ('ewv', 'ewr', 'ldp_coordinator', 'project_staff', 'admin') then
+        raise exception 'Your role cannot approve, reject or reopen reports' using errcode = '42501';
+      end if;
+      if r <> 'admin' and old.user_id = auth.uid() then
+        raise exception 'You cannot approve or reject your own report' using errcode = '42501';
+      end if;
     end if;
   end if;
   new.is_alert := new.severity in ('high', 'critical');
@@ -452,6 +507,10 @@ returns trigger language plpgsql security definer set search_path = public as $$
 declare
   confirmed int;
 begin
+  -- Serialise concurrent confirmations for the same report so each count sees
+  -- the others' committed rows.
+  perform 1 from reports where id = new.report_id for update;
+
   select count(*) into confirmed
     from verifications where report_id = new.report_id and is_confirmed;
 
@@ -468,6 +527,24 @@ end $$;
 create trigger verifications_after_insert after insert on public.verifications
   for each row execute function public.verifications_after_insert();
 
+create or replace function public.verifications_after_delete()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  update reports
+     set verification_count = (select count(*) from verifications
+                                where report_id = old.report_id and is_confirmed)
+   where id = old.report_id;
+  return old;
+end $$;
+
+create trigger verifications_after_delete after delete on public.verifications
+  for each row execute function public.verifications_after_delete();
+
+create or replace function public.report_ward(p_report_id uuid)
+returns text language sql stable security definer set search_path = public as $$
+  select ward from reports where id = p_report_id
+$$;
+
 alter table public.verifications enable row level security;
 
 create policy verifications_select on public.verifications for select to authenticated
@@ -478,6 +555,7 @@ create policy verifications_insert on public.verifications for insert to authent
     verifier_id = auth.uid()
     and public.is_verifier()
     and public.report_owner(report_id) is distinct from auth.uid()
+    and (public.app_role() <> 'ewm' or public.report_ward(report_id) = public.my_ward())
   );
 
 create policy verifications_admin_update on public.verifications for update to authenticated
@@ -746,6 +824,12 @@ create policy "users upload own images" on storage.objects for insert to authent
     and (storage.foldername(name))[1] = auth.uid()::text
   );
 
+create policy "users read own images" on storage.objects for select to authenticated
+  using (
+    bucket_id in ('report-images', 'profile-images')
+    and ((storage.foldername(name))[1] = auth.uid()::text or public.is_admin())
+  );
+
 create policy "users update own images" on storage.objects for update to authenticated
   using (
     bucket_id in ('report-images', 'profile-images')
@@ -763,3 +847,17 @@ create policy "users delete own images" on storage.objects for delete to authent
 alter publication supabase_realtime add table
   public.profiles, public.reports, public.alerts, public.messages,
   public.contacts, public.knowledge_base;
+
+-- ── Function privileges ─────────────────────────────────────────────────────
+-- SECURITY DEFINER helpers are only for signed-in users (RLS policies need
+-- them); never expose them to anonymous API callers.
+revoke execute on function
+  public.setting_int(text, int), public.app_role(), public.is_enabled_user(),
+  public.my_ward(), public.auth_user_confirmed(uuid), public.report_owner(uuid),
+  public.report_ward(uuid)
+  from public, anon;
+grant execute on function
+  public.setting_int(text, int), public.app_role(), public.is_enabled_user(),
+  public.my_ward(), public.auth_user_confirmed(uuid), public.report_owner(uuid),
+  public.report_ward(uuid)
+  to authenticated, service_role;
