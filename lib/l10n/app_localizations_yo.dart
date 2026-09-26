@@ -2952,7 +2952,7 @@ class AppLocalizationsYo extends AppLocalizations {
   }
 
   @override
-  String get adminAlertBroadcastSuccess => '✅ A ti kéde ìkìlọ̀ ní àṣeyọrí';
+  String get adminAlertBroadcastSuccess => 'A ti kéde ìkìlọ̀ ní àṣeyọrí';
 
   @override
   String adminAlertSendFailed(String error) {
@@ -3021,10 +3021,10 @@ class AppLocalizationsYo extends AppLocalizations {
   String get adminGuideAddFirst => 'Fi ìtọ́sọ́nà àkọ́kọ́ kún un';
 
   @override
-  String get adminGuideEditMenu => '✏️ Ṣàtúnṣe';
+  String get adminGuideEditMenu => 'Ṣàtúnṣe';
 
   @override
-  String get adminGuideDeleteMenu => '🗑️ Pa Rẹ́';
+  String get adminGuideDeleteMenu => 'Pa Rẹ́';
 
   @override
   String get adminGuideUpdated => 'A ti ṣe àtúnṣe ìtọ́sọ́nà';
@@ -3176,22 +3176,22 @@ class AppLocalizationsYo extends AppLocalizations {
   String get adminUsersPendingChip => 'Ń Dúró';
 
   @override
-  String get adminUsersApproveMenu => '✅ Fọwọ́ sí';
+  String get adminUsersApproveMenu => 'Fọwọ́ sí';
 
   @override
-  String get adminUsersRevokeMenu => '❌ Gba àṣẹ padà';
+  String get adminUsersRevokeMenu => 'Gba àṣẹ padà';
 
   @override
-  String get adminUsersChangeRoleMenu => '🔄 Yí ipa padà';
+  String get adminUsersChangeRoleMenu => 'Yí ipa padà';
 
   @override
-  String get adminUsersChangeLocationMenu => '📍 Yí ibi padà';
+  String get adminUsersChangeLocationMenu => 'Yí ibi padà';
 
   @override
-  String get adminUsersReenableMenu => '🔓 Tún olùlò ṣí sílẹ̀';
+  String get adminUsersReenableMenu => 'Tún olùlò ṣí sílẹ̀';
 
   @override
-  String get adminUsersDisableMenu => '🚫 Dá olùlò dúró';
+  String get adminUsersDisableMenu => 'Dá olùlò dúró';
 
   @override
   String get onboardingWelcomeBody =>

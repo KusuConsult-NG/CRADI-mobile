@@ -2951,7 +2951,7 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get adminAlertBroadcastSuccess => '✅ Alert broadcast successfully';
+  String get adminAlertBroadcastSuccess => 'Alert broadcast successfully';
 
   @override
   String adminAlertSendFailed(String error) {
@@ -3020,10 +3020,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get adminGuideAddFirst => 'Add the first guide';
 
   @override
-  String get adminGuideEditMenu => '✏️ Edit';
+  String get adminGuideEditMenu => 'Edit';
 
   @override
-  String get adminGuideDeleteMenu => '🗑️ Delete';
+  String get adminGuideDeleteMenu => 'Delete';
 
   @override
   String get adminGuideUpdated => 'Guide updated';
@@ -3175,22 +3175,22 @@ class AppLocalizationsEn extends AppLocalizations {
   String get adminUsersPendingChip => 'Pending';
 
   @override
-  String get adminUsersApproveMenu => '✅ Approve';
+  String get adminUsersApproveMenu => 'Approve';
 
   @override
-  String get adminUsersRevokeMenu => '❌ Revoke access';
+  String get adminUsersRevokeMenu => 'Revoke access';
 
   @override
-  String get adminUsersChangeRoleMenu => '🔄 Change role';
+  String get adminUsersChangeRoleMenu => 'Change role';
 
   @override
-  String get adminUsersChangeLocationMenu => '📍 Change location';
+  String get adminUsersChangeLocationMenu => 'Change location';
 
   @override
-  String get adminUsersReenableMenu => '🔓 Re-enable user';
+  String get adminUsersReenableMenu => 'Re-enable user';
 
   @override
-  String get adminUsersDisableMenu => '🚫 Disable user';
+  String get adminUsersDisableMenu => 'Disable user';
 
   @override
   String get onboardingWelcomeBody =>

@@ -3807,7 +3807,7 @@
       }
     }
   },
-  "adminAlertBroadcastSuccess": "✅ Alert broadcast successfully",
+  "adminAlertBroadcastSuccess": "Alert broadcast successfully",
   "@adminAlertBroadcastSuccess": {
     "description": "Snackbar after sending a staff alert."
   },
@@ -3896,11 +3896,11 @@
   "@adminGuideAddFirst": {
     "description": "Button in the empty state."
   },
-  "adminGuideEditMenu": "✏️ Edit",
+  "adminGuideEditMenu": "Edit",
   "@adminGuideEditMenu": {
     "description": "Menu item editing a guide."
   },
-  "adminGuideDeleteMenu": "🗑️ Delete",
+  "adminGuideDeleteMenu": "Delete",
   "@adminGuideDeleteMenu": {
     "description": "Menu item deleting a guide."
   },
@@ -4109,27 +4109,27 @@
   "@adminUsersPendingChip": {
     "description": "Chip on a user awaiting approval (max ~10 chars)."
   },
-  "adminUsersApproveMenu": "✅ Approve",
+  "adminUsersApproveMenu": "Approve",
   "@adminUsersApproveMenu": {
     "description": "Menu action approving a user."
   },
-  "adminUsersRevokeMenu": "❌ Revoke access",
+  "adminUsersRevokeMenu": "Revoke access",
   "@adminUsersRevokeMenu": {
     "description": "Menu action revoking a user's approval."
   },
-  "adminUsersChangeRoleMenu": "🔄 Change role",
+  "adminUsersChangeRoleMenu": "Change role",
   "@adminUsersChangeRoleMenu": {
     "description": "Menu action changing a user's role."
   },
-  "adminUsersChangeLocationMenu": "📍 Change location",
+  "adminUsersChangeLocationMenu": "Change location",
   "@adminUsersChangeLocationMenu": {
     "description": "Menu action changing a user's location."
   },
-  "adminUsersReenableMenu": "🔓 Re-enable user",
+  "adminUsersReenableMenu": "Re-enable user",
   "@adminUsersReenableMenu": {
     "description": "Menu action re-enabling a user."
   },
-  "adminUsersDisableMenu": "🚫 Disable user",
+  "adminUsersDisableMenu": "Disable user",
   "@adminUsersDisableMenu": {
     "description": "Menu action disabling a user."
   },

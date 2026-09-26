@@ -5171,7 +5171,7 @@ abstract class AppLocalizations {
   /// Snackbar after sending a staff alert.
   ///
   /// In en, this message translates to:
-  /// **'✅ Alert broadcast successfully'**
+  /// **'Alert broadcast successfully'**
   String get adminAlertBroadcastSuccess;
 
   /// Snackbar when sending a staff alert fails; {error} is the reason.
@@ -5297,13 +5297,13 @@ abstract class AppLocalizations {
   /// Menu item editing a guide.
   ///
   /// In en, this message translates to:
-  /// **'✏️ Edit'**
+  /// **'Edit'**
   String get adminGuideEditMenu;
 
   /// Menu item deleting a guide.
   ///
   /// In en, this message translates to:
-  /// **'🗑️ Delete'**
+  /// **'Delete'**
   String get adminGuideDeleteMenu;
 
   /// Snackbar after editing a guide.
@@ -5585,37 +5585,37 @@ abstract class AppLocalizations {
   /// Menu action approving a user.
   ///
   /// In en, this message translates to:
-  /// **'✅ Approve'**
+  /// **'Approve'**
   String get adminUsersApproveMenu;
 
   /// Menu action revoking a user's approval.
   ///
   /// In en, this message translates to:
-  /// **'❌ Revoke access'**
+  /// **'Revoke access'**
   String get adminUsersRevokeMenu;
 
   /// Menu action changing a user's role.
   ///
   /// In en, this message translates to:
-  /// **'🔄 Change role'**
+  /// **'Change role'**
   String get adminUsersChangeRoleMenu;
 
   /// Menu action changing a user's location.
   ///
   /// In en, this message translates to:
-  /// **'📍 Change location'**
+  /// **'Change location'**
   String get adminUsersChangeLocationMenu;
 
   /// Menu action re-enabling a user.
   ///
   /// In en, this message translates to:
-  /// **'🔓 Re-enable user'**
+  /// **'Re-enable user'**
   String get adminUsersReenableMenu;
 
   /// Menu action disabling a user.
   ///
   /// In en, this message translates to:
-  /// **'🚫 Disable user'**
+  /// **'Disable user'**
   String get adminUsersDisableMenu;
 
   /// Onboarding page 1 text.

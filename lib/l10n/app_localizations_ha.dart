@@ -2970,7 +2970,7 @@ class AppLocalizationsHa extends AppLocalizations {
   }
 
   @override
-  String get adminAlertBroadcastSuccess => '✅ An watsa faɗakarwa cikin nasara';
+  String get adminAlertBroadcastSuccess => 'An watsa faɗakarwa cikin nasara';
 
   @override
   String adminAlertSendFailed(String error) {
@@ -3039,10 +3039,10 @@ class AppLocalizationsHa extends AppLocalizations {
   String get adminGuideAddFirst => 'Ƙara jagora ta farko';
 
   @override
-  String get adminGuideEditMenu => '✏️ Gyara';
+  String get adminGuideEditMenu => 'Gyara';
 
   @override
-  String get adminGuideDeleteMenu => '🗑️ Goge';
+  String get adminGuideDeleteMenu => 'Goge';
 
   @override
   String get adminGuideUpdated => 'An sabunta jagora';
@@ -3195,22 +3195,22 @@ class AppLocalizationsHa extends AppLocalizations {
   String get adminUsersPendingChip => 'Ana Jira';
 
   @override
-  String get adminUsersApproveMenu => '✅ Amince';
+  String get adminUsersApproveMenu => 'Amince';
 
   @override
-  String get adminUsersRevokeMenu => '❌ Janye izini';
+  String get adminUsersRevokeMenu => 'Janye izini';
 
   @override
-  String get adminUsersChangeRoleMenu => '🔄 Canza matsayi';
+  String get adminUsersChangeRoleMenu => 'Canza matsayi';
 
   @override
-  String get adminUsersChangeLocationMenu => '📍 Canza wuri';
+  String get adminUsersChangeLocationMenu => 'Canza wuri';
 
   @override
-  String get adminUsersReenableMenu => '🔓 Sake kunna mai amfani';
+  String get adminUsersReenableMenu => 'Sake kunna mai amfani';
 
   @override
-  String get adminUsersDisableMenu => '🚫 Dakatar da mai amfani';
+  String get adminUsersDisableMenu => 'Dakatar da mai amfani';
 
   @override
   String get onboardingWelcomeBody =>
