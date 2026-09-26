@@ -152,3 +152,37 @@ select status, approved_at is null as approved_cleared, rejected_at is not null 
 \echo '--- audit rows survive deleting the validator'
 delete from auth.users where id='00000000-0000-0000-0000-00000000000f';
 select action, validator_id is null as validator_nulled from verification_overrides where report_id='10000000-0000-0000-0000-000000000002' order by created_at;
+
+\echo '=== round 6: security hardening ==='
+select set_config('request.jwt.claim.sub','',false);
+insert into auth.users values ('00000000-0000-0000-0000-000000000012','new@x.com',null,'{"name":"Newbie"}',now(),null);
+set role authenticated;
+\echo '--- unapproved user cannot read or post chat (expect 0 rows, ERROR rls)'
+select as_user('00000000-0000-0000-0000-000000000012');
+select count(*) as chat_visible from messages;
+insert into messages(message) values ('hi');
+\echo '--- approved ewm posts chat with spoofed sender_name (stored as real name)'
+select as_user('00000000-0000-0000-0000-00000000000b');
+insert into messages(message, sender_name) values ('hello', 'CRADI Admin');
+select sender_name from messages order by created_at desc limit 1;
+\echo '--- spoofed reporter_name / workflow fields on insert are overwritten'
+select as_user('00000000-0000-0000-0000-00000000000a');
+insert into reports(id,user_id,hazard_type,lga,ward,reporter_name,approved_at) values ('10000000-0000-0000-0000-000000000009',auth.uid(),'Flood','L1','W1','Someone Else',now());
+select reporter_name, approved_at is null as approved_cleared from reports where id='10000000-0000-0000-0000-000000000009';
+\echo '--- over-long hazard_type (expect ERROR check)'
+insert into reports(user_id,hazard_type,lga) values (auth.uid(), repeat('x',61),'L1');
+\echo '--- report_owner oracle: plain user asks about someone else''s report (expect NULL)'
+select as_user('00000000-0000-0000-0000-000000000012');
+select report_owner('10000000-0000-0000-0000-000000000009') as leaked_owner;
+\echo '--- plain user cannot see other profiles; ewm sees only same-area peers'
+select count(*) as newbie_sees_profiles from profiles;
+select as_user('00000000-0000-0000-0000-000000000011');
+select count(*) as other_area_ewm_sees from profiles where lga='L1';
+\echo '--- alert with forged author (expect ERROR rls); override insert (expect ERROR rls)'
+select as_user('00000000-0000-0000-0000-00000000000d');
+insert into alerts(title, created_by) values ('x','00000000-0000-0000-0000-00000000000b');
+insert into verification_overrides(report_id,action) values ('10000000-0000-0000-0000-000000000009','approved');
+\echo '--- staff editing another report''s reporter_name (expect ERROR only the reporter)'
+select as_user('00000000-0000-0000-0000-00000000000b');
+update reports set reporter_name='X' where id='10000000-0000-0000-0000-000000000009';
+reset role;
