@@ -132,9 +132,6 @@ class NotificationService {
     }
   }
 
-  /// Asks for the OS notification permission. [fallbackToSettings] offers
-  /// to open the system settings when it was denied before; only use it for
-  /// an explicit user action (the Settings toggle), not at startup.
   /// Asks for the OS permission without the "open Settings" fallback, then
   /// undoes an earlier opt-out only when permission is granted: OneSignal's
   /// optIn() prompts on its own (with the Settings fallback), which would
@@ -164,6 +161,13 @@ class NotificationService {
     }
   }
 
+  /// Whether push is set up on this device (OneSignal configured and
+  /// initialised).
+  bool get isPushAvailable => _pushEnabled;
+
+  /// Asks for the OS notification permission. [fallbackToSettings] offers
+  /// to open the system settings when it was denied before; only use it for
+  /// an explicit user action (the Settings toggle), not at startup.
   Future<void> requestPushPermission({required bool fallbackToSettings}) async {
     if (!_pushEnabled) return;
     try {
