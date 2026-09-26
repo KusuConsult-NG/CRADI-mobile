@@ -8,25 +8,34 @@ import 'package:url_launcher/url_launcher.dart';
 class HelpSupportScreen extends StatelessWidget {
   const HelpSupportScreen({super.key});
 
+  /// Builds the support mailto link. The query is encoded with
+  /// [Uri.encodeComponent] (spaces as %20): `Uri(queryParameters:)` encodes
+  /// spaces as '+', which mail apps show literally.
+  static Uri supportMailUri({
+    String address = 'support@cradi.org',
+    String subject = 'CRADI App Support Request',
+    String body = 'Please describe your issue:\n\n',
+  }) {
+    final query =
+        'subject=${Uri.encodeComponent(subject)}'
+        '&body=${Uri.encodeComponent(body)}';
+    return Uri.parse('mailto:$address?$query');
+  }
+
   Future<void> _contactSupport(BuildContext context) async {
-    final uri = Uri(
-      scheme: 'mailto',
-      path: 'support@cradi.org',
-      queryParameters: {
-        'subject': 'CRADI App Support Request',
-        'body': 'Please describe your issue:\n\n',
-      },
-    );
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri);
-    } else {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('No email app found. Contact support@cradi.org'),
-          ),
-        );
-      }
+    final uri = supportMailUri();
+    var launched = false;
+    try {
+      launched = await launchUrl(uri);
+    } on Exception catch (e) {
+      debugPrint('Could not open email app: $e');
+    }
+    if (!launched && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No email app found. Contact support@cradi.org'),
+        ),
+      );
     }
   }
 

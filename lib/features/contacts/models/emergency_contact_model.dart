@@ -38,8 +38,9 @@ class EmergencyContact {
       'name': name,
       'role': role,
       'phone': phone,
-      if (organization != null) 'organization': organization,
-      if (lga != null) 'lga': lga,
+      // Always sent (null clears the column on update).
+      'organization': organization,
+      'lga': lga,
       'category': category,
       'isAvailable': isAvailable,
     };

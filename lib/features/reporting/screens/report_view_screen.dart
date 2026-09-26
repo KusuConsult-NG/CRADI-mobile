@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:climate_app/core/constants/hazards.dart';
 import 'package:climate_app/core/theme/app_colors.dart';
 import 'package:climate_app/features/verification/models/verification_report_model.dart';
+import 'package:climate_app/features/verification/widgets/report_vote_actions.dart';
 
 /// Read-only screen that displays full report details.
 /// Receives a [VerificationReport] via GoRouter `extra` parameter.
@@ -51,6 +52,9 @@ class ReportViewScreen extends StatelessWidget {
             // ── Status + Hazard Header ────────────────────────────────
             _buildHeaderCard(),
             const SizedBox(height: 16),
+
+            // ── Peer vote (verification_request pushes open this screen) ──
+            ReportVoteActions(report: report),
 
             // ── Details Section ───────────────────────────────────────
             _buildSectionCard(

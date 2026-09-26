@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mockito/annotations.dart';
 import 'package:mockito/mockito.dart';
@@ -97,6 +98,26 @@ void main() {
       await tester.pumpWidget(buildScreen());
       await tester.pumpAndSettle();
       expect(find.text('Updated March 2026'), findsOneWidget);
+    });
+
+    testWidgets('formats updatedAt supplied by the provider', (tester) async {
+      final updated = DateTime.utc(2026, 2, 14, 12);
+      await tester.pumpWidget(
+        buildScreen(
+          guide: {
+            ...testGuide,
+            'lastUpdated': null,
+            'updatedAt': updated.toIso8601String(),
+          },
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.text(
+          'Updated ${DateFormat('d MMM yyyy').format(updated.toLocal())}',
+        ),
+        findsOneWidget,
+      );
     });
 
     testWidgets('should display reading time', (tester) async {

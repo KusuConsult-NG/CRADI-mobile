@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
 /// A knowledge-base category. [hazardType] is the value stored in
 /// `knowledge_base.hazard_type`; [label] is shown to users and stored in
@@ -133,4 +134,24 @@ bool guideMatchesCategory(Map<String, dynamic> guide, String? category) {
   final byHazard = knowledgeCategoryFor(guide['hazardType']);
   if (byHazard != null) return byHazard.hazardType == target.hazardType;
   return target.matches(guide['category']);
+}
+
+/// Formats a knowledge-base / news date for display in local time, e.g.
+/// '3 Mar 2026'. Accepts a [DateTime], an ISO-8601 string or epoch
+/// milliseconds; any other non-empty text (e.g. 'March 2026') is shown as is.
+/// Returns null when there is nothing to show.
+String? formatKnowledgeDate(Object? raw) {
+  DateTime? date;
+  if (raw is DateTime) {
+    date = raw;
+  } else if (raw is int) {
+    date = DateTime.fromMillisecondsSinceEpoch(raw, isUtc: true);
+  } else if (raw is String) {
+    final text = raw.trim();
+    if (text.isEmpty) return null;
+    date = DateTime.tryParse(text);
+    if (date == null) return text;
+  }
+  if (date == null) return null;
+  return DateFormat('d MMM yyyy').format(date.toLocal());
 }

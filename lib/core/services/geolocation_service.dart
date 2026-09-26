@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
 import 'dart:developer' as developer;
@@ -30,38 +31,93 @@ class GeolocationService {
     return true;
   }
 
-  /// Get current position
+  /// How long to wait for a fresh fix before falling back to the last known
+  /// position. Without a limit the request can hang forever indoors.
+  static const Duration positionTimeLimit = Duration(seconds: 20);
+
+  /// Human-readable reason of the last [getCurrentPosition] failure (or of a
+  /// fallback to a stale position); null when the last call got a fresh fix.
+  String? lastErrorMessage;
+
+  /// Get current position.
+  ///
+  /// Waits at most [positionTimeLimit] for a fix, then falls back to the
+  /// device's last known position. Returns null (with [lastErrorMessage]
+  /// set) when neither is available.
   Future<Position?> getCurrentPosition() async {
+    lastErrorMessage = null;
     try {
       // Check if location service is enabled
       final serviceEnabled = await isLocationServiceEnabled();
       if (!serviceEnabled) {
         developer.log('Location services are disabled');
+        lastErrorMessage =
+            'Location services are turned off. Please enable GPS.';
         return null;
       }
 
       // Check permissions
       final hasPermission = await checkAndRequestPermission();
       if (!hasPermission) {
+        lastErrorMessage = 'Location permission was denied.';
         return null;
       }
+    } on Exception catch (e) {
+      developer.log('Error checking location availability: $e');
+      lastErrorMessage = 'Could not access location services.';
+      return null;
+    }
 
-      // Get position
-      final position = await Geolocator.getCurrentPosition(
+    return fetchPositionWithFallback(
+      current: () => Geolocator.getCurrentPosition(
         locationSettings: const LocationSettings(
           accuracy: LocationAccuracy.high,
           distanceFilter: 10,
+          timeLimit: positionTimeLimit,
         ),
-      );
+      ),
+      lastKnown: () => Geolocator.getLastKnownPosition(),
+    );
+  }
 
+  /// Fetches a fresh position via [current] (which must enforce its own time
+  /// limit); on failure/timeout falls back to [lastKnown]. Exposed for tests.
+  Future<Position?> fetchPositionWithFallback({
+    required Future<Position> Function() current,
+    required Future<Position?> Function() lastKnown,
+  }) async {
+    lastErrorMessage = null;
+    Object? failure;
+    try {
+      final position = await current().timeout(
+        positionTimeLimit + const Duration(seconds: 5),
+      );
       developer.log(
         'Got position: ${position.latitude}, ${position.longitude}',
       );
       return position;
     } on Exception catch (e) {
+      failure = e;
       developer.log('Error getting position: $e');
-      return null;
     }
+
+    try {
+      final last = await lastKnown();
+      if (last != null) {
+        lastErrorMessage =
+            'Could not get a fresh GPS fix; using your last known location.';
+        return last;
+      }
+    } on Exception catch (e) {
+      developer.log('Error getting last known position: $e');
+    }
+
+    lastErrorMessage = failure is TimeoutException
+        ? 'Timed out waiting for a GPS signal. Move to an open area and '
+              'try again, or choose your location manually.'
+        : 'Could not determine your location. Please try again or choose '
+              'your location manually.';
+    return null;
   }
 
   /// Format coordinates for display

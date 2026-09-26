@@ -347,11 +347,37 @@ class _ReportReviewScreenState extends State<ReportReviewScreen> {
                                   color: Colors.grey.shade200,
                                   borderRadius: BorderRadius.circular(8),
                                 ),
-                                child: Center(
-                                  child: Icon(
-                                    Icons.location_off,
-                                    color: Colors.grey.shade400,
-                                    size: 40,
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(
+                                      Icons.location_off,
+                                      color: Colors.grey.shade400,
+                                      size: 40,
+                                    ),
+                                    const SizedBox(height: 6),
+                                    Text(
+                                      'Exact location unknown - the selected '
+                                      'area will be used',
+                                      textAlign: TextAlign.center,
+                                      style: GoogleFonts.lexend(
+                                        fontSize: 12,
+                                        color: Colors.grey.shade600,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            if (provider.latitude != null &&
+                                provider.locationIsApproximate)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 8),
+                                child: Text(
+                                  'Location approximate (area centre, no GPS '
+                                  'fix)',
+                                  style: GoogleFonts.lexend(
+                                    fontSize: 12,
+                                    color: Colors.orange.shade800,
                                   ),
                                 ),
                               ),

@@ -124,7 +124,58 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
     ];
   }
 
-  Future<void> _updateStatus(String reportId, String newStatus) async {
+  /// Asks for a rejection reason (optional but encouraged; it is shown to the
+  /// reporter). Returns null when the admin cancels, '' for no reason.
+  Future<String?> _promptRejectionReason() async {
+    final controller = TextEditingController();
+    final reason = await showDialog<String>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: Text(
+          'Reject report?',
+          style: GoogleFonts.lexend(fontWeight: FontWeight.bold),
+        ),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          maxLines: 3,
+          maxLength: 500,
+          decoration: const InputDecoration(
+            labelText: 'Reason (recommended)',
+            hintText: 'Why is this report being rejected?',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(c),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(c, controller.text.trim()),
+            child: const Text('Reject', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    return reason;
+  }
+
+  Future<void> _rejectWithReason(String reportId) async {
+    final reason = await _promptRejectionReason();
+    if (reason == null || !mounted) return;
+    await _updateStatus(reportId, 'rejected', rejectionReason: reason);
+  }
+
+  Future<void> _updateStatus(
+    String reportId,
+    String newStatus, {
+    String? rejectionReason,
+  }) async {
+    if (newStatus == 'rejected' && rejectionReason == null) {
+      return _rejectWithReason(reportId);
+    }
     Map<String, dynamic>? updated;
     try {
       if (newStatus == 'pending') {
@@ -142,6 +193,10 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
             if (newStatus == 'verified') 'verifiedAt': now,
             if (newStatus == 'approved') 'approvedAt': now,
             if (newStatus == 'rejected') 'rejectedAt': now,
+            if (newStatus == 'rejected' &&
+                rejectionReason != null &&
+                rejectionReason.isNotEmpty)
+              'rejectionReason': rejectionReason,
           },
         );
       }
@@ -361,8 +416,10 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
                                 foregroundColor: Colors.white,
                               ),
                               onPressed: () {
-                                _updateStatus(id, 'rejected');
+                                // Close the sheet first: the reason dialog
+                                // opens on the screen.
                                 Navigator.pop(context);
+                                _rejectWithReason(id);
                               },
                               icon: const Icon(Icons.close, size: 18),
                               label: const Text('Reject'),

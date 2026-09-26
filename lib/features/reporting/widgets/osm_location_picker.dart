@@ -9,18 +9,25 @@ class OSMLocationPicker extends StatelessWidget {
   final bool isInteractive;
   final MapController? mapController;
 
+  /// Called once the map has rendered; the [mapController] must not be used
+  /// before that.
+  final VoidCallback? onMapReady;
+
   const OSMLocationPicker({
     super.key,
     required this.initialPosition,
     this.onPositionChanged,
     this.isInteractive = true,
     this.mapController,
+    this.onMapReady,
   });
 
   @override
   Widget build(BuildContext context) {
     return FlutterMap(
+      mapController: mapController,
       options: MapOptions(
+        onMapReady: onMapReady,
         initialCenter: initialPosition,
         initialZoom: 15.0,
         interactionOptions: InteractionOptions(

@@ -105,7 +105,7 @@ class ProfileProvider extends ChangeNotifier {
           final lga = await _storage.read('profile_lga');
           final ward = await _storage.read('profile_ward');
           final storedZone = await _storage.read('monitoring_zone');
-          final bioEnabled = await _storage.read('biometric_enabled');
+          final bioEnabled = await _storage.isBiometricEnabled();
           if (stale()) return;
           _name = (cachedName != null && cachedName.isNotEmpty)
               ? cachedName
@@ -118,7 +118,7 @@ class ProfileProvider extends ChangeNotifier {
           _monitoringZone = (storedZone != null && storedZone.isNotEmpty)
               ? storedZone
               : null;
-          _biometricsEnabled = bioEnabled == 'true';
+          _biometricsEnabled = bioEnabled;
           // Notify immediately so the UI shows cached data, then continue
           // fetching from the server to refresh.
           notifyListeners();
@@ -147,7 +147,12 @@ class ProfileProvider extends ChangeNotifier {
             _lga = doc['lga'];
             _ward = doc['ward'];
             _registrationCode = doc['registrationCode'];
-            _biometricsEnabled = doc['biometricsEnabled'] ?? false;
+            // The row's biometricsEnabled is informational only: the
+            // device lock is per device and is read from local storage,
+            // never overwritten from the server (a device without
+            // biometrics would lock the user out).
+            _biometricsEnabled = await _storage.isBiometricEnabled();
+            if (stale()) return;
 
             // The row is the truth: '' (the column default) means "all
             // zones", so a zone cached on this device (possibly by another
@@ -185,7 +190,6 @@ class ProfileProvider extends ChangeNotifier {
               'profile_ward': _ward,
               'profile_image': _profileImagePath,
               'monitoring_zone': _monitoringZone ?? '',
-              'biometric_enabled': _biometricsEnabled.toString(),
             };
             for (final entry in cache.entries) {
               if (stale()) return;
@@ -482,12 +486,11 @@ class ProfileProvider extends ChangeNotifier {
     await _syncToServer({'monitoringZone': effectiveZone ?? ''});
   }
 
-  Future<void> setBiometricsEnabled(bool enabled) async {
-    _biometricsEnabled = enabled;
-    await _storage.write('biometric_enabled', enabled.toString());
-    await _updateLocalState({'biometricsEnabled': enabled});
+  /// Re-reads the device's biometric lock flag for display. The flag is
+  /// written only by AuthProvider.setBiometricEnabled.
+  Future<void> refreshBiometricsEnabled() async {
+    _biometricsEnabled = await _storage.isBiometricEnabled();
     notifyListeners();
-    await _syncToServer({'biometricsEnabled': enabled});
   }
 
   static String _metadataName(sb.User user) {

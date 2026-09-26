@@ -14,7 +14,7 @@ void showLanguageSelectorSheet(
       borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
     ),
     builder: (context) {
-      final languages = ['English', 'Hausa', 'Yoruba', 'Igbo', 'Pidgin'];
+      final languages = LanguageProvider.supportedLanguages.keys;
       return Container(
         padding: const EdgeInsets.symmetric(vertical: 20),
         child: Column(

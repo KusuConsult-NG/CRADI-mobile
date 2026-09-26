@@ -7,7 +7,7 @@ import {
   phoneFromFakeEmail, toE164, extractStoragePath, storageTargetFor, rewriteUrl, cleanImageUrl,
   transformUser, transformReport, transformVerification, transformVerificationOverride,
   transformAlert, transformMessage, transformContact, transformKnowledge, transformAuthority,
-  transformTrustedDevice, transformLoginHistory, transformNdpaConsent,
+  transformTrustedDevice, transformLoginHistory, transformNdpaConsent, decodeHtmlEntities,
 } from '../src/transform.js';
 
 const NOW = '2026-09-25T00:00:00.000Z';
@@ -327,5 +327,50 @@ describe('other collections', () => {
     assert.equal(c.policy_version, '1.0');
     assert.equal(transformNdpaConsent('bob', {}, ctx).row.user_id, users.bob);
     assert.ok(transformNdpaConsent('ghost', {}, ctx).skip);
+  });
+});
+
+describe('legacy HTML-escaped free text', () => {
+  test('decodeHtmlEntities decodes the entities old builds produced, once', () => {
+    assert.equal(decodeHtmlEntities('don&#x27;t'), "don't");
+    assert.equal(decodeHtmlEntities('O&#39;Brien &amp; sons'), "O'Brien & sons");
+    assert.equal(decodeHtmlEntities('&lt;b&gt; &quot;x&quot; 1&#x2F;2'), '<b> "x" 1/2');
+    assert.equal(decodeHtmlEntities('A&#x2f;B'), 'A/B');
+    // Single pass: a literally typed "&lt;" (escaped to "&amp;lt;") survives.
+    assert.equal(decodeHtmlEntities('&amp;lt;'), '&lt;');
+    // Unknown entities / bare ampersands are left alone.
+    assert.equal(decodeHtmlEntities('R&D &nbsp; &copy;'), 'R&D &nbsp; &copy;');
+    assert.equal(decodeHtmlEntities('plain'), 'plain');
+    assert.equal(decodeHtmlEntities(undefined), undefined);
+  });
+
+  test('report free-text fields are decoded', () => {
+    const { row } = transformReport('x', {
+      userId: 'alice', severity: 'high', lga: 'Jos North',
+      description: 'Water didn&#x27;t recede &amp; roads &lt;closed&gt;',
+      locationDetails: 'Behind &quot;Main&quot; market',
+      address: 'No 5&#x2F;7 Street',
+      rejectionReason: 'isn&#x27;t valid',
+    }, ctx);
+    assert.equal(row.description, "Water didn't recede & roads <closed>");
+    assert.equal(row.location_details, 'Behind "Main" market');
+    assert.equal(row.location, 'Behind "Main" market');
+    assert.equal(row.address, 'No 5/7 Street');
+    assert.equal(row.rejection_reason, "isn't valid");
+  });
+
+  test('user name/address, messages and contacts are decoded', () => {
+    const user = transformUser('u1', { email: 'a@b.co' }, { name: 'Ngozi O&#x27;Neil', address: '12 A&amp;B Road' }, ctx);
+    assert.equal(user.row.profile.name, "Ngozi O'Neil");
+    assert.equal(user.row.profile.address, '12 A&B Road');
+    assert.equal(user.row.auth.user_metadata.name, "Ngozi O'Neil");
+
+    const msg = transformMessage('m', { senderId: 'alice', text: 'We&#x27;re safe', senderName: 'A&amp;B' }, ctx);
+    assert.equal(msg.row.message, "We're safe");
+    assert.equal(msg.row.sender_name, 'A&B');
+
+    const contact = transformContact('c', { userId: 'alice', phone: '0803', name: 'Mama&#x27;s', organization: 'Red &quot;Cross&quot;' }, ctx);
+    assert.equal(contact.row.name, "Mama's");
+    assert.equal(contact.row.organization, 'Red "Cross"');
   });
 });

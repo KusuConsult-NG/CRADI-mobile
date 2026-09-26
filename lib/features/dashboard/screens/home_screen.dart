@@ -544,16 +544,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
               GestureDetector(
-                onTap: () {
-                  // Notification action
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        AppLocalizations.of(context)!.noNewNotifications,
-                      ),
-                    ),
-                  );
-                },
+                onTap: () => context.push('/notifications'),
                 child: Stack(
                   children: [
                     Container(

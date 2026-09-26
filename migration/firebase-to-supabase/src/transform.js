@@ -65,6 +65,39 @@ export function asNullableText(value) {
   return text === '' ? null : text;
 }
 
+// Older app builds HTML-escaped user text before storing it (InputSanitizer
+// .sanitize: & < > " ' / → entities), so e.g. "don't" was saved as
+// "don&#x27;t". Free text is stored raw in Supabase; decode exactly those
+// entities once (single pass, so "&amp;lt;" becomes the literal "&lt;").
+const HTML_ENTITIES = {
+  '&amp;': '&',
+  '&lt;': '<',
+  '&gt;': '>',
+  '&quot;': '"',
+  '&#x27;': "'",
+  '&#39;': "'",
+  '&#039;': "'",
+  '&apos;': "'",
+  '&#x2f;': '/',
+  '&#47;': '/',
+};
+const HTML_ENTITY_RE = /&(?:amp|lt|gt|quot|apos|#x27|#0?39|#x2f|#47);/gi;
+
+export function decodeHtmlEntities(text) {
+  if (typeof text !== 'string' || !text.includes('&')) return text;
+  return text.replace(HTML_ENTITY_RE, (m) => HTML_ENTITIES[m.toLowerCase()] ?? m);
+}
+
+/** asText for user-entered free text: also undoes legacy HTML escaping. */
+export function asFreeText(value, fallback = '') {
+  return decodeHtmlEntities(asText(value, fallback));
+}
+
+export function asNullableFreeText(value) {
+  const text = asFreeText(value, '');
+  return text === '' ? null : text;
+}
+
 export function asBool(value, fallback = false) {
   if (typeof value === 'boolean') return value;
   if (value === 'true' || value === 1 || value === '1') return true;
@@ -327,13 +360,13 @@ export function transformUser(uid, authRecord, doc, ctx) {
   const profilePhone = asText(d.phone) || phone || asText(a.phoneNumber) || '';
 
   const metadata = {
-    name: asText(d.name) || asText(a.displayName) || 'User',
+    name: asFreeText(d.name) || asFreeText(a.displayName) || 'User',
     role: role ?? 'user',
     state: asText(d.state),
     lga: asText(d.lga),
     ward: asText(d.ward),
     phone: profilePhone,
-    address: asText(d.address),
+    address: asFreeText(d.address),
   };
 
   const auth = kind === 'phone'
@@ -388,24 +421,24 @@ export function transformReport(id, d, ctx) {
 
   // `location` is normally a string, but tolerate a GeoPoint.
   const geo = d.location && typeof d.location === 'object' ? d.location : null;
-  const locationText = geo ? '' : asText(d.location);
+  const locationText = geo ? '' : asFreeText(d.location);
   const images = Array.isArray(d.imageUrls) ? d.imageUrls : d.imageUrl ? [d.imageUrl] : [];
 
   const updatedByUid = refId(d.updatedBy);
   return result({
     user_id: userId,
-    reporter_name: asNullableText(d.reporterName),
+    reporter_name: asNullableFreeText(d.reporterName),
     hazard_type: asText(d.hazardType) || asText(d.type) || 'unknown',
     severity,
     latitude: asNumber(d.latitude) ?? asNumber(geo?.latitude ?? geo?._latitude),
     longitude: asNumber(d.longitude) ?? asNumber(geo?.longitude ?? geo?._longitude),
-    location_details: asText(d.locationDetails) || locationText,
-    location: locationText || asText(d.locationDetails),
-    address: asText(d.address),
+    location_details: asFreeText(d.locationDetails) || locationText,
+    location: locationText || asFreeText(d.locationDetails),
+    address: asFreeText(d.address),
     ward: asText(d.ward),
     lga,
     state: asText(d.state),
-    description: asText(d.description),
+    description: asFreeText(d.description),
     submitted_at: submitted ?? ctx.now,
     image_urls: images.map(cleanImageUrl).filter(Boolean).map(ctx.url),
     status,
@@ -416,7 +449,7 @@ export function transformReport(id, d, ctx) {
     auto_validated: asBool(d.autoValidated, false),
     approved_at: toIso(d.approvedAt),
     rejected_at: toIso(d.rejectedAt),
-    rejection_reason: asNullableText(d.rejectionReason),
+    rejection_reason: asNullableFreeText(d.rejectionReason),
     escalated,
     escalated_at: toIso(d.escalatedAt),
     escalation_reason: asNullableText(d.escalationReason),
@@ -441,7 +474,7 @@ export function transformVerification(id, d, ctx) {
     report_id: reportId,
     verifier_id: verifierId,
     is_confirmed: asBool(d.isConfirmed, false),
-    comment: asText(d.comment),
+    comment: asFreeText(d.comment),
     submitted_at: submitted,
     created_at: toIso(d.createdAt) ?? submitted,
   });
@@ -460,7 +493,7 @@ export function transformVerificationOverride(id, d, ctx) {
     report_id: reportId,
     validator_id: validatorId,
     action,
-    reason: asText(d.reason),
+    reason: asFreeText(d.reason),
     created_at: toIso(d.timestamp) ?? toIso(d.createdAt) ?? ctx.now,
   });
 }
@@ -500,13 +533,13 @@ export function transformMessage(id, d, ctx) {
   const senderFb = refId(d.senderId ?? d.userId);
   const senderId = senderFb ? ctx.user(senderFb) : null;
   if (!senderId) return skipped(`sender ${senderFb ?? '(missing)'} not migrated`);
-  const message = asText(d.message ?? d.text);
+  const message = asFreeText(d.message ?? d.text);
   if (!message) return skipped('empty message');
   const sent = toIso(d.sentAt) ?? toIso(d.createdAt) ?? toIso(d.timestamp) ?? ctx.now;
   return result({
     chat_id: asText(d.chatId) || 'general',
     sender_id: senderId,
-    sender_name: asText(d.senderName),
+    sender_name: asFreeText(d.senderName),
     message,
     type: asText(d.type) || 'text',
     sent_at: sent,
@@ -523,10 +556,10 @@ export function transformContact(id, d, ctx) {
   if (!phone) return skipped('missing phone');
   return result({
     user_id: userId,
-    name: asText(d.name) || phone,
-    role: asText(d.role ?? d.relationship),
+    name: asFreeText(d.name) || phone,
+    role: asFreeText(d.role ?? d.relationship),
     phone,
-    organization: asNullableText(d.organization),
+    organization: asNullableFreeText(d.organization),
     lga: asNullableText(d.lga),
     category: asText(d.category) || 'other',
     is_available: asBool(d.isAvailable, true),

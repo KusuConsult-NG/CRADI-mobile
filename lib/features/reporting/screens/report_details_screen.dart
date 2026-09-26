@@ -31,6 +31,10 @@ class _ReportDetailsScreenState extends State<ReportDetailsScreen> {
   void initState() {
     super.initState();
     _speech = stt.SpeechToText();
+    // Returning here through the review screen's "Edit" links pushes a fresh
+    // copy of this page; start from what the user already entered instead of
+    // an empty field (which would wipe the description on "Review").
+    _descController.text = context.read<ReportingProvider>().description ?? '';
     _initSpeech();
     _descController.addListener(_updateCharCount);
   }
@@ -227,7 +231,20 @@ class _ReportDetailsScreenState extends State<ReportDetailsScreen> {
           pickedTime.hour,
           pickedTime.minute,
         );
+        // An incident cannot happen in the future (today's date with a later
+        // time is still selectable); the provider clamps it to now.
+        final inFuture = newDateTime.isAfter(DateTime.now());
         provider.setReportDateTime(newDateTime);
+        if (inFuture && context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'The incident time cannot be in the future. '
+                'It has been set to the current time.',
+              ),
+            ),
+          );
+        }
       }
     }
   }
@@ -383,11 +400,13 @@ class _ReportDetailsScreenState extends State<ReportDetailsScreen> {
                         ],
                       ),
                       Text(
-                        '${_descController.text.length}/500',
+                        '${_descController.text.length}/${ReportingProvider.maxDescriptionLength}',
                         style: GoogleFonts.lexend(
                           fontSize: 12,
                           fontWeight: FontWeight.w500,
-                          color: _descController.text.length > 500
+                          color:
+                              _descController.text.length >
+                                  ReportingProvider.maxDescriptionLength
                               ? Colors.red
                               : Colors.green.shade600,
                         ),
@@ -662,7 +681,13 @@ class _ReportDetailsScreenState extends State<ReportDetailsScreen> {
               child: CustomButton(
                 onPressed: () {
                   context.read<ReportingProvider>().setDescription(
-                    InputSanitizer.fullSanitize(_descController.text),
+                    // Stored as typed (no HTML escaping); only control
+                    // characters/extra whitespace are removed.
+                    InputSanitizer.cleanForStorage(
+                      _descController.text,
+                      preserveNewlines: true,
+                      maxLength: ReportingProvider.maxDescriptionLength,
+                    ),
                   );
                   context.push('/report/review');
                 },

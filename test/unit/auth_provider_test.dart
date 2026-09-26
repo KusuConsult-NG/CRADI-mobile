@@ -70,13 +70,4 @@ void main() {
       expect(e.userMessage, contains('a@b.com'));
     });
   });
-
-  // ─── SmsConfig Tests ─────────────────────────────────────────────────────
-  group('SmsConfig', () {
-    test('isConfigured returns false when TERMII_API_KEY is empty', () {
-      const emptyKey = '';
-      final configured = emptyKey != 'YOUR_API_KEY_HERE' && emptyKey.isNotEmpty;
-      expect(configured, isFalse);
-    });
-  });
 }

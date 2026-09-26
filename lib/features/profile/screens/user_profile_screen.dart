@@ -5,6 +5,7 @@ import 'package:climate_app/core/utils/error_handler.dart';
 import 'package:climate_app/features/auth/providers/auth_provider.dart'
     as app_auth;
 import 'package:climate_app/features/profile/providers/profile_provider.dart';
+import 'package:climate_app/features/profile/widgets/sos_sheet.dart';
 import 'package:climate_app/core/providers/language_provider.dart';
 import 'package:climate_app/core/services/biometric_service.dart';
 import 'package:climate_app/features/contacts/providers/emergency_contacts_provider.dart';
@@ -774,43 +775,49 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                       ),
                       activeThumbColor: AppColors.primaryRed,
                       value: profile.biometricsEnabled,
+                      // The device lock flag is only written through
+                      // AuthProvider (it prompts for biometrics first).
                       onChanged: (value) async {
-                        if (value) {
-                          final available = await BiometricService()
-                              .isBiometricAvailable();
-                          if (!available) {
-                            if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text(
-                                    'Biometrics not available on this device',
-                                  ),
-                                  backgroundColor: Colors.red,
-                                ),
-                              );
-                            }
-                            return;
+                        final messenger = ScaffoldMessenger.of(context);
+                        final auth = context.read<app_auth.AuthProvider>();
+                        if (value && !await auth.isBiometricAvailable()) {
+                          messenger.showSnackBar(
+                            const SnackBar(
+                              content: Text(
+                                'Biometrics not available on this device',
+                              ),
+                              backgroundColor: Colors.red,
+                            ),
+                          );
+                          return;
+                        }
+                        try {
+                          await auth.setBiometricEnabled(value);
+                          await profile.refreshBiometricsEnabled();
+                          if (value) {
+                            messenger.showSnackBar(
+                              const SnackBar(
+                                content: Text('Biometrics enabled!'),
+                                backgroundColor: Colors.green,
+                              ),
+                            );
                           }
-
-                          final authenticated = await BiometricService()
-                              .authenticate(
-                                reason: 'Authenticate to enable biometrics',
-                                useErrorDialogs: true,
-                              );
-
-                          if (authenticated) {
-                            await profile.setBiometricsEnabled(true);
-                            if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('Biometrics enabled!'),
-                                  backgroundColor: Colors.green,
-                                ),
-                              );
-                            }
+                        } on Exception {
+                          final message =
+                              BiometricService.messageFor(
+                                BiometricService().lastErrorCode,
+                              ) ??
+                              (BiometricService().lastErrorCode == null
+                                  ? 'Could not change biometric login'
+                                  : null);
+                          if (message != null) {
+                            messenger.showSnackBar(
+                              SnackBar(
+                                content: Text(message),
+                                backgroundColor: Colors.red,
+                              ),
+                            );
                           }
-                        } else {
-                          await profile.setBiometricsEnabled(false);
                         }
                       },
                     ),
@@ -893,46 +900,10 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
               child: Column(
                 children: [
                   CustomButton(
-                    onPressed: () {
-                      showDialog(
-                        context: context,
-                        builder: (c) => AlertDialog(
-                          title: Text(
-                            'SOS Emergency',
-                            style: GoogleFonts.lexend(
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          content: Text(
-                            'Send emergency alert to your supervisor?',
-                            style: GoogleFonts.lexend(),
-                          ),
-                          actions: [
-                            TextButton(
-                              onPressed: () => Navigator.pop(c),
-                              child: Text(AppLocalizations.of(context)!.cancel),
-                            ),
-                            CustomButton(
-                              onPressed: () {
-                                Navigator.pop(c);
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text(
-                                      'Emergency alert sent!',
-                                      style: GoogleFonts.lexend(),
-                                    ),
-                                    backgroundColor: Colors.red,
-                                  ),
-                                );
-                              },
-                              text: 'Send Alert',
-                              width: 120, // Optional constraint
-                            ),
-                          ],
-                        ),
-                      );
-                    },
-                    text: 'Contact Supervisor / SOS',
+                    // Offers calls to 112 / the user's emergency contacts;
+                    // nothing is sent through the app.
+                    onPressed: () => showSosSheet(context),
+                    text: 'SOS / Emergency Call',
                     icon: Icons.sos,
                     // Note: Using primary red for SOS to make it prominent
                   ),

@@ -3,6 +3,7 @@ import 'package:climate_app/core/providers/connectivity_provider.dart';
 import 'package:climate_app/features/knowledge_base/providers/news_provider.dart';
 import 'package:climate_app/features/knowledge_base/providers/knowledge_provider.dart';
 import 'package:climate_app/core/theme/app_colors.dart';
+import 'package:climate_app/features/knowledge_base/knowledge_categories.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -444,7 +445,9 @@ class _KnowledgeBaseScreenState extends State<KnowledgeBaseScreen> {
                           },
                           child: _buildRecentItem(
                             item['title'],
-                            '${item['source']} • ${item['date']}',
+                            [item['source'], formatKnowledgeDate(item['date'])]
+                                .where((p) => p != null && '$p'.isNotEmpty)
+                                .join(' • '),
                             Icons.public,
                           ),
                         ),

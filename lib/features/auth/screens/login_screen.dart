@@ -403,7 +403,11 @@ class _LoginScreenState extends State<LoginScreen> {
                               keyboardType: TextInputType.emailAddress,
                               prefixIcon: const Icon(Icons.email_outlined),
                               hint: 'email@example.com',
-                              validator: Validators.validateEmail,
+                              // Validated as it is submitted: trimmed (a
+                              // pasted / autofilled address often carries
+                              // a trailing space).
+                              validator: (v) =>
+                                  Validators.validateEmail(v?.trim()),
                               enabled: !_isLoading,
                             ),
 
@@ -520,88 +524,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
                   const SizedBox(height: 24),
 
-                  // Biometric login option: it re-uses the persisted
-                  // session, so it is only offered while one exists (a
-                  // logout revokes it).
-                  FutureBuilder<bool>(
-                    future: _canOfferBiometricLogin(authProvider),
-                    builder: (context, snapshot) {
-                      if (snapshot.data == true) {
-                        return Column(
-                          children: [
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: Divider(color: Colors.grey.shade300),
-                                ),
-                                Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 16,
-                                  ),
-                                  child: Text(
-                                    'OR',
-                                    style: TextStyle(
-                                      color: Colors.grey.shade600,
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                ),
-                                Expanded(
-                                  child: Divider(color: Colors.grey.shade300),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 16),
-                            CustomButton(
-                              text: 'Login with Biometrics',
-                              onPressed: _isLoading
-                                  ? null
-                                  : () async {
-                                      // Capture router before async gap
-                                      final router = GoRouter.of(context);
-
-                                      setState(() => _isLoading = true);
-                                      final enabled = await authProvider
-                                          .isBiometricEnabled();
-                                      if (!enabled) {
-                                        setState(() {
-                                          _isLoading = false;
-                                          _errorMessage =
-                                              'Biometric login is not enabled. Please login with your email/code once and enable it in Settings.';
-                                        });
-                                        return;
-                                      }
-
-                                      final success = await authProvider
-                                          .authenticateWithBiometrics();
-
-                                      if (!mounted) return;
-
-                                      setState(() => _isLoading = false);
-
-                                      if (!mounted) return;
-
-                                      if (success) {
-                                        router.go('/dashboard');
-                                      } else {
-                                        setState(() {
-                                          _errorMessage =
-                                              'Biometric authentication failed. Please try again or use email login.';
-                                        });
-                                      }
-                                    },
-                              icon: Icons.fingerprint,
-                              type: ButtonType.secondary,
-                            ),
-                            const SizedBox(height: 24),
-                          ],
-                        );
-                      }
-                      return const SizedBox.shrink();
-                    },
-                  ),
-
                   // Security info
                   Container(
                     padding: const EdgeInsets.all(16),
@@ -636,12 +558,6 @@ class _LoginScreenState extends State<LoginScreen> {
         );
       },
     );
-  }
-
-  Future<bool> _canOfferBiometricLogin(AuthProvider authProvider) async {
-    if (!authProvider.hasStoredSession) return false;
-    return await authProvider.isBiometricEnabled() &&
-        await authProvider.isBiometricAvailable();
   }
 
   Widget _buildLockScreen(AuthProvider authProvider) {

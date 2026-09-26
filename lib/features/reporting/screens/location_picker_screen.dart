@@ -17,6 +17,8 @@ import 'package:climate_app/features/profile/providers/profile_provider.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:climate_app/l10n/app_localizations.dart';
 
+enum _PositionSource { gps, manual, geocoded }
+
 class LocationPickerScreen extends StatefulWidget {
   const LocationPickerScreen({super.key});
 
@@ -31,6 +33,14 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
   double _severityValue = 3.0;
   final GeolocationService _geoService = GeolocationService();
   Position? _currentPosition;
+
+  /// Where [_currentPosition] came from. Only [_PositionSource.gps] is a real
+  /// fix; a geocoded area centre must never replace a GPS fix or a point the
+  /// user tapped.
+  _PositionSource? _positionSource;
+
+  /// FlutterMap asserts if the controller is used before the map rendered.
+  bool _mapReady = false;
   bool _isLoadingLocation = true;
   String _locationError = '';
   String _lga = 'Loading...';
@@ -170,8 +180,17 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
       if (position != null) {
         setState(() {
           _currentPosition = position;
+          _positionSource = _PositionSource.gps;
           _isLoadingLocation = false;
         });
+        _moveCamera(LatLng(position.latitude, position.longitude));
+        // e.g. fell back to the last known position after a timeout.
+        final notice = _geoService.lastErrorMessage;
+        if (notice != null) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text(notice)));
+        }
 
         // Get location details
         final details = await _geoService.getLocationDetails(
@@ -202,7 +221,9 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
         if (mounted) {
           setState(() {
             _isLoadingLocation = false;
-            _locationError = AppLocalizations.of(context)!.enableGpsMessage;
+            _locationError =
+                _geoService.lastErrorMessage ??
+                AppLocalizations.of(context)!.enableGpsMessage;
           });
         }
       }
@@ -225,6 +246,10 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
       return AppLocalizations.of(context)!.noSignalGps;
     }
 
+    // A geocoded area centre or a tapped point has no accuracy (0): it is
+    // not a GPS fix, so never report it as "GPS Strong".
+    if (_positionSource != _PositionSource.gps) return 'Approximate';
+
     final accuracy = _currentPosition!.accuracy;
     if (accuracy <= 20) return AppLocalizations.of(context)!.gpsStrong;
     if (accuracy <= 50) return AppLocalizations.of(context)!.gpsGood;
@@ -236,7 +261,8 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
     if (status == AppLocalizations.of(context)!.gpsStrong) {
       return Colors.green.shade700;
     }
-    if (status == AppLocalizations.of(context)!.gpsGood) {
+    if (status == AppLocalizations.of(context)!.gpsGood ||
+        status == 'Approximate') {
       return Colors.orange.shade700;
     }
     if (status == AppLocalizations.of(context)!.acquiringGps) {
@@ -245,35 +271,59 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
     return Colors.red.shade700;
   }
 
+  /// Moves the camera only once the map has rendered (its controller throws
+  /// before that).
+  void _moveCamera(LatLng target) {
+    if (!_mapReady) return;
+    try {
+      _mapController.move(target, 15.0);
+    } on Object catch (_) {
+      // Map not attached (e.g. being rebuilt) - the next frame shows the
+      // current position anyway.
+    }
+  }
+
+  /// Centres the map on the chosen State/LGA.
+  ///
+  /// A GPS fix (or a point the user tapped) is precise and is kept: only the
+  /// camera moves. Without one, the geocoded area centre is used as an
+  /// *approximate* position.
   Future<void> _updateMapToSelectedLocation(String locationString) async {
-    setState(() {
-      _isLoadingLocation = true;
-    });
+    final keepPosition =
+        _positionSource == _PositionSource.gps ||
+        _positionSource == _PositionSource.manual;
+    if (!keepPosition) {
+      setState(() {
+        _isLoadingLocation = true;
+      });
+    }
 
     try {
       final position = await _geoService.getCoordinatesFromAddress(
         locationString,
       );
       if (!mounted) return;
+      if (keepPosition) {
+        // Precise coordinates stay untouched; just preview the area.
+        if (position != null) {
+          _moveCamera(LatLng(position.latitude, position.longitude));
+        }
+        return;
+      }
       if (position != null) {
         setState(() {
           _currentPosition = position;
+          _positionSource = _PositionSource.geocoded;
           _isLoadingLocation = false;
+          _locationError = '';
         });
 
-        // Update map center
-        _mapController.move(
-          LatLng(position.latitude, position.longitude),
-          15.0,
-        );
+        _moveCamera(LatLng(position.latitude, position.longitude));
 
-        // Update provider
         context.read<ReportingProvider>().setLocation(
           position.latitude,
           position.longitude,
-        );
-        context.read<ReportingProvider>().setLocationDetails(
-          '${position.latitude},${position.longitude}',
+          approximate: true,
         );
       } else {
         setState(() {
@@ -282,7 +332,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
         });
       }
     } on Exception {
-      if (mounted) {
+      if (mounted && !keepPosition) {
         setState(() {
           _isLoadingLocation = false;
           _locationError = AppLocalizations.of(context)!.mapUpdateError;
@@ -308,6 +358,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
 
     setState(() {
       _currentPosition = position;
+      _positionSource = _PositionSource.manual;
     });
 
     // Update provider coordinates
@@ -315,6 +366,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
       context.read<ReportingProvider>().setLocation(
         point.latitude,
         point.longitude,
+        approximate: true,
       );
       context.read<ReportingProvider>().setLocationDetails(
         '${point.latitude},${point.longitude}',
@@ -620,6 +672,25 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                                                   color: Colors.grey.shade600,
                                                 ),
                                               ),
+                                              if (_locationError.isNotEmpty)
+                                                Padding(
+                                                  padding:
+                                                      const EdgeInsets.fromLTRB(
+                                                        16,
+                                                        6,
+                                                        16,
+                                                        0,
+                                                      ),
+                                                  child: Text(
+                                                    _locationError,
+                                                    textAlign: TextAlign.center,
+                                                    style: TextStyle(
+                                                      fontSize: 12,
+                                                      color:
+                                                          Colors.grey.shade600,
+                                                    ),
+                                                  ),
+                                                ),
                                             ],
                                           ),
                                         ),
@@ -634,6 +705,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                                       ),
                                       isInteractive: true,
                                       onPositionChanged: _onMapPositionChanged,
+                                      onMapReady: () => _mapReady = true,
                                     ),
                                     Positioned(
                                       bottom: 12,
@@ -1382,6 +1454,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                     context.read<ReportingProvider>().setLocation(
                       _currentPosition!.latitude,
                       _currentPosition!.longitude,
+                      approximate: _positionSource != _PositionSource.gps,
                     );
                   }
 

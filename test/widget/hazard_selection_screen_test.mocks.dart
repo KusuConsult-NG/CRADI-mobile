@@ -65,6 +65,14 @@ class MockReportingProvider extends _i1.Mock implements _i2.ReportingProvider {
           as bool);
 
   @override
+  bool get locationIsApproximate =>
+      (super.noSuchMethod(
+            Invocation.getter(#locationIsApproximate),
+            returnValue: false,
+          )
+          as bool);
+
+  @override
   bool get hasListeners =>
       (super.noSuchMethod(Invocation.getter(#hasListeners), returnValue: false)
           as bool);
@@ -88,8 +96,19 @@ class MockReportingProvider extends _i1.Mock implements _i2.ReportingProvider {
   );
 
   @override
-  void setLocation(double? lat, double? lng) => super.noSuchMethod(
-    Invocation.method(#setLocation, [lat, lng]),
+  void setLocation(double? lat, double? lng, {bool? approximate = false}) =>
+      super.noSuchMethod(
+        Invocation.method(
+          #setLocation,
+          [lat, lng],
+          {#approximate: approximate},
+        ),
+        returnValueForMissingStub: null,
+      );
+
+  @override
+  void clearLocation() => super.noSuchMethod(
+    Invocation.method(#clearLocation, []),
     returnValueForMissingStub: null,
   );
 

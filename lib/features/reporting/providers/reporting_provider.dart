@@ -43,6 +43,9 @@ bool isAlertSeverity(Object? raw) {
 class ReportingProvider extends ChangeNotifier {
   ReportingProvider();
 
+  /// Maximum length of the free-text description.
+  static const int maxDescriptionLength = 500;
+
   final SupabaseService _db = SupabaseService();
   final ImagePicker _picker = ImagePicker();
 
@@ -57,6 +60,7 @@ class ReportingProvider extends ChangeNotifier {
   List<XFile> _photos = [];
   double? _latitude;
   double? _longitude;
+  bool _locationIsApproximate = false;
 
   bool _isLoading = false;
 
@@ -77,6 +81,10 @@ class ReportingProvider extends ChangeNotifier {
   double? get latitude => _latitude;
   double? get longitude => _longitude;
 
+  /// True when the coordinates are not a GPS fix (e.g. the geocoded centre of
+  /// the chosen state/LGA, or a point tapped on the map).
+  bool get locationIsApproximate => _locationIsApproximate;
+
   void setHazardType(String type) {
     _hazardType = type;
     notifyListeners();
@@ -92,9 +100,18 @@ class ReportingProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  void setLocation(double lat, double lng) {
+  void setLocation(double lat, double lng, {bool approximate = false}) {
     _latitude = lat;
     _longitude = lng;
+    _locationIsApproximate = approximate;
+    notifyListeners();
+  }
+
+  /// Forget the coordinates (the report is then located by state/LGA/ward).
+  void clearLocation() {
+    _latitude = null;
+    _longitude = null;
+    _locationIsApproximate = false;
     notifyListeners();
   }
 
@@ -103,8 +120,10 @@ class ReportingProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Sets the incident time; a time in the future is clamped to now.
   void setReportDateTime(DateTime dateTime) {
-    _reportDateTime = dateTime;
+    final now = DateTime.now();
+    _reportDateTime = dateTime.isAfter(now) ? now : dateTime;
     notifyListeners();
   }
 
@@ -169,6 +188,7 @@ class ReportingProvider extends ChangeNotifier {
     _photos = [];
     _latitude = null;
     _longitude = null;
+    _locationIsApproximate = false;
     notifyListeners();
   }
 
@@ -189,10 +209,12 @@ class ReportingProvider extends ChangeNotifier {
       if (_lga == null) throw Exception('LGA is missing');
       final state = resolvedState;
       if (state == null) throw Exception('State is missing');
+      // GPS coordinates are optional (reports.latitude/longitude are
+      // nullable): without a fix the report is located by state/LGA/ward
+      // only and the UI labels the location as approximate/unknown.
       if (_latitude == null || _longitude == null) {
-        throw Exception(
-          'GPS coordinates are missing. Please refresh location or enable GPS.',
-        );
+        _latitude = null;
+        _longitude = null;
       }
 
       // Drafts and uploads are owner-tagged; an ownerless draft could never

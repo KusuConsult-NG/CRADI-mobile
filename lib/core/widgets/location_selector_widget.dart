@@ -34,17 +34,28 @@ class _LocationSelectorWidgetState extends State<LocationSelectorWidget> {
   @override
   void initState() {
     super.initState();
-    _selectedState = widget.initialState;
-    _selectedLGA = widget.initialLGA;
-    _selectedWard = widget.initialWard;
+    // Blank or unknown initial values (e.g. '' from an empty profile) are
+    // treated as "not selected": a dropdown value must be one of its items.
+    String? pick(String? value, List<String> options) {
+      final v = value?.trim();
+      if (v == null || v.isEmpty) return null;
+      return options.contains(v) ? v : null;
+    }
+
+    _selectedState = pick(
+      widget.initialState,
+      NigeriaLocationsData.focalStates,
+    );
     if (_selectedState != null) {
       _availableLGAs = NigeriaLocationsData.getLGAsForState(_selectedState!);
+      _selectedLGA = pick(widget.initialLGA, _availableLGAs);
     }
     if (_selectedLGA != null) {
       _availableWards = NigeriaLocationsData.getWardsForLGA(
         _selectedState!,
         _selectedLGA!,
       );
+      _selectedWard = pick(widget.initialWard, _availableWards);
     }
   }
 

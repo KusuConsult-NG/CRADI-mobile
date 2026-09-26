@@ -5,8 +5,10 @@ import 'package:flutter/foundation.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:onesignal_flutter/onesignal_flutter.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:climate_app/core/constants/app_config.dart';
+import 'package:climate_app/core/providers/settings_provider.dart';
 import 'package:climate_app/core/services/hive_encryption_service.dart';
 import 'package:climate_app/features/profile/providers/profile_provider.dart';
 
@@ -98,12 +100,19 @@ class NotificationService {
         OneSignal.Notifications.addClickListener(_onNotificationClicked);
         _pushEnabled = true;
 
-        // Not awaited: the permission dialog can stay open indefinitely and
-        // must not hold back initialization or identifying the user.
-        unawaited(_requestPermission());
+        // Restore the user's Push Notifications setting.
+        if (SettingsProvider().pushNotifications) {
+          // Not awaited: the permission dialog can stay open indefinitely
+          // and must not hold back initialization or identifying the user.
+          unawaited(_requestPermission());
+        } else {
+          unawaited(setPushSubscribed(false));
+        }
       }
 
       _initialized = true;
+      // The history belongs to one account; drop another account's.
+      await _ensureHistoryOwner(_userId);
       _updateUnreadCount();
 
       // A user signed in while we were initializing — identify them now.
@@ -135,6 +144,26 @@ class NotificationService {
         'Permission request error: $e',
         name: 'NotificationService',
       );
+    }
+  }
+
+  /// Opts this device in to / out of push (the Settings toggle). Opting in
+  /// may show the OS permission prompt. Returns false when it failed.
+  Future<bool> setPushSubscribed(bool enabled) async {
+    if (!_pushEnabled) return false;
+    try {
+      if (enabled) {
+        await OneSignal.User.pushSubscription.optIn();
+      } else {
+        await OneSignal.User.pushSubscription.optOut();
+      }
+      return true;
+    } on Exception catch (e) {
+      developer.log(
+        'Push opt-${enabled ? 'in' : 'out'} error: $e',
+        name: 'NotificationService',
+      );
+      return false;
     }
   }
 
@@ -310,7 +339,9 @@ class NotificationService {
         : monitoringZone;
     // If not yet initialized, initialize() will sync once it finishes.
     if (!_initialized) return;
-    await _serialized(_syncSignedInUser);
+    final sync = _serialized(_syncSignedInUser);
+    if (!sameUser) await _ensureHistoryOwner(userId);
+    await sync;
   }
 
   /// Call after the user signs out: detaches the device from the user so it
@@ -321,21 +352,27 @@ class NotificationService {
     _baseTags = const {};
     _tagsKnown = false;
     _zone = null;
-    if (!_pushEnabled || !wasSignedIn) return;
-    await _serialized(() async {
-      // A new user signed in meanwhile: their login replaces the identity;
-      // logging out now would detach them.
-      if (_userId != null) return;
-      _appliedTags = const {};
-      try {
-        await OneSignal.logout();
-      } on Exception catch (e) {
-        developer.log(
-          'OneSignal logout error: $e',
-          name: 'NotificationService',
-        );
-      }
-    });
+    // Queued before any await, so a sign-in that follows runs after it.
+    final logout = (!_pushEnabled || !wasSignedIn)
+        ? Future<void>.value()
+        : _serialized(() async {
+            // A new user signed in meanwhile: their login replaces the
+            // identity; logging out now would detach them.
+            if (_userId != null) return;
+            _appliedTags = const {};
+            try {
+              await OneSignal.logout();
+            } on Exception catch (e) {
+              developer.log(
+                'OneSignal logout error: $e',
+                name: 'NotificationService',
+              );
+            }
+          });
+    // The next account on this device must not see this one's history
+    // (unless that account already signed in meanwhile).
+    if (_userId == null) await clearHistoryForSignOut();
+    await logout;
   }
 
   Future<void> _syncSignedInUser() async {
@@ -386,6 +423,55 @@ class NotificationService {
   }
 
   // ─────────────────────────── Local history ───────────────────────────────
+
+  /// SharedPreferences key holding the user id the history belongs to.
+  static const String historyOwnerKey = 'notifications_history_owner';
+
+  /// Uses [box] as the history box (tests only; the app opens an encrypted
+  /// Hive box in [initialize]).
+  @visibleForTesting
+  void attachHistoryBoxForTesting(Box<Map> box) {
+    _notificationsBox = box;
+    _updateUnreadCount();
+  }
+
+  /// Signed-in user id for tests that bypass [onUserSignedIn].
+  @visibleForTesting
+  Future<void> setUserForTesting(String? userId) async {
+    _userId = userId;
+    if (userId == null) {
+      await clearHistoryForSignOut();
+    } else {
+      await _ensureHistoryOwner(userId);
+    }
+  }
+
+  /// Clears the history and its owner record (on sign-out).
+  Future<void> clearHistoryForSignOut() async {
+    try {
+      await clearAll();
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(historyOwnerKey);
+    } on Object catch (e) {
+      developer.log('History clear error: $e', name: 'NotificationService');
+    }
+  }
+
+  /// Clears the history when it was recorded for another account (e.g. the
+  /// sign-out clear could not run because the box was not open yet), then
+  /// records [userId] as its owner.
+  Future<void> _ensureHistoryOwner(String? userId) async {
+    if (userId == null || _notificationsBox == null) return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final owner = prefs.getString(historyOwnerKey);
+      if (owner == userId) return;
+      await clearAll();
+      await prefs.setString(historyOwnerKey, userId);
+    } on Object catch (e) {
+      developer.log('History owner error: $e', name: 'NotificationService');
+    }
+  }
 
   Future<void> _saveNotification({
     required String title,

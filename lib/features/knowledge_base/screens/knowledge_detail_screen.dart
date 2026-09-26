@@ -1,4 +1,5 @@
 import 'package:climate_app/core/theme/app_colors.dart';
+import 'package:climate_app/features/knowledge_base/knowledge_categories.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
@@ -20,6 +21,13 @@ class KnowledgeDetailScreen extends StatefulWidget {
 class _KnowledgeDetailScreenState extends State<KnowledgeDetailScreen> {
   bool _isBookmarked = false;
   static const _bookmarksKey = 'bookmarked_guides';
+
+  @override
+  void dispose() {
+    // Don't keep reading the guide aloud after leaving it.
+    TTSService().stop();
+    super.dispose();
+  }
 
   @override
   void initState() {
@@ -208,7 +216,7 @@ class _KnowledgeDetailScreenState extends State<KnowledgeDetailScreen> {
                 const Icon(Icons.access_time, size: 14, color: Colors.grey),
                 const SizedBox(width: 4),
                 Text(
-                  'Updated ${guide['lastUpdated'] ?? 'recently'}',
+                  'Updated ${formatKnowledgeDate(guide['updatedAt'] ?? guide['lastUpdated']) ?? 'recently'}',
                   style: GoogleFonts.lexend(fontSize: 12, color: Colors.grey),
                 ),
                 const SizedBox(width: 16),

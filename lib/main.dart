@@ -23,7 +23,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:provider/provider.dart';
-import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:climate_app/core/l10n/fallback_localizations.dart';
+import 'package:climate_app/core/widgets/force_update_gate.dart';
 import 'package:climate_app/l10n/app_localizations.dart';
 import 'package:climate_app/core/services/remote_config_service.dart';
 import 'package:climate_app/core/services/security_service.dart';
@@ -267,18 +268,22 @@ class _ClimateAppState extends State<ClimateApp> {
   }
 
   Widget _buildApp() {
-    return MaterialApp.router(
-      title: 'EWER Mobile - Early Warning System',
-      theme: AppTheme.lightTheme,
-      routerConfig: _router,
-      localizationsDelegates: const [
-        AppLocalizations.delegate,
-        GlobalMaterialLocalizations.delegate,
-        GlobalWidgetsLocalizations.delegate,
-        GlobalCupertinoLocalizations.delegate,
-      ],
-      supportedLocales: AppLocalizations.supportedLocales,
-      debugShowCheckedModeBanner: false,
+    // The in-app language choice drives the locale; Flutter has no
+    // Material/Cupertino translations for Hausa, so fallback delegates
+    // supply English ones instead of null.
+    return Consumer<LanguageProvider>(
+      builder: (context, language, _) => MaterialApp.router(
+        title: 'EWER Mobile - Early Warning System',
+        theme: AppTheme.lightTheme,
+        routerConfig: _router,
+        locale: language.locale,
+        localizationsDelegates: appLocalizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        debugShowCheckedModeBanner: false,
+        // Blocks the app while this build is below app_min_version.
+        builder: (context, child) =>
+            ForceUpdateGate(child: child ?? const SizedBox.shrink()),
+      ),
     );
   }
 }

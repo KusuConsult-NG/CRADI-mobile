@@ -367,22 +367,42 @@ class OfflineStorageService {
     }
   }
 
-  /// Mark queue item as failed
-  Future<void> markAsFailed(String queueId, String error) async {
+  /// The retry count after a failed attempt: unchanged when the attempt
+  /// does not count (transient network failure).
+  static int nextRetryCount(int previous, {required bool countsAsRetry}) =>
+      countsAsRetry ? previous + 1 : previous;
+
+  /// Whether a sync failure should consume one of the item's retries.
+  static bool failureCountsAsRetry(Object error) =>
+      !isTransientNetworkError(error);
+
+  /// Mark queue item as failed.
+  ///
+  /// When [countsAsRetry] is false (a transient network failure: the device
+  /// is offline / the server unreachable) the retry budget is not consumed,
+  /// so an item is never given up on just because the phone was offline.
+  Future<void> markAsFailed(
+    String queueId,
+    String error, {
+    bool countsAsRetry = true,
+  }) async {
     _ensureInitialized();
 
     final item = _syncQueueBox!.get(queueId);
     if (item != null) {
-      final retryCount = (item['retryCount'] as int?) ?? 0;
+      final retryCount = nextRetryCount(
+        (item['retryCount'] as int?) ?? 0,
+        countsAsRetry: countsAsRetry,
+      );
       final updated = Map<String, dynamic>.from(item)
         ..['status'] = 'failed'
-        ..['retryCount'] = retryCount + 1
+        ..['retryCount'] = retryCount
         ..['lastError'] = error
         ..['lastAttemptAt'] = DateTime.now().toIso8601String();
 
       await _syncQueueBox!.put(queueId, updated);
       developer.log(
-        'Marked as failed: $queueId (retry: ${retryCount + 1})',
+        'Marked as failed: $queueId (retry: $retryCount)',
         name: 'OfflineStorageService',
       );
     }
@@ -564,7 +584,11 @@ class OfflineStorageService {
           );
           rejectedCount++;
         } else {
-          await markAsFailed(queueId, e.toString());
+          await markAsFailed(
+            queueId,
+            e.toString(),
+            countsAsRetry: failureCountsAsRetry(e),
+          );
           failCount++;
         }
         developer.log(

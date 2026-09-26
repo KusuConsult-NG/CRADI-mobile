@@ -176,14 +176,20 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
       _showToast('Please select an LGA', isError: true);
       return;
     }
+    if (_selectedWard == null || _selectedWard!.trim().isEmpty) {
+      _showToast('Please select a ward', isError: true);
+      return;
+    }
 
     setState(() => _isLoading = true);
 
     try {
       final authProvider = context.read<AuthProvider>();
 
-      final name = InputSanitizer.sanitize(_nameController.text.trim());
-      final address = InputSanitizer.sanitize(_addressController.text.trim());
+      // Stored as typed: trimmed, whitespace/control characters normalised,
+      // never HTML-escaped (escaping turned "O'Brien" into "O&#x27;Brien").
+      final name = InputSanitizer.cleanForStorage(_nameController.text);
+      final address = InputSanitizer.cleanForStorage(_addressController.text);
       final phone = InputSanitizer.sanitizePhoneNumber(
         _phoneController.text.trim(),
       );
@@ -249,7 +255,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
       }
 
       // Traditional Email Auth Flow
-      final email = InputSanitizer.sanitize(_emailController.text.trim());
+      final email = _emailController.text.trim();
       final password = _passwordController.text;
 
       developer.log(
@@ -509,8 +515,10 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                               controller: _nameController,
                               hint: 'John Doe',
                               prefixIcon: const Icon(Icons.person_outline),
-                              validator: (v) =>
-                                  Validators.validateRequired(v, 'Name'),
+                              validator: (v) => Validators.validateRequired(
+                                v?.trim(),
+                                'Name',
+                              ),
                               enabled: !_isLoading,
                             ),
                             const SizedBox(height: 16),
@@ -523,7 +531,8 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                                 hint: 'name@example.com',
                                 prefixIcon: const Icon(Icons.email_outlined),
                                 keyboardType: TextInputType.emailAddress,
-                                validator: Validators.validateEmail,
+                                validator: (v) =>
+                                    Validators.validateEmail(v?.trim()),
                                 enabled:
                                     !_isLoading &&
                                     widget.prefilledEmail == null,
@@ -552,8 +561,10 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                               prefixIcon: const Icon(
                                 Icons.location_on_outlined,
                               ),
-                              validator: (v) =>
-                                  Validators.validateRequired(v, 'Address'),
+                              validator: (v) => Validators.validateRequired(
+                                v?.trim(),
+                                'Address',
+                              ),
                               enabled: !_isLoading,
                             ),
                             const SizedBox(height: 24),

@@ -6,8 +6,8 @@ import 'package:climate_app/core/providers/connectivity_provider.dart';
 import 'package:climate_app/features/profile/providers/profile_provider.dart';
 import 'package:climate_app/core/providers/settings_provider.dart';
 import 'package:climate_app/core/services/biometric_service.dart';
+import 'package:climate_app/core/services/notification_service.dart';
 import 'package:climate_app/core/utils/error_handler.dart';
-import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
@@ -23,8 +23,6 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  bool _pushNotifications = true;
-  bool _criticalAlerts = true;
   bool _biometricAvailable = false;
   bool _biometricEnabled = false;
   bool _checkingBiometric = true;
@@ -65,6 +63,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  /// Persists the Push Notifications setting and opts this device in to /
+  /// out of OneSignal push.
+  Future<void> _setPushNotifications(
+    SettingsProvider settings,
+    bool value,
+  ) async {
+    await settings.setPushNotifications(value);
+    final ok = await NotificationService().setPushSubscribed(value);
+    if (!ok && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Push notifications are unavailable right now. Your choice is '
+            'saved and will apply when they are.',
+          ),
+        ),
+      );
+    }
+  }
+
   Future<void> _toggleBiometric(bool value) async {
     try {
       final authProvider = context.read<AuthProvider>();
@@ -82,52 +100,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         );
       }
-    } on PlatformException catch (e) {
-      if (!mounted) return;
-      // noCredentialsSet = no fingerprints/face enrolled on device
-      if (e.code == 'noCredentialsSet' || e.code == 'NotEnrolled') {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'No biometrics enrolled. Please add a fingerprint or Face ID in your device Settings first.',
-            ),
-            backgroundColor: Colors.orange,
-            duration: Duration(seconds: 4),
-          ),
-        );
-        // Refresh biometric availability status
-        await _checkBiometric();
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Biometric authentication failed. Please try again.'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
     } on AuthException catch (e) {
-      if (mounted) {
+      // setBiometricEnabled throws when the confirming prompt fails;
+      // BiometricService keeps the local_auth error code of that failure.
+      if (!mounted) return;
+      final bio = BiometricService();
+      final code = bio.lastErrorCode;
+      final notEnrolled = bio.lastErrorIsNotEnrolled;
+      final message = code != null
+          ? BiometricService.messageFor(code)
+          : e.toString();
+      if (message != null) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.toString()), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text(message),
+            backgroundColor: notEnrolled ? Colors.orange : Colors.red,
+            duration: const Duration(seconds: 4),
+          ),
         );
       }
+      // Enrolment / hardware state may have changed: refresh availability.
+      if (notEnrolled) await _checkBiometric();
     } on Exception catch (e) {
-      // Check if it's a PlatformException wrapped in a generic Exception
-      final msg = e.toString();
-      if (msg.contains('noCredentialsSet') || msg.contains('NotEnrolled')) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                'No biometrics enrolled. Please add a fingerprint in your device Settings first.',
-              ),
-              backgroundColor: Colors.orange,
-              duration: Duration(seconds: 4),
-            ),
-          );
-          await _checkBiometric();
-        }
-      } else if (mounted) {
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(ErrorHandler.getUserMessage(e)),
@@ -301,56 +296,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 decoration: _cardDecoration(),
                 child: Column(
                   children: [
-                    _buildSwitchTile(
-                      icon: Icons.notifications,
-                      color: Colors.red,
-                      title: provider.pushNotifications,
-                      value: _pushNotifications,
-                      onChanged: (v) => setState(() => _pushNotifications = v),
-                    ),
-                    Divider(height: 1, color: Colors.grey.shade100, indent: 60),
-                    _buildSwitchTile(
-                      icon: Icons.warning,
-                      color: Colors.orange,
-                      title: provider.criticalAlerts,
-                      subtitle: 'Play sound even if muted',
-                      value: _criticalAlerts,
-                      onChanged: (v) => setState(() => _criticalAlerts = v),
-                    ),
-                  ],
-                ),
-              ),
-
-              const SizedBox(height: 24),
-
-              _buildSectionHeader(provider.dataStorage),
-              Container(
-                decoration: _cardDecoration(),
-                child: Column(
-                  children: [
                     Consumer<SettingsProvider>(
                       builder: (context, settings, _) => Column(
                         children: [
                           _buildSwitchTile(
-                            icon: Icons.wifi,
-                            color: Colors.blue,
-                            title: provider.wifiOnly,
-                            value: settings.wifiOnly,
-                            onChanged: (v) => settings.setWifiOnly(v),
+                            icon: Icons.notifications,
+                            color: Colors.red,
+                            title: provider.pushNotifications,
+                            value: settings.pushNotifications,
+                            onChanged: (v) =>
+                                _setPushNotifications(settings, v),
                           ),
-                          Divider(
-                            height: 1,
-                            color: Colors.grey.shade100,
-                            indent: 60,
-                          ),
-                          _buildSwitchTile(
-                            icon: Icons.data_saver_on,
-                            color: Colors.green,
-                            title: provider.lowData,
-                            subtitle: 'Reduce data usage for maps',
-                            value: settings.lowData,
-                            onChanged: (v) => settings.setLowData(v),
-                          ),
+                          // "Critical alerts" (sound while muted) is hidden until
+                          // the iOS critical-alert entitlement and an Android
+                          // high-importance channel actually back it.
                         ],
                       ),
                     ),

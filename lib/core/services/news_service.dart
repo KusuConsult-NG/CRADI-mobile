@@ -16,6 +16,8 @@ class NewsService {
         'limit': limit.toString(),
         'preset': 'latest',
         'profile': 'list',
+        // The public report page URL; `href` is the API resource URL.
+        'fields[include][]': 'url',
       };
 
       final uri = Uri.parse(_baseUrl).replace(queryParameters: queryParams);
@@ -27,22 +29,10 @@ class NewsService {
         final data = json.decode(response.body);
         final List<dynamic> items = data['data'] ?? [];
 
-        return items.map((item) {
-          final fields = item['fields'] ?? {};
-          final sources = fields['source'];
-          final firstSource = sources is List && sources.isNotEmpty
-              ? sources.first
-              : null;
-          return {
-            'id': item['id'],
-            'title': fields['title'] ?? 'No Title',
-            'url': item['href'],
-            'date': fields['date']?['created'] ?? '',
-            'source': firstSource is Map
-                ? (firstSource['name'] ?? 'ReliefWeb')
-                : 'ReliefWeb',
-          };
-        }).toList();
+        return items
+            .whereType<Map<dynamic, dynamic>>()
+            .map(mapReliefWebItem)
+            .toList();
       } else {
         developer.log(
           'API Error ${response.statusCode}: ${response.body}',
@@ -54,6 +44,29 @@ class NewsService {
       developer.log('Error fetching news: $e', name: 'NewsService');
       return _getFallbackNews();
     }
+  }
+
+  /// Maps one ReliefWeb API item to the news map used by the UI. The link is
+  /// the public page (`fields.url`), falling back to the API `href` only
+  /// when the page URL is missing.
+  static Map<String, dynamic> mapReliefWebItem(Map<dynamic, dynamic> item) {
+    final rawFields = item['fields'];
+    final fields = rawFields is Map ? rawFields : const {};
+    final sources = fields['source'];
+    final firstSource = sources is List && sources.isNotEmpty
+        ? sources.first
+        : null;
+    final pageUrl = fields['url'];
+    final date = fields['date'];
+    return {
+      'id': item['id'],
+      'title': fields['title'] ?? 'No Title',
+      'url': (pageUrl is String && pageUrl.isNotEmpty) ? pageUrl : item['href'],
+      'date': date is Map ? (date['created'] ?? '') : '',
+      'source': firstSource is Map
+          ? (firstSource['name'] ?? 'ReliefWeb')
+          : 'ReliefWeb',
+    };
   }
 
   /// Fallback news when API is unavailable or rate limited

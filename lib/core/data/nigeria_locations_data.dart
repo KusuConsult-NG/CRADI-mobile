@@ -975,28 +975,27 @@ class NigeriaLocationsData {
 
   /// Get only the 3 focal states (Plateau, Benue, Nasarawa)
 
-  /// Get LGAs for a specific state
-  static List<String> getLGAsForState(String state) {
-    try {
-      return locations.firstWhere((loc) => loc.state == state).lgas;
-    } on Exception catch (_) {
-      return [];
+  /// The entry for [state], or null for a blank/unknown state.
+  static NigeriaLocation? _find(String? state) {
+    final name = state?.trim();
+    if (name == null || name.isEmpty) return null;
+    for (final loc in locations) {
+      if (loc.state == name) return loc;
     }
+    return null;
+  }
+
+  /// Get LGAs for a specific state (empty for a blank/unknown state).
+  static List<String> getLGAsForState(String state) {
+    return _find(state)?.lgas ?? const [];
   }
 
   /// Check if a state exists
-  static bool isValidState(String state) {
-    return locations.any((loc) => loc.state == state);
-  }
+  static bool isValidState(String state) => _find(state) != null;
 
   /// Check if an LGA exists in a state
   static bool isValidLGA(String state, String lga) {
-    try {
-      final location = locations.firstWhere((loc) => loc.state == state);
-      return location.lgas.contains(lga);
-    } on Exception catch (_) {
-      return false;
-    }
+    return _find(state)?.lgas.contains(lga) ?? false;
   }
 
   /// Returns a list of wards for a given state and LGA.
