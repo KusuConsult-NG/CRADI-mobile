@@ -3329,4 +3329,48 @@ class AppLocalizationsIg extends AppLocalizations {
   @override
   String get adminUsersApproveUnconfirmed =>
       'Akaụntụ a ekwenyebeghị email ma ọ bụ nọmba ekwentị ya, ya mere a pụghị ịnabata ya.';
+
+  @override
+  String get commonSubmittingPleaseWait => 'Na-ezipu, biko chere';
+
+  @override
+  String get commonClearSearch => 'Hichapụ ọchụchọ';
+
+  @override
+  String get authShowPassword => 'Gosi paswọọdụ';
+
+  @override
+  String get authHidePassword => 'Zoo paswọọdụ';
+
+  @override
+  String get knowledgeShareTooltip => 'Kesaa ntuziaka a';
+
+  @override
+  String get knowledgeBookmarkAddTooltip => 'Chekwaa ntuziaka a';
+
+  @override
+  String get knowledgeBookmarkRemoveTooltip => 'Wepụ ntuziaka echekwara';
+
+  @override
+  String get knowledgeListenTooltip => 'Gee ntị na ntuziaka a';
+
+  @override
+  String a11ySeverityLabel(String severity) {
+    return 'Ogo njọ: $severity';
+  }
+
+  @override
+  String a11yStatusLabel(String status) {
+    return 'Ọnọdụ: $status';
+  }
+
+  @override
+  String contactsSmsTooltip(String name) {
+    return 'Zigara $name ozi ederede';
+  }
+
+  @override
+  String reportRemovePhoto(int number) {
+    return 'Wepụ foto $number';
+  }
 }

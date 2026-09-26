@@ -44,6 +44,7 @@ class RouteStatusScreen extends StatelessWidget {
         backgroundColor: AppColors.background,
         elevation: 0,
         leading: IconButton(
+          tooltip: context.l10n.back,
           icon: const Icon(Icons.arrow_back_ios_new, size: 20),
           onPressed: () =>
               context.canPop() ? context.pop() : context.go(homeLocation),

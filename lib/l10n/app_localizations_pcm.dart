@@ -3343,4 +3343,48 @@ class AppLocalizationsPcm extends AppLocalizations {
   @override
   String get adminUsersApproveUnconfirmed =>
       'Dis account never confirm im email or phone yet, so you no fit approve am.';
+
+  @override
+  String get commonSubmittingPleaseWait => 'E dey send, abeg wait';
+
+  @override
+  String get commonClearSearch => 'Clear search';
+
+  @override
+  String get authShowPassword => 'Show password';
+
+  @override
+  String get authHidePassword => 'Hide password';
+
+  @override
+  String get knowledgeShareTooltip => 'Share dis guide';
+
+  @override
+  String get knowledgeBookmarkAddTooltip => 'Save dis guide';
+
+  @override
+  String get knowledgeBookmarkRemoveTooltip => 'Remove di guide wey you save';
+
+  @override
+  String get knowledgeListenTooltip => 'Listen to dis guide';
+
+  @override
+  String a11ySeverityLabel(String severity) {
+    return 'How bad e be: $severity';
+  }
+
+  @override
+  String a11yStatusLabel(String status) {
+    return 'Status: $status';
+  }
+
+  @override
+  String contactsSmsTooltip(String name) {
+    return 'Send text message give $name';
+  }
+
+  @override
+  String reportRemovePhoto(int number) {
+    return 'Remove photo $number';
+  }
 }

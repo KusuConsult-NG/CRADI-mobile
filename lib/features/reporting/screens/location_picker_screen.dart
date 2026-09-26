@@ -455,6 +455,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
       backgroundColor: AppColors.background,
       appBar: AppBar(
         leading: IconButton(
+          tooltip: context.l10n.back,
           icon: const Icon(
             Icons.arrow_back_ios_new,
             size: 20,
@@ -1602,6 +1603,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                   ),
                 ),
                 IconButton(
+                  tooltip: context.l10n.close,
                   onPressed: () => Navigator.pop(context),
                   icon: const Icon(Icons.close),
                 ),

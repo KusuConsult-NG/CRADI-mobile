@@ -129,6 +129,7 @@ class _VerificationRequestScreenState extends State<VerificationRequestScreen> {
       appBar: AppBar(
         title: Text(context.l10n.verificationRequestTitle),
         leading: IconButton(
+          tooltip: context.l10n.back,
           icon: const Icon(
             Icons.arrow_back_ios_new,
             size: 20,

@@ -90,6 +90,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       backgroundColor: AppColors.background,
       appBar: AppBar(
         leading: IconButton(
+          tooltip: context.l10n.back,
           icon: const Icon(
             Icons.arrow_back_ios_new,
             color: AppColors.primaryRed,

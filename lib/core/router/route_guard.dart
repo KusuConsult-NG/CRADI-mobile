@@ -87,7 +87,9 @@ String _withFrom(String base, String from) =>
 
 /// Maps `cradi://<host>/<rest>` to the in-app location `/<host>/<rest>`.
 /// Returns null for any other URI.
-@visibleForTesting
+///
+/// Used by [resolveRedirect] and by `DeepLinkService`, which feeds incoming
+/// links to the router.
 String? mapCustomSchemeLink(Uri uri) {
   if (uri.scheme != kDeepLinkScheme) return null;
   final segments = [

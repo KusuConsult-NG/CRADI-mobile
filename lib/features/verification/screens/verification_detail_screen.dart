@@ -13,6 +13,7 @@ import 'package:climate_app/features/reporting/widgets/osm_location_picker.dart'
 import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 import 'package:climate_app/core/l10n/l10n.dart';
+import 'package:climate_app/core/utils/screen_security.dart';
 
 class VerificationDetailScreen extends StatefulWidget {
   final Map<String, dynamic> report;
@@ -37,7 +38,8 @@ class VerificationDetailScreen extends StatefulWidget {
       _ => (l10n.statusBadgePending, Colors.orange.shade800),
     };
 
-class _VerificationDetailScreenState extends State<VerificationDetailScreen> {
+class _VerificationDetailScreenState extends State<VerificationDetailScreen>
+    with ScreenSecurityMixin<VerificationDetailScreen> {
   bool _isLoading = false;
 
   /// Set once voting is no longer possible (already voted, or the report
@@ -132,6 +134,7 @@ class _VerificationDetailScreenState extends State<VerificationDetailScreen> {
       appBar: AppBar(
         title: Text(context.l10n.verificationDetailTitle),
         leading: IconButton(
+          tooltip: context.l10n.back,
           icon: const Icon(Icons.arrow_back),
           onPressed: () => context.pop(),
         ),
@@ -149,12 +152,16 @@ class _VerificationDetailScreenState extends State<VerificationDetailScreen> {
                 borderRadius: BorderRadius.circular(20),
                 border: Border.all(color: badgeColor),
               ),
-              child: Text(
-                badgeLabel,
-                style: GoogleFonts.lexend(
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                  color: badgeColor,
+              child: Semantics(
+                label: context.l10n.a11yStatusLabel(badgeLabel),
+                excludeSemantics: true,
+                child: Text(
+                  badgeLabel,
+                  style: GoogleFonts.lexend(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: badgeColor,
+                  ),
                 ),
               ),
             ),

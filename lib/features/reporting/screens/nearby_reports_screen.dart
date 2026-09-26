@@ -440,12 +440,18 @@ class _NearbyReportsScreenState extends State<NearbyReportsScreen> {
                               color: statusColor.withValues(alpha: 0.1),
                               borderRadius: BorderRadius.circular(10),
                             ),
-                            child: Text(
-                              report.status.label(context.l10n),
-                              style: GoogleFonts.lexend(
-                                fontSize: 10,
-                                fontWeight: FontWeight.w600,
-                                color: statusColor,
+                            child: Semantics(
+                              label: context.l10n.a11yStatusLabel(
+                                report.status.label(context.l10n),
+                              ),
+                              excludeSemantics: true,
+                              child: Text(
+                                report.status.label(context.l10n),
+                                style: GoogleFonts.lexend(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w600,
+                                  color: statusColor,
+                                ),
                               ),
                             ),
                           ),

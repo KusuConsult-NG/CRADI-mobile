@@ -1,0 +1,8 @@
+/* Hausa (ha) — iOS permission prompts. Terminology follows lib/l10n/app_ha.arb
+   (wuri, haɗari, shaida, kyamara, hoto). */
+"NSLocationWhenInUseUsageDescription" = "Manhajar tana buƙatar wurin da kake yayin da take a buɗe, don nuna ainihin inda lamarin ya faru.";
+"NSSpeechRecognitionUsageDescription" = "Manhajar tana buƙatar gane muryarka don rubuta bayanin haɗarin da kake faɗa.";
+"NSMicrophoneUsageDescription" = "Manhajar tana buƙatar makirufo don saurarar muryarka wajen bayar da rahoton haɗari.";
+"NSPhotoLibraryUsageDescription" = "Manhajar tana buƙatar damar shiga hotunan wayarka don ɗora shaidar haɗari.";
+"NSCameraUsageDescription" = "Manhajar tana buƙatar damar kyamara don ɗaukar hotunan shaidar haɗari.";
+"NSFaceIDUsageDescription" = "Ana amfani da Face ID don buɗe manhajar da kuma kare asusunka.";

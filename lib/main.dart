@@ -20,6 +20,7 @@ import 'package:climate_app/core/services/session_manager.dart';
 import 'package:climate_app/core/services/offline_storage_service.dart';
 import 'package:climate_app/core/providers/settings_provider.dart';
 import 'package:climate_app/core/services/notification_service.dart';
+import 'package:climate_app/core/services/deep_link_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:hive_flutter/hive_flutter.dart';
@@ -27,7 +28,6 @@ import 'package:provider/provider.dart';
 import 'package:climate_app/core/l10n/fallback_localizations.dart';
 import 'package:climate_app/core/widgets/force_update_gate.dart';
 import 'package:climate_app/core/services/remote_config_service.dart';
-import 'package:climate_app/core/services/security_service.dart';
 import 'package:climate_app/core/services/supabase_service.dart';
 import 'package:climate_app/core/constants/app_config.dart';
 import 'package:climate_app/core/utils/error_handler.dart';
@@ -52,9 +52,6 @@ Future<void> main() async {
 
 Future<void> _bootstrap() async {
   WidgetsFlutterBinding.ensureInitialized();
-
-  // Security: Enforce SSL Certificate Pinning before any network calls
-  await SecurityService().initializePinning();
 
   // Initialize Supabase (auth session is restored from secure storage).
   try {
@@ -144,6 +141,10 @@ class _ClimateAppState extends State<ClimateApp> with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     // Initialize push notifications after app starts
     _initializeNotifications();
+    // Start listening for cradi:// and https://cradi.ng links. Supabase auth
+    // callbacks are filtered out by DeepLinkService and stay with
+    // supabase_flutter's own listener.
+    unawaited(DeepLinkService().initialize());
     // Wire auto-sync: when connectivity is restored, flush the offline queue
     _wireAutoSync();
     _wireDataRefresh();
@@ -282,6 +283,9 @@ class _ClimateAppState extends State<ClimateApp> with WidgetsBindingObserver {
     }
     // Keep NotificationService in sync if router was created after init
     NotificationService().router ??= _router;
+    // Same for deep links: a link that launched the app (cold start) is
+    // replayed the moment the router exists.
+    DeepLinkService().router ??= _router;
 
     return Listener(
       behavior: HitTestBehavior.translucent,

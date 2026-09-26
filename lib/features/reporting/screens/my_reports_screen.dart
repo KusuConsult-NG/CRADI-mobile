@@ -10,6 +10,7 @@ import 'package:climate_app/features/verification/providers/reports_status_provi
 import 'package:climate_app/features/verification/models/verification_report_model.dart';
 import 'package:climate_app/shared/widgets/shimmer_loading.dart';
 import 'package:climate_app/core/l10n/l10n.dart';
+import 'package:climate_app/core/utils/screen_security.dart';
 
 /// My Reports screen with Active / History tabs.
 /// Active = pending + verified | History = approved + rejected
@@ -21,7 +22,7 @@ class MyReportsScreen extends StatefulWidget {
 }
 
 class _MyReportsScreenState extends State<MyReportsScreen>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, ScreenSecurityMixin<MyReportsScreen> {
   late TabController _tabController;
 
   @override
@@ -390,12 +391,20 @@ class _MyReportsScreenState extends State<MyReportsScreen>
                               color: statusColor.withValues(alpha: 0.1),
                               borderRadius: BorderRadius.circular(10),
                             ),
-                            child: Text(
-                              report.status.label(context.l10n),
-                              style: GoogleFonts.lexend(
-                                fontSize: 10,
-                                fontWeight: FontWeight.w600,
-                                color: statusColor,
+                            // The chip's colour also encodes the status, so
+                            // the screen reader is given the meaning in words.
+                            child: Semantics(
+                              label: context.l10n.a11yStatusLabel(
+                                report.status.label(context.l10n),
+                              ),
+                              excludeSemantics: true,
+                              child: Text(
+                                report.status.label(context.l10n),
+                                style: GoogleFonts.lexend(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w600,
+                                  color: statusColor,
+                                ),
                               ),
                             ),
                           ),

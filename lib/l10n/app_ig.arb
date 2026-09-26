@@ -958,5 +958,17 @@
   "verificationRequestBadge": "Arịrịọ nnyocha",
   "reportViewSafetyGuides": "Ntuziaka nchekwa",
   "authAccountRemoved": "E wepụla akaụntụ gị, ya mere a pụpụrụ gị. Kpọtụrụ onye nhazi gị ma ọ bụrụ na ị chere na ọ bụ njehie.",
-  "adminUsersApproveUnconfirmed": "Akaụntụ a ekwenyebeghị email ma ọ bụ nọmba ekwentị ya, ya mere a pụghị ịnabata ya."
+  "adminUsersApproveUnconfirmed": "Akaụntụ a ekwenyebeghị email ma ọ bụ nọmba ekwentị ya, ya mere a pụghị ịnabata ya.",
+  "commonSubmittingPleaseWait": "Na-ezipu, biko chere",
+  "commonClearSearch": "Hichapụ ọchụchọ",
+  "authShowPassword": "Gosi paswọọdụ",
+  "authHidePassword": "Zoo paswọọdụ",
+  "knowledgeShareTooltip": "Kesaa ntuziaka a",
+  "knowledgeBookmarkAddTooltip": "Chekwaa ntuziaka a",
+  "knowledgeBookmarkRemoveTooltip": "Wepụ ntuziaka echekwara",
+  "knowledgeListenTooltip": "Gee ntị na ntuziaka a",
+  "a11ySeverityLabel": "Ogo njọ: {severity}",
+  "a11yStatusLabel": "Ọnọdụ: {status}",
+  "contactsSmsTooltip": "Zigara {name} ozi ederede",
+  "reportRemovePhoto": "Wepụ foto {number}"
 }

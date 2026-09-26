@@ -3348,4 +3348,48 @@ class AppLocalizationsYo extends AppLocalizations {
   @override
   String get adminUsersApproveUnconfirmed =>
       'Àkáǹtì yìí kò tíì jẹ́rìísí ímeèlì tàbí nọ́ńbà fóònù rẹ̀, nítorí náà a kò lè fọwọ́ sí i.';
+
+  @override
+  String get commonSubmittingPleaseWait => 'Ó ń fi ránṣẹ́, jọ̀wọ́ dúró';
+
+  @override
+  String get commonClearSearch => 'Pa ìwákiri rẹ́';
+
+  @override
+  String get authShowPassword => 'Fi ọ̀rọ̀ aṣínà hàn';
+
+  @override
+  String get authHidePassword => 'Fi ọ̀rọ̀ aṣínà pamọ́';
+
+  @override
+  String get knowledgeShareTooltip => 'Pín ìtọ́sọ́nà yìí';
+
+  @override
+  String get knowledgeBookmarkAddTooltip => 'Fi ìtọ́sọ́nà yìí pamọ́';
+
+  @override
+  String get knowledgeBookmarkRemoveTooltip => 'Yọ ìtọ́sọ́nà tí a pamọ́ kúrò';
+
+  @override
+  String get knowledgeListenTooltip => 'Gbọ́ ìtọ́sọ́nà yìí';
+
+  @override
+  String a11ySeverityLabel(String severity) {
+    return 'Líle: $severity';
+  }
+
+  @override
+  String a11yStatusLabel(String status) {
+    return 'Ipò: $status';
+  }
+
+  @override
+  String contactsSmsTooltip(String name) {
+    return 'Fi ìfiránṣẹ́ ọ̀rọ̀ ránṣẹ́ sí $name';
+  }
+
+  @override
+  String reportRemovePhoto(int number) {
+    return 'Yọ àwòrán $number kúrò';
+  }
 }

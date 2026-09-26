@@ -5857,6 +5857,78 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'This account has not confirmed its email or phone yet, so it cannot be approved.'**
   String get adminUsersApproveUnconfirmed;
+
+  /// Spoken by a screen reader while a button is in its loading state.
+  ///
+  /// In en, this message translates to:
+  /// **'Submitting, please wait'**
+  String get commonSubmittingPleaseWait;
+
+  /// Tooltip on the button that clears a search box.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear search'**
+  String get commonClearSearch;
+
+  /// Tooltip on the eye button that reveals the typed password.
+  ///
+  /// In en, this message translates to:
+  /// **'Show password'**
+  String get authShowPassword;
+
+  /// Tooltip on the eye button that hides the typed password.
+  ///
+  /// In en, this message translates to:
+  /// **'Hide password'**
+  String get authHidePassword;
+
+  /// Tooltip on the share button in a knowledge-base guide.
+  ///
+  /// In en, this message translates to:
+  /// **'Share this guide'**
+  String get knowledgeShareTooltip;
+
+  /// Tooltip on the bookmark button when the guide is not yet saved.
+  ///
+  /// In en, this message translates to:
+  /// **'Save this guide'**
+  String get knowledgeBookmarkAddTooltip;
+
+  /// Tooltip on the bookmark button when the guide is already saved.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove saved guide'**
+  String get knowledgeBookmarkRemoveTooltip;
+
+  /// Tooltip on the button that reads a knowledge-base guide aloud.
+  ///
+  /// In en, this message translates to:
+  /// **'Listen to this guide'**
+  String get knowledgeListenTooltip;
+
+  /// Screen-reader label for a severity indicator shown only as a colour; {severity} is the severity name.
+  ///
+  /// In en, this message translates to:
+  /// **'Severity: {severity}'**
+  String a11ySeverityLabel(String severity);
+
+  /// Screen-reader label for a status badge shown only as a colour; {status} is the status name.
+  ///
+  /// In en, this message translates to:
+  /// **'Status: {status}'**
+  String a11yStatusLabel(String status);
+
+  /// Tooltip / screen-reader label on the SMS button beside an emergency contact; {name} is the contact's name.
+  ///
+  /// In en, this message translates to:
+  /// **'Send a text message to {name}'**
+  String contactsSmsTooltip(String name);
+
+  /// Screen-reader label and tooltip on the X that removes an attached photo from a report; {number} is the photo's position, starting at 1.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove photo {number}'**
+  String reportRemovePhoto(int number);
 }
 
 class _AppLocalizationsDelegate

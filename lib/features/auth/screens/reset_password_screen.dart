@@ -9,6 +9,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:climate_app/core/utils/validators.dart';
 import 'package:climate_app/core/l10n/l10n.dart';
+import 'package:climate_app/core/utils/screen_security.dart';
 
 /// Password reset screen.
 ///
@@ -26,7 +27,8 @@ class ResetPasswordScreen extends StatefulWidget {
   State<ResetPasswordScreen> createState() => _ResetPasswordScreenState();
 }
 
-class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
+class _ResetPasswordScreenState extends State<ResetPasswordScreen>
+    with ScreenSecurityMixin<ResetPasswordScreen> {
   late final TextEditingController _emailController = TextEditingController(
     text: widget.email,
   );
@@ -141,6 +143,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
+          tooltip: context.l10n.close,
           icon: const Icon(Icons.close, color: Colors.black),
           onPressed: () => context.go('/login'),
         ),
@@ -239,6 +242,9 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
               context.l10n.resetNewPassword,
               Icons.lock_outline,
               suffix: IconButton(
+                tooltip: _obscurePassword
+                    ? context.l10n.authShowPassword
+                    : context.l10n.authHidePassword,
                 icon: Icon(
                   _obscurePassword ? Icons.visibility_off : Icons.visibility,
                   color: Colors.grey,

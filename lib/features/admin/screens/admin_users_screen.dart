@@ -8,6 +8,7 @@ import 'package:climate_app/core/theme/app_colors.dart';
 import 'dart:developer' as developer;
 import 'package:climate_app/core/l10n/l10n.dart';
 import 'package:climate_app/features/auth/providers/auth_provider.dart';
+import 'package:climate_app/core/utils/screen_security.dart';
 
 /// Whether the database refused to approve an account because it has not
 /// confirmed its email / phone yet (errcode 42501 from the profiles
@@ -41,7 +42,8 @@ class AdminUsersScreen extends StatefulWidget {
   State<AdminUsersScreen> createState() => _AdminUsersScreenState();
 }
 
-class _AdminUsersScreenState extends State<AdminUsersScreen> {
+class _AdminUsersScreenState extends State<AdminUsersScreen>
+    with ScreenSecurityMixin<AdminUsersScreen> {
   String _roleFilter = 'all';
   bool _pendingOnly = false;
   String _searchQuery = '';
@@ -413,6 +415,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
                     prefixIcon: const Icon(Icons.search, size: 20),
                     suffixIcon: _searchQuery.isNotEmpty
                         ? IconButton(
+                            tooltip: context.l10n.commonClearSearch,
                             icon: const Icon(Icons.clear, size: 18),
                             onPressed: () {
                               _searchCtrl.clear();

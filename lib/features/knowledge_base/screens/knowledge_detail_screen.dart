@@ -117,6 +117,7 @@ class _KnowledgeDetailScreenState extends State<KnowledgeDetailScreen> {
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
+          tooltip: context.l10n.back,
           icon: const Icon(
             Icons.arrow_back_ios_new,
             color: AppColors.textPrimary,
@@ -134,6 +135,7 @@ class _KnowledgeDetailScreenState extends State<KnowledgeDetailScreen> {
         ),
         actions: [
           IconButton(
+            tooltip: context.l10n.knowledgeShareTooltip,
             icon: const Icon(
               Icons.share_outlined,
               color: AppColors.textPrimary,
@@ -141,6 +143,9 @@ class _KnowledgeDetailScreenState extends State<KnowledgeDetailScreen> {
             onPressed: _shareGuide,
           ),
           IconButton(
+            tooltip: _isBookmarked
+                ? context.l10n.knowledgeBookmarkRemoveTooltip
+                : context.l10n.knowledgeBookmarkAddTooltip,
             icon: Icon(
               _isBookmarked ? Icons.bookmark : Icons.bookmark_border,
               color: _isBookmarked
@@ -150,6 +155,7 @@ class _KnowledgeDetailScreenState extends State<KnowledgeDetailScreen> {
             onPressed: _toggleBookmark,
           ),
           IconButton(
+            tooltip: context.l10n.knowledgeListenTooltip,
             icon: const Icon(
               Icons.volume_up_outlined,
               color: AppColors.textPrimary,

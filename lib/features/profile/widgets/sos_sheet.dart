@@ -190,11 +190,22 @@ class _CallTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    return MergeSemantics(
+      child: Semantics(button: true, child: _tile(context)),
+    );
+  }
+
+  Widget _tile(BuildContext context) {
+    // The tile is a call action: the icons carry no information a screen
+    // reader can use, so only the title and subtitle are announced, as a
+    // button.
     return ListTile(
-      leading: Icon(icon, color: AppColors.primaryRed),
+      leading: ExcludeSemantics(child: Icon(icon, color: AppColors.primaryRed)),
       title: Text(title, style: GoogleFonts.lexend(fontSize: 15)),
       subtitle: Text(subtitle, style: GoogleFonts.lexend(fontSize: 12)),
-      trailing: const Icon(Icons.call, color: AppColors.primaryRed),
+      trailing: const ExcludeSemantics(
+        child: Icon(Icons.call, color: AppColors.primaryRed),
+      ),
       onTap: () async {
         Navigator.pop(context);
         final ok = await dialNumber(phone);

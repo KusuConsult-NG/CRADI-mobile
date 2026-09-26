@@ -1,116 +1,89 @@
-# Google Play Store Review Test Credentials
+# Google Play review test account
 
-## Purpose
-This document contains test account credentials for Google Play Store reviewers to access all features of CRADI Mobile app.
+Google Play reviewers need a working account, because the app is unusable
+without signing in. This page explains how to set one up and what to paste into
+the Play Console.
 
-## Test Account Details
+> **The credentials themselves are not in this file, and must not be.**
+> This repository is public. An earlier version of this page contained the
+> reviewer account's real email, password and registration code in plain text,
+> so **those accounts are compromised and must be rotated** — see
+> "Rotating the old ones" below. Keep the current values in your team's
+> password manager and paste them straight into the Play Console.
 
-### Primary Test Account
+## What the reviewer needs
 
-**Instruction Name for Play Console:**
-```
-Test Account for CRADI Mobile App Review
-```
+Sign-in takes three things, which is unusual enough that reviewers will reject
+the build if you don't explain it:
 
-**Email Address:**
-```
-reviewer@craditest.com
-```
-
-**Password:**
-```
-ReviewTest2026!
-```
-
-**Registration Code:**
-```
-CRD123456
-```
-
-### Login Instructions for Reviewers
-
-1. Open CRADI Mobile app
-2. On the login screen, enter:
-   - **Email**: reviewer@craditest.com
-   - **Registration Code**: CRD123456
-   - **Password**: ReviewTest2026!
-3. Tap "Login" button
-4. You will be directed to the dashboard with full access
-
-### Additional Notes for Play Console Submission
-
-Add this in the "Other instructions" field:
-
-```
-This app uses a three-factor authentication system for enhanced security:
 1. Email address
-2. Registration code (format: CRD######) 
+2. Registration code (format `CRD######`)
 3. Password
 
-The test account provides full access to all app features including:
-- Climate hazard reporting and verification
-- Interactive maps with location-based data
-- Knowledge base with safety guides
-- Community chat and messaging
-- User profile management
-- Biometric authentication (optional, can be tested on supported devices)
+## Creating the account
 
-IMPORTANT PERMISSIONS:
-- Location: Required for hazard reporting with geographic coordinates
-- Camera: Optional for attaching photos to hazard reports
-- Microphone: Optional for voice-to-text in report descriptions
-- Biometric: Optional for biometric login feature
+1. **Supabase dashboard → Authentication → Users → Add user.** Use an address
+   on a domain you control. Tick **Auto Confirm User** — an unconfirmed account
+   cannot be approved, and the reviewer will be locked out.
+2. **Approve the profile**, so the account is past the pending-approval screen:
 
-Language Support: English and Hausa
+   ```sql
+   update public.profiles
+      set is_approved = true, is_disabled = false
+    where email = 'REVIEWER_EMAIL_HERE'
+   returning id, email, role, is_approved;
+   ```
+
+   Leave `role` as `user` unless the reviewer needs to see staff screens. A
+   reviewer account with admin rights can change other people's roles, so give
+   it the lowest role that still shows the features under review.
+3. **Set the registration code** to whatever you will give the reviewer, and
+   record it in the password manager alongside the password.
+4. **Sign in with it yourself** on a real build before submitting. Most review
+   rejections for this app will be a test account that was never tried.
+
+## What to paste into the Play Console
+
+Under *App content → App access → All or some functionality is restricted*, add
+the username, password and this note:
+
+```
+Sign-in requires three fields:
+  1. Email address
+  2. Registration code (format CRD######)
+  3. Password
+
+The registration code is provided with these credentials. The account has
+full access to hazard reporting, peer verification, alerts, the knowledge
+base and emergency contacts.
 ```
 
-## Creating the Test Account
+Put the registration code in the password field alongside the password, or in
+the instructions box — the Play Console has no third field for it.
 
-> **ACTION REQUIRED**: You must create this test account in the Supabase project before uploading to Play Store.
+## Keeping it working
 
-### Steps to Create Test Account:
+The account can stop working between submissions:
 
-1. **Open the Supabase dashboard → Authentication → Users → Add user**
-2. **Create the user with "Auto Confirm User" ticked:**
-   - Email: `reviewer@craditest.com`
-   - Password: `ReviewTest2026!`
-   - User metadata: `{"name": "Play Store Reviewer"}`
-3. **In Table Editor → `profiles`**, set on that row: `is_approved = true`,
-   `is_verified = true`, `registration_code = 'CRD123456'`, and the role to
-   grant (e.g. `ewm`) plus `state` / `lga` / `ward`.
+- **Rate limiting** locks an account after repeated failed sign-ins. If a
+  reviewer reports being locked out, clear the lock rather than making a new
+  account.
+- **`app_min_version`** blocks every build below the configured minimum. If you
+  raise it (see `docs/DEPLOYMENT.md`), the reviewer's build must be at or above
+  it, or they will see only the update screen.
+- **A disabled or unapproved profile** shows the pending-approval screen. Check
+  `is_approved` and `is_disabled` before each submission.
 
-4. **Verify the account works:**
-   - Test login with these credentials on your device
-   - Ensure all features are accessible
-   - Test location permissions and camera access
+## Rotating the old ones
 
-## Security Best Practices
+Two accounts were published in this file's git history, with their passwords
+and registration codes. Git history is public and cannot be unpublished, so:
 
-- ✅ Use a dedicated test account (not a real user account)
-- ✅ Set a strong password
-- ✅ Monitor this account for unusual activity after app goes live
-- ✅ Consider disabling/resetting this account after successful review if desired
-- ⚠️ Keep these credentials secure and only share via Play Console
+1. Change both passwords in Supabase (Authentication → Users → the user →
+   Reset password), or delete the accounts and create fresh ones.
+2. Change their registration codes.
+3. Store the new values in the password manager, not here.
 
-## Troubleshooting
-
-If Google reviewers report issues accessing the app:
-
-1. **Verify the account exists in Supabase (Auth → Users) and its `profiles` row is approved**
-2. **Check account is not locked** (rate limiting may block after failed attempts)
-3. **Ensure registration code matches** exactly in your database
-4. **Test credentials yourself** before each submission
-
-## Alternative Test Accounts (Optional)
-
-If you want to provide multiple test accounts or region-specific accounts:
-
-**Account 2:**
-- Email: `testuser2@craditest.com`
-- Password: `TestUser2026!`
-- Code: `CRD789012`
-
----
-
-**Last Updated:** January 15, 2026
-**App Version:** 1.0.0+2
+The accounts are ordinary user accounts with no admin rights, so the exposure
+is limited to those two accounts — but anyone can still sign in as them and
+submit reports that look like they came from your test users.

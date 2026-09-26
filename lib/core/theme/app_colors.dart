@@ -2,7 +2,11 @@ import 'package:flutter/material.dart';
 
 class AppColors {
   // Primary Brand Colors - Modern & Vibrant
-  static const Color primaryRed = Color(0xFFE63946); // Vibrant red
+  /// The brand red. Darkened from the original #E63946, which reached only
+  /// 4.17:1 against white text and so failed WCAG AA (4.5:1) on every primary
+  /// button, chip and badge in the app. #D62828 reaches 5.01:1 and is close
+  /// enough that the brand reads the same.
+  static const Color primaryRed = Color(0xFFD62828);
   static const Color primaryDeep = Color(0xFF9D0208); // Deep red
   static const Color primaryGrey = Color(0xFF8D99AE); // Soft grey-blue
 

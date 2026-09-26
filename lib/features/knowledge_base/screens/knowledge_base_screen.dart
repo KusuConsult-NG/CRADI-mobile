@@ -69,20 +69,35 @@ class _KnowledgeBaseScreenState extends State<KnowledgeBaseScreen> {
         backgroundColor: AppColors.background.withValues(alpha: 0.95),
         elevation: 0,
         actions: [
-          GestureDetector(
-            onTap: () => context.push('/profile'),
-            child: Container(
-              margin: const EdgeInsets.only(right: 16),
-              width: 32,
-              height: 32,
-              decoration: BoxDecoration(
-                color: AppColors.primaryRed.withValues(alpha: 0.1),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                Icons.account_circle,
-                color: AppColors.primaryRed,
-                size: 20,
+          Semantics(
+            button: true,
+            label: context.l10n.myProfile,
+            child: Tooltip(
+              message: context.l10n.myProfile,
+              child: GestureDetector(
+                onTap: () => context.push('/profile'),
+                // 48pt hit area around the 32pt avatar.
+                child: Container(
+                  margin: const EdgeInsets.only(right: 8),
+                  width: 48,
+                  height: 48,
+                  alignment: Alignment.center,
+                  child: Container(
+                    width: 32,
+                    height: 32,
+                    decoration: BoxDecoration(
+                      color: AppColors.primaryRed.withValues(alpha: 0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const ExcludeSemantics(
+                      child: Icon(
+                        Icons.account_circle,
+                        color: AppColors.primaryRed,
+                        size: 20,
+                      ),
+                    ),
+                  ),
+                ),
               ),
             ),
           ),
@@ -120,6 +135,7 @@ class _KnowledgeBaseScreenState extends State<KnowledgeBaseScreen> {
                   prefixIcon: Icon(Icons.search, color: Colors.grey.shade400),
                   suffixIcon: _searchQuery.isNotEmpty
                       ? IconButton(
+                          tooltip: context.l10n.commonClearSearch,
                           icon: const Icon(Icons.clear),
                           onPressed: () {
                             _searchController.clear();

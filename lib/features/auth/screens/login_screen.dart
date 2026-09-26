@@ -13,6 +13,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:climate_app/core/l10n/l10n.dart';
+import 'package:climate_app/core/utils/screen_security.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -21,7 +22,8 @@ class LoginScreen extends StatefulWidget {
   State<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen> {
+class _LoginScreenState extends State<LoginScreen>
+    with ScreenSecurityMixin<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
   final _identifierController = TextEditingController();
   final _passwordController = TextEditingController();
@@ -433,6 +435,9 @@ class _LoginScreenState extends State<LoginScreen> {
                               obscureText: !_isPasswordVisible,
                               prefixIcon: const Icon(Icons.lock_outline),
                               suffixIcon: IconButton(
+                                tooltip: _isPasswordVisible
+                                    ? context.l10n.authHidePassword
+                                    : context.l10n.authShowPassword,
                                 icon: Icon(
                                   _isPasswordVisible
                                       ? Icons.visibility

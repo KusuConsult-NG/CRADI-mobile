@@ -15,6 +15,7 @@ import 'package:climate_app/core/design/glass_container.dart';
 import 'package:climate_app/core/widgets/location_selector_widget.dart';
 import 'dart:developer' as developer;
 import 'package:climate_app/core/l10n/l10n.dart';
+import 'package:climate_app/core/utils/screen_security.dart';
 
 class RegistrationScreen extends StatefulWidget {
   const RegistrationScreen({super.key});
@@ -23,7 +24,8 @@ class RegistrationScreen extends StatefulWidget {
   State<RegistrationScreen> createState() => _RegistrationScreenState();
 }
 
-class _RegistrationScreenState extends State<RegistrationScreen> {
+class _RegistrationScreenState extends State<RegistrationScreen>
+    with ScreenSecurityMixin<RegistrationScreen> {
   // Form Controllers
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _addressController = TextEditingController();
@@ -345,18 +347,27 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                       // Header
                       Row(
                         children: [
-                          GestureDetector(
-                            onTap: () => context.go('/login'),
-                            child: Container(
-                              width: 40,
-                              height: 40,
-                              decoration: const BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: Colors.transparent,
-                              ),
-                              child: const Icon(
-                                Icons.arrow_back,
-                                color: AppColors.textPrimary,
+                          Semantics(
+                            button: true,
+                            label: context.l10n.back,
+                            child: Tooltip(
+                              message: context.l10n.back,
+                              child: GestureDetector(
+                                onTap: () => context.go('/login'),
+                                child: Container(
+                                  width: 48,
+                                  height: 48,
+                                  decoration: const BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: Colors.transparent,
+                                  ),
+                                  child: const ExcludeSemantics(
+                                    child: Icon(
+                                      Icons.arrow_back,
+                                      color: AppColors.textPrimary,
+                                    ),
+                                  ),
+                                ),
                               ),
                             ),
                           ),
@@ -599,6 +610,9 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                                 obscureText: !_isPasswordVisible,
                                 prefixIcon: const Icon(Icons.lock_outline),
                                 suffixIcon: IconButton(
+                                  tooltip: _isPasswordVisible
+                                      ? context.l10n.authHidePassword
+                                      : context.l10n.authShowPassword,
                                   icon: Icon(
                                     _isPasswordVisible
                                         ? Icons.visibility
@@ -630,6 +644,9 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                                 obscureText: !_isConfirmPasswordVisible,
                                 prefixIcon: const Icon(Icons.lock_outline),
                                 suffixIcon: IconButton(
+                                  tooltip: _isConfirmPasswordVisible
+                                      ? context.l10n.authHidePassword
+                                      : context.l10n.authShowPassword,
                                   icon: Icon(
                                     _isConfirmPasswordVisible
                                         ? Icons.visibility

@@ -1,0 +1,8 @@
+/* Igbo (ig) — iOS permission prompts. Terminology follows lib/l10n/app_ig.arb
+   (ngwa a, ebe, ihe egwu, ihe akaebe, kamera, ọba foto). */
+"NSLocationWhenInUseUsageDescription" = "Ngwa a chọrọ ebe ị nọ mgbe e mepere ya, iji gosi kpọmkwem ebe ihe ahụ mere.";
+"NSSpeechRecognitionUsageDescription" = "Ngwa a chọrọ ịghọta okwu ọnụ gị iji dee nkọwa ihe egwu ahụ.";
+"NSMicrophoneUsageDescription" = "Ngwa a chọrọ ikike maikrofonu iji gee ntị n'olu gị mgbe ị na-akọ ihe egwu.";
+"NSPhotoLibraryUsageDescription" = "Ngwa a chọrọ ikike ịbanye n'ọba foto gị iji bulite ihe akaebe ihe egwu.";
+"NSCameraUsageDescription" = "Ngwa a chọrọ ikike kamera iji see foto ihe akaebe ihe egwu.";
+"NSFaceIDUsageDescription" = "A na-eji Face ID emeghe ngwa a ma chebe akaụntụ gị.";

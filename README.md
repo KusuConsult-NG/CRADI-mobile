@@ -100,7 +100,6 @@ cp env.example.json env.json   # env.json is git-ignored
 | `SUPABASE_URL` | yes | `https://<ref>.supabase.co` |
 | `SUPABASE_ANON_KEY` | yes | anon / publishable key (never the service-role key) |
 | `ONESIGNAL_APP_ID` | for push | push is disabled when empty |
-| `BACKEND_URL` | for email | Railway URL, no trailing slash |
 | `SENTRY_DSN` | no | crash reporting is disabled when empty |
 
 Run / build with the file:
@@ -151,7 +150,7 @@ Mocks are generated with `dart run build_runner build --delete-conflicting-outpu
 
 See `docs/KEYSTORE_SETUP.md` for signing. The CI release job writes
 `env.json` from the repository secrets `SUPABASE_URL`, `SUPABASE_ANON_KEY`,
-`ONESIGNAL_APP_ID`, `BACKEND_URL` and `SENTRY_DSN`.
+`ONESIGNAL_APP_ID` and `SENTRY_DSN`.
 
 ```bash
 flutter build apk --release --no-tree-shake-icons --dart-define-from-file=env.json

@@ -958,5 +958,17 @@
   "verificationRequestBadge": "Ìbéèrè ìjẹ́rìísí",
   "reportViewSafetyGuides": "Ìtọ́sọ́nà ààbò",
   "authAccountRemoved": "A ti yọ àkáǹtì rẹ kúrò, nítorí náà a ti mú ọ jáde. Kàn sí olùṣàkóso rẹ tí o bá rò pé àṣìṣe ni.",
-  "adminUsersApproveUnconfirmed": "Àkáǹtì yìí kò tíì jẹ́rìísí ímeèlì tàbí nọ́ńbà fóònù rẹ̀, nítorí náà a kò lè fọwọ́ sí i."
+  "adminUsersApproveUnconfirmed": "Àkáǹtì yìí kò tíì jẹ́rìísí ímeèlì tàbí nọ́ńbà fóònù rẹ̀, nítorí náà a kò lè fọwọ́ sí i.",
+  "commonSubmittingPleaseWait": "Ó ń fi ránṣẹ́, jọ̀wọ́ dúró",
+  "commonClearSearch": "Pa ìwákiri rẹ́",
+  "authShowPassword": "Fi ọ̀rọ̀ aṣínà hàn",
+  "authHidePassword": "Fi ọ̀rọ̀ aṣínà pamọ́",
+  "knowledgeShareTooltip": "Pín ìtọ́sọ́nà yìí",
+  "knowledgeBookmarkAddTooltip": "Fi ìtọ́sọ́nà yìí pamọ́",
+  "knowledgeBookmarkRemoveTooltip": "Yọ ìtọ́sọ́nà tí a pamọ́ kúrò",
+  "knowledgeListenTooltip": "Gbọ́ ìtọ́sọ́nà yìí",
+  "a11ySeverityLabel": "Líle: {severity}",
+  "a11yStatusLabel": "Ipò: {status}",
+  "contactsSmsTooltip": "Fi ìfiránṣẹ́ ọ̀rọ̀ ránṣẹ́ sí {name}",
+  "reportRemovePhoto": "Yọ àwòrán {number} kúrò"
 }

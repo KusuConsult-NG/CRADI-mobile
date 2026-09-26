@@ -317,6 +317,7 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
                       ),
                       const Spacer(),
                       IconButton(
+                        tooltip: context.l10n.close,
                         icon: const Icon(Icons.close),
                         onPressed: () => Navigator.pop(context),
                       ),

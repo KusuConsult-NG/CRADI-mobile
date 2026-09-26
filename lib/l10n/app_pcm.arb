@@ -958,5 +958,17 @@
   "verificationRequestBadge": "Verification request",
   "reportViewSafetyGuides": "Safety guides",
   "authAccountRemoved": "Dem don remove your account, so we don sign you out. Contact your coordinator if you think say na mistake.",
-  "adminUsersApproveUnconfirmed": "Dis account never confirm im email or phone yet, so you no fit approve am."
+  "adminUsersApproveUnconfirmed": "Dis account never confirm im email or phone yet, so you no fit approve am.",
+  "commonSubmittingPleaseWait": "E dey send, abeg wait",
+  "commonClearSearch": "Clear search",
+  "authShowPassword": "Show password",
+  "authHidePassword": "Hide password",
+  "knowledgeShareTooltip": "Share dis guide",
+  "knowledgeBookmarkAddTooltip": "Save dis guide",
+  "knowledgeBookmarkRemoveTooltip": "Remove di guide wey you save",
+  "knowledgeListenTooltip": "Listen to dis guide",
+  "a11ySeverityLabel": "How bad e be: {severity}",
+  "a11yStatusLabel": "Status: {status}",
+  "contactsSmsTooltip": "Send text message give {name}",
+  "reportRemovePhoto": "Remove photo {number}"
 }

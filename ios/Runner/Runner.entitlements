@@ -2,8 +2,11 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<!-- Push notifications (OneSignal / APNs). Use "production" for
-	     App Store / TestFlight builds; see ios/README.md. -->
+	<!-- DEBUG / PROFILE entitlements. The Release configuration uses
+	     RunnerRelease.entitlements (aps-environment = production); see
+	     CODE_SIGN_ENTITLEMENTS per build configuration in
+	     Runner.xcodeproj/project.pbxproj and ios/README.md.
+	     Keep both files in sync when adding a capability. -->
 	<key>aps-environment</key>
 	<string>development</string>
 </dict>

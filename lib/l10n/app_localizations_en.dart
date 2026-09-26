@@ -3348,4 +3348,48 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get adminUsersApproveUnconfirmed =>
       'This account has not confirmed its email or phone yet, so it cannot be approved.';
+
+  @override
+  String get commonSubmittingPleaseWait => 'Submitting, please wait';
+
+  @override
+  String get commonClearSearch => 'Clear search';
+
+  @override
+  String get authShowPassword => 'Show password';
+
+  @override
+  String get authHidePassword => 'Hide password';
+
+  @override
+  String get knowledgeShareTooltip => 'Share this guide';
+
+  @override
+  String get knowledgeBookmarkAddTooltip => 'Save this guide';
+
+  @override
+  String get knowledgeBookmarkRemoveTooltip => 'Remove saved guide';
+
+  @override
+  String get knowledgeListenTooltip => 'Listen to this guide';
+
+  @override
+  String a11ySeverityLabel(String severity) {
+    return 'Severity: $severity';
+  }
+
+  @override
+  String a11yStatusLabel(String status) {
+    return 'Status: $status';
+  }
+
+  @override
+  String contactsSmsTooltip(String name) {
+    return 'Send a text message to $name';
+  }
+
+  @override
+  String reportRemovePhoto(int number) {
+    return 'Remove photo $number';
+  }
 }

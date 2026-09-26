@@ -11,6 +11,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:climate_app/core/l10n/l10n.dart';
+import 'package:climate_app/core/utils/screen_security.dart';
 
 class EmergencyContactsScreen extends StatefulWidget {
   const EmergencyContactsScreen({super.key});
@@ -20,7 +21,8 @@ class EmergencyContactsScreen extends StatefulWidget {
       _EmergencyContactsScreenState();
 }
 
-class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
+class _EmergencyContactsScreenState extends State<EmergencyContactsScreen>
+    with ScreenSecurityMixin<EmergencyContactsScreen> {
   final TextEditingController _searchController = TextEditingController();
 
   /// Category filter values (stored contact categories, plus 'all').
@@ -249,6 +251,7 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
       backgroundColor: AppColors.background,
       appBar: AppBar(
         leading: IconButton(
+          tooltip: context.l10n.back,
           icon: const Icon(
             Icons.arrow_back_ios_new,
             size: 20,
@@ -325,6 +328,8 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
                     fontWeight: FontWeight.w600,
                     color: isSelected ? Colors.white : AppColors.textPrimary,
                   ),
+                  // White label on the selected chip: needs the darker red
+                  // to clear the 4.5:1 contrast minimum.
                   selectedColor: AppColors.primaryRed,
                   backgroundColor: Colors.white,
                   shape: RoundedRectangleBorder(
@@ -450,9 +455,11 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
               color: _getCategoryColor(contact.category).withValues(alpha: 0.1),
               shape: BoxShape.circle,
             ),
-            child: Icon(
-              _getCategoryIcon(contact.category),
-              color: _getCategoryColor(contact.category),
+            child: ExcludeSemantics(
+              child: Icon(
+                _getCategoryIcon(contact.category),
+                color: _getCategoryColor(contact.category),
+              ),
             ),
           ),
           const SizedBox(width: 12),
@@ -483,20 +490,19 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
               ],
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: _buildActionButton(
-              Icons.sms,
-              Colors.grey.shade100,
-              Colors.grey.shade600,
-              () => _sendSMS(contact.phone),
-            ),
+          _buildActionButton(
+            Icons.sms,
+            Colors.grey.shade100,
+            Colors.grey.shade600,
+            () => _sendSMS(contact.phone),
+            context.l10n.contactsSmsTooltip(contact.name),
           ),
           _buildActionButton(
             Icons.call,
             AppColors.successGreen,
             Colors.white,
             () => _makePhoneCall(contact.phone),
+            context.l10n.sosCallContact(contact.name),
           ),
           PopupMenuButton<String>(
             tooltip: context.l10n.contactsMoreActions,
@@ -532,20 +538,37 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
     );
   }
 
+  /// An icon-only action on a contact row. [semanticLabel] is what a screen
+  /// reader announces and what the tooltip shows; the 40pt circle is centred
+  /// in a 48pt hit area so it meets the minimum tap-target size.
   Widget _buildActionButton(
     IconData icon,
     Color bg,
     Color fg,
     VoidCallback onTap,
+    String semanticLabel,
   ) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(20),
-      child: Container(
-        width: 40,
-        height: 40,
-        decoration: BoxDecoration(color: bg, shape: BoxShape.circle),
-        child: Icon(icon, color: fg, size: 20),
+    return Tooltip(
+      message: semanticLabel,
+      child: Semantics(
+        button: true,
+        label: semanticLabel,
+        child: SizedBox(
+          width: 48,
+          height: 48,
+          child: Center(
+            child: InkWell(
+              onTap: onTap,
+              borderRadius: BorderRadius.circular(20),
+              child: Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(color: bg, shape: BoxShape.circle),
+                child: ExcludeSemantics(child: Icon(icon, color: fg, size: 20)),
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }

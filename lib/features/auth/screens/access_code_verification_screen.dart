@@ -11,6 +11,7 @@ import 'package:provider/provider.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:go_router/go_router.dart';
 import 'package:climate_app/core/l10n/l10n.dart';
+import 'package:climate_app/core/utils/screen_security.dart';
 
 class AccessCodeVerificationScreen extends StatefulWidget {
   const AccessCodeVerificationScreen({super.key});
@@ -21,13 +22,9 @@ class AccessCodeVerificationScreen extends StatefulWidget {
 }
 
 class _AccessCodeVerificationScreenState
-    extends State<AccessCodeVerificationScreen> {
+    extends State<AccessCodeVerificationScreen>
+    with ScreenSecurityMixin<AccessCodeVerificationScreen> {
   bool _isLoading = false;
-
-  @override
-  void dispose() {
-    super.dispose();
-  }
 
   Future<void> _handleVerify() async {
     setState(() => _isLoading = true);

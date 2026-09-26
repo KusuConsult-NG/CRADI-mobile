@@ -38,58 +38,72 @@ class CustomTextField extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          label,
-          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-            fontWeight: FontWeight.w600,
-            color: AppColors.textPrimary,
-            fontSize: 16, // Increased from default
+        // The visible label is drawn above the field to keep the app's
+        // design, but it is excluded from the semantics tree so a screen
+        // reader does not announce it twice: it is attached to the input
+        // itself below.
+        ExcludeSemantics(
+          child: Text(
+            label,
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              fontWeight: FontWeight.w600,
+              color: AppColors.textPrimary,
+              fontSize: 16, // Increased from default
+            ),
           ),
         ),
         const SizedBox(height: 8),
-        TextFormField(
-          controller: controller,
-          validator: validator,
-          keyboardType: keyboardType,
-          obscureText: obscureText,
-          enabled: enabled,
-          readOnly: readOnly,
-          maxLines: maxLines,
-          onChanged: onChanged,
-          style: const TextStyle(fontSize: 18), // Increased from default
-          decoration: InputDecoration(
-            hintText: hint,
-            errorText: errorText,
-            hintStyle: const TextStyle(
-              color: AppColors.textSecondary,
-              fontSize: 16, // Increased from default
-            ),
-            prefixIcon: prefixIcon,
-            suffixIcon: suffixIcon,
-            filled: true,
-            fillColor: enabled ? Colors.white : Colors.grey.shade100,
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 16,
-              vertical: 12,
-            ),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-              borderSide: const BorderSide(color: AppColors.divider),
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-              borderSide: const BorderSide(color: AppColors.divider),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-              borderSide: const BorderSide(
-                color: AppColors.primaryRed,
-                width: 2,
+        // MergeSemantics + Semantics(label:) folds the field name into the
+        // input's own semantics node, so TalkBack/VoiceOver announce
+        // "<label>, edit box" instead of a nameless edit box.
+        MergeSemantics(
+          child: Semantics(
+            label: label,
+            child: TextFormField(
+              controller: controller,
+              validator: validator,
+              keyboardType: keyboardType,
+              obscureText: obscureText,
+              enabled: enabled,
+              readOnly: readOnly,
+              maxLines: maxLines,
+              onChanged: onChanged,
+              style: const TextStyle(fontSize: 18), // Increased from default
+              decoration: InputDecoration(
+                hintText: hint,
+                errorText: errorText,
+                hintStyle: const TextStyle(
+                  color: AppColors.textSecondary,
+                  fontSize: 16, // Increased from default
+                ),
+                prefixIcon: prefixIcon,
+                suffixIcon: suffixIcon,
+                filled: true,
+                fillColor: enabled ? Colors.white : Colors.grey.shade100,
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
+                ),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: const BorderSide(color: AppColors.divider),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: const BorderSide(color: AppColors.divider),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: const BorderSide(
+                    color: AppColors.primaryRed,
+                    width: 2,
+                  ),
+                ),
+                errorBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: const BorderSide(color: AppColors.errorRed),
+                ),
               ),
-            ),
-            errorBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-              borderSide: const BorderSide(color: AppColors.errorRed),
             ),
           ),
         ),

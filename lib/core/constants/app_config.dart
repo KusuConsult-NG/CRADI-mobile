@@ -17,10 +17,6 @@ class AppConfig {
     'ONESIGNAL_APP_ID',
   );
 
-  /// Base URL of the Railway backend (transactional email etc.), no trailing
-  /// slash.
-  static const String backendUrl = String.fromEnvironment('BACKEND_URL');
-
   /// Optional. Crash reporting is disabled when empty.
   static const String sentryDsn = String.fromEnvironment('SENTRY_DSN');
 

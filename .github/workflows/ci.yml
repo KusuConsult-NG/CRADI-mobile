@@ -149,11 +149,10 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
           ONESIGNAL_APP_ID: ${{ secrets.ONESIGNAL_APP_ID }}
-          BACKEND_URL: ${{ secrets.BACKEND_URL }}
           SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
         run: |
           jq -n '{SUPABASE_URL: env.SUPABASE_URL, SUPABASE_ANON_KEY: env.SUPABASE_ANON_KEY,
-                  ONESIGNAL_APP_ID: env.ONESIGNAL_APP_ID, BACKEND_URL: env.BACKEND_URL,
+                  ONESIGNAL_APP_ID: env.ONESIGNAL_APP_ID,
                   SENTRY_DSN: env.SENTRY_DSN}' > env.json
 
       - name: Build release APK

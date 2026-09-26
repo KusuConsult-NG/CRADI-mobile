@@ -3366,4 +3366,48 @@ class AppLocalizationsHa extends AppLocalizations {
   @override
   String get adminUsersApproveUnconfirmed =>
       'Wannan asusu bai tabbatar da imel ko lambar wayarsa ba tukuna, don haka ba za a iya amince da shi ba.';
+
+  @override
+  String get commonSubmittingPleaseWait => 'Ana aikawa, da fatan za a jira';
+
+  @override
+  String get commonClearSearch => 'Share bincike';
+
+  @override
+  String get authShowPassword => 'Nuna kalmar sirri';
+
+  @override
+  String get authHidePassword => 'Ɓoye kalmar sirri';
+
+  @override
+  String get knowledgeShareTooltip => 'Raba wannan jagorar';
+
+  @override
+  String get knowledgeBookmarkAddTooltip => 'Ajiye wannan jagorar';
+
+  @override
+  String get knowledgeBookmarkRemoveTooltip => 'Cire jagorar da aka ajiye';
+
+  @override
+  String get knowledgeListenTooltip => 'Saurari wannan jagorar';
+
+  @override
+  String a11ySeverityLabel(String severity) {
+    return 'Tsanani: $severity';
+  }
+
+  @override
+  String a11yStatusLabel(String status) {
+    return 'Matsayi: $status';
+  }
+
+  @override
+  String contactsSmsTooltip(String name) {
+    return 'Aika saƙon rubutu zuwa $name';
+  }
+
+  @override
+  String reportRemovePhoto(int number) {
+    return 'Cire hoto $number';
+  }
 }

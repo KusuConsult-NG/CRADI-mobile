@@ -22,6 +22,7 @@ import 'package:provider/provider.dart';
 import 'package:climate_app/shared/widgets/custom_button.dart';
 import 'package:climate_app/shared/widgets/custom_text_field.dart';
 import 'package:climate_app/core/l10n/l10n.dart';
+import 'package:climate_app/core/utils/screen_security.dart';
 
 class UserProfileScreen extends StatefulWidget {
   const UserProfileScreen({super.key});
@@ -30,7 +31,8 @@ class UserProfileScreen extends StatefulWidget {
   State<UserProfileScreen> createState() => _UserProfileScreenState();
 }
 
-class _UserProfileScreenState extends State<UserProfileScreen> {
+class _UserProfileScreenState extends State<UserProfileScreen>
+    with ScreenSecurityMixin<UserProfileScreen> {
   final ImagePicker _picker = ImagePicker();
 
   /// Created once so profile rebuilds do not resubscribe the realtime stream.
@@ -334,6 +336,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
       backgroundColor: AppColors.background,
       appBar: AppBar(
         leading: IconButton(
+          tooltip: context.l10n.back,
           icon: const Icon(
             Icons.arrow_back_ios_new,
             size: 20,
@@ -492,30 +495,38 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                                     : Colors.orange.withValues(alpha: 0.3),
                               ),
                             ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  isVerified ? Icons.verified : Icons.pending,
-                                  size: 16,
-                                  color: isVerified
-                                      ? AppColors.successGreen
-                                      : Colors.orange,
-                                ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  isVerified
-                                      ? context.l10n.profileVerified
-                                      : context.l10n.profileUnverified,
-                                  style: GoogleFonts.lexend(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w500,
+                            child: Semantics(
+                              label: context.l10n.a11yStatusLabel(
+                                isVerified
+                                    ? context.l10n.profileVerified
+                                    : context.l10n.profileUnverified,
+                              ),
+                              excludeSemantics: true,
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    isVerified ? Icons.verified : Icons.pending,
+                                    size: 16,
                                     color: isVerified
                                         ? AppColors.successGreen
                                         : Colors.orange,
                                   ),
-                                ),
-                              ],
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    isVerified
+                                        ? context.l10n.profileVerified
+                                        : context.l10n.profileUnverified,
+                                    style: GoogleFonts.lexend(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w500,
+                                      color: isVerified
+                                          ? AppColors.successGreen
+                                          : Colors.orange,
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
                         ],

@@ -263,6 +263,7 @@ class _AlertDetailScreenState extends State<AlertDetailScreen> {
       backgroundColor: AppColors.background,
       appBar: AppBar(
         leading: IconButton(
+          tooltip: context.l10n.back,
           icon: const Icon(Icons.arrow_back_ios_new, size: 20),
           onPressed: _close,
         ),
@@ -304,7 +305,9 @@ class _AlertDetailScreenState extends State<AlertDetailScreen> {
                           color: severityColor.withValues(alpha: 0.1),
                           shape: BoxShape.circle,
                         ),
-                        child: Icon(_icon, color: severityColor, size: 32),
+                        child: ExcludeSemantics(
+                          child: Icon(_icon, color: severityColor, size: 32),
+                        ),
                       ),
                       const SizedBox(width: 16),
                       Expanded(
@@ -320,12 +323,21 @@ class _AlertDetailScreenState extends State<AlertDetailScreen> {
                               ),
                             ),
                             const SizedBox(height: 4),
-                            Text(
-                              alertSeverityLabel(_severity, context.l10n),
-                              style: GoogleFonts.lexend(
-                                fontSize: 14,
-                                color: severityColor,
-                                fontWeight: FontWeight.w600,
+                            // Severity is also signalled by the icon and the
+                            // colour, neither of which a screen reader can
+                            // convey, so the text node carries the meaning.
+                            Semantics(
+                              label: context.l10n.a11ySeverityLabel(
+                                alertSeverityLabel(_severity, context.l10n),
+                              ),
+                              excludeSemantics: true,
+                              child: Text(
+                                alertSeverityLabel(_severity, context.l10n),
+                                style: GoogleFonts.lexend(
+                                  fontSize: 14,
+                                  color: severityColor,
+                                  fontWeight: FontWeight.w600,
+                                ),
                               ),
                             ),
                             if (_isVerificationRequest) ...[

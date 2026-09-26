@@ -53,7 +53,6 @@ dependencies:
   local_auth: ^3.0.0
   crypto: ^3.0.6
   http: ^1.2.2
-  pointycastle: ^4.0.0
   # Device fingerprinting and security
   device_info_plus: ^12.0.0
   
@@ -78,6 +77,10 @@ dependencies:
   flutter_chat_core: ^2.9.0  # Explicit dep — transitively used by flutter_chat_ui
   # Backend – Supabase (auth, Postgres, storage, realtime)
   supabase_flutter: ^2.10.0
+  # Incoming deep links (cradi:// and https://cradi.ng). Already pulled in by
+  # supabase_flutter for its auth callbacks; declared here because
+  # DeepLinkService imports it directly.
+  app_links: ^7.2.1
   # Push notifications
   onesignal_flutter: ^5.3.0
   # Crash reporting (optional — only initialised when SENTRY_DSN is set)
@@ -88,7 +91,8 @@ dependencies:
   package_info_plus: ^9.0.0
   # Image compression before storage upload (reduces upload size 70-90%)
   flutter_image_compress: ^2.3.0
-  # FLAG_SECURE is implemented via native MethodChannel in MainActivity.java.
+  # FLAG_SECURE is implemented via a native MethodChannel in MainActivity.kt
+  # (android/app/src/main/kotlin/.../MainActivity.kt), applied by ScreenSecurityMixin.
   # flutter_windowmanager_plus removed — incompatible with AGP 8.0+ (missing namespace).
   share_plus: ^12.0.1
 

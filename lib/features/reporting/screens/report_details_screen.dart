@@ -254,6 +254,7 @@ class _ReportDetailsScreenState extends State<ReportDetailsScreen> {
       backgroundColor: AppColors.background,
       appBar: AppBar(
         leading: IconButton(
+          tooltip: context.l10n.back,
           icon: const Icon(
             Icons.arrow_back_ios_new,
             size: 20,
@@ -718,15 +719,30 @@ class _ReportDetailsScreenState extends State<ReportDetailsScreen> {
         Positioned(
           top: 4,
           right: 4,
-          child: GestureDetector(
-            onTap: () => _removeImage(provider, index),
-            child: Container(
-              padding: const EdgeInsets.all(4),
-              decoration: const BoxDecoration(
-                color: Colors.red,
-                shape: BoxShape.circle,
+          child: Semantics(
+            button: true,
+            label: context.l10n.reportRemovePhoto(index + 1),
+            child: Tooltip(
+              message: context.l10n.reportRemovePhoto(index + 1),
+              child: GestureDetector(
+                onTap: () => _removeImage(provider, index),
+                // The X is small by design; the hit area is not.
+                child: Container(
+                  width: 48,
+                  height: 48,
+                  alignment: Alignment.topRight,
+                  child: Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: const BoxDecoration(
+                      color: Colors.red,
+                      shape: BoxShape.circle,
+                    ),
+                    child: const ExcludeSemantics(
+                      child: Icon(Icons.close, size: 16, color: Colors.white),
+                    ),
+                  ),
+                ),
               ),
-              child: const Icon(Icons.close, size: 16, color: Colors.white),
             ),
           ),
         ),

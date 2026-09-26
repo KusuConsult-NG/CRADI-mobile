@@ -1018,5 +1018,17 @@
   "verificationRequestBadge": "Buƙatar tabbatarwa",
   "reportViewSafetyGuides": "Jagororin tsaro",
   "authAccountRemoved": "An cire asusunka, don haka an fitar da kai. Tuntuɓi mai gudanarwarka idan kana ganin kuskure ne.",
-  "adminUsersApproveUnconfirmed": "Wannan asusu bai tabbatar da imel ko lambar wayarsa ba tukuna, don haka ba za a iya amince da shi ba."
+  "adminUsersApproveUnconfirmed": "Wannan asusu bai tabbatar da imel ko lambar wayarsa ba tukuna, don haka ba za a iya amince da shi ba.",
+  "commonSubmittingPleaseWait": "Ana aikawa, da fatan za a jira",
+  "commonClearSearch": "Share bincike",
+  "authShowPassword": "Nuna kalmar sirri",
+  "authHidePassword": "Ɓoye kalmar sirri",
+  "knowledgeShareTooltip": "Raba wannan jagorar",
+  "knowledgeBookmarkAddTooltip": "Ajiye wannan jagorar",
+  "knowledgeBookmarkRemoveTooltip": "Cire jagorar da aka ajiye",
+  "knowledgeListenTooltip": "Saurari wannan jagorar",
+  "a11ySeverityLabel": "Tsanani: {severity}",
+  "a11yStatusLabel": "Matsayi: {status}",
+  "contactsSmsTooltip": "Aika saƙon rubutu zuwa {name}",
+  "reportRemovePhoto": "Cire hoto {number}"
 }

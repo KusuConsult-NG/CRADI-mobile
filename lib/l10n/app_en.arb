@@ -4322,5 +4322,73 @@
   "adminUsersApproveUnconfirmed": "This account has not confirmed its email or phone yet, so it cannot be approved.",
   "@adminUsersApproveUnconfirmed": {
     "description": "Error on the admin users screen when approving an account that has not confirmed its email or phone number."
+  },
+  "commonSubmittingPleaseWait": "Submitting, please wait",
+  "@commonSubmittingPleaseWait": {
+    "description": "Spoken by a screen reader while a button is in its loading state."
+  },
+  "commonClearSearch": "Clear search",
+  "@commonClearSearch": {
+    "description": "Tooltip on the button that clears a search box."
+  },
+  "authShowPassword": "Show password",
+  "@authShowPassword": {
+    "description": "Tooltip on the eye button that reveals the typed password."
+  },
+  "authHidePassword": "Hide password",
+  "@authHidePassword": {
+    "description": "Tooltip on the eye button that hides the typed password."
+  },
+  "knowledgeShareTooltip": "Share this guide",
+  "@knowledgeShareTooltip": {
+    "description": "Tooltip on the share button in a knowledge-base guide."
+  },
+  "knowledgeBookmarkAddTooltip": "Save this guide",
+  "@knowledgeBookmarkAddTooltip": {
+    "description": "Tooltip on the bookmark button when the guide is not yet saved."
+  },
+  "knowledgeBookmarkRemoveTooltip": "Remove saved guide",
+  "@knowledgeBookmarkRemoveTooltip": {
+    "description": "Tooltip on the bookmark button when the guide is already saved."
+  },
+  "knowledgeListenTooltip": "Listen to this guide",
+  "@knowledgeListenTooltip": {
+    "description": "Tooltip on the button that reads a knowledge-base guide aloud."
+  },
+  "a11ySeverityLabel": "Severity: {severity}",
+  "@a11ySeverityLabel": {
+    "description": "Screen-reader label for a severity indicator shown only as a colour; {severity} is the severity name.",
+    "placeholders": {
+      "severity": {
+        "type": "String"
+      }
+    }
+  },
+  "a11yStatusLabel": "Status: {status}",
+  "@a11yStatusLabel": {
+    "description": "Screen-reader label for a status badge shown only as a colour; {status} is the status name.",
+    "placeholders": {
+      "status": {
+        "type": "String"
+      }
+    }
+  },
+  "contactsSmsTooltip": "Send a text message to {name}",
+  "@contactsSmsTooltip": {
+    "description": "Tooltip / screen-reader label on the SMS button beside an emergency contact; {name} is the contact's name.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "reportRemovePhoto": "Remove photo {number}",
+  "@reportRemovePhoto": {
+    "description": "Screen-reader label and tooltip on the X that removes an attached photo from a report; {number} is the photo's position, starting at 1.",
+    "placeholders": {
+      "number": {
+        "type": "int"
+      }
+    }
   }
 }

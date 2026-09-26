@@ -372,10 +372,12 @@ class _AlertsListScreenState extends State<AlertsListScreen>
                           color: color.withValues(alpha: 0.1),
                           shape: BoxShape.circle,
                         ),
-                        child: Icon(
-                          alertSeverityIcon(severity),
-                          color: color,
-                          size: 24,
+                        child: ExcludeSemantics(
+                          child: Icon(
+                            alertSeverityIcon(severity),
+                            color: color,
+                            size: 24,
+                          ),
                         ),
                       ),
                       const SizedBox(width: 16),
@@ -430,9 +432,15 @@ class _AlertsListScreenState extends State<AlertsListScreen>
                               spacing: 8,
                               runSpacing: 4,
                               children: [
-                                _buildTag(
-                                  alertSeverityLabel(severity, context.l10n),
-                                  color,
+                                Semantics(
+                                  label: context.l10n.a11ySeverityLabel(
+                                    alertSeverityLabel(severity, context.l10n),
+                                  ),
+                                  excludeSemantics: true,
+                                  child: _buildTag(
+                                    alertSeverityLabel(severity, context.l10n),
+                                    color,
+                                  ),
                                 ),
                                 _buildTag(
                                   target ?? context.l10n.alertsAllLgas,

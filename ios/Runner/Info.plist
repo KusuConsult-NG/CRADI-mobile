@@ -68,9 +68,11 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<!-- Only `remote-notification` (OneSignal). No background fetch is
+	     implemented, and declaring one App Review cannot see invites a
+	     rejection. -->
 	<key>UIBackgroundModes</key>
 	<array>
-		<string>fetch</string>
 		<string>remote-notification</string>
 	</array>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
@@ -79,8 +81,6 @@
 	<true/>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>This app needs access to location when open to pinpoint incident reports.</string>
-	<key>NSLocationAlwaysUsageDescription</key>
-	<string>This app needs access to location when in the background to pinpoint incident reports.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>This app needs to recognize your speech to transcribe hazard descriptions.</string>
 	<key>NSMicrophoneUsageDescription</key>
@@ -91,5 +91,28 @@
 	<string>Face ID is used to unlock the app and protect your account.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>This app requires access to the camera to take hazard evidence photos.</string>
+	<!-- Languages the app ships (see lib/l10n/app_*.arb). iOS picks the
+	     matching Runner/<lang>.lproj/InfoPlist.strings for the permission
+	     prompts above; the values here are the English fallback. -->
+	<key>CFBundleLocalizations</key>
+	<array>
+		<string>en</string>
+		<string>ha</string>
+		<string>yo</string>
+		<string>ig</string>
+		<string>pcm</string>
+	</array>
+	<!-- EXPORT COMPLIANCE — deliberately NOT declared here.
+	     ITSAppUsesNonExemptEncryption = false would claim the app only uses
+	     HTTPS/TLS and the platform's own crypto. That is not accurate: the
+	     app bundles its own AES implementations to encrypt data at rest —
+	     Hive boxes are opened with an AES-256 cipher (hive_encryption_service
+	     .dart) and EncryptionService uses PointyCastle AES-256-GCM with
+	     PBKDF2-SHA256 (encryption_service.dart). The algorithms are standard,
+	     but they are not OS-provided and not limited to authentication, so
+	     the usual "exempt" answers do not obviously apply.
+	     Decide with whoever owns export compliance, then add the key (and,
+	     if it is true, an annual self-classification report). See
+	     docs/DEPLOYMENT.md "Export compliance". -->
 </dict>
 </plist>

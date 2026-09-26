@@ -264,12 +264,18 @@ class _VerificationListScreenState extends State<VerificationListScreen> {
                               ),
                             ),
                           const SizedBox(height: 4),
-                          Text(
-                            _severityLabel(severity),
-                            style: GoogleFonts.lexend(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                              color: _severityColor(severity),
+                          Semantics(
+                            label: context.l10n.a11ySeverityLabel(
+                              _severityLabel(severity),
+                            ),
+                            excludeSemantics: true,
+                            child: Text(
+                              _severityLabel(severity),
+                              style: GoogleFonts.lexend(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                                color: _severityColor(severity),
+                              ),
                             ),
                           ),
                         ],

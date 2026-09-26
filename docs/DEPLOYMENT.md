@@ -282,8 +282,10 @@ directory `backend`**.
    Twilio values for `twilio`.
 
 5. **Settings → Networking → Generate Domain.** Note the URL, e.g.
-   `https://cradi-backend.up.railway.app` — the Flutter app needs it as
-   `BACKEND_URL` in step 6.
+   `https://cradi-backend.up.railway.app`. You need it to check `/health` and
+   to reach `POST /email`; the Flutter app does not call the backend directly
+   (it talks to Supabase, and the backend reacts to what the database queues),
+   so no build-time value is needed for it.
 6. **Verify:**
 
    ```bash
@@ -420,7 +422,6 @@ All runtime configuration is compile-time (`String.fromEnvironment`) in
 | `SUPABASE_URL` | **yes** | `https://<project-ref>.supabase.co` | With either Supabase value empty, `AppConfig.isSupabaseConfigured` is false and the app starts permanently signed out (useful for UI work and tests). |
 | `SUPABASE_ANON_KEY` | **yes** | anon / publishable key | as above |
 | `ONESIGNAL_APP_ID` | for push | `2e6f30a8-ef18-4091-9961-e6a6fe862322` | push is disabled |
-| `BACKEND_URL` | for email | the Railway backend URL from step 4.5, **no trailing slash** | transactional email from the app is unavailable |
 | `SENTRY_DSN` | no | Sentry DSN | crash reporting disabled |
 
 `AppConfig` also holds non-configurable constants (the Android
@@ -431,7 +432,7 @@ names) — nothing to set there.
 
 ```bash
 cp env.example.json env.json     # env.json is git-ignored
-# edit env.json: SUPABASE_URL, SUPABASE_ANON_KEY, ONESIGNAL_APP_ID, BACKEND_URL, SENTRY_DSN
+# edit env.json: SUPABASE_URL, SUPABASE_ANON_KEY, ONESIGNAL_APP_ID, SENTRY_DSN
 flutter pub get
 flutter run   --dart-define-from-file=env.json
 flutter build apk --release --no-tree-shake-icons --dart-define-from-file=env.json
@@ -439,11 +440,63 @@ flutter build apk --release --no-tree-shake-icons --dart-define-from-file=env.js
 
 `env.example.json` is the template and contains only placeholders. The CI
 release job writes `env.json` from the repository secrets `SUPABASE_URL`,
-`SUPABASE_ANON_KEY`, `ONESIGNAL_APP_ID`, `BACKEND_URL` and `SENTRY_DSN`.
+`SUPABASE_ANON_KEY`, `ONESIGNAL_APP_ID` and `SENTRY_DSN`.
 Signing: see `docs/KEYSTORE_SETUP.md`.
 
 > **The OneSignal REST API key must never be passed to the app** — not in
 > `env.json`, not as a `--dart-define`, not in `AppConfig`, not obfuscated.
+
+### iOS — platform configuration
+
+Full detail lives in `ios/README.md`; the points that affect a release:
+
+**Minimum iOS version is 15.0.** `onesignal_flutter` 5.7.0 requires it. It is
+set in `ios/Podfile` (`platform :ios, '15.0'` plus a `post_install` hook that
+pins every pod to the same value) and in all three build configurations of
+`ios/Runner.xcodeproj/project.pbxproj`. Change both or `pod install` fails.
+
+**Push entitlements are split per configuration** — no manual edit before an
+archive:
+
+| Configuration | `CODE_SIGN_ENTITLEMENTS` | `aps-environment` |
+| --- | --- | --- |
+| Debug / Profile | `Runner/Runner.entitlements` | `development` |
+| Release | `Runner/RunnerRelease.entitlements` | `production` |
+
+TestFlight and App Store builds are Release builds, so they carry
+`production`. With `development` in an uploaded build, APNs tokens are issued
+against the sandbox and **every push silently fails**.
+
+**Permission prompts are localized** through
+`ios/Runner/<lang>.lproj/InfoPlist.strings` (en, ha, yo, ig, pcm), listed in
+`CFBundleLocalizations`. They are already referenced from the Xcode project as
+an `InfoPlist.strings` variant group in *Copy Bundle Resources*; if a new
+language is added, drop the `.lproj` folder in and add it to that group in
+Xcode (*File → Add Files*, then tick the Runner target), and to
+`CFBundleLocalizations`.
+
+**Info.plist hygiene for App Review.** `UIBackgroundModes` lists only
+`remote-notification` (no background fetch is implemented) and
+`NSLocationAlwaysUsageDescription` has been removed — the app only ever
+requests when-in-use location. Do not re-add either without an implementation
+to point at.
+
+#### Export compliance — a decision is still open
+
+`ITSAppUsesNonExemptEncryption` is **not** in `Info.plist`, so App Store
+Connect asks the encryption question on every upload. It was left out
+deliberately rather than answered `false`:
+
+* `lib/core/services/hive_encryption_service.dart` opens the local Hive boxes
+  with an AES-256 cipher (key generated in-app, stored in the Keychain).
+* `lib/core/services/encryption_service.dart` implements AES-256-GCM with
+  PBKDF2-SHA256 (PointyCastle).
+
+The algorithms are standard, but they are **not** limited to HTTPS/TLS, the
+platform's own crypto, or authentication — the categories the usual "exempt"
+answers cover. Whoever owns export compliance should decide between declaring
+`false` and declaring the app 5D992.c mass market (which carries an annual
+self-classification report to BIS), then add the key.
 
 ### Releasing an update — version numbers and the force-update gate
 
@@ -524,10 +577,17 @@ fails only at runtime:
    never run. Do a signed release build well before you need one.
 3. **The NDK.** `jni` is among the plugins, so `ndkVersion` 28.2.13676358 is
    genuinely required — a ~2 GB download on the first Android build.
-4. **Deep links.** The manifest sets `android:autoVerify="true"` for
-   `https://cradi.ng`, which needs `https://cradi.ng/.well-known/assetlinks.json`
-   published with the **release** signing certificate's SHA-256. Without it,
-   links open a chooser dialog instead of the app.
+4. **Deep links.** `lib/core/services/deep_link_service.dart` listens for
+   `cradi://…` and `https://cradi.ng/…` with `app_links` and hands the mapped
+   location to `go_router`; Supabase auth callbacks are filtered out and left
+   to `supabase_flutter`. The mapping is unit-tested
+   (`test/unit/deep_link_service_test.dart`) but has never run on a device.
+   The Android manifest sets `android:autoVerify="true"` for `https://cradi.ng`,
+   which needs `https://cradi.ng/.well-known/assetlinks.json` published with the
+   **release** signing certificate's SHA-256; on iOS, Universal Links need the
+   *Associated Domains* entitlement (`applinks:cradi.ng`) and an
+   `apple-app-site-association` file. Without those, `https://` links open a
+   browser/chooser instead of the app — the `cradi://` scheme works regardless.
 
 One ProGuard leftover, listed so nobody reads it as protection: the
 `com.google.gson.**` keep rule matches no Java class in this app. The

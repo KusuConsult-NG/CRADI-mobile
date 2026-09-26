@@ -74,6 +74,7 @@ class _HazardGuidesScreenState extends State<HazardGuidesScreen> {
       backgroundColor: AppColors.background,
       appBar: AppBar(
         leading: IconButton(
+          tooltip: context.l10n.back,
           icon: const Icon(
             Icons.arrow_back_ios_new,
             size: 20,
@@ -106,6 +107,7 @@ class _HazardGuidesScreenState extends State<HazardGuidesScreen> {
         centerTitle: true,
         actions: [
           IconButton(
+            tooltip: context.l10n.refresh,
             icon: const Icon(Icons.refresh, color: AppColors.textPrimary),
             onPressed: () => knowledgeProvider.fetchGuides(
               category: _filters[_selectedFilterIndex],
