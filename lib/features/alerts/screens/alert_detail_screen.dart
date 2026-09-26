@@ -36,10 +36,12 @@ class _AlertDetailScreenState extends State<AlertDetailScreen> {
   @override
   void initState() {
     super.initState();
-    // Votes of the signed-in user (cached per user), to hide the vote
-    // actions on a report already voted on.
+    // Votes of the signed-in user, to hide the vote actions on a report
+    // already voted on. Re-read: a reopen elsewhere may have cleared them.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) context.read<ReportsStatusProvider>().loadMyVotes();
+      if (mounted) {
+        context.read<ReportsStatusProvider>().loadMyVotes(force: true);
+      }
     });
   }
 

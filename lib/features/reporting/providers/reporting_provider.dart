@@ -195,11 +195,20 @@ class ReportingProvider extends ChangeNotifier {
         );
       }
 
+      // Drafts and uploads are owner-tagged; an ownerless draft could never
+      // be synced (or would be attributed to whoever signs in next).
+      final uid = _db.currentUserId;
+      if (uid == null) {
+        throw AuthException(
+          'You must be signed in to submit or save a report.',
+        );
+      }
+
       final hasInternet = context.read<ConnectivityProvider>().isOnline;
 
       if (!hasInternet) {
         final draftId = await OfflineStorageService().saveDraft(
-          userId: _db.currentUserId,
+          userId: uid,
           hazardType: _hazardType!,
           severity: _severity!,
           locationDetails: _locationDetails!,
@@ -221,11 +230,6 @@ class ReportingProvider extends ChangeNotifier {
           'draftId': draftId,
           'offline': true,
         };
-      }
-
-      final uid = _db.currentUserId;
-      if (uid == null) {
-        throw Exception('User must be logged in to submit a report');
       }
 
       final String docId = const Uuid().v4();
@@ -351,9 +355,9 @@ class ReportingProvider extends ChangeNotifier {
       // drafts of another account and ownerless drafts of older builds wait
       // for their author / an explicit choice, and drafts refused
       // permanently by the server wait for the user to retry or discard.
-      final drafts = offlineService
-          .getAllDrafts()
-          .where((d) => OfflineStorageService.isAutoSyncableDraft(d, uid));
+      final drafts = offlineService.getAllDrafts().where(
+        (d) => OfflineStorageService.isAutoSyncableDraft(d, uid),
+      );
       for (final draft in drafts) {
         try {
           final draftId = draft['id'] as String;

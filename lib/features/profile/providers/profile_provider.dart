@@ -63,36 +63,61 @@ class ProfileProvider extends ChangeNotifier {
     );
   }
 
+  /// Bumped by [clearProfile] and by every [loadProfile]: a load that was
+  /// superseded (or outlived a sign-out) drops its results instead of
+  /// writing another user's data into this provider or the device cache.
+  int _loadGen = 0;
+
+  /// Secure-storage keys caching the signed-in user's profile.
+  static const List<String> _profileStorageKeys = [
+    'profile_name',
+    'profile_email',
+    'profile_phone',
+    'profile_image',
+    'profile_state',
+    'profile_lga',
+    'profile_ward',
+    'monitoring_zone',
+  ];
+
   Future<void> loadProfile() async {
+    final gen = ++_loadGen;
+    final user = _db.getCurrentUser();
+    final uid = user?.id;
+    bool stale() => gen != _loadGen || _db.currentUserId != uid;
+
     _isLoading = true;
     notifyListeners();
 
     try {
-      final user = _db.getCurrentUser();
-
       if (user != null) {
         _email = user.email ?? '';
         // ── Fast path: load from secure-storage cache immediately ──────────
         // This ensures the name is correct on the very first frame,
         // without waiting for the network round-trip.
         final cachedEmail = await _storage.read('profile_email');
+        if (stale()) return;
         if (cachedEmail == user.email) {
           final cachedName = await _storage.read('profile_name');
-          if (cachedName != null && cachedName.isNotEmpty) {
-            _name = cachedName;
-          } else {
-            _name = _metadataName(user);
-          }
-          _phone = await _storage.read('profile_phone') ?? '';
-          _profileImagePath = await _storage.read('profile_image');
-          _state = await _storage.read('profile_state');
-          _lga = await _storage.read('profile_lga');
-          _ward = await _storage.read('profile_ward');
+          final phone = await _storage.read('profile_phone');
+          final image = await _storage.read('profile_image');
+          final state = await _storage.read('profile_state');
+          final lga = await _storage.read('profile_lga');
+          final ward = await _storage.read('profile_ward');
           final storedZone = await _storage.read('monitoring_zone');
+          final bioEnabled = await _storage.read('biometric_enabled');
+          if (stale()) return;
+          _name = (cachedName != null && cachedName.isNotEmpty)
+              ? cachedName
+              : _metadataName(user);
+          _phone = phone ?? '';
+          _profileImagePath = image;
+          _state = state;
+          _lga = lga;
+          _ward = ward;
           _monitoringZone = (storedZone != null && storedZone.isNotEmpty)
               ? storedZone
               : null;
-          final bioEnabled = await _storage.read('biometric_enabled');
           _biometricsEnabled = bioEnabled == 'true';
           // Notify immediately so the UI shows cached data, then continue
           // fetching from the server to refresh.
@@ -108,12 +133,12 @@ class ProfileProvider extends ChangeNotifier {
             collectionId: AppConfig.usersCollection,
             documentId: user.id,
           );
+          if (stale()) return;
 
           if (doc.isNotEmpty) {
             // Rows are plain JSON (timestamps are ISO strings), so they can
             // be cached in Hive as-is.
             _userProfile = Map<String, dynamic>.from(doc);
-            await _offlineStorage.cacheUserProfile(_userProfile!);
 
             _name = doc['name'] ?? _name;
             _email = doc['email'] ?? _email;
@@ -124,40 +149,52 @@ class ProfileProvider extends ChangeNotifier {
             _registrationCode = doc['registrationCode'];
             _biometricsEnabled = doc['biometricsEnabled'] ?? false;
 
-            final remoteZone = doc['monitoringZone'] as String?;
-            if (remoteZone != null && remoteZone.isNotEmpty) {
-              _monitoringZone = remoteZone;
-              await _storage.write('monitoring_zone', remoteZone);
-            } else {
-              final storedZone = await _storage.read('monitoring_zone');
-              _monitoringZone = (storedZone != null && storedZone.isNotEmpty)
-                  ? storedZone
-                  : null;
-            }
+            // The row is the truth: '' (the column default) means "all
+            // zones", so a zone cached on this device (possibly by another
+            // account) must not be used instead.
+            final remoteZone = (doc['monitoringZone'] as String?)?.trim();
+            _monitoringZone = (remoteZone != null && remoteZone.isNotEmpty)
+                ? remoteZone
+                : null;
 
             final imageUrl = doc['profileImageUrl'] as String?;
             if (imageUrl != null && imageUrl.isNotEmpty) {
-              _profileImagePath = doc['profileImageUrl'] as String;
+              _profileImagePath = imageUrl;
             }
+            notifyListeners();
 
-            // Cache to secure storage
-            await _storage.write('profile_name', _name);
-            await _storage.write('profile_email', _email);
-            await _storage.write('profile_phone', _phone);
-            if (_state != null) await _storage.write('profile_state', _state!);
-            if (_lga != null) await _storage.write('profile_lga', _lga!);
-            if (_ward != null) await _storage.write('profile_ward', _ward!);
-            if (_profileImagePath != null) {
-              await _storage.write('profile_image', _profileImagePath!);
+            // Cache locally; stop as soon as the load became stale so the
+            // cache never receives another account's profile.
+            try {
+              await _offlineStorage.cacheUserProfile(_userProfile!);
+            } on Object catch (e) {
+              developer.log('Could not cache profile: $e');
             }
-            await _storage.write(
-              'biometric_enabled',
-              _biometricsEnabled.toString(),
-            );
+            final cache = <String, String?>{
+              'profile_name': _name,
+              'profile_email': _email,
+              'profile_phone': _phone,
+              'profile_state': _state,
+              'profile_lga': _lga,
+              'profile_ward': _ward,
+              'profile_image': _profileImagePath,
+              'monitoring_zone': _monitoringZone ?? '',
+              'biometric_enabled': _biometricsEnabled.toString(),
+            };
+            for (final entry in cache.entries) {
+              if (stale()) return;
+              final value = entry.value;
+              if (value == null) {
+                await _storage.delete(entry.key);
+              } else {
+                await _storage.write(entry.key, value);
+              }
+            }
 
             developer.log('Profile loaded: ${user.id}');
           }
         } on Exception catch (e) {
+          if (stale()) return;
           developer.log('Profile fetch error, using local fallback: $e');
           final cached = _offlineStorage.getCachedUserProfile();
           if (cached != null) {
@@ -170,17 +207,24 @@ class ProfileProvider extends ChangeNotifier {
     } on Exception catch (e) {
       developer.log('Error loading profile: $e');
     } finally {
-      _isLoading = false;
-      notifyListeners();
+      // A newer load or a clear owns the loading flag now.
+      if (gen == _loadGen) {
+        _isLoading = false;
+        notifyListeners();
+      }
     }
   }
 
   /// Resets all profile data to default values (called on logout).
   ///
-  /// Only the cached profile is removed. Offline drafts and the sync queue
-  /// are owner-tagged and filtered per user, so they are kept: wiping them
-  /// here would destroy reports that have not been uploaded yet.
+  /// The cached profile (Hive and secure storage) is removed so the next
+  /// account on a shared device never starts from it. Offline drafts and
+  /// the sync queue are owner-tagged and filtered per user, so they are
+  /// kept: wiping them here would destroy reports that have not been
+  /// uploaded yet.
   Future<void> clearProfile() async {
+    _loadGen++;
+    _isLoading = false;
     _name = 'User';
     _email = '';
     _phone = '';
@@ -193,13 +237,21 @@ class ProfileProvider extends ChangeNotifier {
     _registrationDate = null;
     _biometricsEnabled = false;
     _userProfile = null;
+    notifyListeners();
+    try {
+      for (final key in _profileStorageKeys) {
+        await _storage.delete(key);
+      }
+    } on Object catch (e) {
+      developer.log('Could not clear cached profile keys: $e');
+    }
     try {
       await _offlineStorage.clearUserProfile();
-    } on Exception catch (e) {
-      // Hive may not be initialised yet (e.g. signed-out cold start).
+    } on Object catch (e) {
+      // Hive may not be initialised yet (e.g. signed-out cold start); a
+      // HiveError is an Error, not an Exception.
       developer.log('Could not clear cached profile: $e');
     }
-    notifyListeners();
   }
 
   /// Push profile changes to the `profiles` row.

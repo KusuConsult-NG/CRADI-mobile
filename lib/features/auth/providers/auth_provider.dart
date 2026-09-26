@@ -253,6 +253,10 @@ class AuthProvider extends ChangeNotifier {
   /// an in-flight [_handleSignedIn] stops once it no longer matches.
   int _authGen = 0;
 
+  /// User id the sign-in listeners last ran for (null after a reset), so a
+  /// sign-in that is retried after a failed attempt still notifies them.
+  String? _listenersFiredFor;
+
   static void _notifyAll(List<VoidCallback> listeners, String kind) {
     for (final listener in List.of(listeners)) {
       try {
@@ -357,6 +361,8 @@ class AuthProvider extends ChangeNotifier {
     final profileSub = _profileSub;
     _profileSub = null;
     _resetUserState();
+    // A sign-in that starts during the awaits below supersedes this run.
+    final gen = _authGen;
     _sessionManager.cancelTimers();
     // Before any await, so a sign-in that follows is queued after it.
     unawaited(NotificationService().onUserSignedOut());
@@ -364,6 +370,7 @@ class AuthProvider extends ChangeNotifier {
     // Load onboarding status here too, otherwise logged-out users are sent
     // back to /onboarding on every cold start.
     await _loadOnboardingStatus();
+    if (gen != _authGen) return;
     _isInitialized = true;
     notifyListeners();
     _notifyAll(_signOutListeners, 'Sign-out');
@@ -373,6 +380,7 @@ class AuthProvider extends ChangeNotifier {
   /// Pending registration data (email / phone OTP in progress) is kept.
   void _resetUserState() {
     _authGen++;
+    _listenersFiredFor = null;
     _signInFuture = null;
     _signInUid = null;
     _currentUser = null;
@@ -396,7 +404,6 @@ class AuthProvider extends ChangeNotifier {
     // run: nothing may be applied for a user who is no longer signed in.
     final gen = _authGen;
     bool stale() => gen != _authGen;
-    final isNewUser = _currentUser?.id != user.id || !_isAuthenticated;
     if (_currentUser != null && _currentUser!.id != user.id) {
       // A different account without an intervening sign-out: drop the
       // previous user's profile-derived state.
@@ -481,7 +488,10 @@ class AuthProvider extends ChangeNotifier {
     if (stale()) return;
     _isInitialized = true;
     notifyListeners();
-    if (isNewUser) _notifyAll(_signInListeners, 'Sign-in');
+    if (_listenersFiredFor != user.id) {
+      _listenersFiredFor = user.id;
+      _notifyAll(_signInListeners, 'Sign-in');
+    }
   }
 
   /// Identifies this device to OneSignal with the user id and targeting
@@ -1419,10 +1429,13 @@ class AuthProvider extends ChangeNotifier {
       _resetUserState();
       _isLoading = false;
       notifyListeners();
+      // The signedOut auth event notifies too; listeners are idempotent.
+      _notifyAll(_signOutListeners, 'Sign-out');
     } on Exception catch (e) {
       _resetUserState();
       _isLoading = false;
       notifyListeners();
+      _notifyAll(_signOutListeners, 'Sign-out');
       ErrorHandler.logError(e, context: 'AuthProvider.logout');
     }
   }

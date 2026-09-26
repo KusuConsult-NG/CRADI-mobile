@@ -1,6 +1,7 @@
 import 'package:climate_app/core/constants/app_config.dart';
 import 'package:climate_app/core/services/supabase_service.dart';
 import 'package:climate_app/features/auth/providers/auth_provider.dart';
+import 'package:climate_app/features/verification/providers/reports_status_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -127,11 +128,9 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
     Map<String, dynamic>? updated;
     try {
       if (newStatus == 'pending') {
-        // Reopening clears peer votes; only the RPC may do it.
-        await SupabaseService().client.rpc(
-          'reopen_report',
-          params: {'p_report_id': reportId},
-        );
+        // Reopening clears peer votes; only the reopen_report RPC may do
+        // it. The provider also drops the cached vote and refreshes lists.
+        await context.read<ReportsStatusProvider>().moveBackToPending(reportId);
       } else {
         final now = DateTime.now();
         updated = await SupabaseService().updateDocument(

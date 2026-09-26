@@ -130,7 +130,9 @@ class PeerVerificationService {
       'This report is no longer pending.';
 
   /// Re-reads the report after a refused vote: true when it is no longer
-  /// pending. Unknown (read failed) counts as still pending.
+  /// pending (also when it is no longer visible: RLS hides reports that
+  /// left 'pending' from peers, or it was deleted). Unknown (read failed)
+  /// counts as still pending.
   Future<bool> _isNoLongerPending(String reportId) async {
     try {
       final doc = await _db.getDocument(
@@ -139,6 +141,8 @@ class PeerVerificationService {
       );
       final status = (doc['status'] as String?)?.toLowerCase();
       return status != null && status != 'pending';
+    } on DocumentNotFoundException {
+      return true;
     } on Exception catch (e) {
       developer.log(
         'Could not re-read report $reportId: $e',

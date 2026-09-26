@@ -176,12 +176,11 @@ class OfflineStorageService {
 
   /// Drafts shown to [userId]: their own, plus ownerless (legacy) drafts
   /// that the user may submit as their own or discard.
-  List<Map<String, dynamic>> getDraftsFor(String? userId) => getAllDrafts()
-      .where((d) {
+  List<Map<String, dynamic>> getDraftsFor(String? userId) =>
+      getAllDrafts().where((d) {
         final owner = draftOwner(d);
         return owner == null || owner == userId;
-      })
-      .toList();
+      }).toList();
 
   /// Whether [draft] may be uploaded automatically for [userId]: only the
   /// author's own drafts, never ownerless ones (the author is unknown on a
@@ -290,9 +289,12 @@ class OfflineStorageService {
     return owner is String && owner.isNotEmpty ? owner : null;
   }
 
-  static bool _belongsTo(Map item, String? userId) {
+  /// Whether [item] may be shown to / synced for [userId]. Items of another
+  /// account are hidden, also when nobody is signed in ([userId] null):
+  /// only ownerless (legacy) items are visible then.
+  static bool belongsTo(Map item, String? userId) {
     final owner = _itemOwner(item);
-    return owner == null || userId == null || owner == userId;
+    return owner == null || owner == userId;
   }
 
   /// Whether a queue item will not be retried automatically any more.
@@ -302,12 +304,13 @@ class OfflineStorageService {
           ((item['retryCount'] as int?) ?? 0) >= maxSyncAttempts);
 
   /// Unsynced queue items (pending, failed or rejected) belonging to
-  /// [userId] (all users when null). Safe to call before [initialize].
+  /// [userId] (only ownerless items when null). Safe to call before
+  /// [initialize].
   List<Map<String, dynamic>> getUnsyncedItems({String? userId}) {
     if (!isInitialized) return [];
     return getSyncQueue()
         .where((item) => item['status'] != 'synced')
-        .where((item) => _belongsTo(item, userId))
+        .where((item) => belongsTo(item, userId))
         .toList();
   }
 
@@ -466,7 +469,7 @@ class OfflineStorageService {
               ((item['retryCount'] as int?) ?? 0) < maxSyncAttempts &&
               // Items queued by another account would be refused by RLS
               // (and must never be attributed to this user).
-              _belongsTo(item, currentUserId),
+              belongsTo(item, currentUserId),
         )
         .toList();
 

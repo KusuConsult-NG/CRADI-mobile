@@ -65,6 +65,10 @@ class ReportsStatusProvider extends ChangeNotifier {
   final Map<String, int> _offsetMap = {};
   final Map<String, bool> _hasMoreMap = {};
   final Map<String, bool> _loadingMap = {};
+
+  /// Lists a screen loaded with [fetchAllPages]; refreshes reload them fully
+  /// so a first-page refresh can't truncate them.
+  final Set<String> _allPagesKeys = {};
   final Map<String, int> _totalCounts = {};
 
   /// Last fetch error per key (null once a fetch succeeds).
@@ -90,6 +94,11 @@ class ReportsStatusProvider extends ChangeNotifier {
   /// dropped.
   int _userGen = 0;
 
+  /// Changes whenever [clearUserData] dropped the cached lists: screens
+  /// that load their own lists (e.g. every page of "My Reports") compare it
+  /// to reload them.
+  int get userDataGeneration => _userGen;
+
   /// Rows fetched for the "To Verify" list: pending reports are filtered
   /// client-side (already voted, ward / LGA eligibility), so one page of
   /// the default size could leave the list empty while more exist.
@@ -104,20 +113,38 @@ class ReportsStatusProvider extends ChangeNotifier {
     if (z == null || z.isEmpty) return const {};
     final lower = z.toLowerCase();
     if (lower.contains('all zone')) return const {};
-    String stripState(String v) =>
-        v.replaceAll(RegExp(r'\s+state$', caseSensitive: false), '').trim();
+    // Column filters are case-sensitive equality: known names are mapped to
+    // their stored spelling ("benue" → "Benue").
+    String canonicalState(String v) {
+      final name = v
+          .replaceAll(RegExp(r'\s+state$', caseSensitive: false), '')
+          .trim();
+      return MVPLocationsData.getAllStates().firstWhere(
+        (s) => s.toLowerCase() == name.toLowerCase(),
+        orElse: () => name,
+      );
+    }
+
     if (z.contains(',')) {
       final parts = z.split(',');
-      final lga = parts.first.trim();
-      final state = stripState(parts.last.trim());
+      final state = canonicalState(parts.last.trim());
+      final rawLga = parts.first.trim();
+      final lga = rawLga.isEmpty
+          ? rawLga
+          : MVPLocationsData.findLGA(
+                  rawLga,
+                  state: state.isEmpty ? null : state,
+                )?.name ??
+                rawLga;
       return {
         if (lga.isNotEmpty) 'lga': lga,
         if (state.isNotEmpty) 'state': state,
       };
     }
-    if (lower.endsWith(' state')) return {'state': stripState(z)};
-    if (MVPLocationsData.getAllStates().any((s) => s.toLowerCase() == lower)) {
-      return {'state': z};
+    if (lower.endsWith(' state')) return {'state': canonicalState(z)};
+    final state = canonicalState(z);
+    if (MVPLocationsData.getAllStates().contains(state)) {
+      return {'state': state};
     }
     return const {};
   }
@@ -132,6 +159,7 @@ class ReportsStatusProvider extends ChangeNotifier {
     _offsetMap.clear();
     _hasMoreMap.clear();
     _loadingMap.clear();
+    _allPagesKeys.clear();
     _totalCounts.clear();
     _errorMap.clear();
     _keyParams.clear();
@@ -248,30 +276,53 @@ class ReportsStatusProvider extends ChangeNotifier {
   Future<void> refreshReports({String? excludeUserId, String? userId}) async {
     await Future.wait([
       loadMyVotes(force: true),
-      fetchReports(status: null, excludeUserId: excludeUserId, userId: userId),
-      fetchReports(
-        status: ReportStatus.pending,
-        excludeUserId: excludeUserId,
+      _refreshList(null, userId: userId, excludeUserId: excludeUserId),
+      _refreshList(
+        ReportStatus.pending,
         userId: userId,
+        excludeUserId: excludeUserId,
       ),
       // The "To Verify" list of the signed-in user.
       if (userId == null && excludeUserId == null) fetchToVerify(),
-      fetchReports(
-        status: ReportStatus.verified,
-        excludeUserId: excludeUserId,
+      _refreshList(
+        ReportStatus.verified,
         userId: userId,
+        excludeUserId: excludeUserId,
       ),
-      fetchReports(
-        status: ReportStatus.approved,
-        excludeUserId: excludeUserId,
+      _refreshList(
+        ReportStatus.approved,
         userId: userId,
+        excludeUserId: excludeUserId,
       ),
-      fetchReports(
-        status: ReportStatus.rejected,
-        excludeUserId: excludeUserId,
+      _refreshList(
+        ReportStatus.rejected,
         userId: userId,
+        excludeUserId: excludeUserId,
       ),
     ]);
+  }
+
+  /// First page, or every page for lists loaded with [fetchAllPages].
+  Future<void> _refreshList(
+    ReportStatus? status, {
+    String? userId,
+    String? excludeUserId,
+    int? pageSize,
+  }) {
+    final key = _getKey(status, userId, excludeUserId: excludeUserId);
+    if (_allPagesKeys.contains(key)) {
+      return fetchAllPages(
+        status: status,
+        userId: userId,
+        excludeUserId: excludeUserId,
+      );
+    }
+    return fetchReports(
+      status: status,
+      userId: userId,
+      excludeUserId: excludeUserId,
+      pageSize: pageSize ?? _pageSize,
+    );
   }
 
   /// Re-fetches (first page of) every list that has been loaded, e.g. after
@@ -279,8 +330,8 @@ class ReportsStatusProvider extends ChangeNotifier {
   Future<void> refreshLoadedLists() {
     return Future.wait(
       _keyParams.values.map(
-        (k) => fetchReports(
-          status: k.status,
+        (k) => _refreshList(
+          k.status,
           userId: k.userId,
           excludeUserId: k.excludeUserId,
           pageSize: k.pageSize,
@@ -346,6 +397,7 @@ class ReportsStatusProvider extends ChangeNotifier {
     String? excludeUserId,
     int maxRows = 1000,
   }) async {
+    _allPagesKeys.add(_getKey(status, userId, excludeUserId: excludeUserId));
     await fetchReports(
       status: status,
       userId: userId,
@@ -545,9 +597,7 @@ class ReportsStatusProvider extends ChangeNotifier {
         name: 'ReportsStatusProvider',
       );
     }
-    return [
-      for (final e in filter.entries) FQuery.equal(e.key, e.value),
-    ];
+    return [for (final e in filter.entries) FQuery.equal(e.key, e.value)];
   }
 
   /// Name from the reporter's profile (readable by staff), cached per user.

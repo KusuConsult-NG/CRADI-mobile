@@ -26,9 +26,22 @@ class _MyReportsScreenState extends State<MyReportsScreen>
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
+  }
 
+  /// User and [ReportsStatusProvider.userDataGeneration] the list was last
+  /// loaded for. The list is (re)loaded on first build, when another user
+  /// signs in, and after the provider dropped its cached lists (sign-in /
+  /// sign-out), which would otherwise leave this screen empty.
+  String? _loadedUid;
+  int? _loadedGen;
+
+  void _reloadIfStale(ReportsStatusProvider provider, String uid) {
+    final gen = provider.userDataGeneration;
+    if (uid == _loadedUid && gen == _loadedGen) return;
+    _loadedUid = uid;
+    _loadedGen = gen;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _refreshMyReports();
+      if (mounted) _refreshMyReports();
     });
   }
 
@@ -88,6 +101,8 @@ class _MyReportsScreenState extends State<MyReportsScreen>
               ),
             );
           }
+
+          _reloadIfStale(provider, uid);
 
           // Get ALL user reports (status: null means all)
           final allReports = provider.getReports(null, userId: uid);

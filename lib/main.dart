@@ -168,13 +168,25 @@ class _ClimateAppState extends State<ClimateApp> {
     final alerts = context.read<AlertsProvider>();
     final reports = context.read<ReportsStatusProvider>();
     final profile = context.read<ProfileProvider>();
+    // Zone-filtered lists need the new user's monitoring zone first.
+    // clearUserData() also dropped the user's own (userId-scoped) lists, so
+    // those are reloaded too; screens showing them refetch on their own.
+    Future<void> reloadFor(String uid) async {
+      await profile.loadProfile();
+      // Signed out (or another account signed in) meanwhile: that event
+      // clears / reloads the lists itself.
+      if (_auth?.currentUser?.id != uid) return;
+      await Future.wait([
+        reports.refreshReports(),
+        reports.refreshReports(userId: uid),
+      ]);
+    }
+
     _onSignedIn = () {
+      final uid = _auth?.currentUser?.id;
       reports.clearUserData();
       unawaited(alerts.fetchAlerts());
-      // Zone-filtered lists need the new user's monitoring zone first.
-      unawaited(
-        profile.loadProfile().then((_) => reports.refreshReports()),
-      );
+      if (uid != null) unawaited(reloadFor(uid));
     };
     _onSignedOut = () {
       reports.clearUserData();

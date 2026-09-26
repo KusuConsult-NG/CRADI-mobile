@@ -74,6 +74,13 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
             if (!mounted) return;
             setState(() => _contactsError = e);
           },
+          // A stream that ends without rows (e.g. signed out) must not
+          // leave the spinner up forever.
+          onDone: () {
+            settle();
+            if (!mounted || _contacts != null) return;
+            setState(() => _contacts = const []);
+          },
         );
   }
 
