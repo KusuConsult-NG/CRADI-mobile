@@ -548,12 +548,20 @@ async function patchProfiles(sb, state, report, plans) {
     if (t.skip || !id) continue;
     if (claimed.has(id)) continue; // merged duplicate: the first Firebase user's profile wins
     claimed.add(id);
-    jobs.push({ uid, id, profile: t.row.profile });
+    jobs.push({ uid, id, profile: t.row.profile, kind: t.kind });
   }
   let written = 0;
   let banned = 0;
   let unbanned = 0;
-  await mapLimit(jobs, 8, async ({ uid, id, profile }) => {
+  await mapLimit(jobs, 8, async ({ uid, id, profile, kind }) => {
+    // The DB only approves confirmed accounts. New accounts are created
+    // confirmed when approved (transformUser), but an account reused from an
+    // earlier run may still be unconfirmed: confirm it first, or the whole
+    // profile update (role, area, flags) would be refused, not just approval.
+    if (profile.is_approved && kind !== 'phone') {
+      const { error: confirmError } = await sb.auth.admin.updateUserById(id, { email_confirm: true });
+      if (confirmError) report.warn('profiles', uid, `confirm email failed: ${confirmError.message}`);
+    }
     const { error } = await sb.from('profiles').update(profile).eq('id', id);
     if (error) { report.skip('profiles', uid, `profile update failed: ${error.message}`); return; }
     written += 1;
