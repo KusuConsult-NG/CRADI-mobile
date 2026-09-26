@@ -104,3 +104,11 @@ reset role;
 update app_settings set value='"abc"' where key='escalation_timeout_minutes';
 insert into reports(user_id,hazard_type,lga) values ('00000000-0000-0000-0000-00000000000a','Flood','L1');
 select count(*) as reports_total from reports;
+
+\echo '=== round 3: disputes ==='
+select set_config('request.jwt.claim.sub','',false);
+insert into reports(id,user_id,hazard_type,lga,ward) values ('10000000-0000-0000-0000-000000000004','00000000-0000-0000-0000-00000000000a','Storm','L1','W1');
+set role authenticated; select as_user('00000000-0000-0000-0000-00000000000b');
+insert into verifications(report_id,is_confirmed,comment) values ('10000000-0000-0000-0000-000000000004',false,'not true');
+reset role;
+select event_type from notification_outbox where payload->>'report_id'='10000000-0000-0000-0000-000000000004' order by id;

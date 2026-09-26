@@ -7,6 +7,6 @@ RLS/trigger behaviour can be checked against any Postgres 15+:
 ```sh
 createdb cradi_test
 psql -d cradi_test -f supabase/tests/local_stubs.sql
-psql -d cradi_test -f supabase/migrations/20260925000000_init.sql
+for f in supabase/migrations/*.sql; do psql -d cradi_test -f "$f"; done
 psql -d cradi_test -f supabase/tests/rls_smoke.sql   # each "expect ERROR" line should error
 ```
