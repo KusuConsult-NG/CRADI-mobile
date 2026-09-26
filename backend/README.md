@@ -217,7 +217,8 @@ Stuck events: `select * from notification_outbox where processed_at is null and 
 ## Authority SMS
 
 On a transition into `approved` (same rule as the LGA broadcast), rows of
-`authorities` with `coverage_lga = report.lga` (exact match, at most
+`authorities` with `coverage_lga = report.lga` and
+`coverage_state = report.state` or `coverage_state` NULL (exact matches, at most
 `app_settings.max_sms_per_alert_event`, default 20) get:
 
 ```
@@ -229,8 +230,13 @@ truncated to 320 characters (the description is shortened with `...`).
 - Phone numbers are normalised to E.164 `+234XXXXXXXXXX` (`0803…`, `803…`,
   `234803…`, `+234 (0)803…`, `00234…`); invalid or non-Nigerian numbers are
   skipped and logged; duplicate numbers get one SMS.
+- State-aware routing: LGA names repeat across states (Obi is in Benue and in
+  Nasarawa), so an authority with `coverage_state` set is texted only for
+  reports in that state. Rows with `coverage_state` NULL (legacy, created before
+  the column existed) still match every same-named LGA until an admin edits
+  them and picks the state. A report with no `state` matches by LGA name only.
 - Daily cap: `app_settings.max_sms_per_lga_per_day` (default 50) successful SMS
-  per LGA per day (Africa/Lagos day), counted in memory per instance.
+  per (state, LGA) per day (Africa/Lagos day), counted in memory per instance.
 - Dedupe: once a report's SMS round completes it is never texted again by this
   instance; if every send fails the event is retried (outbox backoff) and
   numbers that already received the SMS are not texted again.

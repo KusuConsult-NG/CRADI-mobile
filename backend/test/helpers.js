@@ -105,9 +105,12 @@ export function fakeRepo({
     async getSettings(keys) {
       return Object.fromEntries(keys.filter((k) => k in state.settings).map((k) => [k, state.settings[k]]));
     },
-    async findAuthorities(lga, limit) {
-      state.authorityQueries.push({ lga, limit });
-      return state.authorities.filter((a) => a.coverage_lga === lga).slice(0, limit);
+    async findAuthorities(lga, reportState, limit) {
+      state.authorityQueries.push({ lga, state: reportState, limit });
+      const st = typeof reportState === 'string' ? reportState.trim() : '';
+      return state.authorities
+        .filter((a) => a.coverage_lga === lga && (!st || a.coverage_state == null || a.coverage_state === st))
+        .slice(0, limit);
     },
     async finishPendingEscalationForReport(reportId, status, reason = null) {
       const rows = state.escalations.filter((e) => e.report_id === reportId && e.status === 'pending');

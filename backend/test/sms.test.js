@@ -118,7 +118,7 @@ test('authority SMS: lga match, per-event limit from settings, invalid/duplicate
   const sms = fakeSms();
   const svc = createAuthoritySms({ repo, sms, logger });
   const summary = await svc.notifyApproved(report);
-  assert.deepEqual(repo.state.authorityQueries, [{ lga: 'Ikeja', limit: 3 }]);
+  assert.deepEqual(repo.state.authorityQueries, [{ lga: 'Ikeja', state: undefined, limit: 3 }]);
   assert.deepEqual(sms.sent.map((s) => s.to), ['+2348031234567']);
   assert.equal(summary.invalid, 1);
   assert.equal(sms.sent[0].text, authoritySmsText(report));
@@ -126,7 +126,7 @@ test('authority SMS: lga match, per-event limit from settings, invalid/duplicate
   // Default per-event limit is 20.
   const repo2 = fakeRepo({ authorities: [] });
   await createAuthoritySms({ repo: repo2, sms, logger }).notifyApproved(report);
-  assert.deepEqual(repo2.state.authorityQueries, [{ lga: 'Ikeja', limit: 20 }]);
+  assert.deepEqual(repo2.state.authorityQueries, [{ lga: 'Ikeja', state: undefined, limit: 20 }]);
 });
 
 test('authority SMS: daily cap per LGA, resets next Lagos day', async () => {
@@ -306,4 +306,31 @@ test('outbox: approval transition texts authorities once, even when the event is
   delete repo.state.events[0].processed_at;
   await runOutboxBatch({ repo, handlers, logger });
   assert.equal(sms.sent.length, 1);
+});
+
+test('authority SMS: same-named LGA in another state is not texted (Obi, Benue vs Nasarawa)', async () => {
+  const obi = { ...report, id: 'obi-benue', lga: 'Obi', state: 'Benue' };
+  const repo = fakeRepo({
+    authorities: [
+      { id: 'benue', name: 'benue', phone: '08031110001', coverage_lga: 'Obi', coverage_state: 'Benue' },
+      { id: 'legacy', name: 'legacy', phone: '08031110002', coverage_lga: 'Obi', coverage_state: null },
+      { id: 'nasarawa', name: 'nasarawa', phone: '08031110003', coverage_lga: 'Obi', coverage_state: 'Nasarawa' },
+      { id: 'other-lga', name: 'other', phone: '08031110004', coverage_lga: 'Makurdi', coverage_state: 'Benue' },
+    ],
+  });
+  const sms = fakeSms();
+  const summary = await createAuthoritySms({ repo, sms, logger }).notifyApproved(obi);
+  assert.deepEqual(repo.state.authorityQueries, [{ lga: 'Obi', state: 'Benue', limit: 20 }]);
+  assert.deepEqual(sms.sent.map((s) => s.to).sort(), ['+2348031110001', '+2348031110002']);
+  assert.equal(summary.sent, 2);
+
+  // A report without a state (legacy) matches by LGA name only.
+  const sms2 = fakeSms();
+  await createAuthoritySms({ repo, sms: sms2, logger }).notifyApproved({ ...obi, id: 'obi-nostate', state: '' });
+  assert.deepEqual(sms2.sent.map((s) => s.to).sort(), ['+2348031110001', '+2348031110002', '+2348031110003']);
+
+  // Nasarawa's Obi gets its own authorities plus the legacy row, not Benue's.
+  const sms3 = fakeSms();
+  await createAuthoritySms({ repo, sms: sms3, logger }).notifyApproved({ ...obi, id: 'obi-nasarawa', state: 'Nasarawa' });
+  assert.deepEqual(sms3.sent.map((s) => s.to).sort(), ['+2348031110002', '+2348031110003']);
 });

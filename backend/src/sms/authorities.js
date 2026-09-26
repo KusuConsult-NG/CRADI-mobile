@@ -20,6 +20,7 @@ const WAT_OFFSET_MS = 60 * 60_000; // Nigeria: UTC+1, no DST
 const DEDUPE_TTL_MS = 7 * 24 * 60 * 60_000;
 
 const oneLine = (s) => String(s ?? '').replace(/\s+/g, ' ').trim();
+const capKeyFor = (t, lga, state) => `${lagosDay(t)}|${oneLine(state).toLowerCase()}|${oneLine(lga).toLowerCase()}`;
 
 /** "EWER ALERT: {SEVERITY} {hazard} reported in {ward}, {lga}. {description} - verified by community monitors." (<= 320 chars) */
 export function authoritySmsText(report, maxChars = SMS_MAX_CHARS) {
@@ -71,10 +72,11 @@ export function createAuthoritySms({ repo, sms, logger = defaultLog, now = Date.
     const settings = await repo.getSettings(['max_sms_per_alert_event', 'max_sms_per_lga_per_day']);
     const perEvent = positiveInt(settings.max_sms_per_alert_event, DEFAULT_MAX_SMS_PER_ALERT_EVENT);
     const perDay = positiveInt(settings.max_sms_per_lga_per_day, DEFAULT_MAX_SMS_PER_LGA_PER_DAY);
-    const authorities = await repo.findAuthorities(report.lga, perEvent);
+    const authorities = await repo.findAuthorities(report.lga, report.state, perEvent);
 
     const text = authoritySmsText(report);
-    const capKey = `${lagosDay(t)}|${oneLine(report.lga).toLowerCase()}`;
+    // Keyed by (state, lga): same-named LGAs in different states have separate caps.
+    const capKey = capKeyFor(t, report.lga, report.state);
     const round = delivered.get(report.id) ?? { at: t, phones: new Set() };
     delivered.set(report.id, round);
     const done = round.phones;
@@ -114,7 +116,7 @@ export function createAuthoritySms({ repo, sms, logger = defaultLog, now = Date.
       }
     }
 
-    logger.info('sms.authorities', { report_id: report.id, lga: report.lga, authorities: authorities.length, ...summary });
+    logger.info('sms.authorities', { report_id: report.id, lga: report.lga, state: report.state ?? null, authorities: authorities.length, ...summary });
     // Any failed send: throw so the outbox retries the event. Phones already
     // texted in this round are remembered in `done` and skipped on the retry,
     // so only the failed ones are attempted again. The report is marked
@@ -129,5 +131,5 @@ export function createAuthoritySms({ repo, sms, logger = defaultLog, now = Date.
     return summary;
   }
 
-  return { notifyApproved, dailyCount: (lga, t = now()) => daily.get(`${lagosDay(t)}|${oneLine(lga).toLowerCase()}`) ?? 0 };
+  return { notifyApproved, dailyCount: (lga, t = now(), state = '') => daily.get(capKeyFor(t, lga, state)) ?? 0 };
 }

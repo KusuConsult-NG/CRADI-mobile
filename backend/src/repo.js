@@ -6,6 +6,11 @@ const REPORT_COLUMNS =
   'id, user_id, hazard_type, severity, ward, lga, state, description, status, rejection_reason, escalated, escalation_reason';
 const ALERT_COLUMNS = 'id, title, message, severity, target_lga, is_active';
 
+/** Double-quotes a value for a PostgREST `or=(...)` filter (commas, dots, parens are reserved). */
+function postgrestQuote(value) {
+  return `"${String(value).replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
+}
+
 function check({ data, error }, what) {
   if (error) throw new Error(`${what}: ${error.message ?? error}`);
   return data;
@@ -141,18 +146,23 @@ export function createRepo(supabase) {
       return Object.fromEntries((rows ?? []).map((r) => [r.key, r.value]));
     },
 
-    /** Authorities whose coverage_lga equals `lga` (exact match, as stored on the report). */
-    async findAuthorities(lga, limit) {
+    /**
+     * Authorities covering the report's LGA: coverage_lga equals `lga` (exact
+     * match, as stored on the report) and coverage_state equals `state` or is
+     * NULL (legacy rows that predate coverage_state match by LGA name only).
+     * LGA names repeat across states (Obi: Benue and Nasarawa), so a report
+     * with a state never reaches another state's same-named LGA. An empty
+     * `state` matches by LGA only.
+     */
+    async findAuthorities(lga, state, limit) {
+      let q = supabase
+        .from('authorities')
+        .select('id, name, organization, phone, coverage_lga, coverage_state')
+        .eq('coverage_lga', lga);
+      const st = typeof state === 'string' ? state.trim() : '';
+      if (st) q = q.or(`coverage_state.eq.${postgrestQuote(st)},coverage_state.is.null`);
       return (
-        check(
-          await supabase
-            .from('authorities')
-            .select('id, name, organization, phone, coverage_lga')
-            .eq('coverage_lga', lga)
-            .order('created_at', { ascending: true })
-            .limit(limit),
-          'find authorities',
-        ) ?? []
+        check(await q.order('created_at', { ascending: true }).limit(limit), 'find authorities') ?? []
       );
     },
 
