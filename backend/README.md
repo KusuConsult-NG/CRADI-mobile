@@ -73,10 +73,14 @@ curl localhost:8080/health
 
 ## Deploy on Railway
 
-1. Railway: **New Project → Deploy from GitHub repo**, pick this repository.
-2. Service **Settings → Source → Root Directory = `backend`**. Railway then
-   uses `backend/railway.json` (Dockerfile build, `node src/index.js`,
-   health check `/health`, restart on failure).
+See `../docs/DEPLOYMENT.md` section 4 for the full first-time walkthrough
+(which variables, how to verify, what to do when the healthcheck fails).
+
+1. Railway: **New Project → Deploy from GitHub repo**, pick this repository
+   (`KusuConsult-NG/CRADI-mobile`).
+2. Service **Settings → Source → Root Directory = `backend`**, **Branch =
+   `supabase-migration`**. Railway then uses `backend/railway.json` (Dockerfile
+   build, `node src/index.js`, health check `/health`, restart on failure).
 3. Service **Variables**: add the variables above (at least the two Supabase ones).
 4. **Settings → Networking → Generate Domain** to get a public URL for `/email`
    (e.g. `https://cradi-backend.up.railway.app`). Put that URL in the Flutter app config.
@@ -89,7 +93,10 @@ curl localhost:8080/health
 1. Create a OneSignal app; configure Android (FCM v1 service-account JSON
    **inside OneSignal only**; the app itself no longer uses Firebase) and iOS (APNs `.p8` key).
 2. **Settings → Keys & IDs**: copy the App ID and create an App API key →
-   `ONESIGNAL_APP_ID`, `ONESIGNAL_REST_API_KEY`.
+   `ONESIGNAL_APP_ID`, `ONESIGNAL_REST_API_KEY`. The REST key is a server
+   secret: it belongs in the Railway variables and nowhere else. If one is ever
+   exposed, revoke it on this page and create a new one before doing anything
+   else.
 3. Optional: create an Android notification category (e.g. "Alerts", high
    importance) and set `ONESIGNAL_ANDROID_CHANNEL_ID` to its id.
 

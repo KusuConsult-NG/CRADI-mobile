@@ -14,17 +14,27 @@ approves an account, peer-verification threshold, escalation scheduling,
 notifications) live in the database (RLS + triggers in
 `supabase/migrations/`) and the Railway backend — not in the app.
 
+> **Deploying for the first time?** Follow `docs/DEPLOYMENT.md` — the
+> end-to-end runbook (Supabase → first admin → OneSignal → Railway backend →
+> Railway admin → app build → smoke test). The sections below are the reference
+> for each piece.
+
 ## 1. Supabase project
 
-1. Create a project at <https://supabase.com> and install the
-   [Supabase CLI](https://supabase.com/docs/guides/cli).
-2. Apply the schema:
+1. Create a project at <https://supabase.com>.
+2. Apply the schema. Either paste
+   `supabase/deploy/schema.sql` (all 12 migrations, generated — see
+   `supabase/deploy/README.md`) into the dashboard **SQL Editor** on an empty
+   project, or, with the
+   [Supabase CLI](https://supabase.com/docs/guides/cli) installed:
 
    ```bash
    supabase login
    supabase link --project-ref <your-project-ref>
    supabase db push
    ```
+
+   Afterwards `public` holds 17 tables, all with RLS enabled.
 
 3. **Authentication → Providers → Email**: keep *Confirm email* on.
 4. **Authentication → Email Templates**: the app verifies accounts and resets
@@ -41,9 +51,13 @@ notifications) live in the database (RLS + triggers in
    `registration_screen.dart`.
 6. **Authentication → Rate Limits / Attack protection**: adjust to taste (the
    app also rate-limits OTP resends locally).
-7. Create the first admin: sign up in the app, then in **Table Editor →
-   profiles** set `role = 'admin'` and `is_approved = true` on that row.
-   Every other account needs an admin to approve it (Admin → Users).
+7. Create the first admin: sign up in the app (or add the user under
+   **Authentication → Users**), confirm its email, then run
+   `scripts/set-admin.mjs` in the admin repo — or, in **Table Editor →
+   profiles**, set `role = 'admin'` and `is_approved = true` on that row.
+   Approval is refused until Supabase Auth has confirmed the account's email or
+   phone. Every other account needs an admin to approve it (Admin → Users).
+   Details: `docs/DEPLOYMENT.md` section 2.
 8. Storage buckets `report-images` and `profile-images` are created by the
    migration (public read; uploads must be under `<user id>/…`).
 
@@ -68,8 +82,10 @@ targets users by these.
 
 ## 3. Railway backend
 
-Deploy `backend/` as described in `backend/README.md` and note its public URL
-(used for `POST /email`).
+Deploy `backend/` as described in `backend/README.md` (root directory
+`backend`, branch `supabase-migration`) and note its public URL (used for
+`POST /email`). Step-by-step, including every environment variable:
+`docs/DEPLOYMENT.md` section 4.
 
 ## 4. App configuration (`env.json`)
 
