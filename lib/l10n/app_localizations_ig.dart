@@ -3307,4 +3307,20 @@ class AppLocalizationsIg extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String nearbyReportsInAreaCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Akụkọ $count n\'ógbè gị',
+      one: 'Akụkọ 1 n\'ógbè gị',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String landingCopyright(String year) {
+    return '© $year CRADI. Ikike niile echekwara.';
+  }
 }

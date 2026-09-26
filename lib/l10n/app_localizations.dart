@@ -5839,6 +5839,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{count, plural, other{You can keep at most {count} unsent reports on this device. Sync or discard some first.}}'**
   String offlineDraftLimit(int count);
+
+  /// Count of nearby reports shown above the Nearby Reports list.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 report in your area} other{{count} reports in your area}}'**
+  String nearbyReportsInAreaCount(int count);
+
+  /// Copyright footer on the landing screen; {year} is the current year.
+  ///
+  /// In en, this message translates to:
+  /// **'© {year} CRADI. All rights reserved.'**
+  String landingCopyright(String year);
 }
 
 class _AppLocalizationsDelegate

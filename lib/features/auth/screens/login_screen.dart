@@ -376,7 +376,9 @@ class _LoginScreenState extends State<LoginScreen> {
                                   const SizedBox(width: 8),
                                   Expanded(
                                     child: Text(
-                                      '$_remainingAttempts login attempts remaining',
+                                      context.l10n.rateLimitAttemptsRemaining(
+                                        _remainingAttempts,
+                                      ),
                                       style: TextStyle(
                                         color: Colors.orange.shade700,
                                         fontSize: 14,

@@ -252,7 +252,8 @@ class _AdminKnowledgeScreenState extends State<AdminKnowledgeScreen> {
                           ),
                         ),
                         title: Text(
-                          d['title'] as String? ?? 'Untitled',
+                          d['title'] as String? ??
+                              context.l10n.knowledgeNoTitle,
                           style: GoogleFonts.lexend(
                             fontWeight: FontWeight.w600,
                             fontSize: 14,

@@ -324,7 +324,7 @@ class _NearbyReportsScreenState extends State<NearbyReportsScreen> {
             return Padding(
               padding: const EdgeInsets.only(bottom: 4),
               child: Text(
-                '${_nearbyReports.length} report${_nearbyReports.length == 1 ? '' : 's'} in your area',
+                context.l10n.nearbyReportsInAreaCount(_nearbyReports.length),
                 style: GoogleFonts.lexend(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,

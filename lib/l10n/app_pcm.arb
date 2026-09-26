@@ -955,5 +955,7 @@
   "permissionPhotosRationale": "EWER need access to your photos so you fit upload evidence of hazards. We go only upload di photos wey you yourself choose.",
   "permissionNotNow": "No Be Now",
   "permissionSettingsBody": "{reason}\n\nAbeg on am for your phone settings.",
-  "offlineDraftLimit": "{count, plural, other{You fit only keep {count} reports wey never send for dis phone. Sync or throw some away first.}}"
+  "offlineDraftLimit": "{count, plural, other{You fit only keep {count} reports wey never send for dis phone. Sync or throw some away first.}}",
+  "nearbyReportsInAreaCount": "{count, plural, =1{1 report for your area} other{{count} reports for your area}}",
+  "landingCopyright": "© {year} CRADI. All rights reserved."
 }

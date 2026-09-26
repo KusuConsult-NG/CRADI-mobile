@@ -3344,4 +3344,20 @@ class AppLocalizationsHa extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String nearbyReportsInAreaCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Rahotanni $count a yankinka',
+      one: 'Rahoto 1 a yankinka',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String landingCopyright(String year) {
+    return '© $year CRADI. Duk haƙƙoƙi an kiyaye su.';
+  }
 }

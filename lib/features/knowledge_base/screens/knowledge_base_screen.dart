@@ -40,8 +40,9 @@ class _KnowledgeBaseScreenState extends State<KnowledgeBaseScreen> {
     if (_searchQuery.isEmpty) return newsItems;
     return newsItems
         .where(
-          (item) =>
-              item['title'].toLowerCase().contains(_searchQuery.toLowerCase()),
+          (item) => (item['title']?.toString() ?? '').toLowerCase().contains(
+            _searchQuery.toLowerCase(),
+          ),
         )
         .toList();
   }

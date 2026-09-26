@@ -352,7 +352,7 @@ class _KnowledgeDetailScreenState extends State<KnowledgeDetailScreen> {
                 return Column(
                   children: relatedGuides.map((relatedGuide) {
                     return _buildRelatedItem(
-                      relatedGuide['title'] ?? 'Guide',
+                      relatedGuide['title'] ?? context.l10n.knowledgeNoTitle,
                       categoryIcon,
                       onTap: () {
                         context.push(

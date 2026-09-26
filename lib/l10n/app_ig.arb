@@ -955,5 +955,7 @@
   "permissionPhotosRationale": "EWER chọrọ ohere foto gị ka ị nwee ike ibuga ihe akaebe nke ihe egwu. Anyị na-ebuga naanị foto ndị ị họọrọ n'onwe gị.",
   "permissionNotNow": "Ọ Bụghị Ugbu a",
   "permissionSettingsBody": "{reason}\n\nBiko gbanye nke a na ntọala ngwaọrụ gị.",
-  "offlineDraftLimit": "{count, plural, other{Ị nwere ike idebe kacha akụkọ {count} e zibeghị na ngwaọrụ a. Buru ụzọ mekọrịta ma ọ bụ tụfuo ụfọdụ.}}"
+  "offlineDraftLimit": "{count, plural, other{Ị nwere ike idebe kacha akụkọ {count} e zibeghị na ngwaọrụ a. Buru ụzọ mekọrịta ma ọ bụ tụfuo ụfọdụ.}}",
+  "nearbyReportsInAreaCount": "{count, plural, =1{Akụkọ 1 n'ógbè gị} other{Akụkọ {count} n'ógbè gị}}",
+  "landingCopyright": "© {year} CRADI. Ikike niile echekwara."
 }

@@ -220,7 +220,9 @@ class _VerificationDetailScreenState extends State<VerificationDetailScreen> {
             ),
             const SizedBox(height: 8),
             Text(
-              report['description'] ?? 'No description provided.',
+              (report['description'] as String?)?.trim().isNotEmpty == true
+                  ? report['description'] as String
+                  : context.l10n.noDescriptionProvided,
               style: GoogleFonts.lexend(
                 fontSize: 14,
                 color: AppColors.textPrimary,

@@ -529,7 +529,8 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
                       if (i == docs.length) return _buildFooter();
                       final d = docs[i];
                       final uid = d['\$id'] as String;
-                      final name = d['name'] as String? ?? 'Unknown';
+                      final name =
+                          d['name'] as String? ?? context.l10n.commonUnknown;
                       final email = d['email'] as String? ?? '';
                       final role = d['role'] as String? ?? 'user';
                       final approved = d['isApproved'] as bool? ?? false;

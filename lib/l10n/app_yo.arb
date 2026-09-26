@@ -955,5 +955,7 @@
   "permissionPhotosRationale": "EWER nílò ìwọlé sí àwọn fọ́tò rẹ kí o lè gbé ẹ̀rí ewu sókè. Àwọn fọ́tò tí o yàn fúnra rẹ nìkan ni a máa ń gbé sókè.",
   "permissionNotNow": "Kì Í Ṣe Báyìí",
   "permissionSettingsBody": "{reason}\n\nJọ̀wọ́ tan èyí nínú ètò ẹ̀rọ rẹ.",
-  "offlineDraftLimit": "{count, plural, other{O lè tọ́jú ìròyìn tí a kò tíì fi ránṣẹ́ tí kò ju {count} lọ sórí ẹ̀rọ yìí. Kọ́kọ́ múdọ́gba tàbí pa díẹ̀ rẹ́.}}"
+  "offlineDraftLimit": "{count, plural, other{O lè tọ́jú ìròyìn tí a kò tíì fi ránṣẹ́ tí kò ju {count} lọ sórí ẹ̀rọ yìí. Kọ́kọ́ múdọ́gba tàbí pa díẹ̀ rẹ́.}}",
+  "nearbyReportsInAreaCount": "{count, plural, =1{Ìròyìn 1 ní agbègbè rẹ} other{Ìròyìn {count} ní agbègbè rẹ}}",
+  "landingCopyright": "© {year} CRADI. Gbogbo ẹ̀tọ́ wà ní ìpamọ́."
 }

@@ -138,7 +138,7 @@ class LandingScreen extends StatelessWidget {
 
                   // Footer / Copyright
                   Text(
-                    '© ${DateTime.now().year} CRADI. All rights reserved.',
+                    context.l10n.landingCopyright('${DateTime.now().year}'),
                     textAlign: TextAlign.center,
                     style: GoogleFonts.roboto(
                       fontSize: 12,

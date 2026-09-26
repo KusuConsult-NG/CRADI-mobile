@@ -3326,4 +3326,20 @@ class AppLocalizationsEn extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String nearbyReportsInAreaCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count reports in your area',
+      one: '1 report in your area',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String landingCopyright(String year) {
+    return '© $year CRADI. All rights reserved.';
+  }
 }

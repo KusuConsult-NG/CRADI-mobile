@@ -1015,5 +1015,7 @@
   "permissionPhotosRationale": "EWER na buƙatar izinin hotunanka don ka iya ɗora shaidar haɗurra. Muna ɗora hotunan da ka zaɓa da kanka ne kawai.",
   "permissionNotNow": "Ba Yanzu Ba",
   "permissionSettingsBody": "{reason}\n\nDon Allah kunna wannan a saitunan na'urarka.",
-  "offlineDraftLimit": "{count, plural, other{Za ka iya ajiye rahotanni {count} da ba a aika ba a wannan na'ura a mafi yawa. Fara daidaita ko watsar da wasu.}}"
+  "offlineDraftLimit": "{count, plural, other{Za ka iya ajiye rahotanni {count} da ba a aika ba a wannan na'ura a mafi yawa. Fara daidaita ko watsar da wasu.}}",
+  "nearbyReportsInAreaCount": "{count, plural, =1{Rahoto 1 a yankinka} other{Rahotanni {count} a yankinka}}",
+  "landingCopyright": "© {year} CRADI. Duk haƙƙoƙi an kiyaye su."
 }

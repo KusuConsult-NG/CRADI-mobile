@@ -4295,5 +4295,23 @@
         "type": "int"
       }
     }
+  },
+  "nearbyReportsInAreaCount": "{count, plural, =1{1 report in your area} other{{count} reports in your area}}",
+  "@nearbyReportsInAreaCount": {
+    "description": "Count of nearby reports shown above the Nearby Reports list.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "landingCopyright": "© {year} CRADI. All rights reserved.",
+  "@landingCopyright": {
+    "description": "Copyright footer on the landing screen; {year} is the current year.",
+    "placeholders": {
+      "year": {
+        "type": "String"
+      }
+    }
   }
 }

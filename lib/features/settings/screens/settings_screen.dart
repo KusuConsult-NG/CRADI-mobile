@@ -99,7 +99,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
     try {
       final authProvider = context.read<AuthProvider>();
       final profileProvider = context.read<ProfileProvider>();
-      await authProvider.setBiometricEnabled(value);
+      await authProvider.setBiometricEnabled(
+        value,
+        promptReason: context.l10n.biometricEnablePrompt,
+      );
       // Keep the profile screen's biometric switch in sync.
       await profileProvider.refreshBiometricsEnabled();
 
