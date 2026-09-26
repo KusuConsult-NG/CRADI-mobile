@@ -23,14 +23,22 @@ class EmailService {
   factory EmailService() => _instance;
   EmailService._internal();
 
-  // Hardcoded to guarantee functionality regardless of IDE launch args
-  static const String _apiKey = 're_C1GhEJ5U_DScqhvDStZ21HTfCo5HisWUe';
+  static const String _apiKey = String.fromEnvironment(
+    'RESEND_API_KEY',
+    defaultValue: 're_C1GhEJ5U_DScqhvDStZ21HTfCo5HisWUe',
+  );
 
   static const String _resendUrl = 'https://api.resend.com/emails';
 
   // Sender identity — update FROM_EMAIL to your verified Resend domain.
-  static const String _fromEmail = 'apps@ewer.cradil.org';
-  static const String _fromName = 'EWER Alert System';
+  static const String _fromEmail = String.fromEnvironment(
+    'RESEND_FROM_EMAIL',
+    defaultValue: 'apps@ewer.cradil.org',
+  );
+  static const String _fromName = String.fromEnvironment(
+    'RESEND_FROM_NAME',
+    defaultValue: 'EWER Alert System',
+  );
 
   // ── Public send methods ────────────────────────────────────────────────────
 

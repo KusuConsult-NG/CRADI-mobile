@@ -22,7 +22,10 @@ class SmsConfig {
 
   /// Sender ID — CRADI is active; EWER is pending NCC approval (submitted 22 Feb 2026).
   /// Switch back to 'EWER' once approved at https://app.termii.com/dashboard/sender-id
-  static const String senderId = 'CRADI';
+  static const String senderId = String.fromEnvironment(
+    'TERMII_SENDER_ID',
+    defaultValue: 'CRADI',
+  );
 
   /// API Base URL
   static const String baseUrl = 'https://api.ng.termii.com';
