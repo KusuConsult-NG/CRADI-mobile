@@ -17,3 +17,17 @@ workflow (use a fresh database; it creates its own users):
 ```sh
 psql -d cradi_cats -f supabase/tests/categories_e2e.sql   # expect 9 rows: pending -> verified -> approved
 ```
+
+`roles_e2e.sql` is the role matrix: one user per role (`user`, `ewm`, `ewv`,
+`ewr`, `ldp_coordinator`, `project_staff`, `admin`, `techSupport`) against
+every hazard category, driven through submit → peer votes → verified →
+decision → reopen, plus the dispute and escalation paths (use a fresh
+database; it creates its own users):
+
+```sh
+psql -d cradi_roles -f supabase/tests/roles_e2e.sql
+```
+
+Expect exactly **39 "ERROR:" lines** (all from statements marked
+"expect ERROR") and every cell of the two result matrices to read `PASS`,
+with `failures = 0` in the summary.
