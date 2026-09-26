@@ -5851,6 +5851,30 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'© {year} CRADI. All rights reserved.'**
   String landingCopyright(String year);
+
+  /// Badge on reports sent as a verification request (also replaces their stored placeholder location); max ~22 chars.
+  ///
+  /// In en, this message translates to:
+  /// **'Verification request'**
+  String get verificationRequestBadge;
+
+  /// Button on the report details screen that opens the safety guides for the report's hazard.
+  ///
+  /// In en, this message translates to:
+  /// **'Safety guides'**
+  String get reportViewSafetyGuides;
+
+  /// Shown after the app signs the user out because their account was deleted by an administrator.
+  ///
+  /// In en, this message translates to:
+  /// **'Your account has been removed, so you have been signed out. Contact your coordinator if you think this is a mistake.'**
+  String get authAccountRemoved;
+
+  /// Error on the admin users screen when approving an account that has not confirmed its email or phone number.
+  ///
+  /// In en, this message translates to:
+  /// **'This account has not confirmed its email or phone yet, so it cannot be approved.'**
+  String get adminUsersApproveUnconfirmed;
 }
 
 class _AppLocalizationsDelegate

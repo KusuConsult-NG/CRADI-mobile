@@ -1,3 +1,4 @@
+import 'package:climate_app/features/verification/widgets/verification_request_badge.dart';
 import 'package:climate_app/core/services/remote_config_service.dart';
 import 'package:climate_app/core/constants/hazards.dart';
 import 'package:climate_app/core/theme/app_colors.dart';
@@ -336,36 +337,15 @@ class _HomeScreenState extends State<HomeScreen> {
                         scrollDirection: Axis.horizontal,
                         child: Row(
                           children: [
-                            _buildCategoryCard(
-                              context.l10n.floodsCategory,
-                              Icons.flood,
-                              Colors.blue,
-                              () => _onCategoryTap('Flooding'),
-                            ),
-                            _buildCategoryCard(
-                              context.l10n.droughtsCategory,
-                              Icons.wb_sunny,
-                              Colors.orange,
-                              () => _onCategoryTap('Drought'),
-                            ),
-                            _buildCategoryCard(
-                              context.l10n.pestsCategory,
-                              Icons.pest_control,
-                              Colors.green,
-                              () => _onCategoryTap('Pest/Disease'),
-                            ),
-                            _buildCategoryCard(
-                              context.l10n.conflictsCategory,
-                              Icons.shield,
-                              Colors.red,
-                              () => _onCategoryTap('Conflict'),
-                            ),
-                            _buildCategoryCard(
-                              context.l10n.erosion,
-                              Icons.landscape,
-                              Colors.brown,
-                              () => _onCategoryTap('Erosion'),
-                            ),
+                            // One shortcut per hazard; the stored name is
+                            // the Alerts screen's category filter.
+                            for (final hazard in Hazard.values)
+                              _buildCategoryCard(
+                                hazard.label(context.l10n),
+                                hazard.icon,
+                                hazard.color,
+                                () => _onCategoryTap(hazard.storedName),
+                              ),
                           ],
                         ),
                       ),
@@ -1014,6 +994,10 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ],
                   ),
+                  if (report.isVerificationRequest) ...[
+                    const SizedBox(height: 4),
+                    const VerificationRequestBadge(),
+                  ],
                   const SizedBox(height: 4),
                   Text(
                     context.l10n.reportLocationAndTime(

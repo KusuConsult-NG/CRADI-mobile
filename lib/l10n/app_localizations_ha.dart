@@ -3360,4 +3360,18 @@ class AppLocalizationsHa extends AppLocalizations {
   String landingCopyright(String year) {
     return '© $year CRADI. Duk haƙƙoƙi an kiyaye su.';
   }
+
+  @override
+  String get verificationRequestBadge => 'Buƙatar tabbatarwa';
+
+  @override
+  String get reportViewSafetyGuides => 'Jagororin tsaro';
+
+  @override
+  String get authAccountRemoved =>
+      'An cire asusunka, don haka an fitar da kai. Tuntuɓi mai gudanarwarka idan kana ganin kuskure ne.';
+
+  @override
+  String get adminUsersApproveUnconfirmed =>
+      'Wannan asusu bai tabbatar da imel ko lambar wayarsa ba tukuna, don haka ba za a iya amince da shi ba.';
 }

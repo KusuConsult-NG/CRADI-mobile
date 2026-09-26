@@ -1,3 +1,4 @@
+import 'package:climate_app/core/constants/hazards.dart';
 import 'package:climate_app/core/theme/app_colors.dart';
 import 'package:climate_app/core/utils/error_handler.dart';
 import 'package:climate_app/core/services/supabase_service.dart';
@@ -7,6 +8,7 @@ import 'package:climate_app/features/auth/providers/auth_provider.dart';
 import 'package:climate_app/features/verification/providers/reports_status_provider.dart';
 import 'package:climate_app/features/verification/models/verification_report_model.dart';
 import 'package:climate_app/features/verification/widgets/dispute_comment_dialog.dart';
+import 'package:climate_app/features/verification/widgets/verification_request_badge.dart';
 
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -112,13 +114,26 @@ class _AlertDetailScreenState extends State<AlertDetailScreen> {
     return status;
   }
 
+  /// Whether the alert is a report sent as a verification request.
+  bool get _isVerificationRequest =>
+      _str(['reportType']) == VerificationReport.verificationRequestType;
+
+  /// Hazard of a report-derived alert (null for staff alerts).
+  Hazard? get _hazard => Hazard.tryParse(_str(['type', 'hazardType']));
+
+  /// Hazard colour for reports (same as the list card), else the colour
+  /// handed over by the caller, else by severity (staff alerts).
   Color get _severityColor {
+    final hazard = _hazard;
+    if (hazard != null) return hazard.color;
     final c = widget.alert['color'];
     if (c is Color) return c;
     return alertSeverityColor(_severity);
   }
 
   IconData get _icon {
+    final hazard = _hazard;
+    if (hazard != null) return hazard.icon;
     final i = widget.alert['icon'];
     return i is IconData ? i : alertSeverityIcon(_severity);
   }
@@ -310,6 +325,10 @@ class _AlertDetailScreenState extends State<AlertDetailScreen> {
                                 fontWeight: FontWeight.w600,
                               ),
                             ),
+                            if (_isVerificationRequest) ...[
+                              const SizedBox(height: 6),
+                              const VerificationRequestBadge(),
+                            ],
                           ],
                         ),
                       ),

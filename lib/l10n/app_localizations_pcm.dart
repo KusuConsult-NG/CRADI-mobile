@@ -3337,4 +3337,18 @@ class AppLocalizationsPcm extends AppLocalizations {
   String landingCopyright(String year) {
     return '© $year CRADI. All rights reserved.';
   }
+
+  @override
+  String get verificationRequestBadge => 'Verification request';
+
+  @override
+  String get reportViewSafetyGuides => 'Safety guides';
+
+  @override
+  String get authAccountRemoved =>
+      'Dem don remove your account, so we don sign you out. Contact your coordinator if you think say na mistake.';
+
+  @override
+  String get adminUsersApproveUnconfirmed =>
+      'Dis account never confirm im email or phone yet, so you no fit approve am.';
 }

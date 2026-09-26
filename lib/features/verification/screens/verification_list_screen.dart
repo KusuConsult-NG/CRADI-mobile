@@ -134,10 +134,7 @@ class _VerificationListScreenState extends State<VerificationListScreen> {
 
   /// Roles allowed on /verification/request (see app_router).
   static bool _canRequestVerification(UserRole? role) =>
-      role == UserRole.ewv ||
-      role == UserRole.ewr ||
-      role == UserRole.admin ||
-      role == UserRole.techSupport;
+      AuthProvider.verificationRequestRoles.contains(role);
 
   @override
   Widget build(BuildContext context) {

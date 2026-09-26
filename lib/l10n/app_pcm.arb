@@ -957,5 +957,9 @@
   "permissionSettingsBody": "{reason}\n\nAbeg on am for your phone settings.",
   "offlineDraftLimit": "{count, plural, other{You fit only keep {count} reports wey never send for dis phone. Sync or throw some away first.}}",
   "nearbyReportsInAreaCount": "{count, plural, =1{1 report for your area} other{{count} reports for your area}}",
-  "landingCopyright": "© {year} CRADI. All rights reserved."
+  "landingCopyright": "© {year} CRADI. All rights reserved.",
+  "verificationRequestBadge": "Verification request",
+  "reportViewSafetyGuides": "Safety guides",
+  "authAccountRemoved": "Dem don remove your account, so we don sign you out. Contact your coordinator if you think say na mistake.",
+  "adminUsersApproveUnconfirmed": "Dis account never confirm im email or phone yet, so you no fit approve am."
 }

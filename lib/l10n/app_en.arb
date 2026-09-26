@@ -4313,5 +4313,21 @@
         "type": "String"
       }
     }
+  },
+  "verificationRequestBadge": "Verification request",
+  "@verificationRequestBadge": {
+    "description": "Badge on reports sent as a verification request (also replaces their stored placeholder location); max ~22 chars."
+  },
+  "reportViewSafetyGuides": "Safety guides",
+  "@reportViewSafetyGuides": {
+    "description": "Button on the report details screen that opens the safety guides for the report's hazard."
+  },
+  "authAccountRemoved": "Your account has been removed, so you have been signed out. Contact your coordinator if you think this is a mistake.",
+  "@authAccountRemoved": {
+    "description": "Shown after the app signs the user out because their account was deleted by an administrator."
+  },
+  "adminUsersApproveUnconfirmed": "This account has not confirmed its email or phone yet, so it cannot be approved.",
+  "@adminUsersApproveUnconfirmed": {
+    "description": "Error on the admin users screen when approving an account that has not confirmed its email or phone number."
   }
 }

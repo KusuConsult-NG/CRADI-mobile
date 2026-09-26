@@ -281,7 +281,7 @@ class ReportsStatusProvider extends ChangeNotifier {
       'latitude': latitude,
       'longitude': longitude,
       'imageUrls': <String>[],
-      'type': 'verification_request',
+      'type': VerificationReport.verificationRequestType,
     };
     // Client-generated id so an offline retry is idempotent.
     final docId = const Uuid().v4();

@@ -7,7 +7,20 @@ import 'package:climate_app/features/reporting/providers/reporting_provider.dart
 class VerificationReport {
   final String id;
   final String title;
+
+  /// Hazard type (`reports.hazard_type`).
   final String type;
+
+  /// Kind of report row (`reports.type`): null for ordinary reports,
+  /// [verificationRequestType] for requests sent from the verification
+  /// request screen.
+  final String? reportType;
+
+  /// Stored [reportType] of verification requests.
+  static const String verificationRequestType = 'verification_request';
+
+  /// Location text stored on verification requests (not user-entered).
+  static const String verificationRequestLocation = 'Verification Request';
   final String reporter;
   final String? reporterId;
   final String location;
@@ -43,6 +56,7 @@ class VerificationReport {
     required this.id,
     required this.title,
     required this.type,
+    this.reportType,
     required this.reporter,
     this.reporterId,
     required this.location,
@@ -77,6 +91,7 @@ class VerificationReport {
     String? id,
     String? title,
     String? type,
+    String? reportType,
     String? reporter,
     String? reporterId,
     String? location,
@@ -102,6 +117,7 @@ class VerificationReport {
       id: id ?? this.id,
       title: title ?? this.title,
       type: type ?? this.type,
+      reportType: reportType ?? this.reportType,
       reporter: reporter ?? this.reporter,
       reporterId: reporterId ?? this.reporterId,
       location: location ?? this.location,
@@ -132,6 +148,12 @@ class VerificationReport {
       id: docId,
       title: data['hazardType'] ?? data['title'] ?? '',
       type: data['hazardType'] ?? data['type'] ?? 'unknown',
+      // Rows carry the hazard in hazardType and the row kind in type;
+      // serialised reports (toJson) carry the row kind in reportType.
+      reportType: _nonEmpty(
+        data['reportType'] ??
+            (data['hazardType'] != null ? data['type'] : null),
+      ),
       reporter: data['reporterName'] ?? data['reporter'] ?? '',
       reporterId: data['userId'] ?? data['reporterId'],
       location: data['locationDetails'] ?? data['location'] ?? '',
@@ -165,6 +187,7 @@ class VerificationReport {
       'id': id,
       'title': title,
       'type': type,
+      'reportType': reportType,
       'reporter': reporter,
       'reporterId': reporterId,
       'location': location,
@@ -233,12 +256,22 @@ class VerificationReport {
 
   // ── Display (localised) ─────────────────────────────────────────────────
 
+  /// Whether this is a verification request (see [reportType]).
+  bool get isVerificationRequest => reportType == verificationRequestType;
+
   /// Card headline for this report's hazard.
   String displayTitle(AppLocalizations l10n) => Hazard.titleFor(type, l10n);
 
   /// Location text, or "Unknown Location".
-  String displayLocation(AppLocalizations l10n) =>
-      location.trim().isEmpty ? l10n.commonUnknownLocation : location;
+  /// Verification requests store a fixed placeholder, shown localised.
+  String displayLocation(AppLocalizations l10n) {
+    final text = location.trim();
+    if (isVerificationRequest &&
+        (text.isEmpty || text == verificationRequestLocation)) {
+      return l10n.verificationRequestBadge;
+    }
+    return text.isEmpty ? l10n.commonUnknownLocation : location;
+  }
 
   /// Reporter name, or "Community Report" when unknown.
   String displayReporter(AppLocalizations l10n) =>

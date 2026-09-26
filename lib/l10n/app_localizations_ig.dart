@@ -3323,4 +3323,18 @@ class AppLocalizationsIg extends AppLocalizations {
   String landingCopyright(String year) {
     return '© $year CRADI. Ikike niile echekwara.';
   }
+
+  @override
+  String get verificationRequestBadge => 'Arịrịọ nnyocha';
+
+  @override
+  String get reportViewSafetyGuides => 'Ntuziaka nchekwa';
+
+  @override
+  String get authAccountRemoved =>
+      'E wepụla akaụntụ gị, ya mere a pụpụrụ gị. Kpọtụrụ onye nhazi gị ma ọ bụrụ na ị chere na ọ bụ njehie.';
+
+  @override
+  String get adminUsersApproveUnconfirmed =>
+      'Akaụntụ a ekwenyebeghị email ma ọ bụ nọmba ekwentị ya, ya mere a pụghị ịnabata ya.';
 }

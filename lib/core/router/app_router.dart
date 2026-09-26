@@ -328,12 +328,11 @@ GoRouter createRouter(BuildContext context) {
       ),
       GoRoute(
         path: '/verification/request',
-        redirect: (context, state) => _requireRole(context, [
-          UserRole.ewv,
-          UserRole.ewr,
-          UserRole.admin,
-          UserRole.techSupport,
-        ]),
+        // Reached from the verification list (verifier roles only).
+        redirect: (context, state) => _requireRole(
+          context,
+          AuthProvider.verificationRequestRoles.toList(),
+        ),
         builder: (context, state) => const VerificationRequestScreen(),
       ),
       GoRoute(

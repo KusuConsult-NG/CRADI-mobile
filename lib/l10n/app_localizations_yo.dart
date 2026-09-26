@@ -3342,4 +3342,18 @@ class AppLocalizationsYo extends AppLocalizations {
   String landingCopyright(String year) {
     return '© $year CRADI. Gbogbo ẹ̀tọ́ wà ní ìpamọ́.';
   }
+
+  @override
+  String get verificationRequestBadge => 'Ìbéèrè ìjẹ́rìísí';
+
+  @override
+  String get reportViewSafetyGuides => 'Ìtọ́sọ́nà ààbò';
+
+  @override
+  String get authAccountRemoved =>
+      'A ti yọ àkáǹtì rẹ kúrò, nítorí náà a ti mú ọ jáde. Kàn sí olùṣàkóso rẹ tí o bá rò pé àṣìṣe ni.';
+
+  @override
+  String get adminUsersApproveUnconfirmed =>
+      'Àkáǹtì yìí kò tíì jẹ́rìísí ímeèlì tàbí nọ́ńbà fóònù rẹ̀, nítorí náà a kò lè fọwọ́ sí i.';
 }

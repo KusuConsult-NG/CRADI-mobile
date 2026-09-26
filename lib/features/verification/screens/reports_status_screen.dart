@@ -1,3 +1,4 @@
+import 'package:climate_app/features/verification/widgets/verification_request_badge.dart';
 import 'dart:io';
 
 import 'package:climate_app/core/constants/hazards.dart';
@@ -308,6 +309,10 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
                         color: AppColors.textPrimary,
                       ),
                     ),
+                    if (report.isVerificationRequest) ...[
+                      const SizedBox(height: 4),
+                      const VerificationRequestBadge(),
+                    ],
                     const SizedBox(height: 4),
                     Text(
                       context.l10n.reportedBy(

@@ -1,6 +1,8 @@
+import 'package:climate_app/core/constants/hazards.dart';
 import 'package:climate_app/features/verification/providers/reports_status_provider.dart';
 import 'package:climate_app/features/verification/models/verification_report_model.dart';
 import 'package:climate_app/features/verification/widgets/dispute_comment_dialog.dart';
+import 'package:climate_app/features/verification/widgets/verification_request_badge.dart';
 import 'package:provider/provider.dart';
 import 'package:climate_app/features/auth/providers/auth_provider.dart';
 import 'package:climate_app/core/utils/error_handler.dart';
@@ -23,6 +25,31 @@ import 'package:climate_app/features/alerts/screens/alert_severity.dart';
 import 'package:climate_app/features/profile/providers/profile_provider.dart';
 import 'package:climate_app/core/l10n/l10n.dart';
 
+/// Reports whose hazard resolves (via [Hazard.tryParse]) to one of
+/// [hazards]; all of [reports] when [hazards] is empty.
+List<VerificationReport> filterReportsByHazard(
+  List<VerificationReport> reports,
+  Set<Hazard> hazards,
+) {
+  if (hazards.isEmpty) return reports;
+  return reports
+      .where((r) => hazards.contains(Hazard.tryParse(r.type)))
+      .toList();
+}
+
+/// Hazard selection for a category id handed over by another screen (stored
+/// hazard names and legacy spellings such as 'Floods'); empty = all. The
+/// legacy combined "Pest/Disease" category selects pests and crop disease.
+Set<Hazard> alertHazardsForCategory(String? category) {
+  final value = category?.trim().toLowerCase();
+  if (value == null || value.isEmpty) return const {};
+  if (value == 'pest/disease' || value == 'pests/diseases') {
+    return const {Hazard.pestOutbreak, Hazard.cropDisease};
+  }
+  final hazard = Hazard.tryParse(value);
+  return hazard == null ? const {} : {hazard};
+}
+
 class AlertsListScreen extends StatefulWidget {
   final String? initialCategory;
 
@@ -38,41 +65,16 @@ class _AlertsListScreenState extends State<AlertsListScreen>
   final TextEditingController _searchController = TextEditingController();
   String _query = '';
 
-  int _selectedFilterIndex = 0;
-
   /// Canonical severity to show (see [normalizeSeverity]); null = all.
   String? _severityFilter;
 
-  /// Hazard filter ids (internal; shown via [_filterLabel]).
-  final List<String> _filters = [
-    'All Alerts',
-    'Floods',
-    'Conflict',
-    'Drought',
-    'Fire',
-    'Pests',
-    'Erosion',
-  ];
+  /// Hazards whose reports are shown; empty = all. Usually one hazard (one
+  /// chip); the legacy "Pest/Disease" category selects pests and crop
+  /// disease together.
+  Set<Hazard> _hazardFilter = const {};
 
-  String _filterLabel(String id) {
-    final l10n = context.l10n;
-    switch (id) {
-      case 'Floods':
-        return l10n.floodsCategory;
-      case 'Conflict':
-        return l10n.hazardConflict;
-      case 'Drought':
-        return l10n.hazardDrought;
-      case 'Fire':
-        return l10n.alertsFilterFire;
-      case 'Pests':
-        return l10n.pestsCategory;
-      case 'Erosion':
-        return l10n.hazardErosion;
-      default:
-        return l10n.alertsFilterAll;
-    }
-  }
+  String _hazardFilterLabel() =>
+      _hazardFilter.map((h) => h.label(context.l10n)).join(' / ');
 
   @override
   void initState() {
@@ -90,18 +92,7 @@ class _AlertsListScreenState extends State<AlertsListScreen>
       final q = _searchController.text.trim().toLowerCase();
       if (q != _query) setState(() => _query = q);
     });
-    if (widget.initialCategory != null) {
-      final index = _filters.indexWhere(
-        (f) => f.toLowerCase() == widget.initialCategory!.toLowerCase(),
-      );
-      if (index != -1) {
-        _selectedFilterIndex = index;
-      } else if (widget.initialCategory == 'Pest/Disease') {
-        _selectedFilterIndex = _filters.indexOf('Pests');
-      } else if (widget.initialCategory == 'Flooding') {
-        _selectedFilterIndex = _filters.indexOf('Floods');
-      }
-    }
+    _hazardFilter = alertHazardsForCategory(widget.initialCategory);
     // Initial fetch
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -111,6 +102,17 @@ class _AlertsListScreenState extends State<AlertsListScreen>
       reports.loadMyVotes();
       context.read<AlertsProvider>().fetchAlerts();
     });
+  }
+
+  @override
+  void didUpdateWidget(covariant AlertsListScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // The route may be reused when a category shortcut is tapped again.
+    final category = widget.initialCategory;
+    if (category != null && category != oldWidget.initialCategory) {
+      _hazardFilter = alertHazardsForCategory(category);
+      _tabController.index = 1;
+    }
   }
 
   @override
@@ -147,18 +149,7 @@ class _AlertsListScreenState extends State<AlertsListScreen>
           )
           .toList();
     }
-    if (_selectedFilterIndex == 0) return allReports;
-    final filter = _filters[_selectedFilterIndex];
-    return allReports.where((report) {
-      final hazard = report.type.toLowerCase();
-      if (filter == 'Floods') return hazard.contains('flood');
-      if (filter == 'Conflict') return hazard.contains('conflict');
-      if (filter == 'Drought') return hazard.contains('drought');
-      if (filter == 'Fire') return hazard.contains('fire');
-      if (filter == 'Pests') return hazard.contains('pest');
-      if (filter == 'Erosion') return hazard.contains('erosion');
-      return false;
-    }).toList();
+    return filterReportsByHazard(allReports, _hazardFilter);
   }
 
   @override
@@ -521,9 +512,7 @@ class _AlertsListScreenState extends State<AlertsListScreen>
         final hasMore = provider.hasMore(null);
         final filteredReports = _filterReports(allReports);
         final unfiltered =
-            _selectedFilterIndex == 0 &&
-            _severityFilter == null &&
-            _query.isEmpty;
+            _hazardFilter.isEmpty && _severityFilter == null && _query.isEmpty;
 
         return RefreshIndicator(
           onRefresh: () => provider.refreshReports(),
@@ -599,15 +588,31 @@ class _AlertsListScreenState extends State<AlertsListScreen>
                     child: ListView.separated(
                       padding: const EdgeInsets.symmetric(horizontal: 16),
                       scrollDirection: Axis.horizontal,
-                      itemCount: _filters.length,
+                      // "All" followed by one chip per hazard.
+                      itemCount: Hazard.values.length + 1,
                       separatorBuilder: (c, i) => const SizedBox(width: 8),
                       itemBuilder: (context, index) {
-                        final isSelected = _selectedFilterIndex == index;
+                        final hazard = index == 0
+                            ? null
+                            : Hazard.values[index - 1];
+                        final isSelected = hazard == null
+                            ? _hazardFilter.isEmpty
+                            : _hazardFilter.contains(hazard);
                         return ChoiceChip(
-                          label: Text(_filterLabel(_filters[index])),
+                          key: ValueKey(
+                            'hazard-filter-${hazard?.name ?? 'all'}',
+                          ),
+                          label: Text(
+                            hazard == null
+                                ? context.l10n.alertsFilterAll
+                                : hazard.label(context.l10n),
+                          ),
                           selected: isSelected,
-                          onSelected: (v) =>
-                              setState(() => _selectedFilterIndex = index),
+                          onSelected: (v) => setState(
+                            () => _hazardFilter = hazard == null
+                                ? const {}
+                                : {hazard},
+                          ),
                           labelStyle: GoogleFonts.lexend(
                             fontWeight: FontWeight.w600,
                             color: isSelected
@@ -644,10 +649,10 @@ class _AlertsListScreenState extends State<AlertsListScreen>
                           : Icons.filter_list_off,
                       title: unfiltered
                           ? context.l10n.alertsNoReportsYet
-                          : _selectedFilterIndex == 0
+                          : _hazardFilter.isEmpty
                           ? context.l10n.alertsNoMatchingReports
                           : context.l10n.alertsNoReportsForFilter(
-                              _filterLabel(_filters[_selectedFilterIndex]),
+                              _hazardFilterLabel(),
                             ),
                       message: unfiltered
                           ? context.l10n.alertsNoReportsYetBody
@@ -702,23 +707,8 @@ class _AlertsListScreenState extends State<AlertsListScreen>
     VerificationReport report,
     ReportsStatusProvider provider,
   ) {
-    IconData icon = Icons.warning;
-    Color color = Colors.orange;
-
-    final hazard = report.type.toLowerCase();
-    if (hazard.contains('flood')) {
-      icon = Icons.flood;
-      color = Colors.blue;
-    } else if (hazard.contains('fire')) {
-      icon = Icons.local_fire_department;
-      color = AppColors.errorRed;
-    } else if (hazard.contains('conflict')) {
-      icon = Icons.shield;
-      color = Colors.red;
-    } else if (hazard.contains('pest')) {
-      icon = Icons.bug_report;
-      color = Colors.green;
-    }
+    final icon = Hazard.iconFor(report.type);
+    final color = Hazard.colorFor(report.type);
 
     final statusStr = report.status.label(context.l10n);
     Color statusColor = Colors.grey;
@@ -744,8 +734,7 @@ class _AlertsListScreenState extends State<AlertsListScreen>
           'reporterId': report.reporterId,
           'ward': report.ward,
           'lga': report.lga,
-          'color': color,
-          'icon': icon,
+          'reportType': report.reportType,
         },
       ),
       child: _buildAlertCard(
@@ -872,6 +861,8 @@ class _AlertsListScreenState extends State<AlertsListScreen>
                                       color,
                                     ),
                                   _buildTag(status, statusColor),
+                                  if (report.isVerificationRequest)
+                                    const VerificationRequestBadge(),
                                 ],
                               ),
                             ],

@@ -5,6 +5,7 @@ import 'package:climate_app/core/utils/validators.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+import 'package:climate_app/features/verification/models/verification_report_model.dart';
 import 'package:climate_app/features/verification/providers/reports_status_provider.dart';
 import 'package:climate_app/core/widgets/location_selector_widget.dart';
 import 'package:climate_app/core/l10n/l10n.dart';
@@ -83,7 +84,8 @@ class _VerificationRequestScreenState extends State<VerificationRequestScreen> {
           state: _selectedState!,
           lga: _selectedLGA!,
           ward: _selectedWard!,
-          locationDetails: 'Verification Request',
+          // Fixed marker (shown localised via displayLocation).
+          locationDetails: VerificationReport.verificationRequestLocation,
         );
         messenger.showSnackBar(
           SnackBar(content: Text(l10n.verificationRequestSubmitted)),

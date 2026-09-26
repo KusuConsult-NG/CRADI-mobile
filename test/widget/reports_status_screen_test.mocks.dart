@@ -6,6 +6,7 @@
 import 'dart:async' as _i5;
 import 'dart:ui' as _i7;
 
+import 'package:climate_app/core/l10n/l10n.dart' as _i9;
 import 'package:climate_app/features/auth/providers/auth_provider.dart' as _i8;
 import 'package:climate_app/features/profile/providers/profile_provider.dart'
     as _i3;
@@ -712,9 +713,9 @@ class MockAuthProvider extends _i1.Mock implements _i8.AuthProvider {
           as _i5.Future<Duration?>);
 
   @override
-  _i5.Future<void> logout() =>
+  _i5.Future<void> logout({_i9.LocalizedText? notice}) =>
       (super.noSuchMethod(
-            Invocation.method(#logout, []),
+            Invocation.method(#logout, [], {#notice: notice}),
             returnValue: _i5.Future<void>.value(),
             returnValueForMissingStub: _i5.Future<void>.value(),
           )

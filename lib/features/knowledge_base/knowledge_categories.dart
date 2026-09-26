@@ -96,7 +96,14 @@ const List<KnowledgeCategory> knowledgeCategories = [
     hazardType: 'extreme_heat',
     icon: Icons.thermostat,
     color: Colors.deepOrange,
-    aliases: ['extreme heat', 'heat', 'heatwave', 'drought'],
+    aliases: [
+      'extreme heat',
+      'heat',
+      'heatwave',
+      'drought',
+      'extreme temperatures',
+      'extreme temperature',
+    ],
   ),
   KnowledgeCategory(
     label: 'Earthquake',
@@ -109,7 +116,7 @@ const List<KnowledgeCategory> knowledgeCategories = [
     hazardType: 'disease',
     icon: Icons.coronavirus_outlined,
     color: Colors.green,
-    aliases: ['epidemic', 'pest/disease'],
+    aliases: ['epidemic', 'pest/disease', 'pest outbreak', 'crop disease'],
   ),
   KnowledgeCategory(
     label: 'Conflict',

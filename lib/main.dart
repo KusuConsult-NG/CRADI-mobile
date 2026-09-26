@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:go_router/go_router.dart';
+import 'package:climate_app/features/auth/widgets/sign_out_notice_listener.dart';
 import 'package:climate_app/core/router/app_router.dart';
 import 'package:climate_app/core/theme/app_theme.dart';
 import 'package:climate_app/features/auth/providers/auth_provider.dart';
@@ -190,6 +191,8 @@ class _ClimateAppState extends State<ClimateApp> {
       if (uid != null) unawaited(reloadFor(uid));
     };
     _onSignedOut = () {
+      // The alerts feed is per session (RLS); restarted by fetchAlerts.
+      alerts.stopRealtime();
       reports.clearUserData();
       unawaited(profile.clearProfile());
     };
@@ -288,8 +291,9 @@ class _ClimateAppState extends State<ClimateApp> {
         supportedLocales: AppLocalizations.supportedLocales,
         debugShowCheckedModeBanner: false,
         // Blocks the app while this build is below app_min_version.
-        builder: (context, child) =>
-            ForceUpdateGate(child: child ?? const SizedBox.shrink()),
+        builder: (context, child) => ForceUpdateGate(
+          child: SignOutNoticeListener(child: child ?? const SizedBox.shrink()),
+        ),
       ),
     );
   }

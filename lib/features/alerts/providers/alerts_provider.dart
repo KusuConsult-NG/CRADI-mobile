@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:climate_app/core/services/supabase_service.dart';
 import 'package:climate_app/core/services/offline_storage_service.dart';
@@ -20,8 +22,83 @@ class AlertsProvider extends ChangeNotifier {
   bool get isLoading => _isLoading;
   LocalizedText? get error => _error;
 
+  /// Realtime feed of the alerts table, so broadcasts and dismissals show
+  /// up without a manual refresh. Bound to the signed-in user it was
+  /// started for.
+  StreamSubscription<List<Map<String, dynamic>>>? _realtimeSub;
+  String? _realtimeUid;
+
   AlertsProvider() {
     fetchAlerts();
+  }
+
+  List<QueryFilter> get _activeAlertsQuery => [
+    FQuery.equal('isActive', true),
+    FQuery.orderDesc('createdAt'),
+    FQuery.limit(50),
+  ];
+
+  /// (Re)starts the realtime feed for the signed-in user; stops it when
+  /// nobody is signed in. Safe to call repeatedly.
+  void _ensureRealtime() {
+    final uid = _db.currentUserId;
+    if (uid == null) {
+      stopRealtime();
+      return;
+    }
+    if (_realtimeSub != null && _realtimeUid == uid) return;
+    stopRealtime();
+    _realtimeUid = uid;
+    _realtimeSub = _db
+        .subscribeToCollection(
+          collectionId: AppConfig.alertsCollection,
+          queries: _activeAlertsQuery,
+        )
+        .listen(
+          (rows) {
+            // Another account signed in meanwhile: its own feed takes over.
+            if (_db.currentUserId != uid) return;
+            _alerts = rows.where(_isActive).toList();
+            _error = null;
+            notifyListeners();
+            unawaited(_cache(_alerts));
+          },
+          onError: (Object e) {
+            ErrorHandler.logError(e, context: 'AlertsProvider.realtime');
+            // Resubscribed by the next fetchAlerts (e.g. reopening Alerts).
+            stopRealtime();
+          },
+          onDone: () {
+            if (_realtimeUid == uid) {
+              _realtimeSub = null;
+              _realtimeUid = null;
+            }
+          },
+        );
+  }
+
+  /// Stops the realtime feed (sign-out / dispose).
+  void stopRealtime() {
+    final sub = _realtimeSub;
+    _realtimeSub = null;
+    _realtimeUid = null;
+    if (sub != null) unawaited(sub.cancel());
+  }
+
+  @override
+  void dispose() {
+    stopRealtime();
+    super.dispose();
+  }
+
+  Future<void> _cache(List<Map<String, dynamic>> alerts) async {
+    // Caching is best-effort: a cache failure (e.g. HiveError, which is an
+    // Error rather than an Exception) must never prevent alerts loading.
+    try {
+      await _offlineStorage.cacheAlerts(alerts);
+    } on Object catch (e) {
+      ErrorHandler.logError(e, context: 'AlertsProvider.cacheAlerts');
+    }
   }
 
   static bool _isActive(Map<String, dynamic> a) {
@@ -49,7 +126,11 @@ class AlertsProvider extends ChangeNotifier {
     // Alerts are only readable when signed in: a fetch before sign-in would
     // return nothing and overwrite the offline cache with an empty list.
     // The sign-in hook in main.dart fetches again once a session exists.
-    if (_db.currentUserId == null) return;
+    if (_db.currentUserId == null) {
+      stopRealtime();
+      return;
+    }
+    _ensureRealtime();
     _isLoading = true;
     _error = null;
     notifyListeners();

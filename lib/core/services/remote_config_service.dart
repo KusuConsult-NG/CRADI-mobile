@@ -33,11 +33,7 @@ class RemoteConfigService {
     'escalation_timeout_minutes': 30,
     'max_sms_per_lga_per_day': 50,
     'max_sms_per_alert_event': 20,
-    'sms_dedup_window_minutes': 60,
-    'content_cache_ttl_hours': 24,
-    'max_report_image_mb': 5,
     'feature_flag_peer_chat': true,
-    'feature_flag_voice_reports': false,
     'app_min_version': '1.0.0',
     // Empty: the app shows its own (translated) default message.
     'app_min_version_message': '',
@@ -179,15 +175,6 @@ class RemoteConfigService {
     return (_defaults[key] as num).toInt();
   }
 
-  double _getDouble(String key) {
-    final v = _raw(key);
-    if (v is num) return v.toDouble();
-    if (v is String) {
-      return double.tryParse(v) ?? (_defaults[key] as num).toDouble();
-    }
-    return (_defaults[key] as num).toDouble();
-  }
-
   bool _getBool(String key) {
     final v = _raw(key);
     if (v is bool) return v;
@@ -214,17 +201,10 @@ class RemoteConfigService {
 
   int get maxSmsPerLgaPerDay => _getInt('max_sms_per_lga_per_day');
   int get maxSmsPerAlertEvent => _getInt('max_sms_per_alert_event');
-  int get smsDeduplicationWindowMinutes => _getInt('sms_dedup_window_minutes');
-
-  // ── Cache & Storage ───────────────────────────────────────────────────────
-
-  int get contentCacheTtlHours => _getInt('content_cache_ttl_hours');
-  double get maxReportImageMb => _getDouble('max_report_image_mb');
 
   // ── Feature Flags ─────────────────────────────────────────────────────────
 
   bool get featureFlagPeerChat => _getBool('feature_flag_peer_chat');
-  bool get featureFlagVoiceReports => _getBool('feature_flag_voice_reports');
 
   // ── Force Update ─────────────────────────────────────────────────────────
 

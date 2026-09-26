@@ -1,3 +1,4 @@
+import 'package:climate_app/features/verification/widgets/verification_request_badge.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
@@ -331,6 +332,10 @@ class _MyReportsScreenState extends State<MyReportsScreen>
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
+                            if (report.isVerificationRequest) ...[
+                              const SizedBox(height: 4),
+                              const VerificationRequestBadge(),
+                            ],
                             const SizedBox(height: 4),
                             Row(
                               children: [

@@ -164,6 +164,15 @@ class AuthProvider extends ChangeNotifier {
     UserRole.admin,
   };
 
+  /// Roles that may send a verification request (/verification/request).
+  /// The only entry point is the verification list, which is limited to
+  /// [verifierRoles], so this must stay a subset of those.
+  static const Set<UserRole> verificationRequestRoles = {
+    UserRole.ewv,
+    UserRole.ewr,
+    UserRole.admin,
+  };
+
   /// Roles that may approve / reject / reopen reports.
   static const Set<UserRole> statusManagerRoles = {
     UserRole.ewv,
@@ -611,6 +620,9 @@ class AuthProvider extends ChangeNotifier {
   /// to role / approval / disabled take effect immediately.
   void _startProfileListener(String uid) {
     _profileSub?.cancel();
+    // A missing row is only meaningful once the row has been seen: the
+    // first snapshot may arrive before the profile exists (sign-up).
+    var seenRow = false;
     _profileSub = _db
         .subscribeToDocument(
           collectionId: AppConfig.usersCollection,
@@ -618,14 +630,23 @@ class AuthProvider extends ChangeNotifier {
         )
         .listen(
           (data) async {
-            if (data == null) return;
+            if (data == null) {
+              if (!seenRow || _currentUser?.id != uid) return;
+              developer.log(
+                'Profile row deleted — logging out',
+                name: 'AuthProvider',
+              );
+              await logout(notice: (l) => l.authAccountRemoved);
+              return;
+            }
+            seenRow = true;
             final changed = await _applyProfile(data);
             if (_accountDisabled) {
               developer.log(
                 'Account disabled via admin — logging out',
                 name: 'AuthProvider',
               );
-              await logout();
+              await logout(notice: (l) => l.authErrorAccountDisabled);
               return;
             }
             if (changed) {
@@ -1420,9 +1441,23 @@ class AuthProvider extends ChangeNotifier {
 
   // ─────────────────────────── Logout ──────────────────────────────────────
 
-  Future<void> logout() async {
+  /// Why the user was signed out without asking (account disabled or
+  /// deleted); shown once by the UI, see [takeSignOutNotice].
+  LocalizedText? _signOutNotice;
+
+  /// Returns and clears the pending forced sign-out message, if any.
+  LocalizedText? takeSignOutNotice() {
+    final notice = _signOutNotice;
+    _signOutNotice = null;
+    return notice;
+  }
+
+  /// Signs out. [notice] is the message to show the user when the sign-out
+  /// was not requested by them.
+  Future<void> logout({LocalizedText? notice}) async {
     // Cancel any sign-in still in flight right away.
     _authGen++;
+    if (notice != null) _signOutNotice = notice;
     try {
       _isLoading = true;
       notifyListeners();

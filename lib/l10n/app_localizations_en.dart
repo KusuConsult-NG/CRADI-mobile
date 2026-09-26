@@ -3342,4 +3342,18 @@ class AppLocalizationsEn extends AppLocalizations {
   String landingCopyright(String year) {
     return '© $year CRADI. All rights reserved.';
   }
+
+  @override
+  String get verificationRequestBadge => 'Verification request';
+
+  @override
+  String get reportViewSafetyGuides => 'Safety guides';
+
+  @override
+  String get authAccountRemoved =>
+      'Your account has been removed, so you have been signed out. Contact your coordinator if you think this is a mistake.';
+
+  @override
+  String get adminUsersApproveUnconfirmed =>
+      'This account has not confirmed its email or phone yet, so it cannot be approved.';
 }

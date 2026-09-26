@@ -1,3 +1,4 @@
+import 'package:climate_app/features/verification/widgets/verification_request_badge.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -92,6 +93,28 @@ class _ReportViewScreenState extends State<ReportViewScreen> {
           children: [
             // ── Status + Hazard Header ────────────────────────────────
             _buildHeaderCard(),
+            const SizedBox(height: 12),
+
+            // ── Safety guides for this hazard ─────────────────────────
+            Align(
+              alignment: Alignment.centerLeft,
+              child: OutlinedButton.icon(
+                key: const ValueKey('report-safety-guides'),
+                // HazardGuidesScreen resolves the hazard to its guide
+                // category (knowledgeCategoryFor).
+                onPressed: () =>
+                    context.push('/knowledge-base/guides', extra: report.type),
+                icon: const Icon(Icons.health_and_safety_outlined, size: 18),
+                label: Text(context.l10n.reportViewSafetyGuides),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.textPrimary,
+                  side: BorderSide(color: Colors.grey.shade300),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+            ),
             const SizedBox(height: 16),
 
             // ── Rejection reason (shown to the reporter too) ──────────
@@ -279,6 +302,10 @@ class _ReportViewScreenState extends State<ReportViewScreen> {
                     color: AppColors.textPrimary,
                   ),
                 ),
+                if (report.isVerificationRequest) ...[
+                  const SizedBox(height: 4),
+                  const VerificationRequestBadge(),
+                ],
                 const SizedBox(height: 4),
                 Text(
                   Hazard.labelFor(report.type, context.l10n),
