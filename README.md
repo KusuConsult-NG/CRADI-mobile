@@ -98,6 +98,26 @@ flutter build apk --release --dart-define-from-file=env.json --no-tree-shake-ico
 Without `SUPABASE_URL` / `SUPABASE_ANON_KEY` the app starts but behaves as
 signed out (useful for UI work and tests).
 
+### Values for the shared development project
+
+The app has no hardcoded fallbacks: these are pasted into your local
+`env.json` (git-ignored) or passed with `--dart-define`.
+
+| Key | Value |
+| --- | --- |
+| `SUPABASE_URL` | `https://splfkqazwzybityoqmyv.supabase.co` |
+| `SUPABASE_ANON_KEY` | `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNwbGZrcWF6d3p5Yml0eW9xbXl2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTAzNjg5MzcsImV4cCI6MjEwNTk0NDkzN30.B3p-MTWYacngdF0uGCxDXZNqL7gxYMQNfKp_6i-7QfQ` |
+| `ONESIGNAL_APP_ID` | `2e6f30a8-ef18-4091-9961-e6a6fe862322` |
+
+Both are public client credentials: the anon key only grants what the RLS
+policies allow, and the OneSignal app id only identifies the app.
+
+**The OneSignal REST API key is a server secret and must never appear in the
+app** — not in `env.json`, not in `AppConfig`, not obfuscated. It lives only in
+the Railway backend environment as `ONESIGNAL_REST_API_KEY`
+(see `backend/README.md`); the app never sends pushes itself, it asks the
+backend to.
+
 Server-tunable values (peer-confirmation threshold, escalation timeout, SMS
 caps, feature flags, minimum app version) are rows in the `app_settings`
 table.

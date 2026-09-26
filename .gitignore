@@ -43,10 +43,12 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
-serviceAccountKey.json
-service-account-key.json
-*service-account*.json
+*serviceAccountKey*.json
+*service-account-key*.json
+*service*account*.json
 *service_account*.json
+**/*service*account*.json
+**/node_modules/
 node_modules/
 
 # Runtime configuration (--dart-define-from-file); see env.example.json
