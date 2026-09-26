@@ -132,3 +132,23 @@ select count(*) as votes_left from verifications where report_id='10000000-0000-
 select count(*) as pending_escalations from scheduled_escalations where report_id='10000000-0000-0000-0000-000000000001' and status='pending';
 \echo '--- approval was audited'
 select action from verification_overrides where report_id='10000000-0000-0000-0000-000000000002';
+
+\echo '=== round 5: workflow hardening ==='
+set role authenticated; select as_user('00000000-0000-0000-0000-00000000000f');
+\echo '--- ewv plain status->pending on approved report 2 (expect ERROR use reopen_report)'
+update reports set status='pending' where id='10000000-0000-0000-0000-000000000002';
+\echo '--- reopen an already pending report 1 (expect ERROR already pending)'
+select reopen_report('10000000-0000-0000-0000-000000000001');
+\echo '--- ewm votes on approved report 2 (expect ERROR rls)'
+select as_user('00000000-0000-0000-0000-00000000000c');
+insert into verifications(report_id,is_confirmed) values ('10000000-0000-0000-0000-000000000002',true);
+\echo '--- ewm edits another user''s report description (expect ERROR only the reporter)'
+update reports set description='changed' where id='10000000-0000-0000-0000-000000000001';
+\echo '--- ewv rejects report 2 with reason; approved_at cleared'
+select as_user('00000000-0000-0000-0000-00000000000f');
+update reports set status='rejected', rejection_reason='duplicate' where id='10000000-0000-0000-0000-000000000002';
+reset role;
+select status, approved_at is null as approved_cleared, rejected_at is not null as rejected_set from reports where id='10000000-0000-0000-0000-000000000002';
+\echo '--- audit rows survive deleting the validator'
+delete from auth.users where id='00000000-0000-0000-0000-00000000000f';
+select action, validator_id is null as validator_nulled from verification_overrides where report_id='10000000-0000-0000-0000-000000000002' order by created_at;
