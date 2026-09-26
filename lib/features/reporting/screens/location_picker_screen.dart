@@ -327,7 +327,8 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
       if (requestId != _geocodeRequestId) return;
       // Re-read: a GPS fix or a tap may have arrived while geocoding.
       if (keepPosition()) {
-        if (!keepAtStart) setState(() => _isLoadingLocation = false);
+        // Always clear: an earlier (superseded) request may have set it.
+        setState(() => _isLoadingLocation = false);
         // Precise coordinates stay untouched; just preview the area.
         if (position != null) {
           _moveCamera(LatLng(position.latitude, position.longitude));
@@ -383,6 +384,8 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
     setState(() {
       _currentPosition = position;
       _positionSource = _PositionSource.manual;
+      // A tapped point is final; pending GPS/geocode lookups yield to it.
+      _isLoadingLocation = false;
     });
 
     // Update provider coordinates

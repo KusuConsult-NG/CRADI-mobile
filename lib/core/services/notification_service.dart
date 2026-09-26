@@ -106,10 +106,7 @@ class NotificationService {
           // and must not hold back initialization or identifying the user.
           // No "open Settings" fallback dialog here: that would nag on
           // every cold start once the user denied the OS prompt.
-          unawaited(requestPushPermission(fallbackToSettings: false));
-          // Undo an earlier opt-out (e.g. setting toggled off then on
-          // while push was unavailable).
-          unawaited(setPushSubscribed(true));
+          unawaited(_restorePushSubscription());
         } else {
           unawaited(setPushSubscribed(false));
         }
@@ -138,6 +135,35 @@ class NotificationService {
   /// Asks for the OS notification permission. [fallbackToSettings] offers
   /// to open the system settings when it was denied before; only use it for
   /// an explicit user action (the Settings toggle), not at startup.
+  /// Asks for the OS permission without the "open Settings" fallback, then
+  /// undoes an earlier opt-out only when permission is granted: OneSignal's
+  /// optIn() prompts on its own (with the Settings fallback), which would
+  /// nag on every cold start after the user denied the OS prompt.
+  Future<void> _restorePushSubscription() async {
+    await requestPushPermission(fallbackToSettings: false);
+    try {
+      if (OneSignal.Notifications.permission &&
+          OneSignal.User.pushSubscription.optedIn != true) {
+        await setPushSubscribed(true);
+      }
+    } on Object catch (e) {
+      developer.log(
+        'Push opt-in restore failed: $e',
+        name: 'NotificationService',
+      );
+    }
+  }
+
+  /// Whether the OS notification permission is currently granted.
+  bool get hasPushPermission {
+    if (!_pushEnabled) return false;
+    try {
+      return OneSignal.Notifications.permission;
+    } on Object catch (_) {
+      return false;
+    }
+  }
+
   Future<void> requestPushPermission({required bool fallbackToSettings}) async {
     if (!_pushEnabled) return;
     try {

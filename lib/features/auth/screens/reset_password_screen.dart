@@ -1,8 +1,5 @@
-import 'dart:async';
-
 import 'package:climate_app/core/theme/app_colors.dart';
 import 'package:climate_app/core/utils/error_handler.dart';
-import 'package:climate_app/core/utils/validators.dart';
 import 'package:climate_app/features/auth/providers/auth_provider.dart';
 import 'package:climate_app/shared/widgets/custom_toast.dart';
 import 'package:flutter/material.dart';
@@ -10,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import 'package:climate_app/core/utils/validators.dart';
 
 /// Password reset screen.
 ///
@@ -40,21 +38,8 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
   bool _isSuccess = false;
   bool _obscurePassword = true;
 
-  /// The code was accepted (and consumed) but the new password was
-  /// rejected: only the password has to be re-entered.
-  bool _codeVerified = false;
-  late final AuthProvider _auth = context.read<AuthProvider>();
-
-  @override
-  void initState() {
-    super.initState();
-    _codeVerified = _auth.passwordResetCodeVerified;
-  }
-
   @override
   void dispose() {
-    // Leaving mid-flow: sign out a recovery session kept for a retry.
-    if (!_isSuccess) unawaited(_auth.cancelPasswordReset());
     _emailController.dispose();
     _codeController.dispose();
     _passwordController.dispose();
@@ -125,18 +110,12 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
       }
     } on AuthException catch (e) {
       if (mounted) {
-        setState(() {
-          _isLoading = false;
-          _codeVerified = _auth.passwordResetCodeVerified;
-        });
+        setState(() => _isLoading = false);
         CustomToast.showError(context, e.userMessage);
       }
     } on Exception catch (e) {
       if (mounted) {
-        setState(() {
-          _isLoading = false;
-          _codeVerified = _auth.passwordResetCodeVerified;
-        });
+        setState(() => _isLoading = false);
         CustomToast.showError(
           context,
           ErrorHandler.handleError(e, context: 'Password Reset'),
@@ -162,10 +141,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.close, color: Colors.black),
-          onPressed: () {
-            unawaited(_auth.cancelPasswordReset());
-            context.go('/login');
-          },
+          onPressed: () => context.go('/login'),
         ),
       ),
       body: SafeArea(
@@ -221,7 +197,6 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
           const SizedBox(height: 32),
           TextFormField(
             controller: _emailController,
-            readOnly: _codeVerified,
             keyboardType: TextInputType.emailAddress,
             decoration: _decoration('Email Address', Icons.email_outlined),
             validator: _validateEmail,
@@ -229,34 +204,20 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
           const SizedBox(height: 16),
           TextFormField(
             controller: _codeController,
-            readOnly: _codeVerified,
             keyboardType: TextInputType.number,
             inputFormatters: [
               FilteringTextInputFormatter.digitsOnly,
               LengthLimitingTextInputFormatter(10),
             ],
-            decoration:
-                _decoration(
-                  'Reset Code',
-                  Icons.pin_outlined,
-                  suffix: _codeVerified
-                      ? const Icon(
-                          Icons.check_circle,
-                          color: AppColors.successGreen,
-                        )
-                      : TextButton(
-                          onPressed: _isSendingCode ? null : _sendCode,
-                          child: Text(
-                            _isSendingCode ? 'Sending…' : 'Send code',
-                          ),
-                        ),
-                ).copyWith(
-                  helperText: _codeVerified
-                      ? 'Code verified — just choose a new password.'
-                      : null,
-                ),
+            decoration: _decoration(
+              'Reset Code',
+              Icons.pin_outlined,
+              suffix: TextButton(
+                onPressed: _isSendingCode ? null : _sendCode,
+                child: Text(_isSendingCode ? 'Sending…' : 'Send code'),
+              ),
+            ),
             validator: (value) {
-              if (_codeVerified) return null;
               if (value == null || value.trim().length < 6) {
                 return 'Enter the code from the email';
               }
@@ -279,7 +240,8 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                     setState(() => _obscurePassword = !_obscurePassword),
               ),
             ),
-            // Same rules as registration.
+            // Same rules as registration, checked before the single-use
+            // recovery code is spent.
             validator: Validators.validatePassword,
           ),
           const SizedBox(height: 16),

@@ -75,6 +75,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
       // Explicit user action: may offer to open the system settings when
       // the permission was denied before.
       await service.requestPushPermission(fallbackToSettings: true);
+      if (!service.hasPushPermission) {
+        // optIn() would prompt a second time; the OS permission is needed first.
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Allow notifications for EWER in your phone settings to '
+                'receive alerts.',
+              ),
+            ),
+          );
+        }
+        return;
+      }
     }
     final ok = await service.setPushSubscribed(value);
     if (!ok && mounted) {

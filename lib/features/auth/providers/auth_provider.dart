@@ -1249,55 +1249,31 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
-  /// True once a recovery code was verified (and consumed) but setting the
-  /// new password was rejected (weak / same password). The recovery session
-  /// is kept so the user can retry just the new password;
-  /// [confirmPasswordReset] then skips the code check. Cleared on success
-  /// and by [cancelPasswordReset].
-  bool _resetCodeVerified = false;
-  bool get passwordResetCodeVerified => _resetCodeVerified;
-
   /// Completes a password reset with the recovery [code] emailed to
   /// [email]. The temporary recovery session is signed out afterwards so the
   /// user logs in with the new password.
-  ///
-  /// When the code was accepted but the new password was rejected
-  /// (weak / same as before), the recovery session is kept and
-  /// [passwordResetCodeVerified] becomes true: the code is single-use, so
-  /// the next call only sets the password. Call [cancelPasswordReset] when
-  /// the user leaves the flow.
   Future<void> confirmPasswordReset({
     required String email,
     required String code,
     required String newPassword,
   }) async {
-    var keepRecoverySession = false;
     try {
       _isLoading = true;
       _recovering = true;
       notifyListeners();
-      if (!_resetCodeVerified || _db.getCurrentUser() == null) {
-        _resetCodeVerified = false;
-        await _db.auth.verifyOTP(
-          type: sb.OtpType.recovery,
-          email: email.trim().toLowerCase(),
-          token: code.trim(),
-        );
-      }
-      _resetCodeVerified = true;
-      try {
-        await _db.auth.updateUser(sb.UserAttributes(password: newPassword));
-      } on sb.AuthException catch (e) {
-        // The code is consumed: keep the session so only the password has
-        // to be re-entered.
-        if (_isRetryablePasswordError(e)) keepRecoverySession = true;
-        rethrow;
-      }
-      _resetCodeVerified = false;
+      await _db.auth.verifyOTP(
+        type: sb.OtpType.recovery,
+        email: email.trim().toLowerCase(),
+        token: code.trim(),
+      );
+      await _db.auth.updateUser(sb.UserAttributes(password: newPassword));
     } on sb.AuthException catch (e) {
       ErrorHandler.logError(e, context: 'AuthProvider.confirmPasswordReset');
       if (e is sb.AuthWeakPasswordException || e.code == 'weak_password') {
-        throw AuthException('Password is too weak. Please choose another.');
+        throw AuthException(
+          'Password is too weak. The code has been used, so please request '
+          'a new code and choose a stronger password.',
+        );
       }
       switch (e.code) {
         case 'otp_expired':
@@ -1307,7 +1283,8 @@ class AuthProvider extends ChangeNotifier {
           );
         case 'same_password':
           throw AuthException(
-            'Your new password must be different from the old one.',
+            'Your new password must be different from the old one. The code '
+            'has been used, so please request a new code.',
           );
         default:
           throw AuthException('Failed to reset password. Please try again.');
@@ -1316,35 +1293,13 @@ class AuthProvider extends ChangeNotifier {
       ErrorHandler.logError(e, context: 'AuthProvider.confirmPasswordReset');
       throw AuthException('Failed to reset password. Please try again.');
     } finally {
-      if (keepRecoverySession) {
-        // Stay in recovery mode (no app sign-in) until retry / cancel.
-        _isLoading = false;
-        notifyListeners();
-      } else {
-        await _endRecovery();
-      }
+      try {
+        if (_db.getCurrentUser() != null) await _db.logout();
+      } on Exception catch (_) {}
+      _recovering = false;
+      _isLoading = false;
+      notifyListeners();
     }
-  }
-
-  static bool _isRetryablePasswordError(sb.AuthException e) =>
-      e is sb.AuthWeakPasswordException ||
-      e.code == 'weak_password' ||
-      e.code == 'same_password';
-
-  /// Abandons a password reset: signs out a kept recovery session.
-  Future<void> cancelPasswordReset() async {
-    if (!_resetCodeVerified) return;
-    await _endRecovery();
-  }
-
-  Future<void> _endRecovery() async {
-    try {
-      if (_db.getCurrentUser() != null) await _db.logout();
-    } on Exception catch (_) {}
-    _resetCodeVerified = false;
-    _recovering = false;
-    _isLoading = false;
-    notifyListeners();
   }
 
   // ─────────────────────────── Biometrics ──────────────────────────────────
