@@ -9,7 +9,7 @@ class AppLocalizationsHa extends AppLocalizations {
   AppLocalizationsHa([String locale = 'ha']) : super(locale);
 
   @override
-  String get appTitle => 'EWER Gargadi Na Wuri';
+  String get appTitle => 'EWER Gargaɗin Farko';
 
   @override
   String get monitoringZone => 'Yankin Sa Ido';
@@ -39,7 +39,7 @@ class AppLocalizationsHa extends AppLocalizations {
   String get notifications => 'SANARWA';
 
   @override
-  String get pushNotifications => 'Sanarwar Tura';
+  String get pushNotifications => 'Sanarwa Kai Tsaye';
 
   @override
   String get general => 'GABAƊAYA';
@@ -81,7 +81,7 @@ class AppLocalizationsHa extends AppLocalizations {
   String get close => 'Rufe';
 
   @override
-  String get settingsTitle => 'Saitunan';
+  String get settingsTitle => 'Saituna';
 
   @override
   String get verifyPhoneNumber => 'Tabbatar da Lambar Waya';
@@ -123,7 +123,7 @@ class AppLocalizationsHa extends AppLocalizations {
   String get criticalLifeThreatening => 'Mai Gaggawa - Barazana ga rayuwa';
 
   @override
-  String get camera => 'Kamara';
+  String get camera => 'Kyamara';
 
   @override
   String get useMyLocationInfo => 'Yi Amfani da Bayanan Wurina';
@@ -153,7 +153,7 @@ class AppLocalizationsHa extends AppLocalizations {
   String get languagePreference => 'Zaɓin Harshe';
 
   @override
-  String get offlineDataSync => 'Daidaita Bayanai Ba Tare da Yanar Gizo';
+  String get offlineDataSync => 'Daidaita Bayanan da Aka Ajiye';
 
   @override
   String get upToDate => 'An sabunta';
@@ -172,16 +172,16 @@ class AppLocalizationsHa extends AppLocalizations {
   String get biometricsDisabled => 'An kashe shiga ta biometric';
 
   @override
-  String get profileUpdated => 'An sabunta bayanan kaina cikin nasara!';
+  String get profileUpdated => 'An sabunta bayananka cikin nasara!';
 
   @override
   String get syncing => 'Ana daidaitawa...';
 
   @override
-  String get offline => 'Ba Yanar Gizo';
+  String get offline => 'Babu Intanet';
 
   @override
-  String get offlineModeReady => 'Shirye a Yanayin Rashin Intanet: ';
+  String get offlineModeReady => 'Shirye don Aiki Ba Tare da Intanet ba: ';
 
   @override
   String get validation_required => 'Ana buƙatar wannan filin';
@@ -192,12 +192,12 @@ class AppLocalizationsHa extends AppLocalizations {
 
   @override
   String validation_minLength(int length) {
-    return 'Dole ne ya zama aƙalla haruffa $length';
+    return 'Dole ya kai aƙalla haruffa $length';
   }
 
   @override
   String validation_maxLength(int length) {
-    return 'Dole ne ya zama ko da yawa haruffa $length';
+    return 'Kada ya wuce haruffa $length';
   }
 
   @override
@@ -210,7 +210,7 @@ class AppLocalizationsHa extends AppLocalizations {
   String get active => 'mai aiki';
 
   @override
-  String get pending => 'Suna Jiran';
+  String get pending => 'Ana Jira';
 
   @override
   String get verified => 'An Tabbatar';
@@ -225,7 +225,7 @@ class AppLocalizationsHa extends AppLocalizations {
   String get droughtsCategory => 'Fari';
 
   @override
-  String get pestsCategory => 'KWari';
+  String get pestsCategory => 'Kwari';
 
   @override
   String get conflictsCategory => 'Rikici';
@@ -261,18 +261,17 @@ class AppLocalizationsHa extends AppLocalizations {
 
   @override
   String reportedBy(String name) {
-    return 'Rahoton daga $name';
+    return 'Rahoto daga $name';
   }
 
   @override
   String get viewDetails => 'Duba Cikakkun Bayanai';
 
   @override
-  String get reportVerified =>
-      'An tantance rahoton kuma an mayar da shi zuwa An Karɓa';
+  String get reportVerified => 'An tabbatar da rahoton cikin nasara';
 
   @override
-  String get verifyReport => 'Tantance';
+  String get verifyReport => 'Tabbatar';
 
   @override
   String get reportRejectedItem => 'An ƙi rahoton';
@@ -281,20 +280,20 @@ class AppLocalizationsHa extends AppLocalizations {
   String get reject => 'Ƙi';
 
   @override
-  String get reportResolvedItem => 'An kimanta rahoton a matsayin An Warware';
+  String get reportResolvedItem => 'An amince da rahoton';
 
   @override
-  String get markResolved => 'Kimanta An Warware';
+  String get markResolved => 'Amince';
 
   @override
-  String get reportMovedPending => 'An mayar da rahoton baya Suna Jiran';
+  String get reportMovedPending => 'An mayar da rahoton zuwa Ana Jira';
 
   @override
   String get reopen => 'Sake buɗewa';
 
   @override
   String get reportReopenedPending =>
-      'Wannan rahoton an sake bude shi kuma yana jiran aiki.';
+      'An sake buɗe rahoton kuma an mayar da shi zuwa Ana Jira';
 
   @override
   String get reportDetailsTitle => 'Cikakkun Bayanan Rahoto';
@@ -304,10 +303,10 @@ class AppLocalizationsHa extends AppLocalizations {
 
   @override
   String get describeHazardHint =>
-      'Kwatanta hatsarin a nan (misali, ruwan ambaliya ya tashi, gada ta ruguje)...';
+      'Bayyana haɗarin a nan (misali, ruwan ambaliya na ƙaruwa, gada ta rushe)...';
 
   @override
-  String get speechNotAvailable => 'Babu tsarin tantance murya gaba daya';
+  String get speechNotAvailable => 'Gane murya ba ya samuwa';
 
   @override
   String get listeningSpeakNow => 'Ana saurare... Ka yi magana yanzu';
@@ -317,23 +316,23 @@ class AppLocalizationsHa extends AppLocalizations {
       'Bayyana wurin da tsananin lamarin sosai.';
 
   @override
-  String get whenDidThisOccur => 'Yaushe hakan ta faru?';
+  String get whenDidThisOccur => 'Yaushe Wannan Ya Faru?';
 
   @override
-  String get optionalLabel => 'Zabi ne';
+  String get optionalLabel => 'Na zaɓi';
 
   @override
   String get todayLabel => 'Yau';
 
   @override
   String get tapToSelectDateTime =>
-      'Danna don zabar kwanan wata & lokaci. Idan ba a canza ba, zai nuna yanzu.';
+      'Danna don zaɓar kwanan wata da lokaci. Idan ba ka canza ba, zai kasance lokacin yanzu.';
 
   @override
   String get evidenceLabel => 'Shaida';
 
   @override
-  String get max3Photos => 'Hotuna 3 kacal';
+  String get max3Photos => 'Hotuna 3 kawai';
 
   @override
   String get offlineModeMessage =>
@@ -388,10 +387,10 @@ class AppLocalizationsHa extends AppLocalizations {
       'Da fatan za a duba bayanan da ke ƙasa don tabbatar da ingancin su kafin aikawa cibiyar gudanarwa.';
 
   @override
-  String get hazardDetails => 'Bayanan Hatsari';
+  String get hazardDetails => 'Bayanan Haɗari';
 
   @override
-  String get hazardType => 'Nau\'in Hatsari';
+  String get hazardType => 'Nau\'in Haɗari';
 
   @override
   String get notSelected => 'Ba a zaɓa ba';
@@ -400,25 +399,25 @@ class AppLocalizationsHa extends AppLocalizations {
   String get severityLevelLabel => 'Matsayin Tsanani';
 
   @override
-  String get severityDesc => 'Auna girman lamarin.';
+  String get severityDesc => 'Auna tsananin haɗarin.';
 
   @override
-  String get severityLowShort => 'Kaɗan';
+  String get severityLowShort => 'Ƙarami';
 
   @override
-  String get severityMedShort => 'Tsakiya';
+  String get severityMedShort => 'Tsaka';
 
   @override
-  String get severityHighShort => 'Yawa';
+  String get severityHighShort => 'Babba';
 
   @override
-  String get severityCritShort => 'Tsanan';
+  String get severityCritShort => 'Gaggawa';
 
   @override
   String get dateTimeLabel => 'Kwanan Wata & Lokaci';
 
   @override
-  String get whenItOccurred => 'Sanda ya faru';
+  String get whenItOccurred => 'Lokacin da ya faru';
 
   @override
   String get locationLabel => 'Wuri';
@@ -481,7 +480,7 @@ class AppLocalizationsHa extends AppLocalizations {
   String get noGpsData => 'Babu bayanan GPS';
 
   @override
-  String get locationUnavailable => 'Babu Wuri';
+  String get locationUnavailable => 'Ba a samu wuri ba';
 
   @override
   String get coordinatesLabel => 'LAMBOBIN WURI';
@@ -552,16 +551,16 @@ class AppLocalizationsHa extends AppLocalizations {
   String get locationDetailsTitle => 'Bayanan Wuri';
 
   @override
-  String get latitudeLabel => 'Wurin Acha';
+  String get latitudeLabel => 'Latitude';
 
   @override
-  String get longitudeLabel => 'Wurin Zira';
+  String get longitudeLabel => 'Longitude';
 
   @override
-  String get accuracyLabel => 'Inganci';
+  String get accuracyLabel => 'Daidaito';
 
   @override
-  String get altitudeLabel => 'Tsawa';
+  String get altitudeLabel => 'Tsayi';
 
   @override
   String get closeBtn => 'Rufe';
@@ -573,28 +572,28 @@ class AppLocalizationsHa extends AppLocalizations {
   String get allReports => 'Dukkan Rahotanni';
 
   @override
-  String get pendingOnly => 'Suna Jiran Kaɗai';
+  String get pendingOnly => 'Masu Jira Kaɗai';
 
   @override
-  String get verifiedOnly => 'Wadanda Aka Tabbatar Kaɗai';
+  String get verifiedOnly => 'Waɗanda Aka Tabbatar Kaɗai';
 
   @override
-  String get approvedOnly => 'Wadanda Aka Amince Kaɗai';
+  String get approvedOnly => 'Waɗanda Aka Amince Kaɗai';
 
   @override
   String get adminPortal => 'Tashar Gudanarwa';
 
   @override
-  String get systemOverview => 'Tsarin Gabaɗaya';
+  String get systemOverview => 'Taƙaitaccen Bayanin Tsari';
 
   @override
-  String get quickActions => 'Ayyuka Masu Saurin';
+  String get quickActions => 'Ayyuka Masu Sauri';
 
   @override
   String get userManagement => 'Gudanar da Masu Amfani';
 
   @override
-  String get reportsOverview => 'Gabaɗaya Rahotanni';
+  String get reportsOverview => 'Taƙaitaccen Bayanin Rahotanni';
 
   @override
   String get alertsBroadcast => 'Faɗakarwa & Watsawa';
@@ -606,10 +605,10 @@ class AppLocalizationsHa extends AppLocalizations {
   String get systemHealth => 'Lafiyar Tsarin';
 
   @override
-  String get pendingApprovals => 'Amincewa Masu Jiran';
+  String get pendingApprovals => 'Masu Jiran Amincewa';
 
   @override
-  String get pendingReports => 'Rahotanni Masu Jiran';
+  String get pendingReports => 'Rahotanni Masu Jira';
 
   @override
   String get verifiedReports => 'Rahotannin Da Aka Tabbatar';
@@ -625,10 +624,11 @@ class AppLocalizationsHa extends AppLocalizations {
 
   @override
   String get userManagementDesc =>
-      'Amince asusu, sanya matsayi, dakatar da masu amfani';
+      'Amince da asusu, ba da matsayi, dakatar da masu amfani';
 
   @override
-  String get reportsOverviewDesc => 'Duba, tabbatar, ko ƙi rahotanni';
+  String get reportsOverviewDesc =>
+      'Duba, tabbatar, ko ƙi rahotanni a dukkan Ƙananan Hukumomi';
 
   @override
   String get alertsBroadcastDesc =>
@@ -639,45 +639,45 @@ class AppLocalizationsHa extends AppLocalizations {
       'Saka, gyara, ko cire jagororin gaggawa';
 
   @override
-  String get connected => 'Haɗe';
+  String get connected => 'An Haɗa';
 
   @override
   String get none => 'Babu';
 
   @override
-  String get errorNetwork => 'Network error. Please check your connection.';
+  String get errorNetwork =>
+      'Matsalar hanyar sadarwa. Don Allah duba haɗin intanet ɗinka.';
 
   @override
-  String get errorNoPermission =>
-      'You do not have permission to perform this action.';
+  String get errorNoPermission => 'Ba ka da izinin yin wannan aiki.';
 
   @override
   String get errorContactSupport =>
-      'An error occurred. Please try again or contact support.';
+      'An sami matsala. Don Allah sake gwadawa ko tuntuɓi masu taimako.';
 
   @override
   String get errorUnexpected =>
-      'An unexpected error occurred. Please try again.';
+      'An sami matsalar da ba a zata ba. Don Allah sake gwadawa.';
 
   @override
   String authEmailNotConfirmed(String email) {
-    return 'Please verify your email first. We sent a new code to $email.';
+    return 'Don Allah fara tabbatar da imel ɗinka. Mun aika sabuwar lamba zuwa $email.';
   }
 
   @override
-  String get languageSelectTitle => 'Select Language';
+  String get languageSelectTitle => 'Zaɓi Harshe';
 
   @override
-  String get shellAppBarTitle => 'CRADI Early Warning';
+  String get shellAppBarTitle => 'CRADI Gargaɗin Farko';
 
   @override
-  String get shellNotificationsTooltip => 'Notifications';
+  String get shellNotificationsTooltip => 'Sanarwa';
 
   @override
-  String get shellDrawerDefaultName => 'Early Warning Monitor';
+  String get shellDrawerDefaultName => 'Mai Sa Ido kan Gargaɗin Farko';
 
   @override
-  String get shellDrawerProfile => 'Profile';
+  String get shellDrawerProfile => 'Bayanan Kai';
 
   @override
   String get navHome => 'Gida';
@@ -695,7 +695,7 @@ class AppLocalizationsHa extends AppLocalizations {
   String get navSettings => 'Saituna';
 
   @override
-  String get navAdmin => 'Admin';
+  String get navAdmin => 'Gudanarwa';
 
   @override
   String homeGreeting(String name) {
@@ -715,7 +715,7 @@ class AppLocalizationsHa extends AppLocalizations {
   String get hazardWindstorms => 'Guguwa';
 
   @override
-  String get hazardWildfires => 'Gobara';
+  String get hazardWildfires => 'Gobarar Daji';
 
   @override
   String get hazardErosion => 'Zaizaya';
@@ -724,50 +724,50 @@ class AppLocalizationsHa extends AppLocalizations {
   String get hazardPestOutbreak => 'Annobar Kwari';
 
   @override
-  String get hazardCropDisease => 'Cutar Amfani';
+  String get hazardCropDisease => 'Cutar Amfanin Gona';
 
   @override
   String get hazardConflict => 'Rikici';
 
   @override
-  String get hazardUnknown => 'Unknown Hazard';
+  String get hazardUnknown => 'Haɗarin da Ba a Sani Ba';
 
   @override
-  String get hazardTitleFlooding => 'Flood Alert';
+  String get hazardTitleFlooding => 'Faɗakarwar Ambaliya';
 
   @override
-  String get hazardTitleExtremeTemperatures => 'Temperature Extreme';
+  String get hazardTitleExtremeTemperatures => 'Tsananin Zafi ko Sanyi';
 
   @override
-  String get hazardTitleDrought => 'Drought Warning';
+  String get hazardTitleDrought => 'Gargaɗin Fari';
 
   @override
-  String get hazardTitleWindstorms => 'High Wind Alert';
+  String get hazardTitleWindstorms => 'Faɗakarwar Iska Mai Ƙarfi';
 
   @override
-  String get hazardTitleWildfires => 'Wildfire Report';
+  String get hazardTitleWildfires => 'Rahoton Gobarar Daji';
 
   @override
-  String get hazardTitleErosion => 'Erosion Report';
+  String get hazardTitleErosion => 'Rahoton Zaizayar Ƙasa';
 
   @override
-  String get hazardTitlePestOutbreak => 'Pest Outbreak';
+  String get hazardTitlePestOutbreak => 'Annobar Kwari';
 
   @override
-  String get hazardTitleCropDisease => 'Crop Disease';
+  String get hazardTitleCropDisease => 'Cutar Amfanin Gona';
 
   @override
-  String get hazardTitleConflict => 'Conflict Report';
+  String get hazardTitleConflict => 'Rahoton Rikici';
 
   @override
-  String get timeJustNow => 'Just now';
+  String get timeJustNow => 'Yanzu-yanzu';
 
   @override
   String timeMinutesAgo(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '${count}m ago',
+      other: 'min $count baya',
     );
     return '$_temp0';
   }
@@ -777,7 +777,7 @@ class AppLocalizationsHa extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '${count}h ago',
+      other: 'awa $count baya',
     );
     return '$_temp0';
   }
@@ -787,7 +787,7 @@ class AppLocalizationsHa extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '${count}d ago',
+      other: 'kwana $count baya',
     );
     return '$_temp0';
   }
@@ -797,157 +797,159 @@ class AppLocalizationsHa extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '${count}w ago',
+      other: 'mako $count baya',
     );
     return '$_temp0';
   }
 
   @override
-  String get commonUnknown => 'Unknown';
+  String get commonUnknown => 'Ba a sani ba';
 
   @override
-  String get commonUnknownLocation => 'Unknown Location';
+  String get commonUnknownLocation => 'Wurin da Ba a Sani Ba';
 
   @override
-  String get commonAnonymous => 'Anonymous';
+  String get commonAnonymous => 'Ba a Bayyana Suna Ba';
 
   @override
-  String get commonCommunityReport => 'Community Report';
+  String get commonCommunityReport => 'Rahoton Al\'umma';
 
   @override
-  String get reportStatusPending => 'Pending';
+  String get reportStatusPending => 'Ana Jira';
 
   @override
-  String get reportStatusVerified => 'Verified';
+  String get reportStatusVerified => 'An Tabbatar';
 
   @override
-  String get reportStatusApproved => 'Approved';
+  String get reportStatusApproved => 'An Amince';
 
   @override
-  String get reportStatusRejected => 'Rejected';
+  String get reportStatusRejected => 'An Ƙi';
 
   @override
-  String get verifyErrorOwnReport => 'You cannot verify your own report.';
+  String get verifyErrorOwnReport =>
+      'Ba za ka iya tabbatar da rahotonka na kanka ba.';
 
   @override
   String verifyErrorTooFar(String distanceKm) {
-    return 'You must be within 2 km of the report location to verify. Current distance: $distanceKm km.';
+    return 'Dole ne ka kasance cikin nisan km 2 daga wurin rahoton kafin ka tabbatar. Nisanka a yanzu: km $distanceKm.';
   }
 
   @override
-  String get verifyConfirmedMessage => 'Report confirmed successfully';
+  String get verifyConfirmedMessage => 'An tabbatar da rahoton cikin nasara';
 
   @override
-  String get verifyDisputedMessage => 'Report disputed';
+  String get verifyDisputedMessage => 'An ƙalubalanci rahoton';
 
   @override
   String get verifyErrorAlreadyVoted =>
-      'You have already voted on this report.';
+      'Ka riga ka kaɗa ƙuri\'a kan wannan rahoton.';
 
   @override
   String get verifyErrorNotPermitted =>
-      'Your account is not permitted to verify reports. Verification requires an approved monitor role.';
+      'Asusunka ba shi da izinin tabbatar da rahotanni. Tabbatarwa na buƙatar matsayin mai sa ido da aka amince da shi.';
 
   @override
-  String get verifyErrorNoLongerPending => 'This report is no longer pending.';
+  String get verifyErrorNoLongerPending => 'Wannan rahoton ba ya jira kuma.';
 
   @override
-  String get verifyErrorSignedOut => 'You must be signed in to verify reports.';
+  String get verifyErrorSignedOut =>
+      'Dole ne ka shiga kafin ka tabbatar da rahotanni.';
 
   @override
-  String get verifyErrorFailed => 'Verification failed';
+  String get verifyErrorFailed => 'Tabbatarwa ta kasa';
 
   @override
   String get verifyErrorDisputeReasonRequired =>
-      'Please explain why you dispute this report.';
+      'Don Allah bayyana dalilin da ya sa kake ƙalubalantar wannan rahoton.';
 
   @override
   String get verifyRequestQueuedOffline =>
-      'Offline: request saved and will sync when you are back online.';
+      'Babu intanet: an ajiye buƙatar kuma za a aika ta da zarar ka dawo kan layi.';
 
   @override
   String get reportActionErrorNoPermissionOrGone =>
-      'You do not have permission to change this report, or it no longer exists.';
+      'Ba ka da izinin canza wannan rahoton, ko kuma ba ya nan kuma.';
 
   @override
   String get reportActionErrorAlreadyPending =>
-      'This report is already pending.';
+      'Wannan rahoton tuni yana jira.';
 
   @override
-  String get reportActionErrorGone => 'This report no longer exists.';
+  String get reportActionErrorGone => 'Wannan rahoton ba ya nan kuma.';
 
   @override
   String get reportActionErrorNoPermission =>
-      'You do not have permission to change this report.';
+      'Ba ka da izinin canza wannan rahoton.';
 
   @override
   String get reportsLoadErrorOffline =>
-      'Could not reach the server. Check your connection and retry.';
+      'An kasa isa ga sabar. Duba haɗin intanet ɗinka ka sake gwadawa.';
 
   @override
   String get offlineSavedWillSync =>
-      'Saved offline. It will sync when you are back online.';
+      'An ajiye ba tare da intanet ba. Za a daidaita da zarar ka dawo kan layi.';
 
   @override
   String get profileErrorOfflineNotSaved =>
-      'You\'re offline — changes not saved.';
+      'Ba ka da intanet — ba a ajiye canje-canjen ba.';
 
   @override
   String get profileErrorSignedOut =>
-      'You must be signed in to update your profile.';
+      'Dole ne ka shiga kafin ka sabunta bayananka.';
 
   @override
   String get profileErrorSaveFailed =>
-      'Could not save your changes. Please check your connection and try again.';
+      'An kasa ajiye canje-canjenka. Don Allah duba haɗin intanet ɗinka ka sake gwadawa.';
 
   @override
-  String get profileErrorNameRequired => 'Please enter your name.';
+  String get profileErrorNameRequired => 'Don Allah shigar da sunanka.';
 
   @override
   String get profileErrorEmailSignedOut =>
-      'You must be signed in to change your email.';
+      'Dole ne ka shiga kafin ka canza imel ɗinka.';
 
   @override
   String profileEmailConfirmationSent(String email) {
-    return 'A confirmation link has been sent to $email. Your email will change after you confirm it.';
+    return 'An aika hanyar tabbatarwa zuwa $email. Imel ɗinka zai canza bayan ka tabbatar da shi.';
   }
 
   @override
   String get profileErrorEmailReauth =>
-      'For security, please log out and sign in again before changing your email.';
+      'Saboda tsaro, don Allah ka fita sannan ka sake shiga kafin ka canza imel ɗinka.';
 
   @override
   String get profileErrorEmailInUse =>
-      'That email is already in use by another account.';
+      'Wani asusu na daban yana amfani da wannan imel ɗin.';
 
   @override
   String get profileErrorEmailUpdateFailed =>
-      'Could not update email. Please try again.';
+      'An kasa sabunta imel. Don Allah sake gwadawa.';
 
   @override
   String get profileErrorLocationIncomplete =>
-      'Please select your state, LGA and ward to update your location.';
+      'Don Allah zaɓi jiharka, ƙaramar hukuma da gunduma don sabunta wurinka.';
 
   @override
   String get profileErrorLocationSignedOut =>
-      'You must be signed in to change your location.';
+      'Dole ne ka shiga kafin ka canza wurinka.';
 
   @override
   String get profileErrorLocationManaged =>
-      'Your location is managed by an administrator. Please ask an admin to change the location of a staff account.';
+      'Mai gudanarwa ne ke kula da wurinka. Don Allah nemi mai gudanarwa ya canza wurin asusun ma\'aikaci.';
 
   @override
   String get profileErrorLocationFailed =>
-      'Could not update your location. Please check your connection and try again.';
+      'An kasa sabunta wurinka. Don Allah duba haɗin intanet ɗinka ka sake gwadawa.';
 
   @override
-  String get profileDefaultName => 'User';
+  String get profileDefaultName => 'Mai Amfani';
 
   @override
-  String get homeVerifyReportsLink => 'Verify Reports';
+  String get homeVerifyReportsLink => 'Tabbatar da Rahotanni';
 
   @override
-  String get homeTabNearby => 'Nearby';
+  String get homeTabNearby => 'Na Kusa';
 
   @override
   String homeZoneStatus(String zone, String status) {
@@ -955,13 +957,13 @@ class AppLocalizationsHa extends AppLocalizations {
   }
 
   @override
-  String get homeEmptyMyReports => 'You haven\'t submitted any reports yet';
+  String get homeEmptyMyReports => 'Har yanzu ba ka aika wani rahoto ba';
 
   @override
-  String get homeOpenNearbyReports => 'Open Nearby Reports';
+  String get homeOpenNearbyReports => 'Buɗe Rahotannin Kusa';
 
   @override
-  String get homeEmptyNearby => 'No nearby reports';
+  String get homeEmptyNearby => 'Babu rahotanni a kusa';
 
   @override
   String reportLocationAndTime(String location, String time) {
@@ -969,227 +971,230 @@ class AppLocalizationsHa extends AppLocalizations {
   }
 
   @override
-  String get homeZoneSheetTitle => 'Select Monitoring Zone';
+  String get homeZoneSheetTitle => 'Zaɓi Yankin Sa Ido';
 
   @override
-  String get homeZoneAll => 'All Zones (No Filter)';
+  String get homeZoneAll => 'Dukkan Yankuna (Babu Tacewa)';
 
   @override
-  String get homeZoneAllSelected => 'Showing all zones';
+  String get homeZoneAllSelected => 'Ana nuna dukkan yankuna';
 
   @override
   String homeZoneAllLocalOnly(String error) {
-    return 'Showing all zones on this device. $error';
+    return 'Ana nuna dukkan yankuna a wannan na\'ura. $error';
   }
 
   @override
   String homeZoneChanged(String zone) {
-    return 'Monitoring zone changed to $zone';
+    return 'An canza yankin sa ido zuwa $zone';
   }
 
   @override
   String homeZoneLocalOnly(String zone, String error) {
-    return 'Showing $zone on this device. $error';
+    return 'Ana nuna $zone a wannan na\'ura. $error';
   }
 
   @override
   String zoneStateLabel(String state) {
-    return '$state State';
+    return 'Jihar $state';
   }
 
   @override
   String get settingsPushPermissionNeeded =>
-      'Allow notifications for EWER in your phone settings to receive alerts.';
+      'Ba EWER izinin sanarwa a saitunan wayarka don karɓar faɗakarwa.';
 
   @override
   String get settingsPushUnavailable =>
-      'Push notifications are unavailable right now. Your choice is saved and will apply when they are.';
+      'Sanarwa kai tsaye ba ta samuwa a yanzu. An ajiye zaɓinka kuma zai fara aiki idan ta samu.';
 
   @override
-  String get settingsSectionSecurity => 'SECURITY & PRIVACY';
+  String get settingsSectionSecurity => 'TSARO DA SIRRI';
 
   @override
-  String get settingsBiometricSubtitle => 'Use fingerprint or Face ID to login';
+  String get settingsBiometricSubtitle =>
+      'Yi amfani da zanen yatsa ko Face ID don shiga';
 
   @override
-  String get settingsBiometricUnavailable => 'Not available on this device';
+  String get settingsBiometricUnavailable => 'Ba ya samuwa a wannan na\'ura';
 
   @override
-  String get settingsOfflineMode => 'Offline Mode';
+  String get settingsOfflineMode => 'Yanayin Babu Intanet';
 
   @override
-  String get settingsOfflineModeEnabled => 'Offline mode enabled';
+  String get settingsOfflineModeEnabled => 'An kunna yanayin babu intanet';
 
   @override
-  String get settingsOfflineModeRestoring => 'Restoring connection...';
+  String get settingsOfflineModeRestoring => 'Ana dawo da haɗi...';
 
   @override
-  String get settingsLogoutConfirm => 'Are you sure you want to sign out?';
+  String get settingsLogoutConfirm => 'Ka tabbata kana so ka fita?';
 
   @override
-  String get settingsFooterSystemName => 'Climate Early Warning System (CEWS)';
+  String get settingsFooterSystemName =>
+      'Tsarin Gargaɗin Farko kan Yanayi (CEWS)';
 
   @override
   String get biometricErrorNotEnrolled =>
-      'No biometrics enrolled. Please add a fingerprint or Face ID in your device Settings first.';
+      'Ba a yi rajistar biometric ba. Don Allah fara ƙara zanen yatsa ko Face ID a Saitunan na\'urarka.';
 
   @override
   String get biometricErrorUnavailable =>
-      'Biometrics are not available on this device.';
+      'Biometric ba ya samuwa a wannan na\'ura.';
 
   @override
   String get biometricErrorLockedOut =>
-      'Too many attempts. Biometrics are locked; unlock your device and try again later.';
+      'Ƙoƙari ya yi yawa. An kulle biometric; buɗe na\'urarka ka sake gwadawa daga baya.';
 
   @override
   String get biometricErrorFailed =>
-      'Biometric authentication failed. Please try again.';
+      'Tantancewar biometric ta kasa. Don Allah sake gwadawa.';
 
   @override
-  String get biometricPromptDefault => 'Please authenticate to continue';
+  String get biometricPromptDefault => 'Don Allah tantance kanka don ci gaba';
 
   @override
-  String get biometricEnablePrompt => 'Enable biometric login for EWER';
+  String get biometricEnablePrompt => 'Kunna shiga ta biometric don EWER';
 
   @override
-  String get biometricLoginPrompt => 'Authenticate to login to EWER Mobile';
+  String get biometricLoginPrompt => 'Tantance kanka don shiga EWER Mobile';
 
   @override
   String get biometricTypeFace => 'Face ID';
 
   @override
-  String get biometricTypeFingerprint => 'Fingerprint';
+  String get biometricTypeFingerprint => 'Zanen Yatsa';
 
   @override
-  String get biometricTypeIris => 'Iris';
+  String get biometricTypeIris => 'Ƙwayar Ido';
 
   @override
   String get biometricTypeGeneric => 'Biometric';
 
   @override
   String get authErrorEmailRegistered =>
-      'Email is already registered. Please login.';
+      'An riga an yi rajistar wannan imel. Don Allah ka shiga.';
 
   @override
   String get authErrorRegistrationFailed =>
-      'Registration failed. Please try again.';
+      'Rajista ta kasa. Don Allah sake gwadawa.';
 
   @override
   String get authErrorNetworkRetry =>
-      'Network error. Please check your connection and try again.';
+      'Matsalar hanyar sadarwa. Don Allah duba haɗin intanet ɗinka ka sake gwadawa.';
 
   @override
   String get authErrorWeakPassword =>
-      'Password is too weak. Use at least 8 characters with letters, numbers and symbols.';
+      'Kalmar sirri ba ta da ƙarfi. Yi amfani da aƙalla haruffa 8 masu ɗauke da harafi, lamba da alama.';
 
   @override
   String get authErrorAccountRegistered =>
-      'This account is already registered. Please login.';
+      'An riga an yi rajistar wannan asusu. Don Allah ka shiga.';
 
   @override
   String get authErrorRegistrationDisabled =>
-      'Registration is currently disabled. Please contact support.';
+      'An dakatar da rajista a yanzu. Don Allah tuntuɓi masu taimako.';
 
   @override
   String get authErrorTooManyAttempts =>
-      'Too many attempts. Please wait a few minutes before trying again.';
+      'Ƙoƙari ya yi yawa. Don Allah jira \'yan mintuna kafin ka sake gwadawa.';
 
   @override
-  String get authErrorLoginFailed => 'Login failed. Please try again.';
+  String get authErrorLoginFailed => 'Shiga ya kasa. Don Allah sake gwadawa.';
 
   @override
   String get authErrorAccountDisabled =>
-      'This account has been disabled. Please contact support.';
+      'An dakatar da wannan asusu. Don Allah tuntuɓi masu taimako.';
 
   @override
   String get authErrorLoginConnection =>
-      'Login failed. Please check your connection.';
+      'Shiga ya kasa. Don Allah duba haɗin intanet ɗinka.';
 
   @override
-  String get authErrorInvalidCredentials => 'Invalid email or password';
+  String get authErrorInvalidCredentials =>
+      'Imel ko kalmar sirri ba daidai ba ne';
 
   @override
   String get authErrorTooManyLogins =>
-      'Too many login attempts. Please wait a few minutes and try again.';
+      'Ƙoƙarin shiga ya yi yawa. Don Allah jira \'yan mintuna ka sake gwadawa.';
 
   @override
   String get authErrorLoginUnexpected =>
-      'An unexpected error occurred during login. Please try again.';
+      'An sami matsalar da ba a zata ba yayin shiga. Don Allah sake gwadawa.';
 
   @override
-  String get authErrorInvalidPhone => 'Invalid phone number.';
+  String get authErrorInvalidPhone => 'Lambar waya ba daidai ba ce.';
 
   @override
   String get authErrorSmsUnavailable =>
-      'SMS service is not available. Please contact support.';
+      'Sabis ɗin SMS ba ya samuwa. Don Allah tuntuɓi masu taimako.';
 
   @override
   String get authErrorPhoneNotRegistered =>
-      'No account found for this number. Please register first.';
+      'Ba a sami asusu da wannan lambar ba. Don Allah fara yin rajista.';
 
   @override
-  String get authErrorSmsFailed => 'Failed to send verification SMS.';
+  String get authErrorSmsFailed => 'An kasa aika SMS na tabbatarwa.';
 
   @override
-  String get authErrorCodeSendFailed => 'Failed to send verification code.';
+  String get authErrorCodeSendFailed => 'An kasa aika lambar tabbatarwa.';
 
   @override
   String get authErrorNoUserContext =>
-      'No user context for verification. Please login again.';
+      'Babu bayanan mai amfani don tabbatarwa. Don Allah sake shiga.';
 
   @override
   String get authErrorVerificationFailed =>
-      'Verification failed. Please try again.';
+      'Tabbatarwa ta kasa. Don Allah sake gwadawa.';
 
   @override
   String get authErrorInvalidCode =>
-      'Invalid or expired verification code. Please request a new one.';
+      'Lambar tabbatarwa ba daidai ba ce ko ta ƙare. Don Allah nemi sabuwa.';
 
   @override
   String get authErrorTooManyAttemptsRetry =>
-      'Too many attempts. Please wait a few minutes and try again.';
+      'Ƙoƙari ya yi yawa. Don Allah jira \'yan mintuna ka sake gwadawa.';
 
   @override
-  String get authErrorVerifyCodeFailed => 'Failed to verify code.';
+  String get authErrorVerifyCodeFailed => 'An kasa tabbatar da lambar.';
 
   @override
-  String get authErrorNotLoggedIn => 'User not logged in';
+  String get authErrorNotLoggedIn => 'Mai amfani bai shiga ba';
 
   @override
   String get authErrorResendFailed =>
-      'Failed to resend verification code. Please try again.';
+      'An kasa sake aika lambar tabbatarwa. Don Allah sake gwadawa.';
 
   @override
   String get authErrorResetEmailFailed =>
-      'Failed to send reset email. Please try again.';
+      'An kasa aika imel na sake saita kalmar sirri. Don Allah sake gwadawa.';
 
   @override
   String get authErrorResetWeakPassword =>
-      'Password is too weak. The code has been used, so please request a new code and choose a stronger password.';
+      'Kalmar sirri ba ta da ƙarfi. An riga an yi amfani da lambar, don haka nemi sabuwar lamba ka zaɓi kalmar sirri mai ƙarfi.';
 
   @override
   String get authErrorResetCodeInvalid =>
-      'This reset code is invalid or has expired. Please request a new one.';
+      'Wannan lambar sake saitawa ba daidai ba ce ko ta ƙare. Don Allah nemi sabuwa.';
 
   @override
   String get authErrorResetSamePassword =>
-      'Your new password must be different from the old one. The code has been used, so please request a new code.';
+      'Dole ne sabuwar kalmar sirrinka ta bambanta da tsohuwar. An riga an yi amfani da lambar, don haka nemi sabuwar lamba.';
 
   @override
   String get authErrorResetFailed =>
-      'Failed to reset password. Please try again.';
+      'An kasa sake saita kalmar sirri. Don Allah sake gwadawa.';
 
   @override
   String get rateLimitAccountLocked =>
-      'Account is locked due to too many failed attempts';
+      'An kulle asusu saboda ƙoƙarin da ya kasa ya yi yawa';
 
   @override
   String rateLimitWaitSeconds(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'Please wait $count seconds before trying again',
-      one: 'Please wait 1 second before trying again',
+      other: 'Don Allah jira daƙiƙa $count kafin ka sake gwadawa',
+      one: 'Don Allah jira daƙiƙa 1 kafin ka sake gwadawa',
     );
     return '$_temp0';
   }
@@ -1199,8 +1204,8 @@ class AppLocalizationsHa extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'Too many failed attempts. Account locked for $count minutes.',
-      one: 'Too many failed attempts. Account locked for 1 minute.',
+      other: 'Ƙoƙarin da ya kasa ya yi yawa. An kulle asusu na mintuna $count.',
+      one: 'Ƙoƙarin da ya kasa ya yi yawa. An kulle asusu na minti 1.',
     );
     return '$_temp0';
   }
@@ -1210,8 +1215,9 @@ class AppLocalizationsHa extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'Too many OTP requests. Please try again in $count minutes.',
-      one: 'Too many OTP requests. Please try again in 1 minute.',
+      other:
+          'Buƙatun OTP sun yi yawa. Don Allah sake gwadawa bayan mintuna $count.',
+      one: 'Buƙatun OTP sun yi yawa. Don Allah sake gwadawa bayan minti 1.',
     );
     return '$_temp0';
   }
@@ -1221,8 +1227,8 @@ class AppLocalizationsHa extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'Please wait $count seconds before requesting another code',
-      one: 'Please wait 1 second before requesting another code',
+      other: 'Don Allah jira daƙiƙa $count kafin ka nemi wata lamba',
+      one: 'Don Allah jira daƙiƙa 1 kafin ka nemi wata lamba',
     );
     return '$_temp0';
   }
@@ -1232,58 +1238,59 @@ class AppLocalizationsHa extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count attempts remaining',
-      one: '1 attempt remaining',
+      other: 'Saura ƙoƙari $count',
+      one: 'Saura ƙoƙari 1',
     );
     return '$_temp0';
   }
 
   @override
-  String get rateLimitExceeded => 'Rate limit exceeded';
+  String get rateLimitExceeded => 'An wuce iyakar buƙatu';
 
   @override
   String reportErrorMaxPhotos(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'Maximum $count images allowed',
-      one: 'Maximum 1 image allowed',
+      other: 'Hotuna $count kawai aka yarda',
+      one: 'Hoto 1 kawai aka yarda',
     );
     return '$_temp0';
   }
 
   @override
-  String get reportErrorMissingHazard => 'Please select a hazard type.';
+  String get reportErrorMissingHazard => 'Don Allah zaɓi nau\'in haɗari.';
 
   @override
-  String get reportErrorMissingSeverity => 'Please select a severity level.';
+  String get reportErrorMissingSeverity => 'Don Allah zaɓi matakin tsanani.';
 
   @override
-  String get reportErrorMissingLocation => 'Please add the location details.';
+  String get reportErrorMissingLocation => 'Don Allah ƙara bayanan wuri.';
 
   @override
   String get reportErrorSignedOut =>
-      'You must be signed in to submit or save a report.';
+      'Dole ne ka shiga kafin ka aika ko ajiye rahoto.';
 
   @override
-  String get reportSavedAsDraft => 'Saved as draft. Will sync when online.';
+  String get reportSavedAsDraft =>
+      'An ajiye a matsayin daftari. Za a daidaita idan akwai intanet.';
 
   @override
   String get reportSubmittedWithPeers =>
-      'Report submitted successfully! Verification requests sent to peers.';
+      'An aika rahoto cikin nasara! An aika buƙatun tabbatarwa ga abokan aiki.';
 
   @override
   String get reportQueuedServerUnreachable =>
-      'Could not reach the server. Saved and will sync later.';
+      'An kasa isa ga sabar. An ajiye kuma za a daidaita daga baya.';
 
   @override
   String syncResultSummary(int count, int failed) {
-    return 'Synced $count items. $failed failed.';
+    return 'An daidaita abubuwa $count. $failed sun kasa.';
   }
 
   @override
   String get reportErrorPhotoProcessing =>
-      'A photo could not be processed. Please remove it or choose another photo.';
+      'An kasa sarrafa wani hoto. Don Allah cire shi ko zaɓi wani hoto.';
 
   @override
   String get severityLow => 'Ƙarami';
@@ -1298,135 +1305,135 @@ class AppLocalizationsHa extends AppLocalizations {
   String get severityCritical => 'Mai Gaggawa';
 
   @override
-  String get alertSeverityUnspecified => 'Unspecified severity';
+  String get alertSeverityUnspecified => 'Ba a fayyace tsanani ba';
 
   @override
-  String get alertSeverityInfo => 'Info';
+  String get alertSeverityInfo => 'Bayani';
 
   @override
-  String get alertSeverityWarning => 'Warning';
+  String get alertSeverityWarning => 'Gargaɗi';
 
   @override
   String reviewDateTodayAt(String time) {
-    return 'Today at $time';
+    return 'Yau da ƙarfe $time';
   }
 
   @override
   String reviewDateOnAt(String date, String time) {
-    return '$date at $time';
+    return '$date da ƙarfe $time';
   }
 
   @override
   String get reviewLocationUnknown =>
-      'Exact location unknown - the selected area will be used';
+      'Ba a san ainihin wurin ba - za a yi amfani da yankin da aka zaɓa';
 
   @override
   String get reviewLocationApproximate =>
-      'Location approximate (area centre, no GPS fix)';
+      'Wurin kimanin ne (tsakiyar yanki, babu GPS)';
 
   @override
   String get reportDetailsSpeechError =>
-      'Speech recognition error. Please try again.';
+      'Matsala wajen gane murya. Don Allah sake gwadawa.';
 
   @override
   String get reportDetailsCameraUnavailable =>
-      'Camera is not available. Please try using the gallery.';
+      'Kyamara ba ta samuwa. Don Allah gwada amfani da hotuna (gallery).';
 
   @override
   String get reportDetailsGalleryError =>
-      'Could not access gallery. Please try again.';
+      'An kasa buɗe hotuna (gallery). Don Allah sake gwadawa.';
 
   @override
   String get reportDetailsFutureTime =>
-      'The incident time cannot be in the future. It has been set to the current time.';
+      'Lokacin lamarin ba zai iya zama nan gaba ba. An saita shi zuwa lokacin yanzu.';
 
   @override
   String get geoErrorServicesOff =>
-      'Location services are turned off. Please enable GPS.';
+      'An kashe sabis ɗin wuri. Don Allah kunna GPS.';
 
   @override
-  String get geoErrorPermissionDenied => 'Location permission was denied.';
+  String get geoErrorPermissionDenied => 'An ƙi bayar da izinin wuri.';
 
   @override
   String get geoErrorServicesUnavailable =>
-      'Could not access location services.';
+      'An kasa samun damar sabis ɗin wuri.';
 
   @override
   String get geoNoticeLastKnown =>
-      'Could not get a fresh GPS fix; using your last known location.';
+      'An kasa samun sabon wurin GPS; ana amfani da wurinka na ƙarshe da aka sani.';
 
   @override
   String get geoErrorTimeout =>
-      'Timed out waiting for a GPS signal. Move to an open area and try again, or choose your location manually.';
+      'Lokaci ya ƙare ana jiran siginar GPS. Matsa zuwa fili ka sake gwadawa, ko zaɓi wurinka da hannu.';
 
   @override
   String get geoErrorUndetermined =>
-      'Could not determine your location. Please try again or choose your location manually.';
+      'An kasa gano wurinka. Don Allah sake gwadawa ko zaɓi wurinka da hannu.';
 
   @override
-  String get commonLoading => 'Loading...';
+  String get commonLoading => 'Ana lodawa...';
 
   @override
-  String get locationPickerSeverityLow => 'Low Severity';
+  String get locationPickerSeverityLow => 'Ƙaramin Tsanani';
 
   @override
-  String get locationPickerSeverityMedium => 'Medium Severity';
+  String get locationPickerSeverityMedium => 'Matsakaicin Tsanani';
 
   @override
-  String get locationPickerSeverityHigh => 'High Severity';
+  String get locationPickerSeverityHigh => 'Babban Tsanani';
 
   @override
-  String get locationPickerSeverityCritical => 'Critical Severity';
+  String get locationPickerSeverityCritical => 'Tsanani Mai Haɗari';
 
   @override
   String get locationPickerSeverityLowDesc =>
-      'Minor issue. No immediate threat.';
+      'Ƙaramar matsala. Babu barazana nan take.';
 
   @override
   String get locationPickerSeverityMediumDesc =>
-      'Moderate issue. Monitor situation.';
+      'Matsakaiciyar matsala. A ci gaba da lura da lamarin.';
 
   @override
   String get locationPickerSeverityHighDesc =>
-      'Significant threat to property or health. Response required.';
+      'Babbar barazana ga dukiya ko lafiya. Ana buƙatar ɗaukar mataki.';
 
   @override
   String get locationPickerSeverityCriticalDesc =>
-      'Life-threatening situation. Immediate action required.';
+      'Lamari mai barazana ga rayuwa. Ana buƙatar ɗaukar mataki nan take.';
 
   @override
-  String get locationPickerSelectedLevel => 'Selected Level';
+  String get locationPickerSelectedLevel => 'Matakin da Aka Zaɓa';
 
   @override
-  String get locationPickerGpsApproximate => 'Approximate';
+  String get locationPickerGpsApproximate => 'Kimanin Wuri';
 
   @override
-  String get locationPickerLgaHeading => 'LGA';
+  String get locationPickerLgaHeading => 'Ƙ/HUKUMA';
 
   @override
-  String get locationPickerWardHeading => 'WARD';
+  String get locationPickerWardHeading => 'GUNDUMA';
 
   @override
-  String get locationPickerUnknownLga => 'Unknown LGA';
+  String get locationPickerUnknownLga => 'Ƙaramar Hukuma Ba a Sani Ba';
 
   @override
-  String get locationPickerUnknownWard => 'Unknown Ward';
+  String get locationPickerUnknownWard => 'Gunduma Ba a Sani Ba';
 
   @override
-  String get locationPickerAutofilled => 'Auto-filled from GPS';
+  String get locationPickerAutofilled => 'An cike ta atomatik daga GPS';
 
   @override
   String locationPickerGpsLgaNotFound(String lga, String state) {
-    return 'GPS Location ($lga) not found in $state';
+    return 'Ba a sami wurin GPS ($lga) a cikin $state ba';
   }
 
   @override
   String get locationPickerGpsUnavailable =>
-      'GPS Location unavailable or State not selected';
+      'Wurin GPS ba ya samuwa ko ba a zaɓi Jiha ba';
 
   @override
   String locationPickerMeters(String distance) {
-    return '$distance meters';
+    return 'mita $distance';
   }
 
   @override
@@ -1435,344 +1442,345 @@ class AppLocalizationsHa extends AppLocalizations {
   }
 
   @override
-  String get reportViewSectionDetails => 'Details';
+  String get reportViewSectionDetails => 'Cikakkun Bayanai';
 
   @override
-  String get reportViewReporter => 'Reporter';
+  String get reportViewReporter => 'Mai Rahoto';
 
   @override
-  String get reportViewReported => 'Reported';
+  String get reportViewReported => 'Lokacin Rahoto';
 
   @override
-  String get reportViewSeverity => 'Severity';
+  String get reportViewSeverity => 'Tsanani';
 
   @override
-  String get reportViewVerifications => 'Verifications';
+  String get reportViewVerifications => 'Tabbatarwa';
 
   @override
   String reportViewEvidenceCount(int count) {
-    return 'Evidence ($count)';
+    return 'Shaida ($count)';
   }
 
   @override
-  String get reportViewCoordinates => 'Coordinates';
+  String get reportViewCoordinates => 'Lambobin Wuri';
 
   @override
   String reportViewRejectedOn(String date) {
-    return 'Report rejected on $date';
+    return 'An ƙi rahoton a ranar $date';
   }
 
   @override
-  String get reportViewNoReason => 'No reason was given.';
+  String get reportViewNoReason => 'Ba a bayar da dalili ba.';
 
   @override
-  String get myReportsTabActive => 'Active';
+  String get myReportsTabActive => 'Masu Aiki';
 
   @override
-  String get myReportsTabHistory => 'History';
+  String get myReportsTabHistory => 'Tarihi';
 
   @override
-  String get myReportsSignIn => 'Please sign in to view your reports.';
+  String get myReportsSignIn => 'Don Allah ka shiga don ganin rahotanninka.';
 
   @override
-  String get myReportsEmptyActiveTitle => 'No active reports';
+  String get myReportsEmptyActiveTitle => 'Babu rahotanni masu aiki';
 
   @override
   String get myReportsEmptyActiveBody =>
-      'Reports you submit will appear here while being verified.';
+      'Rahotannin da ka aika za su bayyana a nan yayin da ake tabbatar da su.';
 
   @override
-  String get myReportsEmptyHistoryTitle => 'No report history';
+  String get myReportsEmptyHistoryTitle => 'Babu tarihin rahotanni';
 
   @override
   String get myReportsEmptyHistoryBody =>
-      'Your approved and rejected reports will appear here.';
+      'Rahotanninka da aka amince da su da waɗanda aka ƙi za su bayyana a nan.';
 
   @override
-  String get myReportsNewReport => 'New Report';
+  String get myReportsNewReport => 'Sabon Rahoto';
 
   @override
   String myReportsRejectionReason(String reason) {
-    return 'Reason: $reason';
+    return 'Dalili: $reason';
   }
 
   @override
-  String get nearbyTitle => 'Nearby Reports';
+  String get nearbyTitle => 'Rahotannin Kusa';
 
   @override
-  String get nearbyNotAvailableTitle => 'Not available for your account';
+  String get nearbyNotAvailableTitle => 'Ba ya samuwa ga asusunka';
 
   @override
   String get nearbyNotAvailableBody =>
-      'Nearby reports are visible to approved monitors and staff. You can follow your own reports under My Reports.';
+      'Masu sa ido da aka amince da su da ma\'aikata ne kaɗai ke ganin rahotannin kusa. Kana iya bibiyar rahotanninka a ƙarƙashin Rahotannina.';
 
   @override
-  String get nearbyLocationNotSetTitle => 'Location Not Set';
+  String get nearbyLocationNotSetTitle => 'Ba a Saka Wuri Ba';
 
   @override
   String get nearbyLocationNotSetBody =>
-      'Set your LGA or monitoring zone in\nyour profile to see reports near you.';
+      'Saka ƙaramar hukumarka ko yankin sa ido a\nbayananka don ganin rahotanni kusa da kai.';
 
   @override
-  String get nearbyLoadErrorTitle => 'Could not load reports';
+  String get nearbyLoadErrorTitle => 'An kasa loda rahotanni';
 
   @override
-  String get nearbyEmptyTitle => 'No Nearby Reports';
+  String get nearbyEmptyTitle => 'Babu Rahotanni a Kusa';
 
   @override
   String get nearbyEmptyBody =>
-      'There are no reports from your\narea at this time.';
+      'Babu rahotanni daga\nyankinku a wannan lokaci.';
 
   @override
-  String get alertDetailDefaultTitle => 'Alert';
+  String get alertDetailDefaultTitle => 'Faɗakarwa';
 
   @override
-  String get alertDetailNotSpecified => 'Not specified';
+  String get alertDetailNotSpecified => 'Ba a fayyace ba';
 
   @override
-  String get alertStatusActive => 'Active';
+  String get alertStatusActive => 'Mai Aiki';
 
   @override
-  String get alertStatusInactive => 'Inactive';
+  String get alertStatusInactive => 'Ba Ya Aiki';
 
   @override
-  String get alertDetailReportLoadError =>
-      'Report details could not be loaded.';
+  String get alertDetailReportLoadError => 'An kasa loda bayanan rahoton.';
 
   @override
-  String get alertDetailTitle => 'Alert Details';
+  String get alertDetailTitle => 'Bayanan Faɗakarwa';
 
   @override
-  String get alertDetailReportedTime => 'Reported Time';
+  String get alertDetailReportedTime => 'Lokacin Rahoto';
 
   @override
-  String get alertDetailStatus => 'Status';
+  String get alertDetailStatus => 'Matsayi';
 
   @override
   String get alertDetailNoDescription =>
-      'No additional description provided for this alert. Please take necessary precautions and follow local guidelines.';
+      'Babu ƙarin bayani game da wannan faɗakarwa. Don Allah ɗauki matakan kariya da suka dace kuma bi ƙa\'idojin yankinku.';
 
   @override
-  String get alertDetailRecommendedActions => 'Recommended Actions';
+  String get alertDetailRecommendedActions => 'Matakan da Ake Ba da Shawara';
 
   @override
-  String get alertDetailAction1 => '1. Stay informed via local news/radio.';
+  String get alertDetailAction1 =>
+      '1. Ci gaba da samun labarai ta rediyo ko kafofin yaɗa labarai na yanki.';
 
   @override
-  String get alertDetailAction2 => '2. Prepare emergency supplies.';
+  String get alertDetailAction2 => '2. Shirya kayan gaggawa.';
 
   @override
-  String get alertDetailAction3 => '3. Avoid travel to affected areas.';
+  String get alertDetailAction3 => '3. Guji zuwa wuraren da abin ya shafa.';
 
   @override
-  String get alertDetailAction4 => '4. Follow evacuation orders if issued.';
+  String get alertDetailAction4 => '4. Bi umarnin ƙaura idan an bayar.';
 
   @override
-  String get alertDetailPeerVerificationTitle => 'Peer Verification Required';
+  String get alertDetailPeerVerificationTitle =>
+      'Ana Buƙatar Tabbatarwar Abokan Aiki';
 
   @override
   String get alertDetailPeerVerificationBody =>
-      'As an EWM in this ward, please verify if you can confirm this report based on what you\'ve observed.';
+      'A matsayinka na EWM a wannan gunduma, don Allah tabbatar ko za ka iya gaskata wannan rahoton bisa abin da ka gani.';
 
   @override
-  String get alertDetailCommentLabel => 'Comment (required to dispute)';
+  String get alertDetailCommentLabel => 'Sharhi (dole idan za ka ƙalubalanta)';
 
   @override
-  String get alertDetailCommentHint =>
-      'Additional information about this report...';
+  String get alertDetailCommentHint => 'Ƙarin bayani game da wannan rahoton...';
 
   @override
-  String get commonSubmitting => 'Submitting...';
+  String get commonSubmitting => 'Ana aikawa...';
 
   @override
-  String get voteConfirm => 'Confirm';
+  String get voteConfirm => 'Tabbatar';
 
   @override
-  String get voteDecline => 'Decline';
+  String get voteDecline => 'Ƙalubalanta';
 
   @override
-  String get alertDetailVerificationSubmitted => 'Verification Submitted';
+  String get alertDetailVerificationSubmitted => 'An Aika Tabbatarwa';
 
   @override
-  String get alertDetailThanks => 'Thank you for your contribution!';
+  String get alertDetailThanks => 'Mun gode da gudummawarka!';
 
   @override
-  String get alertDetailGoBack => 'Go Back';
+  String get alertDetailGoBack => 'Koma Baya';
 
   @override
-  String get alertDetailDismiss => 'Dismiss';
+  String get alertDetailDismiss => 'Rufe';
 
   @override
-  String get alertsFilterAll => 'All Alerts';
+  String get alertsFilterAll => 'Duk Faɗakarwa';
 
   @override
-  String get alertsFilterFire => 'Fire';
+  String get alertsFilterFire => 'Gobara';
 
   @override
-  String get alertsBroadcastTooltip => 'Broadcast an alert';
+  String get alertsBroadcastTooltip => 'Watsa faɗakarwa';
 
   @override
-  String get alertsSeverityFilterTooltip => 'Filter by severity';
+  String get alertsSeverityFilterTooltip => 'Tace ta tsanani';
 
   @override
-  String get alertsAllSeverities => 'All severities';
+  String get alertsAllSeverities => 'Duk matakan tsanani';
 
   @override
-  String get alertsTabBroadcasts => 'Broadcasts';
+  String get alertsTabBroadcasts => 'Sanarwar Hukuma';
 
   @override
-  String get alertsTabReportHistory => 'Report History';
+  String get alertsTabReportHistory => 'Tarihin Rahotanni';
 
   @override
-  String get alertsSearchReportsHint => 'Search location, hazard, or ID...';
+  String get alertsSearchReportsHint => 'Nemi wuri, haɗari, ko ID...';
 
   @override
-  String get alertsSearchAlertsHint => 'Search alerts...';
+  String get alertsSearchAlertsHint => 'Nemi faɗakarwa...';
 
   @override
-  String get alertsClearSearch => 'Clear search';
+  String get alertsClearSearch => 'Share bincike';
 
   @override
-  String get alertsLoadError => 'Could not load alerts';
+  String get alertsLoadError => 'An kasa loda faɗakarwa';
 
   @override
-  String get alertsNoMatching => 'No matching alerts';
+  String get alertsNoMatching => 'Babu faɗakarwa da ta dace';
 
   @override
-  String get alertsPullToRetry => 'Pull down to try again.';
+  String get alertsPullToRetry => 'Ja ƙasa don sake gwadawa.';
 
   @override
   String get alertsEmptyBody =>
-      'Official alerts for your area will appear here.';
+      'Faɗakarwar hukuma ta yankinku za ta bayyana a nan.';
 
   @override
-  String get alertsAllLgas => 'All LGAs';
+  String get alertsAllLgas => 'Duk Ƙananan Hukumomi';
 
   @override
-  String get alertsSynchronizing => 'Synchronizing...';
+  String get alertsSynchronizing => 'Ana daidaitawa...';
 
   @override
-  String get alertsNoReportsYet => 'No Reports Yet';
+  String get alertsNoReportsYet => 'Babu Rahotanni Tukuna';
 
   @override
-  String get alertsNoMatchingReports => 'No matching reports';
+  String get alertsNoMatchingReports => 'Babu rahotannin da suka dace';
 
   @override
   String alertsNoReportsForFilter(String filter) {
-    return 'No $filter';
+    return 'Babu $filter';
   }
 
   @override
   String get alertsNoReportsYetBody =>
-      'When hazards are reported in your area,\nthey\'ll appear here';
+      'Idan aka kawo rahoton haɗari a yankinku,\nzai bayyana a nan';
 
   @override
   String get alertsNoMatchingReportsBody =>
-      'No matching reports found in this area';
+      'Ba a sami rahotannin da suka dace a wannan yanki ba';
 
   @override
-  String get alertsDisputeRecorded => 'Dispute recorded';
+  String get alertsDisputeRecorded => 'An rubuta ƙalubale';
 
   @override
-  String get alertsReportConfirmed => 'Report confirmed';
+  String get alertsReportConfirmed => 'An tabbatar da rahoton';
 
   @override
-  String get accessCodeVerified => 'Account verified successfully!';
+  String get accessCodeVerified => 'An tabbatar da asusu cikin nasara!';
 
   @override
   String get accessCodeNotVerified =>
-      'Not verified yet. Please enter the code sent to your email.';
+      'Ba a tabbatar ba tukuna. Don Allah shigar da lambar da aka aika zuwa imel ɗinka.';
 
   @override
-  String get accessCodeSent => 'Verification code sent!';
+  String get accessCodeSent => 'An aika lambar tabbatarwa!';
 
   @override
   String get accessCodeNoEmail =>
-      'No email found for this account. Please log in again.';
+      'Ba a sami imel na wannan asusu ba. Don Allah sake shiga.';
 
   @override
-  String get accessCodeTitle => 'Verify Your Email';
+  String get accessCodeTitle => 'Tabbatar da Imel ɗinka';
 
   @override
-  String get accessCodeEnterCode => 'Enter Code';
+  String get accessCodeEnterCode => 'Shigar da Lamba';
 
   @override
-  String get accessCodeIHaveVerified => 'I have verified my account';
+  String get accessCodeIHaveVerified => 'Na tabbatar da asusuna';
 
   @override
   String accessCodeBody(String email) {
-    return 'We have sent a 6-digit verification code to $email.\nEnter the code to activate your account.';
+    return 'Mun aika lambar tabbatarwa mai lambobi 6 zuwa $email.\nShigar da lambar don kunna asusunka.';
   }
 
   @override
   String get accessCodeBodyNoEmail =>
-      'We have sent a 6-digit verification code to your email.\nEnter the code to activate your account.';
+      'Mun aika lambar tabbatarwa mai lambobi 6 zuwa imel ɗinka.\nShigar da lambar don kunna asusunka.';
 
   @override
-  String get forgotTitle => 'Forgot Password?';
+  String get forgotTitle => 'Ka Manta Kalmar Sirri?';
 
   @override
   String get forgotBody =>
-      'Enter your email address to receive a password reset code.';
+      'Shigar da adireshin imel ɗinka don karɓar lambar sake saita kalmar sirri.';
 
   @override
-  String get authEmailHint => 'Enter your email';
+  String get authEmailHint => 'Shigar da imel ɗinka';
 
   @override
-  String get authEmailRequired => 'Please enter your email';
+  String get authEmailRequired => 'Don Allah shigar da imel ɗinka';
 
   @override
-  String get authEmailInvalid => 'Please enter a valid email';
+  String get authEmailInvalid => 'Don Allah shigar da ingantaccen imel';
 
   @override
-  String get forgotSendCode => 'Send Reset Code';
+  String get forgotSendCode => 'Aika Lambar Sake Saiti';
 
   @override
-  String get forgotEmailSentTitle => 'Email Sent!';
+  String get forgotEmailSentTitle => 'An Aika Imel!';
 
   @override
   String forgotEmailSentBody(String email) {
-    return 'If an account exists for $email, we have sent a 6-digit reset code.\nEnter it on the next screen to choose a new password.';
+    return 'Idan akwai asusu na $email, mun aika lambar sake saiti mai lambobi 6.\nShigar da ita a shafi na gaba don zaɓar sabuwar kalmar sirri.';
   }
 
   @override
-  String get forgotEnterCode => 'Enter Reset Code';
+  String get forgotEnterCode => 'Shigar da Lambar Saiti';
 
   @override
-  String get landingWelcome => 'Welcome to EWER';
+  String get landingWelcome => 'Barka da zuwa EWER';
 
   @override
-  String get landingSubtitle => 'Early Warning and Early Response System';
+  String get landingSubtitle =>
+      'Tsarin Gargaɗin Farko da Ɗaukar Mataki da Wuri';
 
   @override
   String get landingTagline =>
-      'Empowering communities with real-time hazard reporting and rapid response coordination.';
+      'Ƙarfafa al\'umma da bayar da rahoton haɗari nan take da haɗa kai don ɗaukar mataki cikin gaggawa.';
 
   @override
-  String get landingGetStarted => 'Get Started';
+  String get landingGetStarted => 'Fara Yanzu';
 
   @override
-  String get authSignUp => 'Sign Up';
+  String get authSignUp => 'Yi Rajista';
 
   @override
-  String get authLogin => 'Login';
+  String get authLogin => 'Shiga';
 
   @override
-  String get validatorPhoneRequired => 'Phone number is required';
+  String get validatorPhoneRequired => 'Ana buƙatar lambar waya';
 
   @override
   String get validatorPhoneInvalid =>
-      'Please enter a valid Nigerian phone number';
+      'Don Allah shigar da ingantacciyar lambar wayar Najeriya';
 
   @override
-  String get validatorAddressRequired => 'Address is required';
+  String get validatorAddressRequired => 'Ana buƙatar adireshi';
 
   @override
   String validatorAddressTooShort(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'Address must be at least $count characters',
+      other: 'Dole adireshi ya kai aƙalla haruffa $count',
     );
     return '$_temp0';
   }
@@ -1782,461 +1790,463 @@ class AppLocalizationsHa extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'Address is too long (max $count characters)',
+      other: 'Adireshi ya yi tsawo (iyaka haruffa $count)',
     );
     return '$_temp0';
   }
 
   @override
   String validatorFieldRequired(String field) {
-    return '$field is required';
+    return 'Ana buƙatar $field';
   }
 
   @override
   String validatorFieldMinLength(String field, int count) {
-    return '$field must be at least $count characters';
+    return 'Dole $field ya kai aƙalla haruffa $count';
   }
 
   @override
   String validatorFieldMaxLength(String field, int count) {
-    return '$field must not exceed $count characters';
+    return 'Kada $field ya wuce haruffa $count';
   }
 
   @override
-  String get validatorInvalidCharacters => 'Invalid characters detected';
+  String get validatorInvalidCharacters =>
+      'An gano haruffan da ba a yarda da su ba';
 
   @override
   String validatorFieldInvalidCharacters(String field) {
-    return '$field contains invalid characters';
+    return '$field na ɗauke da haruffan da ba a yarda da su ba';
   }
 
   @override
-  String get validatorDescriptionRequired => 'Description is required';
+  String get validatorDescriptionRequired => 'Ana buƙatar bayani';
 
   @override
   String validatorDescriptionTooLong(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'Description must not exceed $count characters',
+      other: 'Kada bayani ya wuce haruffa $count',
     );
     return '$_temp0';
   }
 
   @override
-  String get validatorEmailRequired => 'Email is required';
+  String get validatorEmailRequired => 'Ana buƙatar imel';
 
   @override
-  String get validatorPasswordRequired => 'Password is required';
+  String get validatorPasswordRequired => 'Ana buƙatar kalmar sirri';
 
   @override
   String validatorPasswordMinLength(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'Password must be at least $count characters',
+      other: 'Dole kalmar sirri ta kai aƙalla haruffa $count',
     );
     return '$_temp0';
   }
 
   @override
   String get validatorPasswordUppercase =>
-      'Must contain at least one uppercase letter';
+      'Dole ta ƙunshi aƙalla babban harafi ɗaya';
 
   @override
   String get validatorPasswordLowercase =>
-      'Must contain at least one lowercase letter';
+      'Dole ta ƙunshi aƙalla ƙaramin harafi ɗaya';
 
   @override
-  String get validatorPasswordNumber => 'Must contain at least one number';
+  String get validatorPasswordNumber => 'Dole ta ƙunshi aƙalla lamba ɗaya';
 
   @override
   String get validatorPasswordSpecial =>
-      'Must contain at least one special character';
+      'Dole ta ƙunshi aƙalla alama ta musamman ɗaya';
 
   @override
-  String get passwordStrengthWeak => 'Weak';
+  String get passwordStrengthWeak => 'Rauni';
 
   @override
-  String get passwordStrengthFair => 'Fair';
+  String get passwordStrengthFair => 'Madaidaici';
 
   @override
-  String get passwordStrengthGood => 'Good';
+  String get passwordStrengthGood => 'Mai Kyau';
 
   @override
-  String get passwordStrengthStrong => 'Strong';
+  String get passwordStrengthStrong => 'Mai Ƙarfi';
 
   @override
   String passwordErrorTooLong(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'Password is too long (max $count characters)',
+      other: 'Kalmar sirri ta yi tsawo (iyaka haruffa $count)',
     );
     return '$_temp0';
   }
 
   @override
   String get passwordErrorCommon =>
-      'This password is too common. Please choose a stronger password';
+      'Wannan kalmar sirri ta zama gama-gari. Don Allah zaɓi mai ƙarfi';
 
   @override
   String get passwordErrorSequential =>
-      'Password should not contain sequential characters (e.g., 123, abc)';
+      'Kada kalmar sirri ta ƙunshi haruffa masu bin juna (misali, 123, abc)';
 
   @override
   String passwordRequirementLength(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'At least $count characters',
+      other: 'Aƙalla haruffa $count',
     );
     return '$_temp0';
   }
 
   @override
-  String get passwordRequirementUppercase => 'Uppercase letter';
+  String get passwordRequirementUppercase => 'Babban harafi';
 
   @override
-  String get passwordRequirementLowercase => 'Lowercase letter';
+  String get passwordRequirementLowercase => 'Ƙaramin harafi';
 
   @override
-  String get passwordRequirementNumber => 'Number';
+  String get passwordRequirementNumber => 'Lamba';
 
   @override
-  String get passwordRequirementSpecial => 'Special character';
+  String get passwordRequirementSpecial => 'Alama ta musamman';
 
   @override
-  String get passwordRequirementNotCommon => 'Not a common password';
+  String get passwordRequirementNotCommon => 'Ba kalmar sirri ta gama-gari ba';
 
   @override
   String get authLoginCheckCredentials =>
-      'Login failed. Please check your credentials.';
+      'Shiga ya kasa. Don Allah duba bayanan shigarka.';
 
   @override
-  String get loginWelcomeBack => 'Welcome Back';
+  String get loginWelcomeBack => 'Barka da Dawowa';
 
   @override
-  String get loginSubtitle => 'Sign in to your account';
+  String get loginSubtitle => 'Shiga cikin asusunka';
 
   @override
-  String get authPhoneNumber => 'Phone Number';
+  String get authPhoneNumber => 'Lambar Waya';
 
   @override
-  String get authPassword => 'Password';
+  String get authPassword => 'Kalmar Sirri';
 
   @override
-  String get loginRememberMe => 'Remember Me';
+  String get loginRememberMe => 'Tuna Ni';
 
   @override
-  String get loginNoAccount => 'Don\'t have an account? ';
+  String get loginNoAccount => 'Ba ka da asusu? ';
 
   @override
-  String get loginDataSecure => 'Your data is encrypted and secure';
+  String get loginDataSecure => 'Bayananka suna ɓoye kuma suna cikin tsaro';
 
   @override
-  String get loginLockedTitle => 'CRADI Mobile Locked';
+  String get loginLockedTitle => 'An Kulle CRADI Mobile';
 
   @override
-  String get loginUnlockBiometrics => 'Unlock with Biometrics';
+  String get loginUnlockBiometrics => 'Buɗe da Biometric';
 
   @override
-  String get loginLogoutDifferentAccount => 'Log out and use different account';
+  String get loginLogoutDifferentAccount => 'Fita ka yi amfani da wani asusu';
 
   @override
-  String get authMethodEmail => 'Email';
+  String get authMethodEmail => 'Imel';
 
   @override
-  String get authMethodPhone => 'Phone';
+  String get authMethodPhone => 'Waya';
 
   @override
-  String get loginSendCode => 'Send Code';
+  String get loginSendCode => 'Aika Lamba';
 
   @override
-  String get otpSuccess => 'Verification successful!';
+  String get otpSuccess => 'An tabbatar cikin nasara!';
 
   @override
-  String get otpNewCodeSent => 'A new code has been sent.';
+  String get otpNewCodeSent => 'An aika sabuwar lamba.';
 
   @override
-  String get otpVerifyEmail => 'Verify Email';
+  String get otpVerifyEmail => 'Tabbatar da Imel';
 
   @override
   String otpCodeSentTo(String destination) {
-    return 'Enter the 6-digit code sent to\n$destination';
+    return 'Shigar da lambar mai lambobi 6 da aka aika zuwa\n$destination';
   }
 
   @override
-  String get otpSecureCode => 'Secure Code';
+  String get otpSecureCode => 'Lambar Tsaro';
 
   @override
-  String get otpCodeHint => 'Enter 6-digit code';
+  String get otpCodeHint => 'Shigar da lambar mai lambobi 6';
 
   @override
-  String get otpCodeRequired => 'Please enter the code';
+  String get otpCodeRequired => 'Don Allah shigar da lambar';
 
   @override
-  String get otpCodeInvalidFormat => 'Invalid code format';
+  String get otpCodeInvalidFormat => 'Tsarin lambar ba daidai ba ne';
 
   @override
-  String get otpVerifyAndLogin => 'Verify & Login';
+  String get otpVerifyAndLogin => 'Tabbatar ka Shiga';
 
   @override
-  String get otpNoCode => 'Didn\'t receive code? ';
+  String get otpNoCode => 'Ba ka karɓi lamba ba? ';
 
   @override
   String otpResendIn(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'Resend in ${count}s',
+      other: 'Sake aikawa cikin daƙ. $count',
     );
     return '$_temp0';
   }
 
   @override
-  String get pendingTitle => 'Approval Pending';
+  String get pendingTitle => 'Ana Jiran Amincewa';
 
   @override
   String get pendingBody =>
-      'Your account has been created successfully but is waiting for admin approval.\n\nYou will be able to access the full application once an administrator reviews and approves your account.';
+      'An ƙirƙiri asusunka cikin nasara amma yana jiran amincewar mai gudanarwa.\n\nZa ka iya amfani da dukkan manhajar da zarar mai gudanarwa ya duba ya amince da asusunka.';
 
   @override
-  String get pendingStillWaiting => 'Your account is still awaiting approval.';
+  String get pendingStillWaiting => 'Asusunka har yanzu yana jiran amincewa.';
 
   @override
-  String get pendingCheckStatus => 'Check approval status';
+  String get pendingCheckStatus => 'Duba matsayin amincewa';
 
   @override
-  String get pendingContactSupport => 'Contact Support';
+  String get pendingContactSupport => 'Tuntuɓi Masu Taimako';
 
   @override
-  String get registrationPrivacyTitle => 'Data Privacy Notice';
+  String get registrationPrivacyTitle => 'Sanarwar Sirrin Bayanai';
 
   @override
-  String get registrationDecline => 'Decline';
+  String get registrationDecline => 'Ƙi';
 
   @override
-  String get registrationAgree => 'I Agree';
+  String get registrationAgree => 'Na Amince';
 
   @override
   String get registrationMustAccept =>
-      'You must accept the Data Privacy Notice to register.';
+      'Dole ne ka amince da Sanarwar Sirrin Bayanai kafin ka yi rajista.';
 
   @override
-  String get registrationSelectState => 'Please select a state';
+  String get registrationSelectState => 'Don Allah zaɓi jiha';
 
   @override
-  String get registrationSelectLga => 'Please select an LGA';
+  String get registrationSelectLga => 'Don Allah zaɓi ƙaramar hukuma';
 
   @override
-  String get registrationSelectWard => 'Please select a ward';
+  String get registrationSelectWard => 'Don Allah zaɓi gunduma';
 
   @override
-  String get registrationVerifyPhoneTitle => 'Verify Your Phone Number';
+  String get registrationVerifyPhoneTitle => 'Tabbatar da Lambar Wayarka';
 
   @override
   String registrationPhoneCodeSent(String phone) {
-    return 'A 6-digit verification code has been sent to $phone.\n\nPlease enter the code to activate your account.';
+    return 'An aika lambar tabbatarwa mai lambobi 6 zuwa $phone.\n\nDon Allah shigar da lambar don kunna asusunka.';
   }
 
   @override
-  String get registrationAccountCreated => 'Account created!';
+  String get registrationAccountCreated => 'An ƙirƙiri asusu!';
 
   @override
-  String get registrationVerifyEmailTitle => 'Verify Your Email Address';
+  String get registrationVerifyEmailTitle => 'Tabbatar da Adireshin Imel ɗinka';
 
   @override
   String registrationEmailCodeSent(String email) {
-    return 'Account created successfully!\n\nA 6-digit verification code has been sent to $email.\n\nPlease enter the code to activate your account.';
+    return 'An ƙirƙiri asusu cikin nasara!\n\nAn aika lambar tabbatarwa mai lambobi 6 zuwa $email.\n\nDon Allah shigar da lambar don kunna asusunka.';
   }
 
   @override
-  String get registrationCreateAccount => 'Create Account';
+  String get registrationCreateAccount => 'Ƙirƙiri Asusu';
 
   @override
-  String get registrationJoinNetwork => 'Join the Network';
+  String get registrationJoinNetwork => 'Shiga Cikin Hanyar Sadarwa';
 
   @override
-  String get registrationSelectLocation =>
-      'Select your location to get started.';
+  String get registrationSelectLocation => 'Zaɓi wurinka don farawa.';
 
   @override
-  String get registrationMethod => 'Registration Method';
+  String get registrationMethod => 'Hanyar Rajista';
 
   @override
-  String get registrationPersonalInfo => 'Personal Information';
+  String get registrationPersonalInfo => 'Bayanan Kai';
 
   @override
-  String get registrationNameHint => 'John Doe';
+  String get registrationNameHint => 'Musa Abdullahi';
 
   @override
-  String get registrationNameField => 'Name';
+  String get registrationNameField => 'Suna';
 
   @override
-  String get registrationAddressLabel => 'Address Description';
+  String get registrationAddressLabel => 'Bayanin Adireshi';
 
   @override
-  String get registrationAddressHint => 'e.g., No 5, Main Street';
+  String get registrationAddressHint => 'misali, Lamba 5, Babban Titi';
 
   @override
-  String get registrationAddressField => 'Address';
+  String get registrationAddressField => 'Adireshi';
 
   @override
-  String get registrationSecurity => 'Security';
+  String get registrationSecurity => 'Tsaro';
 
   @override
-  String get registrationPasswordHint => 'Create a password';
+  String get registrationPasswordHint => 'Ƙirƙiri kalmar sirri';
 
   @override
-  String get registrationConfirmPassword => 'Confirm Password';
+  String get registrationConfirmPassword => 'Tabbatar da Kalmar Sirri';
 
   @override
-  String get registrationConfirmPasswordHint => 'Re-enter your password';
+  String get registrationConfirmPasswordHint =>
+      'Sake shigar da kalmar sirrinka';
 
   @override
   String get registrationConfirmPasswordRequired =>
-      'Please confirm your password';
+      'Don Allah tabbatar da kalmar sirrinka';
 
   @override
-  String get registrationPasswordsMismatch => 'Passwords do not match';
+  String get registrationPasswordsMismatch =>
+      'Kalmomin sirri ba su yi daidai ba';
 
   @override
-  String get registrationSendOtp => 'Send OTP & Register';
+  String get registrationSendOtp => 'Aika OTP ka Yi Rajista';
 
   @override
-  String get registrationHaveAccount => 'Already have an account? ';
+  String get registrationHaveAccount => 'Kana da asusu? ';
 
   @override
-  String get registrationCreating => 'Creating account...';
+  String get registrationCreating => 'Ana ƙirƙirar asusu...';
 
   @override
   String get privacyNoticeText =>
-      'Nigeria Data Protection Act (NDPA) — Data Processing Notice\n\nYour data is processed by EWER Mobile (a CRADI / KusuConsult-NG service) for climate hazard early warning purposes.\n\n• Data collected: name, phone, email, location (state/LGA/ward), hazard reports, and a push-notification device identifier.\n• Purpose: community hazard reporting, peer verification, and emergency alerts.\n• Storage: Supabase (PostgreSQL) cloud database; push notifications are delivered via OneSignal and crash diagnostics may be sent to Sentry.\n• International transfer: Pursuant to NDPA Article 24, we disclose that your data may be transferred to and stored on servers outside Nigeria. This transfer is necessary to provide the service. You have the right to withdraw consent at any time by deleting your account.\n• Retention: Data is retained for 5 years after your last activity, then anonymised.\n• Your rights: access, rectification, erasure, and data portability under the NDPA 2023.\n\nBy tapping \"I Agree\", you consent to these terms and the international transfer of your personal data.';
+      'Dokar Kare Bayanai ta Najeriya (NDPA) — Sanarwar Sarrafa Bayanai\n\nEWER Mobile (sabis na CRADI / KusuConsult-NG) ne ke sarrafa bayananka don gargaɗin farko game da haɗurran yanayi.\n\n• Bayanan da ake tattarawa: suna, waya, imel, wuri (jiha/ƙaramar hukuma/gunduma), rahotannin haɗari, da lambar tantance na\'ura don sanarwa kai tsaye.\n• Manufa: bayar da rahoton haɗari na al\'umma, tabbatarwar abokan aiki, da faɗakarwar gaggawa.\n• Ajiya: rumbun bayanai na gajimare na Supabase (PostgreSQL); ana isar da sanarwa kai tsaye ta OneSignal kuma ana iya aika bayanan matsalolin manhaja zuwa Sentry.\n• Tura bayanai zuwa ƙasashen waje: Bisa Sashe na 24 na NDPA, muna bayyana cewa ana iya tura bayananka zuwa sabobi a wajen Najeriya kuma a ajiye su a can. Wannan tura bayanai ya zama dole don samar da sabis ɗin. Kana da ikon janye amincewarka a kowane lokaci ta hanyar goge asusunka.\n• Tsawon ajiya: Ana ajiye bayanai na tsawon shekaru 5 bayan aikinka na ƙarshe, sannan a cire duk abin da zai iya bayyana ko kai wane ne.\n• Haƙƙoƙinka: samun dama, gyara, gogewa, da ɗaukar bayananka zuwa wani wuri a ƙarƙashin NDPA 2023.\n\nTa danna \"Na Amince\", ka amince da waɗannan sharuɗɗa da kuma tura bayananka na sirri zuwa ƙasashen waje.';
 
   @override
   String get aboutAppName => 'EWER Mobile';
 
   @override
-  String get aboutTagline => 'Early Warning System';
+  String get aboutTagline => 'Tsarin Gargaɗin Farko';
 
   @override
   String aboutVersion(String version, String build) {
-    return 'Version $version (Build $build)';
+    return 'Sigar $version (Gini $build)';
   }
 
   @override
   String aboutCopyright(String year) {
-    return '© $year EWER. All rights reserved.';
+    return '© $year EWER. Dukkan haƙƙoƙi an kiyaye su.';
   }
 
   @override
-  String get aboutPrivacyPolicy => 'Privacy Policy';
+  String get aboutPrivacyPolicy => 'Manufar Sirri';
 
   @override
-  String get resetCodeResent =>
-      'If an account exists, a new code has been sent.';
+  String get resetCodeResent => 'Idan akwai asusu, an aika sabuwar lamba.';
 
   @override
-  String get resetTitle => 'Create New Password';
+  String get resetTitle => 'Ƙirƙiri Sabuwar Kalmar Sirri';
 
   @override
   String get resetBody =>
-      'Enter the 6-digit code from the reset email and choose a new secure password.';
+      'Shigar da lambar mai lambobi 6 daga imel ɗin sake saiti kuma zaɓi sabuwar kalmar sirri mai tsaro.';
 
   @override
-  String get resetCodeLabel => 'Reset Code';
+  String get resetCodeLabel => 'Lambar Sake Saiti';
 
   @override
-  String get resetSendingCode => 'Sending…';
+  String get resetSendingCode => 'Ana aikawa…';
 
   @override
-  String get resetSendCode => 'Send code';
+  String get resetSendCode => 'Aika lamba';
 
   @override
-  String get resetCodeRequired => 'Enter the code from the email';
+  String get resetCodeRequired => 'Shigar da lambar daga imel';
 
   @override
-  String get resetNewPassword => 'New Password';
+  String get resetNewPassword => 'Sabuwar Kalmar Sirri';
 
   @override
-  String get resetSubmit => 'Reset Password';
+  String get resetSubmit => 'Sake Saita Kalmar Sirri';
 
   @override
-  String get resetSuccessTitle => 'Password Reset!';
+  String get resetSuccessTitle => 'An Sake Saita Kalmar Sirri!';
 
   @override
   String get resetSuccessBody =>
-      'Your password has been reset successfully. You can now login with your new password.';
+      'An sake saita kalmar sirrinka cikin nasara. Yanzu za ka iya shiga da sabuwar kalmar sirrinka.';
 
   @override
-  String get resetContinueToLogin => 'Continue to Login';
+  String get resetContinueToLogin => 'Ci gaba zuwa Shiga';
 
   @override
-  String get offlineSyncingPending => 'Syncing pending data...';
+  String get offlineSyncingPending => 'Ana daidaita bayanan da ke jira...';
 
   @override
-  String get offlineDiscardTitle => 'Discard report?';
+  String get offlineDiscardTitle => 'A watsar da rahoton?';
 
   @override
   String get offlineDiscardBody =>
-      'This report has not been sent and will be deleted from this device.';
+      'Ba a aika wannan rahoton ba kuma za a goge shi daga wannan na\'ura.';
 
   @override
-  String get offlineDiscard => 'Discard';
+  String get offlineDiscard => 'Watsar';
 
   @override
-  String get offlineActions => 'Actions';
+  String get offlineActions => 'Ayyuka';
 
   @override
-  String get offlineSubmitAsMe => 'Submit as me';
+  String get offlineSubmitAsMe => 'Aika da sunana';
 
   @override
-  String get offlineNoInternet => 'No Internet Connection';
+  String get offlineNoInternet => 'Babu Haɗin Intanet';
 
   @override
   String get offlineCanViewSaved =>
-      'You can still view your saved guides and draft reports.';
+      'Har yanzu kana iya duba jagororinka da rahotannin da ka ajiye.';
 
   @override
-  String get offlineReconnectToSignIn => 'Reconnect to sign in.';
+  String get offlineReconnectToSignIn => 'Sake haɗawa da intanet don shiga.';
 
   @override
-  String get offlineTryReconnect => 'Try Reconnecting & Sync';
+  String get offlineTryReconnect => 'Sake Haɗawa ka Daidaita';
 
   @override
   String get offlineModeEnabledInSettings =>
-      'Offline Mode is enabled in Settings.';
+      'An kunna Yanayin Babu Intanet a Saituna.';
 
   @override
-  String get offlineGoOnline => 'Go online';
+  String get offlineGoOnline => 'Koma kan layi';
 
   @override
-  String get offlineStillNoInternet => 'Still no internet connection';
+  String get offlineStillNoInternet => 'Har yanzu babu haɗin intanet';
 
   @override
-  String get offlineOpenSettings => 'Open Settings';
+  String get offlineOpenSettings => 'Buɗe Saituna';
 
   @override
-  String get offlineViewSavedGuides => 'View Saved Guides';
+  String get offlineViewSavedGuides => 'Duba Jagororin da Aka Ajiye';
 
   @override
-  String get offlineNoPending => 'No pending reports';
+  String get offlineNoPending => 'Babu rahotanni masu jira';
 
   @override
   String get offlineStatusOwnerless =>
-      'Saved by an earlier version: submit or discard it';
+      'Tsohuwar siga ce ta ajiye shi: aika ko watsar da shi';
 
   @override
-  String get offlineStatusFailed => 'Failed, will not sync automatically';
+  String get offlineStatusFailed =>
+      'Ya kasa, ba za a daidaita shi kai tsaye ba';
 
   @override
   String offlineStatusFailedWithError(String error) {
-    return 'Failed, will not sync automatically: $error';
+    return 'Ya kasa, ba za a daidaita shi kai tsaye ba: $error';
   }
 
   @override
-  String get offlineStatusWaiting => 'Waiting to sync';
+  String get offlineStatusWaiting => 'Yana jiran daidaitawa';
 
   @override
   String offlineItemSubtitle(String location, String date, String status) {
@@ -2244,79 +2254,79 @@ class AppLocalizationsHa extends AppLocalizations {
   }
 
   @override
-  String get roleUser => 'User';
+  String get roleUser => 'Mai Amfani';
 
   @override
-  String get roleEwm => 'Early Warning Monitor';
+  String get roleEwm => 'Mai Sa Ido kan Gargaɗin Farko';
 
   @override
-  String get roleEwv => 'Early Warning Validator';
+  String get roleEwv => 'Mai Tantance Gargaɗin Farko';
 
   @override
-  String get roleEwr => 'Early Warning Responder';
+  String get roleEwr => 'Mai Ɗaukar Mataki kan Gargaɗin Farko';
 
   @override
-  String get roleLdpCoordinator => 'LDP Coordinator';
+  String get roleLdpCoordinator => 'Mai Kula da LDP';
 
   @override
-  String get roleProjectStaff => 'Project Staff';
+  String get roleProjectStaff => 'Ma\'aikacin Aiki';
 
   @override
-  String get roleAdmin => 'Administrator';
+  String get roleAdmin => 'Mai Gudanarwa';
 
   @override
-  String get roleTechSupport => 'Tech Support';
+  String get roleTechSupport => 'Taimakon Fasaha';
 
   @override
-  String get profilePhotoUpdated => 'Profile photo updated!';
+  String get profilePhotoUpdated => 'An sabunta hoton bayanan kai!';
 
   @override
   String get profileCameraUnavailable =>
-      'Camera not available. Please use the gallery.';
+      'Kyamara ba ta samuwa. Don Allah yi amfani da hotuna (gallery).';
 
   @override
   String get profilePickImageFailed =>
-      'Failed to pick image. Please try again.';
+      'An kasa zaɓar hoto. Don Allah sake gwadawa.';
 
   @override
-  String get profileUpdatePhoto => 'Update Profile Photo';
+  String get profileUpdatePhoto => 'Sabunta Hoton Bayanan Kai';
 
   @override
-  String get profileChooseGallery => 'Choose from Gallery';
+  String get profileChooseGallery => 'Zaɓa daga Hotuna';
 
   @override
-  String get profileChooseGallerySubtitle => 'Select a photo from your device';
+  String get profileChooseGallerySubtitle => 'Zaɓi hoto daga na\'urarka';
 
   @override
-  String get profileCameraWebUnavailable => 'Camera not available on web';
+  String get profileCameraWebUnavailable => 'Kyamara ba ta samuwa a yanar gizo';
 
   @override
-  String get profileUseGallery => 'Please use the gallery option';
+  String get profileUseGallery => 'Don Allah yi amfani da zaɓin hotuna';
 
   @override
-  String get profilePhotoLibrary => 'Photo Library';
+  String get profilePhotoLibrary => 'Ɗakin Hotuna';
 
   @override
-  String get profileEdit => 'Edit Profile';
+  String get profileEdit => 'Gyara Bayanan Kai';
 
   @override
-  String get profileAskAdminArea => 'Ask an admin to change your area';
+  String get profileAskAdminArea => 'Nemi mai gudanarwa ya canza yankinka';
 
   @override
-  String get profileVerifyAccount => 'Verify Account';
+  String get profileVerifyAccount => 'Tabbatar da Asusu';
 
   @override
   String get profileVerifyAccountBody =>
-      'Enter the Access Code sent to your email to verify your account.';
+      'Shigar da Lambar Shiga da aka aika zuwa imel ɗinka don tabbatar da asusunka.';
 
   @override
-  String get profileAccessCode => 'Access Code';
+  String get profileAccessCode => 'Lambar Shiga';
 
   @override
-  String get profileAccessCodeHint => 'e.g., ABC-123';
+  String get profileAccessCodeHint => 'misali, ABC-123';
 
   @override
-  String get commonNotAvailable => 'N/A';
+  String get commonNotAvailable => 'Babu';
 
   @override
   String profileIdLabel(String code) {
@@ -2324,64 +2334,65 @@ class AppLocalizationsHa extends AppLocalizations {
   }
 
   @override
-  String get profileVerified => 'Verified';
+  String get profileVerified => 'An Tabbatar';
 
   @override
-  String get profileUnverified => 'Unverified';
+  String get profileUnverified => 'Ba a Tabbatar ba';
 
   @override
-  String get profileVerifyNow => 'Verify Now';
+  String get profileVerifyNow => 'Tabbatar Yanzu';
 
   @override
-  String get profileStatReports => 'Reports';
+  String get profileStatReports => 'Rahotanni';
 
   @override
-  String get profileAccountSettings => 'Account Settings';
+  String get profileAccountSettings => 'Saitunan Asusu';
 
   @override
-  String get profileBiometricsEnabled => 'Biometrics enabled!';
+  String get profileBiometricsEnabled => 'An kunna biometric!';
 
   @override
-  String get profileBiometricChangeFailed => 'Could not change biometric login';
+  String get profileBiometricChangeFailed => 'An kasa canza shiga ta biometric';
 
   @override
-  String get profileSyncingOffline => 'Syncing offline data...';
+  String get profileSyncingOffline =>
+      'Ana daidaita bayanan da aka ajiye ba tare da intanet ba...';
 
   @override
-  String get profileSyncComplete => 'Sync complete!';
+  String get profileSyncComplete => 'An kammala daidaitawa!';
 
   @override
-  String get profileSupportChat => 'Support Chat';
+  String get profileSupportChat => 'Hira da Masu Taimako';
 
   @override
-  String get profileSosButton => 'SOS / Emergency Call';
+  String get profileSosButton => 'SOS / Kiran Gaggawa';
 
   @override
-  String get sosTitle => 'SOS Emergency';
+  String get sosTitle => 'SOS na Gaggawa';
 
   @override
   String get sosBody =>
-      'Call for help directly. This does not send an alert through the app.';
+      'Kira don neman taimako kai tsaye. Wannan ba ya aika faɗakarwa ta manhajar.';
 
   @override
   String sosCallEmergency(String phone) {
-    return 'Call Emergency ($phone)';
+    return 'Kira Lambar Gaggawa ($phone)';
   }
 
   @override
-  String get sosNationalNumber => 'National emergency number';
+  String get sosNationalNumber => 'Lambar gaggawa ta ƙasa';
 
   @override
   String get sosContactsLoadError =>
-      'Couldn\'t load your contacts. Check your connection and try again.';
+      'An kasa loda lambobinka. Duba haɗin intanet ɗinka ka sake gwadawa.';
 
   @override
   String get sosNoContacts =>
-      'No personal emergency contacts saved yet. Add them under Emergency Contacts.';
+      'Ba ka ajiye lambobin gaggawa na kanka ba tukuna. Ƙara su a ƙarƙashin Lambobin Gaggawa.';
 
   @override
   String sosCallContact(String name) {
-    return 'Call $name';
+    return 'Kira $name';
   }
 
   @override
@@ -2391,126 +2402,126 @@ class AppLocalizationsHa extends AppLocalizations {
 
   @override
   String sosDialFailed(String phone) {
-    return 'Could not open the phone app. Dial $phone.';
+    return 'An kasa buɗe manhajar waya. Kira $phone.';
   }
 
   @override
-  String get chatLoginRequired => 'Please login to chat';
+  String get chatLoginRequired => 'Don Allah ka shiga don yin hira';
 
   @override
-  String get chatLoadError => 'Could not load messages.';
+  String get chatLoadError => 'An kasa loda saƙonni.';
 
   @override
-  String get chatMe => 'Me';
+  String get chatMe => 'Ni';
 
   @override
   String chatRateLimited(String reason) {
-    return '$reason. Please wait a moment.';
+    return '$reason. Don Allah jira ɗan lokaci.';
   }
 
   @override
   String chatSendFailed(String error) {
-    return 'Message not sent. $error';
+    return 'Ba a aika saƙon ba. $error';
   }
 
   @override
-  String get contactsNameRequired => 'Name is required';
+  String get contactsNameRequired => 'Ana buƙatar suna';
 
   @override
-  String get contactsNameTooLong => 'Name is too long';
+  String get contactsNameTooLong => 'Suna ya yi tsawo';
 
   @override
   String get contactsPhoneDigitsOnly =>
-      'Use digits only (optionally starting with +)';
+      'Yi amfani da lambobi kawai (za a iya farawa da +)';
 
   @override
-  String get contactsPhoneInvalid => 'Enter a valid phone number';
+  String get contactsPhoneInvalid => 'Shigar da ingantacciyar lambar waya';
 
   @override
-  String get contactsLaunchPhoneFailed => 'Could not launch phone app';
+  String get contactsLaunchPhoneFailed => 'An kasa buɗe manhajar waya';
 
   @override
-  String get contactsLaunchSmsFailed => 'Could not launch SMS app';
+  String get contactsLaunchSmsFailed => 'An kasa buɗe manhajar SMS';
 
   @override
-  String get contactsAdded => 'Contact added successfully';
+  String get contactsAdded => 'An ƙara lamba cikin nasara';
 
   @override
-  String get contactsUpdated => 'Contact updated successfully';
+  String get contactsUpdated => 'An sabunta lamba cikin nasara';
 
   @override
-  String get contactsDeleteTitle => 'Delete contact?';
+  String get contactsDeleteTitle => 'A goge lambar?';
 
   @override
   String contactsDeleteBody(String name) {
-    return 'Remove $name from your emergency contacts?';
+    return 'A cire $name daga lambobinka na gaggawa?';
   }
 
   @override
-  String get contactsDeleted => 'Contact deleted';
+  String get contactsDeleted => 'An goge lamba';
 
   @override
-  String get contactsTitle => 'Emergency Contacts';
+  String get contactsTitle => 'Lambobin Gaggawa';
 
   @override
-  String get contactsAddTooltip => 'Add contact';
+  String get contactsAddTooltip => 'Ƙara lamba';
 
   @override
-  String get contactsSearchHint => 'Search name, LGA, or role';
+  String get contactsSearchHint => 'Nemi suna, ƙaramar hukuma, ko matsayi';
 
   @override
-  String get contactsEmpty => 'No contacts found';
+  String get contactsEmpty => 'Ba a sami lambobi ba';
 
   @override
-  String get contactsEmergencyButton => 'Emergency 112';
+  String get contactsEmergencyButton => 'Gaggawa 112';
 
   @override
-  String get contactsMoreActions => 'More actions';
+  String get contactsMoreActions => 'Ƙarin ayyuka';
 
   @override
-  String get contactsEditTitle => 'Edit Emergency Contact';
+  String get contactsEditTitle => 'Gyara Lambar Gaggawa';
 
   @override
-  String get contactsAddTitle => 'Add Emergency Contact';
+  String get contactsAddTitle => 'Ƙara Lambar Gaggawa';
 
   @override
-  String get contactsNameLabel => 'Name *';
+  String get contactsNameLabel => 'Suna *';
 
   @override
-  String get contactsRoleLabel => 'Role';
+  String get contactsRoleLabel => 'Matsayi';
 
   @override
-  String get contactsPhoneLabel => 'Phone *';
+  String get contactsPhoneLabel => 'Waya *';
 
   @override
-  String get contactsOrganizationLabel => 'Organization (Optional)';
+  String get contactsOrganizationLabel => 'Ƙungiya (Na zaɓi)';
 
   @override
-  String get contactsLgaLabel => 'LGA (Optional)';
+  String get contactsLgaLabel => 'Ƙaramar Hukuma (Na zaɓi)';
 
   @override
-  String get contactsCategoryLabel => 'Category';
+  String get contactsCategoryLabel => 'Rukuni';
 
   @override
-  String get contactsAdd => 'Add';
+  String get contactsAdd => 'Ƙara';
 
   @override
-  String get contactsFilterAll => 'All';
+  String get contactsFilterAll => 'Duka';
 
   @override
-  String get contactsFilterCoordinators => 'Coordinators';
+  String get contactsFilterCoordinators => 'Masu Kula';
 
   @override
-  String get contactsCategoryCoordinator => 'Coordinator';
+  String get contactsCategoryCoordinator => 'Mai Kula';
 
   @override
-  String get contactsCategoryEmergency => 'Emergency';
+  String get contactsCategoryEmergency => 'Gaggawa';
 
   @override
-  String get contactsCategoryAgriExtension => 'Agri-Extension';
+  String get contactsCategoryAgriExtension => 'Jami\'in Gona';
 
   @override
-  String get contactsCategoryOther => 'Other';
+  String get contactsCategoryOther => 'Wasu';
 
   @override
   String contactsRoleAndLga(String role, String lga) {
@@ -2518,395 +2529,401 @@ class AppLocalizationsHa extends AppLocalizations {
   }
 
   @override
-  String get knowledgeCategoryAll => 'All';
+  String get knowledgeCategoryAll => 'Duka';
 
   @override
-  String get knowledgeCategoryFlood => 'Flood';
+  String get knowledgeCategoryFlood => 'Ambaliya';
 
   @override
-  String get knowledgeCategoryFire => 'Fire';
+  String get knowledgeCategoryFire => 'Gobara';
 
   @override
-  String get knowledgeCategoryErosion => 'Erosion';
+  String get knowledgeCategoryErosion => 'Zaizaya';
 
   @override
-  String get knowledgeCategoryStorm => 'Storm';
+  String get knowledgeCategoryStorm => 'Guguwa';
 
   @override
-  String get knowledgeCategoryExtremeHeat => 'Extreme Heat';
+  String get knowledgeCategoryExtremeHeat => 'Tsananin Zafi';
 
   @override
-  String get knowledgeCategoryEarthquake => 'Earthquake';
+  String get knowledgeCategoryEarthquake => 'Girgizar Ƙasa';
 
   @override
-  String get knowledgeCategoryDisease => 'Disease';
+  String get knowledgeCategoryDisease => 'Cuta';
 
   @override
-  String get knowledgeCategoryConflict => 'Conflict';
+  String get knowledgeCategoryConflict => 'Rikici';
 
   @override
-  String get knowledgeCategoryAccident => 'Accident';
+  String get knowledgeCategoryAccident => 'Haɗari';
 
   @override
-  String get knowledgeCategorySafety => 'Safety';
+  String get knowledgeCategorySafety => 'Tsaro';
 
   @override
-  String get knowledgeCategoryGeneral => 'General';
+  String get knowledgeCategoryGeneral => 'Gabaɗaya';
 
   @override
-  String get knowledgeTagGuide => 'GUIDE';
+  String get knowledgeTagGuide => 'JAGORA';
 
   @override
-  String get knowledgeLoadError => 'Failed to fetch guides. Please try again.';
+  String get knowledgeLoadError =>
+      'An kasa samo jagorori. Don Allah sake gwadawa.';
 
   @override
-  String get knowledgeGuidesTitle => 'Hazard Guides';
+  String get knowledgeGuidesTitle => 'Jagororin Haɗari';
 
   @override
-  String get knowledgeBaseCaption => 'KNOWLEDGE BASE';
+  String get knowledgeBaseCaption => 'TASKAR ILIMI';
 
   @override
-  String get knowledgeGuidesSearchHint => 'Search guides, signs, or hazards...';
+  String get knowledgeGuidesSearchHint => 'Nemi jagorori, alamu, ko haɗurra...';
 
   @override
-  String get knowledgeNoGuidesCategory => 'No guides found for this category';
+  String get knowledgeNoGuidesCategory =>
+      'Ba a sami jagorori a wannan rukuni ba';
 
   @override
   String knowledgeNoGuidesMatch(String query) {
-    return 'No guides match \"$query\"';
+    return 'Babu jagorar da ta dace da \"$query\"';
   }
 
   @override
-  String get knowledgeNoTitle => 'No Title';
+  String get knowledgeNoTitle => 'Babu Take';
 
   @override
-  String get knowledgeSubtitleManual => 'Manual';
+  String get knowledgeSubtitleManual => 'Littafin Jagora';
 
   @override
-  String get knowledgeNewsLoadError => 'Failed to load news. Please try again.';
+  String get knowledgeNewsLoadError =>
+      'An kasa loda labarai. Don Allah sake gwadawa.';
 
   @override
-  String get knowledgeBaseTitle => 'Knowledge Base';
+  String get knowledgeBaseTitle => 'Taskar Ilimi';
 
   @override
-  String get knowledgeBaseSearchHint =>
-      'Search guides, hazards, or contacts...';
+  String get knowledgeBaseSearchHint => 'Nemi jagorori, haɗurra, ko lambobi...';
 
   @override
-  String get knowledgeOfflineActive => 'Offline Mode Active';
+  String get knowledgeOfflineActive => 'Yanayin Babu Intanet Yana Aiki';
 
   @override
-  String get knowledgeOfflineAvailable => 'Offline Mode Available';
+  String get knowledgeOfflineAvailable =>
+      'Ana Iya Amfani Ba Tare da Intanet ba';
 
   @override
-  String get knowledgeUsingCache => 'Using cached data';
+  String get knowledgeUsingCache => 'Ana amfani da bayanan da aka ajiye';
 
   @override
-  String get knowledgeContentDownloaded => 'Content downloaded successfully';
+  String get knowledgeContentDownloaded => 'An sauke abubuwan cikin nasara';
 
   @override
-  String get knowledgeFeaturedGuides => 'Featured Guides';
+  String get knowledgeFeaturedGuides => 'Fitattun Jagorori';
 
   @override
-  String get knowledgeNoGuides => 'No guides available';
+  String get knowledgeNoGuides => 'Babu jagorori';
 
   @override
-  String get knowledgeHazardIdGuides => 'Hazard ID Guides';
+  String get knowledgeHazardIdGuides => 'Jagororin Gane Haɗari';
 
   @override
-  String get knowledgeHazardIdGuidesDesc => 'Identify local threats';
+  String get knowledgeHazardIdGuidesDesc => 'Gano barazanar yankinku';
 
   @override
-  String get knowledgeFireResponse => 'Fire Response';
+  String get knowledgeFireResponse => 'Ɗaukar Mataki kan Gobara';
 
   @override
-  String get knowledgeFireResponseDesc => 'Wildfire protocols';
+  String get knowledgeFireResponseDesc => 'Ƙa\'idojin gobarar daji';
 
   @override
-  String get knowledgeFloodReadiness => 'Flood Readiness';
+  String get knowledgeFloodReadiness => 'Shirin Ambaliya';
 
   @override
-  String get knowledgeFloodReadinessDesc => 'Water & Storms';
+  String get knowledgeFloodReadinessDesc => 'Ruwa da Guguwa';
 
   @override
-  String get knowledgeContactsDirectory => 'Contacts Directory';
+  String get knowledgeContactsDirectory => 'Kundin Lambobi';
 
   @override
-  String get knowledgeContactsDirectoryDesc => 'Emergency services';
+  String get knowledgeContactsDirectoryDesc => 'Hukumomin gaggawa';
 
   @override
-  String get knowledgeExternalNews => 'External News & Updates';
+  String get knowledgeExternalNews => 'Labarai da Sabbin Bayanai na Waje';
 
   @override
-  String get knowledgeNoNews => 'No recent news updates found.';
+  String get knowledgeNoNews => 'Ba a sami sabbin labarai ba.';
 
   @override
-  String get knowledgeDetailTitle => 'Guide Detail';
+  String get knowledgeDetailTitle => 'Bayanan Jagora';
 
   @override
-  String get knowledgeBookmarked => 'Guide bookmarked';
+  String get knowledgeBookmarked => 'An ajiye jagorar';
 
   @override
-  String get knowledgeBookmarkRemoved => 'Bookmark removed';
+  String get knowledgeBookmarkRemoved => 'An cire alamar ajiya';
 
   @override
-  String get knowledgeNoTextToSpeak => 'No text to speak';
+  String get knowledgeNoTextToSpeak => 'Babu rubutun da za a karanta';
 
   @override
   String get knowledgeTtsUnavailable =>
-      'Text-to-speech is unavailable. Please try again.';
+      'Karanta rubutu da murya ba ya samuwa. Don Allah sake gwadawa.';
 
   @override
   String knowledgeUpdatedOn(String date) {
-    return 'Updated $date';
+    return 'An sabunta $date';
   }
 
   @override
-  String get knowledgeUpdatedRecently => 'Updated recently';
+  String get knowledgeUpdatedRecently => 'An sabunta kwanan nan';
 
   @override
   String knowledgeReadTime(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count min read',
-      one: '1 min read',
+      other: 'Karatun minti $count',
+      one: 'Karatun minti 1',
     );
     return '$_temp0';
   }
 
   @override
-  String get knowledgeContentComingSoon => 'Detailed content coming soon.';
+  String get knowledgeContentComingSoon =>
+      'Cikakken bayani na zuwa nan ba da jimawa ba.';
 
   @override
-  String get knowledgeRelatedTopics => 'Related Topics';
+  String get knowledgeRelatedTopics => 'Batutuwa Masu Alaƙa';
 
   @override
-  String get knowledgeNoRelated => 'No related topics found.';
+  String get knowledgeNoRelated => 'Ba a sami batutuwa masu alaƙa ba.';
 
   @override
-  String get knowledgeShareDefaultTitle => 'CRADI Guide';
+  String get knowledgeShareDefaultTitle => 'Jagorar CRADI';
 
   @override
   String knowledgeShareText(String content) {
-    return '$content\n\nShared via CRADI Early Warning App';
+    return '$content\n\nAn raba ta manhajar CRADI Gargaɗin Farko';
   }
 
   @override
-  String get helpSupportEmailSubject => 'CRADI App Support Request';
+  String get helpSupportEmailSubject => 'Buƙatar Taimako daga Manhajar CRADI';
 
   @override
-  String get helpSupportEmailBody => 'Please describe your issue:\n\n';
+  String get helpSupportEmailBody => 'Don Allah bayyana matsalarka:\n\n';
 
   @override
   String helpNoEmailApp(String email) {
-    return 'No email app found. Contact $email';
+    return 'Ba a sami manhajar imel ba. Tuntuɓi $email';
   }
 
   @override
-  String get helpFaqTitle => 'Frequently Asked Questions';
+  String get helpFaqTitle => 'Tambayoyin da Aka Fi Yi';
 
   @override
-  String get helpFaqReportQ => 'How do I report a hazard?';
+  String get helpFaqReportQ => 'Ta yaya zan kawo rahoton haɗari?';
 
   @override
   String get helpFaqReportA =>
-      'Navigate to the \"Report\" tab or tap the \"+\" button on the dashboard. Select the hazard type, add photos/videos, and submit your report.';
+      'Je shafin \"Rahoto\" ko danna maɓallin \"+\" a babban shafi. Zaɓi nau\'in haɗari, ƙara hotuna/bidiyo, sannan ka aika rahotonka.';
 
   @override
-  String get helpFaqColorsQ => 'What do the alert colors mean?';
+  String get helpFaqColorsQ => 'Mene ne ma\'anar launukan faɗakarwa?';
 
   @override
   String get helpFaqColorsA =>
-      'Red indicates high severity (immediate danger), Orange is medium, and Yellow is low. Blue typically indicates water-related hazards like floods.';
+      'Ja na nuna babban tsanani (haɗari nan take), Ruwan lemu matsakaici ne, Rawaya kuma ƙarami. Shuɗi yawanci yana nuna haɗurran da suka shafi ruwa kamar ambaliya.';
 
   @override
-  String get helpFaqOfflineQ => 'Can I report without internet?';
+  String get helpFaqOfflineQ => 'Zan iya kawo rahoto ba tare da intanet ba?';
 
   @override
   String get helpFaqOfflineA =>
-      'Yes! Use \"Offline Mode\" in Settings. Your reports will be saved locally and can be synced when you go online.';
+      'Ƙwarai! Yi amfani da \"Yanayin Babu Intanet\" a Saituna. Za a ajiye rahotanninka a wayarka kuma za a iya daidaita su idan ka dawo kan layi.';
 
   @override
-  String get helpFaqVerifyQ => 'How do I verify other reports?';
+  String get helpFaqVerifyQ => 'Ta yaya zan tabbatar da rahotannin wasu?';
 
   @override
   String get helpFaqVerifyA =>
-      'Go to \"Alerts\" and look for pending reports nearby. You can confirm or reject them based on your observation.';
+      'Je shafin \"Faɗakarwa\" ka nemi rahotanni masu jira a kusa da kai. Za ka iya tabbatar da su ko ka ƙi su bisa abin da ka gani.';
 
   @override
-  String get helpStillNeedHelp => 'Still need help?';
+  String get helpStillNeedHelp => 'Har yanzu kana buƙatar taimako?';
 
   @override
-  String get notificationsAllRead => 'All notifications marked as read';
+  String get notificationsAllRead =>
+      'An yi wa dukkan sanarwa alamar an karanta';
 
   @override
-  String get notificationsClearAll => 'Clear All';
+  String get notificationsClearAll => 'Share Duka';
 
   @override
   String get notificationsClearConfirm =>
-      'Are you sure you want to delete all notifications?';
+      'Ka tabbata kana so ka goge dukkan sanarwa?';
 
   @override
-  String get notificationsMarkAllRead => 'Mark all as read';
+  String get notificationsMarkAllRead => 'Yi wa duka alamar an karanta';
 
   @override
-  String get notificationsClearAllMenu => 'Clear all';
+  String get notificationsClearAllMenu => 'Share duka';
 
   @override
-  String get notificationsEmpty => 'No notifications yet';
+  String get notificationsEmpty => 'Babu sanarwa tukuna';
 
   @override
-  String get notificationsDefaultTitle => 'Notification';
+  String get notificationsDefaultTitle => 'Sanarwa';
 
   @override
-  String get voteDispute => 'Dispute';
+  String get voteDispute => 'Ƙalubalanta';
 
   @override
   String get voteDisputeRecorded =>
-      'Dispute recorded. Staff will review the report.';
+      'An rubuta ƙalubale. Ma\'aikata za su sake duba rahoton.';
 
   @override
-  String get voteConfirmedThanks => 'Report confirmed. Thank you!';
+  String get voteConfirmedThanks => 'An tabbatar da rahoton. Mun gode!';
 
   @override
-  String get exportRejectedOnly => 'Rejected only';
+  String get exportRejectedOnly => 'Waɗanda Aka Ƙi Kaɗai';
 
   @override
-  String get exportPreparing => 'Preparing export…';
+  String get exportPreparing => 'Ana shirya fitarwa…';
 
   @override
-  String get exportCopied => 'CSV copied to the clipboard.';
+  String get exportCopied => 'An kwafi CSV zuwa allon kwafi.';
 
   @override
   String exportSavedTo(String path) {
-    return 'Report saved to $path';
+    return 'An ajiye rahoto a $path';
   }
 
   @override
-  String get exportShareSubject => 'CRADI reports export';
+  String get exportShareSubject => 'Fitar da rahotannin CRADI';
 
   @override
   String exportShareFailed(String path) {
-    return 'Could not open the share sheet. The report is saved to $path';
+    return 'An kasa buɗe zaɓin rabawa. An ajiye rahoton a $path';
   }
 
   @override
-  String get statusBadgeVerified => 'VERIFIED';
+  String get statusBadgeVerified => 'AN TABBATAR';
 
   @override
-  String get statusBadgeApproved => 'APPROVED';
+  String get statusBadgeApproved => 'AN AMINCE';
 
   @override
-  String get statusBadgeRejected => 'REJECTED';
+  String get statusBadgeRejected => 'AN ƘI';
 
   @override
-  String get statusBadgePending => 'PENDING VERIFICATION';
+  String get statusBadgePending => 'ANA JIRAN TABBATARWA';
 
   @override
-  String get verificationDetailTitle => 'Verify Report';
+  String get verificationDetailTitle => 'Tabbatar da Rahoto';
 
   @override
-  String get verificationDetailUnknownTime => 'Unknown time';
+  String get verificationDetailUnknownTime => 'Ba a san lokaci ba';
 
   @override
-  String get verificationDetailNoLocation => 'No location details';
+  String get verificationDetailNoLocation => 'Babu bayanan wuri';
 
   @override
-  String get verificationDetailNoMap => 'No map location available';
+  String get verificationDetailNoMap => 'Babu wuri a taswira';
 
   @override
-  String get verificationDetailQuestion => 'Can you confirm this report?';
+  String get verificationDetailQuestion =>
+      'Za ka iya tabbatar da wannan rahoton?';
 
   @override
   String get verificationDetailInstructions =>
-      'Please verify if you have observed this hazard in the reported location.';
+      'Don Allah tabbatar ko ka ga wannan haɗarin a wurin da aka ambata.';
 
   @override
   String get verificationDetailCommentHint =>
-      'Add details about what you see...';
+      'Ƙara bayani game da abin da kake gani...';
 
   @override
-  String get verificationDetailConfirm => 'I Can Confirm';
+  String get verificationDetailConfirm => 'Na Tabbatar';
 
   @override
-  String get verificationListRequestTooltip => 'Request verification';
+  String get verificationListRequestTooltip => 'Nemi tabbatarwa';
 
   @override
-  String get verificationListEmpty => 'No reports pending verification';
+  String get verificationListEmpty => 'Babu rahotanni masu jiran tabbatarwa';
 
   @override
   String get verificationRequestSubmitted =>
-      'Verification request submitted successfully';
+      'An aika buƙatar tabbatarwa cikin nasara';
 
   @override
-  String get verificationRequestTitle => 'Request Verification';
+  String get verificationRequestTitle => 'Nemi Tabbatarwa';
 
   @override
   String get verificationRequestDescriptionHint =>
-      'Describe what needs verification...';
+      'Bayyana abin da ke buƙatar tabbatarwa...';
 
   @override
-  String get verificationRequestSubmit => 'Submit Request';
+  String get verificationRequestSubmit => 'Aika Buƙata';
 
   @override
-  String get disputeDialogTitle => 'Dispute report?';
+  String get disputeDialogTitle => 'A ƙalubalanci rahoton?';
 
   @override
-  String get disputeDialogLabel => 'What is wrong with this report? (required)';
+  String get disputeDialogLabel => 'Me ke damun wannan rahoton? (dole)';
 
   @override
-  String get staffRejected => 'Report rejected.';
+  String get staffRejected => 'An ƙi rahoton.';
 
   @override
-  String get staffActionsTitle => 'Staff actions';
+  String get staffActionsTitle => 'Ayyukan ma\'aikata';
 
   @override
-  String get staffApproved => 'Report approved.';
+  String get staffApproved => 'An amince da rahoton.';
 
   @override
-  String get staffApprove => 'Approve';
+  String get staffApprove => 'Amince';
 
   @override
-  String get staffReopened => 'Report reopened for verification.';
+  String get staffReopened => 'An sake buɗe rahoton don tabbatarwa.';
 
   @override
-  String get staffRejectTitle => 'Reject report?';
+  String get staffRejectTitle => 'A ƙi rahoton?';
 
   @override
-  String get staffRejectReasonLabel => 'Reason (required)';
+  String get staffRejectReasonLabel => 'Dalili (dole)';
 
   @override
-  String get staffRejectReasonHint => 'Shown to the reporter';
+  String get staffRejectReasonHint => 'Mai rahoto zai gani';
 
   @override
-  String get staffRejectReasonRequired => 'Please give a reason.';
+  String get staffRejectReasonRequired => 'Don Allah bayar da dalili.';
 
   @override
-  String get verificationsLoadError => 'Could not load peer verifications.';
+  String get verificationsLoadError => 'An kasa loda tabbatarwar abokan aiki.';
 
   @override
-  String get verificationsTitle => 'Peer verifications';
+  String get verificationsTitle => 'Tabbatarwar abokan aiki';
 
   @override
-  String get verificationsNone => 'No peer votes yet.';
+  String get verificationsNone => 'Babu ƙuri\'ar abokan aiki tukuna.';
 
   @override
   String verificationsSummary(int confirmed, int disputed) {
-    return '$confirmed confirmed · $disputed disputed';
+    return '$confirmed sun tabbatar · $disputed sun ƙalubalanta';
   }
 
   @override
-  String get verificationsYou => 'You';
+  String get verificationsYou => 'Kai';
 
   @override
-  String get verificationsPeerVerifier => 'Peer verifier';
+  String get verificationsPeerVerifier => 'Abokin aiki mai tabbatarwa';
 
   @override
   String verificationsVoteBy(String kind, String who) {
     String _temp0 = intl.Intl.selectLogic(kind, {
-      'confirmed': 'Confirmed by $who',
-      'other': 'Disputed by $who',
+      'confirmed': '$who ya tabbatar',
+      'other': '$who ya ƙalubalanta',
     });
     return '$_temp0';
   }
@@ -2914,31 +2931,31 @@ class AppLocalizationsHa extends AppLocalizations {
   @override
   String verificationsVoteByAt(String kind, String who, String date) {
     String _temp0 = intl.Intl.selectLogic(kind, {
-      'confirmed': 'Confirmed by $who · $date',
-      'other': 'Disputed by $who · $date',
+      'confirmed': '$who ya tabbatar · $date',
+      'other': '$who ya ƙalubalanta · $date',
     });
     return '$_temp0';
   }
 
   @override
-  String get voteQuestion => 'Can you verify this report?';
+  String get voteQuestion => 'Za ka iya tabbatar da wannan rahoton?';
 
   @override
-  String get adminCountsError => 'Could not load dashboard counts';
+  String get adminCountsError => 'An kasa loda ƙididdigar babban shafi';
 
   @override
   String get adminCountsErrorBody =>
-      'Check your connection and permissions, then retry.';
+      'Duba haɗin intanet ɗinka da izininka, sannan ka sake gwadawa.';
 
   @override
-  String get adminHealthDatabase => 'Database';
+  String get adminHealthDatabase => 'Rumbun Bayanai';
 
   @override
   String adminHealthActiveCount(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count active',
+      other: '$count masu aiki',
     );
     return '$_temp0';
   }
@@ -2948,338 +2965,337 @@ class AppLocalizationsHa extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count reports',
-      one: '1 report',
+      other: 'rahotanni $count',
+      one: 'rahoto 1',
     );
     return '$_temp0';
   }
 
   @override
-  String get adminAlertBroadcastSuccess => '✅ Alert broadcast successfully';
+  String get adminAlertBroadcastSuccess => '✅ An watsa faɗakarwa cikin nasara';
 
   @override
   String adminAlertSendFailed(String error) {
-    return 'Failed to send alert: $error';
+    return 'An kasa aika faɗakarwa: $error';
   }
 
   @override
-  String get adminAlertDismissFailed => 'Could not dismiss alert.';
+  String get adminAlertDismissFailed => 'An kasa kashe faɗakarwa.';
 
   @override
-  String get adminAlertCompose => 'Compose Alert';
+  String get adminAlertCompose => 'Rubuta Faɗakarwa';
 
   @override
-  String get adminAlertTargetArea => 'Target Area';
+  String get adminAlertTargetArea => 'Yankin da Ake Nufi';
 
   @override
-  String get adminAlertAllAreas => '🌍 All Areas';
+  String get adminAlertAllAreas => '🌍 Dukkan Yankuna';
 
   @override
-  String get adminAlertTitleLabel => 'Alert Title';
+  String get adminAlertTitleLabel => 'Taken Faɗakarwa';
 
   @override
-  String get adminAlertRequired => 'Required';
+  String get adminAlertRequired => 'Dole';
 
   @override
-  String get adminAlertMessageLabel => 'Message';
+  String get adminAlertMessageLabel => 'Saƙo';
 
   @override
-  String get adminAlertBroadcastButton => 'Broadcast Alert';
+  String get adminAlertBroadcastButton => 'Watsa Faɗakarwa';
 
   @override
   String get adminAlertsLoadError =>
-      'Could not load alerts. You may not have permission to view them.';
+      'An kasa loda faɗakarwa. Wataƙila ba ka da izinin ganin su.';
 
   @override
-  String get adminAlertDismissTooltip => 'Dismiss alert';
+  String get adminAlertDismissTooltip => 'Kashe faɗakarwa';
 
   @override
-  String get adminGuideDeleteTitle => 'Delete Guide';
+  String get adminGuideDeleteTitle => 'Goge Jagora';
 
   @override
   String get adminGuideDeleteBody =>
-      'Are you sure you want to delete this guide? This cannot be undone.';
+      'Ka tabbata kana so ka goge wannan jagorar? Ba za a iya dawo da ita ba.';
 
   @override
   String get adminGuideDeleteDenied =>
-      'You do not have permission to delete this guide, or it was already removed.';
+      'Ba ka da izinin goge wannan jagorar, ko kuma an riga an cire ta.';
 
   @override
   String get adminGuideDeleteFailed =>
-      'Could not delete guide. Check your connection and try again.';
+      'An kasa goge jagora. Duba haɗin intanet ɗinka ka sake gwadawa.';
 
   @override
-  String get adminGuideDeleted => 'Guide deleted';
+  String get adminGuideDeleted => 'An goge jagora';
 
   @override
-  String get adminGuideAdd => 'Add Guide';
+  String get adminGuideAdd => 'Ƙara Jagora';
 
   @override
-  String get adminGuidesLoadError => 'Error loading guides';
+  String get adminGuidesLoadError => 'Matsala wajen loda jagorori';
 
   @override
-  String get adminGuidesEmpty => 'No guides found';
+  String get adminGuidesEmpty => 'Ba a sami jagorori ba';
 
   @override
-  String get adminGuideAddFirst => 'Add the first guide';
+  String get adminGuideAddFirst => 'Ƙara jagora ta farko';
 
   @override
-  String get adminGuideEditMenu => '✏️ Edit';
+  String get adminGuideEditMenu => '✏️ Gyara';
 
   @override
-  String get adminGuideDeleteMenu => '🗑️ Delete';
+  String get adminGuideDeleteMenu => '🗑️ Goge';
 
   @override
-  String get adminGuideUpdated => 'Guide updated';
+  String get adminGuideUpdated => 'An sabunta jagora';
 
   @override
-  String get adminGuideCreated => 'Guide created';
+  String get adminGuideCreated => 'An ƙirƙiri jagora';
 
   @override
-  String get adminGuideEditTitle => 'Edit Guide';
+  String get adminGuideEditTitle => 'Gyara Jagora';
 
   @override
-  String get adminGuideNewTitle => 'New Guide';
+  String get adminGuideNewTitle => 'Sabuwar Jagora';
 
   @override
-  String get adminGuideCategoryLabel => 'Category / Hazard Type';
+  String get adminGuideCategoryLabel => 'Rukuni / Nau\'in Haɗari';
 
   @override
-  String get adminGuideTitleLabel => 'Guide Title';
+  String get adminGuideTitleLabel => 'Taken Jagora';
 
   @override
-  String get adminGuideSourceLabel => 'Source (e.g. NEMA, WHO)';
+  String get adminGuideSourceLabel => 'Tushe (misali NEMA, WHO)';
 
   @override
-  String get adminGuideContentLabel => 'Content (Markdown supported)';
+  String get adminGuideContentLabel => 'Abun ciki (ana karɓar Markdown)';
 
   @override
-  String get adminGuideUpdate => 'Update Guide';
+  String get adminGuideUpdate => 'Sabunta Jagora';
 
   @override
-  String get adminGuideCreate => 'Create Guide';
+  String get adminGuideCreate => 'Ƙirƙiri Jagora';
 
   @override
   String get adminReportsLoadError =>
-      'Could not load reports. You may not have permission to view them.';
+      'An kasa loda rahotanni. Wataƙila ba ka da izinin ganin su.';
 
   @override
-  String get adminReportsRejectReasonLabel => 'Reason (recommended)';
+  String get adminReportsRejectReasonLabel => 'Dalili (ana ba da shawara)';
 
   @override
-  String get adminReportsRejectReasonHint =>
-      'Why is this report being rejected?';
+  String get adminReportsRejectReasonHint => 'Me ya sa ake ƙin wannan rahoton?';
 
   @override
   String adminReportsStatusUpdateFailed(String error) {
-    return 'Could not update report status: $error';
+    return 'An kasa sabunta matsayin rahoto: $error';
   }
 
   @override
-  String get adminReportsReopened => 'Report reopened for verification';
+  String get adminReportsReopened => 'An sake buɗe rahoton don tabbatarwa';
 
   @override
   String adminReportsMarkedAs(String status) {
-    return 'Report marked as $status';
+    return 'An sanya rahoton a matsayin $status';
   }
 
   @override
-  String get adminReportsDateTime => 'Date/Time';
+  String get adminReportsDateTime => 'Kwanan Wata/Lokaci';
 
   @override
-  String get adminReportsLga => 'LGA';
+  String get adminReportsLga => 'Ƙaramar Hukuma';
 
   @override
-  String get adminReportsLocationDetails => 'Location Details';
+  String get adminReportsLocationDetails => 'Bayanan Wuri';
 
   @override
-  String get adminReportsRejectionReason => 'Rejection reason';
+  String get adminReportsRejectionReason => 'Dalilin ƙi';
 
   @override
-  String get adminReportsNoReason => 'No reason given';
+  String get adminReportsNoReason => 'Ba a bayar da dalili ba';
 
   @override
-  String get adminReportsImages => 'Images';
+  String get adminReportsImages => 'Hotuna';
 
   @override
-  String get adminReportsMarkVerified => 'Mark Verified';
+  String get adminReportsMarkVerified => 'Sanya An Tabbatar';
 
   @override
-  String get adminReportsReopen => 'Reopen (pending)';
+  String get adminReportsReopen => 'Sake buɗewa (ana jira)';
 
   @override
-  String get adminReportsReopenReset => 'Reopen (reset to pending)';
+  String get adminReportsReopenReset => 'Sake buɗewa (mayar zuwa ana jira)';
 
   @override
-  String get adminReportsEmpty => 'No reports found';
+  String get adminReportsEmpty => 'Ba a sami rahotanni ba';
 
   @override
-  String get adminReportsLoadMoreError => 'Could not load more. Tap to retry.';
+  String get adminReportsLoadMoreError =>
+      'An kasa loda ƙari. Danna don sake gwadawa.';
 
   @override
-  String get adminReportsLoadMore => 'Load more';
+  String get adminReportsLoadMore => 'Loda ƙari';
 
   @override
   String get adminUsersLoadError =>
-      'Could not load users. You may not have permission to view them.';
+      'An kasa loda masu amfani. Wataƙila ba ka da izinin ganin su.';
 
   @override
-  String get adminUsersEmpty => 'No users found';
+  String get adminUsersEmpty => 'Ba a sami masu amfani ba';
 
   @override
   String get adminUsersNoPermission =>
-      'You do not have permission to change this user.';
+      'Ba ka da izinin canza wannan mai amfani.';
 
   @override
-  String get adminUsersUpdateFailed => 'Update failed. Please try again.';
+  String get adminUsersUpdateFailed =>
+      'Sabuntawa ta kasa. Don Allah sake gwadawa.';
 
   @override
-  String get adminUsersApproved => 'User approved';
+  String get adminUsersApproved => 'An amince da mai amfani';
 
   @override
-  String get adminUsersRejected => 'User rejected';
+  String get adminUsersRejected => 'An ƙi mai amfani';
 
   @override
-  String get adminUsersChangeRole => 'Change Role';
+  String get adminUsersChangeRole => 'Canza Matsayi';
 
   @override
   String get adminUsersRoleUpdated =>
-      'Role updated. It takes effect once the user is approved.';
+      'An sabunta matsayi. Zai fara aiki da zarar an amince da mai amfani.';
 
   @override
-  String get adminUsersApply => 'Apply';
+  String get adminUsersApply => 'Aiwatar';
 
   @override
-  String get adminUsersChangeLocationTitle => 'Change location';
+  String get adminUsersChangeLocationTitle => 'Canza wuri';
 
   @override
   String adminUsersLocationUpdated(String ward, String lga, String state) {
-    return 'Location updated to $ward, $lga, $state';
+    return 'An sabunta wuri zuwa $ward, $lga, $state';
   }
 
   @override
-  String get adminUsersDisabled => 'User disabled';
+  String get adminUsersDisabled => 'An dakatar da mai amfani';
 
   @override
-  String get adminUsersReenabled => 'User re-enabled';
+  String get adminUsersReenabled => 'An sake kunna mai amfani';
 
   @override
-  String get adminUsersSearchHint => 'Search by name or email…';
+  String get adminUsersSearchHint => 'Nemi ta suna ko imel…';
 
   @override
-  String get adminUsersAllRoles => 'All Roles';
+  String get adminUsersAllRoles => 'Dukkan Matsayi';
 
   @override
-  String get adminUsersShowingPending => 'Showing Pending Approvals';
+  String get adminUsersShowingPending => 'Ana Nuna Masu Jiran Amincewa';
 
   @override
-  String get adminUsersShowingApproved => 'Showing Approved Users';
+  String get adminUsersShowingApproved => 'Ana Nuna Waɗanda Aka Amince';
 
   @override
-  String get adminUsersPendingChip => 'Pending';
+  String get adminUsersPendingChip => 'Ana Jira';
 
   @override
-  String get adminUsersApproveMenu => '✅ Approve';
+  String get adminUsersApproveMenu => '✅ Amince';
 
   @override
-  String get adminUsersRevokeMenu => '❌ Revoke access';
+  String get adminUsersRevokeMenu => '❌ Janye izini';
 
   @override
-  String get adminUsersChangeRoleMenu => '🔄 Change role';
+  String get adminUsersChangeRoleMenu => '🔄 Canza matsayi';
 
   @override
-  String get adminUsersChangeLocationMenu => '📍 Change location';
+  String get adminUsersChangeLocationMenu => '📍 Canza wuri';
 
   @override
-  String get adminUsersReenableMenu => '🔓 Re-enable user';
+  String get adminUsersReenableMenu => '🔓 Sake kunna mai amfani';
 
   @override
-  String get adminUsersDisableMenu => '🚫 Disable user';
+  String get adminUsersDisableMenu => '🚫 Dakatar da mai amfani';
 
   @override
   String get onboardingWelcomeBody =>
-      'Early Warning and Emergency Response system for your community';
+      'Tsarin Gargaɗin Farko da Ɗaukar Matakin Gaggawa don al\'ummarka';
 
   @override
-  String get onboardingMonitorTitle => 'Monitor Hazards in Real-Time';
+  String get onboardingMonitorTitle => 'Sa Ido kan Haɗurra Nan Take';
 
   @override
   String get onboardingMonitorBody =>
-      'Report emergencies, track hazards, and keep your community safe';
+      'Kawo rahoton gaggawa, bibiyi haɗurra, kuma ka kiyaye al\'ummarka';
 
   @override
-  String get onboardingJoinBody =>
-      'Create an account and start protecting your community today';
+  String get onboardingJoinBody => 'Ƙirƙiri asusu ka fara kare al\'ummarka yau';
 
   @override
-  String get onboardingSkip => 'Skip';
+  String get onboardingSkip => 'Tsallake';
 
   @override
-  String get onboardingNext => 'Next';
+  String get onboardingNext => 'Na Gaba';
 
   @override
-  String get splashTagline => 'Early Warning & Emergency Response';
+  String get splashTagline => 'Gargaɗin Farko & Ɗaukar Matakin Gaggawa';
 
   @override
   String get connectivityOfflineBanner =>
-      'Offline - Some features may be unavailable';
+      'Babu intanet - Wasu fasaloli ba za su yi aiki ba';
 
   @override
-  String get routeReportNotFound => 'Report not found';
+  String get routeReportNotFound => 'Ba a sami rahoton ba';
 
   @override
-  String get routeViewReports => 'View reports';
+  String get routeViewReports => 'Duba rahotanni';
 
   @override
-  String get routeAlertNotFound => 'Alert not found';
+  String get routeAlertNotFound => 'Ba a sami faɗakarwar ba';
 
   @override
-  String get routeViewAlerts => 'View alerts';
+  String get routeViewAlerts => 'Duba faɗakarwa';
 
   @override
-  String get routeNotFoundTitle => 'Page not found';
+  String get routeNotFoundTitle => 'Ba a sami shafin ba';
 
   @override
-  String get routeNotFoundBody =>
-      'The page you were looking for does not exist.';
+  String get routeNotFoundBody => 'Shafin da kake nema babu shi.';
 
   @override
-  String get routeTryAgain => 'Try again';
+  String get routeTryAgain => 'Sake gwadawa';
 
   @override
-  String get routeGoHome => 'Go home';
+  String get routeGoHome => 'Koma gida';
 
   @override
-  String get routeLoadFailedTitle => 'Could not load';
+  String get routeLoadFailedTitle => 'An kasa lodawa';
 
   @override
-  String get routeLoadFailedBody => 'Check your connection and try again.';
+  String get routeLoadFailedBody => 'Duba haɗin intanet ɗinka ka sake gwadawa.';
 
   @override
   String get routeMissingBody =>
-      'It may have been removed, or you may not have access to it.';
+      'Wataƙila an cire shi, ko kuma ba ka da damar ganin sa.';
 
   @override
   String get forceUpdateStoreFailed =>
-      'Could not open the store. Please update the app from your app store.';
+      'An kasa buɗe shagon manhajoji. Don Allah sabunta manhajar daga shagon manhajojinka.';
 
   @override
-  String get forceUpdateTitle => 'Update required';
+  String get forceUpdateTitle => 'Ana buƙatar sabuntawa';
 
   @override
   String get forceUpdateDefaultMessage =>
-      'Please update the EWER app to continue.';
+      'Don Allah sabunta manhajar EWER don ci gaba.';
 
   @override
   String forceUpdateMinVersion(String version) {
-    return 'Minimum version: $version';
+    return 'Mafi ƙarancin siga: $version';
   }
 
   @override
-  String get forceUpdateButton => 'Update';
+  String get forceUpdateButton => 'Sabunta';
 
   @override
-  String get forceUpdateCheckAgain => 'Check again';
+  String get forceUpdateCheckAgain => 'Sake dubawa';
 
   @override
   String formFieldRequiredLabel(String label) {
@@ -3287,35 +3303,35 @@ class AppLocalizationsHa extends AppLocalizations {
   }
 
   @override
-  String get locationSelectorLgaLabel => 'Local Government Area';
+  String get locationSelectorLgaLabel => 'Ƙaramar Hukuma';
 
   @override
-  String get permissionLocationTitle => 'Location Access';
+  String get permissionLocationTitle => 'Izinin Wuri';
 
   @override
   String get permissionLocationRationale =>
-      'EWER needs your location to accurately pinpoint hazards and alert nearby responders. Your location is only used when you submit a report or use the tactical map.';
+      'EWER na buƙatar wurinka don nuna ainihin wurin haɗurra da kuma faɗakar da masu ɗaukar mataki da ke kusa. Ana amfani da wurinka ne kawai lokacin da ka aika rahoto ko ka yi amfani da taswirar aiki.';
 
   @override
-  String get permissionNotificationsTitle => 'Enable Alerts';
+  String get permissionNotificationsTitle => 'Kunna Faɗakarwa';
 
   @override
   String get permissionNotificationsRationale =>
-      'Get real-time updates about hazards in your area. We only send critical safety alerts and status updates for your reports.';
+      'Samu sabbin bayanai nan take game da haɗurra a yankinka. Muna aika faɗakarwar tsaro masu muhimmanci ne kawai da bayanan matsayin rahotanninka.';
 
   @override
-  String get permissionPhotosTitle => 'Photo Access';
+  String get permissionPhotosTitle => 'Izinin Hotuna';
 
   @override
   String get permissionPhotosRationale =>
-      'EWER needs access to your photos so you can upload evidence of hazards. We only upload photos you explicitly select.';
+      'EWER na buƙatar izinin hotunanka don ka iya ɗora shaidar haɗurra. Muna ɗora hotunan da ka zaɓa da kanka ne kawai.';
 
   @override
-  String get permissionNotNow => 'Not Now';
+  String get permissionNotNow => 'Ba Yanzu Ba';
 
   @override
   String permissionSettingsBody(String reason) {
-    return '$reason\n\nPlease enable this in your device settings.';
+    return '$reason\n\nDon Allah kunna wannan a saitunan na\'urarka.';
   }
 
   @override
@@ -3324,7 +3340,7 @@ class AppLocalizationsHa extends AppLocalizations {
       count,
       locale: localeName,
       other:
-          'You can keep at most $count unsent reports on this device. Sync or discard some first.',
+          'Za ka iya ajiye rahotanni $count da ba a aika ba a wannan na\'ura a mafi yawa. Fara daidaita ko watsar da wasu.',
     );
     return '$_temp0';
   }

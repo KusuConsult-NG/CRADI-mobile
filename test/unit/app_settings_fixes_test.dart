@@ -53,17 +53,41 @@ void main() {
 
   group('LanguageProvider', () {
     test('offers only languages with ARB translations', () {
-      expect(LanguageProvider.supportedLanguages.keys, ['English', 'Hausa']);
+      expect(LanguageProvider.supportedLanguages.keys, [
+        'English',
+        'Hausa',
+        'Yoruba',
+        'Igbo',
+        'Pidgin',
+      ]);
+      for (final locale in LanguageProvider.supportedLanguages.values) {
+        expect(
+          File('lib/l10n/app_${locale.languageCode}.arb').existsSync(),
+          isTrue,
+          reason: 'missing ARB for ${locale.languageCode}',
+        );
+        expect(
+          LanguageProvider.nativeNames,
+          contains(
+            LanguageProvider.supportedLanguages.entries
+                .firstWhere((e) => e.value == locale)
+                .key,
+          ),
+        );
+      }
     });
 
     test('maps languages to locales, unknown ones to English', () {
       expect(LanguageProvider.localeFor('Hausa'), const Locale('ha'));
       expect(LanguageProvider.localeFor('English'), const Locale('en'));
-      expect(LanguageProvider.localeFor('Yoruba'), const Locale('en'));
+      expect(LanguageProvider.localeFor('Yoruba'), const Locale('yo'));
+      expect(LanguageProvider.localeFor('Igbo'), const Locale('ig'));
+      expect(LanguageProvider.localeFor('Pidgin'), const Locale('pcm'));
+      expect(LanguageProvider.localeFor('French'), const Locale('en'));
     });
 
     test('a stored untranslated language falls back to English', () async {
-      SharedPreferences.setMockInitialValues({'selected_language': 'Igbo'});
+      SharedPreferences.setMockInitialValues({'selected_language': 'French'});
       final p = LanguageProvider();
       await Future<void>.delayed(Duration.zero);
       expect(p.selectedLanguage, 'English');
@@ -78,16 +102,23 @@ void main() {
       final prefs = await SharedPreferences.getInstance();
       expect(prefs.getString('selected_language'), 'Hausa');
       await p.setLanguage('Pidgin');
+      expect(p.locale, const Locale('pcm'));
+      expect(TTSService().preferredLanguageCode, 'pcm');
+      // A language that isn't offered falls back to English.
+      await p.setLanguage('Klingon');
       expect(p.selectedLanguage, 'English');
       expect(TTSService().preferredLanguageCode, 'en');
     });
   });
 
   group('TTSService', () {
-    test('uses Hausa voice tag for ha and English otherwise', () {
+    test('maps app languages to voice tags, English otherwise', () {
       expect(TTSService.languageTagFor('ha'), 'ha-NG');
+      expect(TTSService.languageTagFor('yo'), 'yo-NG');
+      expect(TTSService.languageTagFor('ig'), 'ig-NG');
+      expect(TTSService.languageTagFor('pcm'), 'en-NG');
       expect(TTSService.languageTagFor('en'), 'en-US');
-      expect(TTSService.languageTagFor('yo'), 'en-US');
+      expect(TTSService.languageTagFor('fr'), 'en-US');
     });
   });
 

@@ -19,6 +19,10 @@ class TTSService {
   static const Map<String, String> _languageTags = {
     'en': 'en-US',
     'ha': 'ha-NG',
+    'yo': 'yo-NG',
+    'ig': 'ig-NG',
+    // Nigerian Pidgin has no speech voices; Nigerian English reads it best.
+    'pcm': 'en-NG',
   };
 
   /// The speech language tag for [code]; English for unknown codes.

@@ -3,15 +3,27 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:climate_app/core/services/tts_service.dart';
 
 class LanguageProvider extends ChangeNotifier {
-  /// Languages offered in the picker: only those with ARB translations
-  /// (lib/l10n/app_*.arb), so choosing one really changes the app's text.
-  /// Yoruba, Igbo and Pidgin are hidden until their ARB files exist.
+  /// Languages offered in the picker; each has an ARB translation
+  /// (lib/l10n/app_*.arb), so choosing one changes the app's text. The keys
+  /// are the stored preference values.
   ///
   /// This provider only holds the selected locale; every display string
   /// comes from AppLocalizations (the ARB files).
   static const Map<String, Locale> supportedLanguages = {
     'English': Locale('en'),
     'Hausa': Locale('ha'),
+    'Yoruba': Locale('yo'),
+    'Igbo': Locale('ig'),
+    'Pidgin': Locale('pcm'),
+  };
+
+  /// Each language's name written in that language (picker labels).
+  static const Map<String, String> nativeNames = {
+    'English': 'English',
+    'Hausa': 'Hausa',
+    'Yoruba': 'Yorùbá',
+    'Igbo': 'Asụsụ Igbo',
+    'Pidgin': 'Naijá (Pidgin)',
   };
 
   static const String defaultLanguage = 'English';
@@ -26,8 +38,8 @@ class LanguageProvider extends ChangeNotifier {
   static Locale localeFor(String language) =>
       supportedLanguages[language] ?? supportedLanguages[defaultLanguage]!;
 
-  /// A stored choice that is no longer offered (e.g. Yoruba) falls back to
-  /// English so the picker and the app text agree.
+  /// A stored choice that is not offered falls back to English so the
+  /// picker and the app text agree.
   static String normalize(String? language) =>
       supportedLanguages.containsKey(language) ? language! : defaultLanguage;
 

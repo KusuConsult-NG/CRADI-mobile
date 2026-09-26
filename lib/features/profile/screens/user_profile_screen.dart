@@ -865,7 +865,10 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                         _buildSettingsTile(
                           Icons.language,
                           context.l10n.languagePreference,
-                          subtitle: languageProvider.selectedLanguage,
+                          subtitle:
+                              LanguageProvider.nativeNames[languageProvider
+                                  .selectedLanguage] ??
+                              languageProvider.selectedLanguage,
                           // A sheet, not push('/settings'): Profile is often
                           // opened from Settings already.
                           onTap: () => showLanguageSelectorSheet(

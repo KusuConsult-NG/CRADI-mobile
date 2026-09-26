@@ -433,7 +433,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       icon: Icons.language,
                       color: Colors.grey,
                       title: context.l10n.language,
-                      trailingText: provider.selectedLanguage,
+                      trailingText:
+                          LanguageProvider.nativeNames[provider
+                              .selectedLanguage] ??
+                          provider.selectedLanguage,
                       onTap: () => showLanguageSelectorSheet(context, provider),
                     ),
                     Divider(height: 1, color: Colors.grey.shade100, indent: 60),

@@ -31,7 +31,10 @@ void showLanguageSelectorSheet(
             const SizedBox(height: 16),
             ...languages.map(
               (lang) => ListTile(
-                title: Text(lang, style: GoogleFonts.lexend(fontSize: 16)),
+                title: Text(
+                  LanguageProvider.nativeNames[lang] ?? lang,
+                  style: GoogleFonts.lexend(fontSize: 16),
+                ),
                 trailing: provider.selectedLanguage == lang
                     ? const Icon(Icons.check, color: AppColors.primaryRed)
                     : null,
