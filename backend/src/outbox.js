@@ -54,6 +54,9 @@ export function createHandlers({ repo, push, authoritySms = null, logger = defau
       if (!reportId || !newStatus) throw new PermanentEventError('invalid payload: report_id/new_status missing');
       const report = await repo.getReport(reportId);
       if (!report) return 'report not found';
+      // The event may be minutes old (retries back off); never announce a
+      // decision that has since been changed, e.g. approved then rejected.
+      if (report.status !== newStatus) return `stale: report now ${report.status}`;
 
       if (report.user_id) {
         await push.sendToUsers([report.user_id], reporterStatusNotification(report, newStatus, reason), {

@@ -87,6 +87,19 @@ test('report_status_changed -> rejected includes reason, no broadcast', async ()
   assert.match(push.calls[0].n.body, /Reason: Duplicate report/);
 });
 
+test('report_status_changed is skipped when the report has since changed status', async () => {
+  const { repo, push, handlers } = setup({
+    reports: [{ ...report, status: 'rejected' }],
+    events: [
+      { id: 9, event_type: 'report_status_changed', payload: { report_id: 'r1', old_status: 'verified', new_status: 'approved' } },
+    ],
+  });
+  await runOutboxBatch({ repo, handlers, logger });
+  assert.equal(push.calls.length, 0);
+  assert.equal(repo.state.events[0].processed_at, 'now');
+  assert.match(repo.state.events[0].last_error, /stale: report now rejected/);
+});
+
 test('alert_created: All -> all subscribers; LGA -> tag filter', async () => {
   const { repo, push, handlers } = setup({
     alerts: [
