@@ -161,6 +161,23 @@ GoRouter createRouter(BuildContext context) {
         return '/dashboard';
       }
 
+      // 5. Approval check — mirrors the database, which treats an
+      // unapproved account as having no privileges (app_role()).
+      final isApproved = authProvider.isApproved;
+      if (isAuthenticated &&
+          !isLocked &&
+          isVerified &&
+          isApproved == false &&
+          !isPublicRoute &&
+          currentPath != '/verify-access-code') {
+        return '/pending-approval';
+      }
+      if (isAuthenticated &&
+          isApproved == true &&
+          currentPath == '/pending-approval') {
+        return '/dashboard';
+      }
+
       return null; // No redirect needed
     },
     routes: [
@@ -201,15 +218,10 @@ GoRouter createRouter(BuildContext context) {
       GoRoute(
         path: '/reset-password',
         builder: (context, state) {
-          final userId = state.uri.queryParameters['userId'] ?? '';
-          final secret = state.uri.queryParameters['secret'] ?? '';
-          // Firebase password-reset action links carry the code as `oobCode`.
-          final oobCode = state.uri.queryParameters['oobCode'] ?? '';
-          return ResetPasswordScreen(
-            userId: userId,
-            secret: secret,
-            oobCode: oobCode,
-          );
+          // Recovery uses the 6-digit code Supabase emails; the screen
+          // collects it together with the new password.
+          final email = state.uri.queryParameters['email'] ?? '';
+          return ResetPasswordScreen(email: email);
         },
       ),
       GoRoute(
@@ -222,11 +234,7 @@ GoRouter createRouter(BuildContext context) {
       ),
       GoRoute(
         path: '/verify-email',
-        builder: (context, state) {
-          final userId = state.uri.queryParameters['userId'] ?? '';
-          final secret = state.uri.queryParameters['secret'] ?? '';
-          return EmailVerificationScreen(userId: userId, secret: secret);
-        },
+        builder: (context, state) => const EmailVerificationScreen(),
       ),
       GoRoute(
         path: '/verify-otp',
@@ -462,7 +470,7 @@ GoRouter createRouter(BuildContext context) {
         builder: (context, state) => const AboutAppScreen(),
       ),
       // ── Deep Link Routes ───────────────────────────────────────────────────
-      // FCM push notifications may include type and id in the payload.
+      // Push notifications (OneSignal additionalData) carry type + id.
       // These routes resolve the ID and redirect to the appropriate screen.
       GoRoute(
         path: '/report/:reportId',

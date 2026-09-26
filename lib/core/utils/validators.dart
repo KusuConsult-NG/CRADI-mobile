@@ -26,7 +26,7 @@ class Validators {
     return null;
   }
 
-  /// Normalize phone number to international format for Firebase
+  /// Normalize phone number to E.164 (used for Supabase phone OTP)
   /// Accepts: 08012345678, +2348012345678, 2348012345678
   /// Returns: +2348012345678
   static String normalizePhoneNumber(String phone) {

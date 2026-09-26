@@ -5,13 +5,34 @@
 class AppConfig {
   AppConfig._();
 
-  // ─────────────────────── Firestore collection names ──────────────────────
+  // ─────────────────────── Runtime configuration ───────────────────────────
+  // Supplied at build time: flutter run --dart-define-from-file=env.json
+  // (see env.example.json). Never commit real values.
 
-  static const String usersCollection = 'users';
+  static const String supabaseUrl = String.fromEnvironment('SUPABASE_URL');
+  static const String supabaseAnonKey = String.fromEnvironment(
+    'SUPABASE_ANON_KEY',
+  );
+  static const String oneSignalAppId = String.fromEnvironment(
+    'ONESIGNAL_APP_ID',
+  );
+
+  /// Base URL of the Railway backend (transactional email etc.), no trailing
+  /// slash.
+  static const String backendUrl = String.fromEnvironment('BACKEND_URL');
+
+  /// Optional. Crash reporting is disabled when empty.
+  static const String sentryDsn = String.fromEnvironment('SENTRY_DSN');
+
+  static bool get isSupabaseConfigured =>
+      supabaseUrl.isNotEmpty && supabaseAnonKey.isNotEmpty;
+
+  // ─────────────────────── Table names ─────────────────────────────────────
+
+  static const String usersCollection = 'profiles';
   static const String reportsCollection = 'reports';
   static const String verificationsCollection = 'verifications';
   static const String alertsCollection = 'alerts';
-  static const String chatsCollection = 'chats';
   static const String messagesCollection = 'messages';
   static const String contactsCollection = 'contacts';
   static const String knowledgeBaseCollection = 'knowledge_base';
@@ -21,11 +42,14 @@ class AppConfig {
   static const String verificationsOverrideCollection =
       'verification_overrides';
   static const String authoritiesCollection = 'authorities';
+  static const String ndpaConsentsCollection = 'ndpa_consents';
+  static const String appSettingsCollection = 'app_settings';
 
-  // ─────────────────────── Firebase Storage paths ──────────────────────────
+  // ─────────────────────── Storage buckets ─────────────────────────────────
+  // Object paths must start with the uploader's user id (storage RLS).
 
-  static const String profileImagesBucket = 'profile_images';
-  static const String reportImagesBucket = 'report_images';
+  static const String profileImagesBucket = 'profile-images';
+  static const String reportImagesBucket = 'report-images';
 
   // ─────────────────────── Feature flags ───────────────────────────────────
 

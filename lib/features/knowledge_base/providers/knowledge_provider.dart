@@ -1,4 +1,4 @@
-import 'package:climate_app/core/services/firebase_service.dart';
+import 'package:climate_app/core/services/supabase_service.dart';
 import 'package:climate_app/core/services/emergency_guides_service.dart';
 import 'package:climate_app/core/services/offline_storage_service.dart';
 import 'package:climate_app/core/constants/app_config.dart';
@@ -6,7 +6,7 @@ import 'package:flutter/material.dart';
 import 'dart:developer' as developer;
 
 class KnowledgeProvider extends ChangeNotifier {
-  final FirebaseService _firebase = FirebaseService();
+  final SupabaseService _db = SupabaseService();
   final EmergencyGuidesService _fallbackService = EmergencyGuidesService();
   final OfflineStorageService _offlineStorage = OfflineStorageService();
 
@@ -30,7 +30,7 @@ class KnowledgeProvider extends ChangeNotifier {
           queries.add(FQuery.equal('hazardType', category.toLowerCase()));
         }
 
-        final docs = await _firebase.listDocuments(
+        final docs = await _db.listDocuments(
           collectionId: AppConfig.knowledgeBaseCollection,
           queries: queries,
           limitCount: 100,
@@ -59,7 +59,7 @@ class KnowledgeProvider extends ChangeNotifier {
 
           await _offlineStorage.cacheGuides(_guides);
           developer.log(
-            'Fetched ${_guides.length} guides from Firestore',
+            'Fetched ${_guides.length} guides from Supabase',
             name: 'KnowledgeProvider',
           );
         } else {
@@ -80,7 +80,7 @@ class KnowledgeProvider extends ChangeNotifier {
         }
       } on Exception catch (e) {
         developer.log(
-          'Firestore fetch failed, using fallback: $e',
+          'Guide fetch failed, using fallback: $e',
           name: 'KnowledgeProvider',
         );
         final cached = _offlineStorage.getCachedGuides();

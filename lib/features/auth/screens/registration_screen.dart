@@ -5,7 +5,6 @@ import 'package:climate_app/shared/widgets/custom_text_field.dart';
 import 'package:climate_app/core/utils/error_handler.dart';
 import 'package:climate_app/core/utils/validators.dart';
 import 'package:climate_app/core/utils/input_sanitizer.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -52,20 +51,22 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
   bool _isPhoneAuth = false;
   bool _ndpaConsented = false;
 
-  static const String _ndpaPolicyVersion = '1.0.0';
+  // Bumped for the Supabase / OneSignal migration (processors changed).
+  // TODO(legal): confirm the storage region wording below before release.
+  static const String _ndpaPolicyVersion = '1.1.0';
 
-  /// Set to false to hide Phone Auth until Termii is configured.
-  /// Toggle back to true once TERMII_API_KEY is confirmed in --dart-define.
+  /// Set to false to hide Phone Auth until an SMS provider is configured
+  /// for phone OTP in the Supabase dashboard (Auth → Providers → Phone).
   static const bool _phoneAuthEnabled = false;
   static const String _ndpaPolicyText = '''
 Nigeria Data Protection Act (NDPA) — Data Processing Notice
 
 Your data is processed by EWER Mobile (a CRADI / KusuConsult-NG service) for climate hazard early warning purposes.
 
-• Data collected: name, phone, email, location (state/LGA/ward), hazard reports, and FCM device tokens.
+• Data collected: name, phone, email, location (state/LGA/ward), hazard reports, and a push-notification device identifier.
 • Purpose: community hazard reporting, peer verification, and emergency alerts.
-• Storage: Firebase Cloud Firestore hosted on Google's us-central1 (Iowa, USA) servers.
-• US residency: Pursuant to NDPA Article 24, we disclose that your data is transferred to and stored in the United States of America. This transfer is necessary to provide the service. You have the right to withdraw consent at any time by deleting your account.
+• Storage: Supabase (PostgreSQL) cloud database; push notifications are delivered via OneSignal and crash diagnostics may be sent to Sentry.
+• International transfer: Pursuant to NDPA Article 24, we disclose that your data may be transferred to and stored on servers outside Nigeria. This transfer is necessary to provide the service. You have the right to withdraw consent at any time by deleting your account.
 • Retention: Data is retained for 5 years after your last activity, then anonymised.
 • Your rights: access, rectification, erasure, and data portability under the NDPA 2023.
 
@@ -161,33 +162,6 @@ By tapping "I Agree", you consent to these terms and the international transfer 
         false;
   }
 
-  /// Records the consent in Firestore for NDPA audit trail.
-  Future<void> _recordNdpaConsent(String uid) async {
-    try {
-      await FirebaseFirestore.instance
-          .collection('ndpa_consents')
-          .doc(uid)
-          .set({
-            'uid': uid,
-            'consentedAt': FieldValue.serverTimestamp(),
-            'policyVersion': _ndpaPolicyVersion,
-            'dataResidency': 'us-central1',
-            'platform': 'mobile',
-            'method': 'registration_screen',
-          });
-      developer.log(
-        'NDPA consent recorded for $uid',
-        name: 'RegistrationScreen',
-      );
-    } on Exception catch (e) {
-      // Non-fatal: log but don\'t block registration. Retry on next launch.
-      developer.log(
-        'NDPA consent record failed: $e',
-        name: 'RegistrationScreen',
-      );
-    }
-  }
-
   Future<void> _handleRegister() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -231,20 +205,23 @@ By tapping "I Agree", you consent to these terms and the international transfer 
         // Custom Phone Auth Flow
         setState(() => _isLoading = true);
         try {
-          final success = await authProvider.sendOtpForPhone(phone);
+          final registrationData = <String, dynamic>{
+            'name': name,
+            'address': address,
+            'role': UserRole.user,
+            'state': _selectedState,
+            'lga': _selectedLga,
+            'ward': _selectedWard,
+            'phone': phone,
+            'ndpaPolicyVersion': _ndpaPolicyVersion,
+          };
+          final success = await authProvider.sendOtpForPhone(
+            phone,
+            registrationData: registrationData,
+          );
           if (mounted) {
             setState(() => _isLoading = false);
             if (success) {
-              final registrationData = {
-                'name': name,
-                'address': address,
-                'role': UserRole.user,
-                'state': _selectedState,
-                'lga': _selectedLga,
-                'ward': _selectedWard,
-                'phone': phone,
-              };
-
               showDialog(
                 context: context,
                 barrierDismissible: false,
@@ -301,21 +278,17 @@ By tapping "I Agree", you consent to these terms and the international transfer 
         state: _selectedState, // Pass selected state
         lga: _selectedLga, // Pass selected LGA
         ward: _selectedWard, // Pass selected Ward
-        isVerified: widget.isVerified,
         phoneNumber: phone,
+        // Recorded in ndpa_consents once the account has a session.
+        ndpaPolicyVersion: _ndpaPolicyVersion,
       );
 
       if (mounted) {
         setState(() => _isLoading = false);
 
         if (success) {
-          // Record NDPA consent in Firestore (uid captured synchronously — safe)
-          final uid = context.read<AuthProvider>().currentUser?.uid;
-          if (uid != null) await _recordNdpaConsent(uid);
-          if (!mounted) return;
-
-          // If already verified (pre-signup), go straight to dashboard
-          if (widget.isVerified) {
+          // Email confirmation disabled in Supabase → already signed in.
+          if (context.read<AuthProvider>().isAuthenticated) {
             _showToast('Account created!');
             context.go('/dashboard');
             return; // Stop here
@@ -329,9 +302,7 @@ By tapping "I Agree", you consent to these terms and the international transfer 
             'state': _selectedState,
             'lga': _selectedLga,
             'ward': _selectedWard,
-            'email': email
-                .trim()
-                .toLowerCase(), // normalised to match Firestore doc ID
+            'email': email.trim().toLowerCase(),
           };
 
           if (mounted) {

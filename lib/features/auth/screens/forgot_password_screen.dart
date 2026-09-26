@@ -28,7 +28,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     });
 
     try {
-      // Use AuthProvider to send reset email (simulated or real Appwrite)
+      // Supabase emails a 6-digit recovery code.
       await context.read<AuthProvider>().sendPasswordResetEmail(
         _emailController.text.trim(),
       );
@@ -105,7 +105,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
           ),
           const SizedBox(height: 12),
           Text(
-            'Enter your email address to receive a password reset link.',
+            'Enter your email address to receive a password reset code.',
             style: GoogleFonts.lexend(
               fontSize: 16,
               color: Colors.grey.shade600,
@@ -156,7 +156,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                     ),
                   )
                 : const Text(
-                    'Send Reset Link',
+                    'Send Reset Code',
                     style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                   ),
           ),
@@ -194,7 +194,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
         ),
         const SizedBox(height: 16),
         Text(
-          'We have sent a password reset link to ${_emailController.text}.\nPlease check your email.',
+          'If an account exists for ${_emailController.text.trim()}, we have sent a 6-digit reset code.\nEnter it on the next screen to choose a new password.',
           style: GoogleFonts.lexend(
             fontSize: 16,
             color: Colors.grey.shade600,
@@ -204,7 +204,9 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
         ),
         const SizedBox(height: 48),
         ElevatedButton(
-          onPressed: () => context.go('/login'),
+          onPressed: () => context.go(
+            '/reset-password?email=${Uri.encodeComponent(_emailController.text.trim())}',
+          ),
           style: ElevatedButton.styleFrom(
             backgroundColor: AppColors.primaryRed,
             foregroundColor: Colors.white,
@@ -214,7 +216,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
             ),
           ),
           child: const Text(
-            'Back to Login',
+            'Enter Reset Code',
             style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
           ),
         ),

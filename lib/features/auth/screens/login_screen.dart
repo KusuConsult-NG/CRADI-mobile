@@ -90,7 +90,7 @@ class _LoginScreenState extends State<LoginScreen> {
         setState(() => _isLoading = false);
 
         if (success) {
-          // Reload profile to get fresh user data from Appwrite
+          // Reload profile to get fresh user data
           if (!mounted) return;
           await context.read<ProfileProvider>().loadProfile();
 
@@ -102,6 +102,15 @@ class _LoginScreenState extends State<LoginScreen> {
             _errorMessage = 'Login failed. Please check your credentials.';
           });
         }
+      } on EmailNotConfirmedException catch (e) {
+        // Account exists but the email was never confirmed: a new code was
+        // sent — take the user to the code entry screen.
+        if (!mounted) return;
+        setState(() {
+          _errorMessage = e.userMessage;
+          _isLoading = false;
+        });
+        context.push('/verify-otp?phone=${Uri.encodeComponent(e.email)}');
       } on AuthException catch (e) {
         if (!mounted) return;
         setState(() {

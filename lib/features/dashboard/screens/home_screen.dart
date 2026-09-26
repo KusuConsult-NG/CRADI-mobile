@@ -16,7 +16,6 @@ import 'package:climate_app/features/verification/models/verification_report_mod
 import 'package:climate_app/features/verification/providers/reports_status_provider.dart';
 import 'package:climate_app/features/auth/providers/auth_provider.dart'; // ADDED
 import 'package:climate_app/core/providers/connectivity_provider.dart';
-import 'package:climate_app/core/services/peer_verification_service.dart';
 import 'package:climate_app/core/services/notification_service.dart';
 import 'package:climate_app/features/reporting/providers/reporting_provider.dart';
 import 'package:climate_app/l10n/app_localizations.dart';
@@ -50,18 +49,12 @@ class _HomeScreenState extends State<HomeScreen> {
       // 1. Zone-filtered reports for To Verify / Alerts / Nearby tabs
       statusProvider.refreshReports();
       // 2. User-specific reports for the "My Reports" tab
-      if (auth.currentUser?.uid != null) {
-        statusProvider.refreshReports(userId: auth.currentUser!.uid);
+      if (auth.currentUser?.id != null) {
+        statusProvider.refreshReports(userId: auth.currentUser!.id);
       }
 
-      final role = auth.userRole;
-      if (role == UserRole.admin ||
-          role == UserRole.ewm ||
-          role == UserRole.ewr ||
-          role == UserRole.ewv ||
-          role == UserRole.techSupport) {
-        PeerVerificationService().checkAndEscalatePendingReports();
-      }
+      // Overdue-report escalation runs on the backend (cron); nothing to do
+      // client-side.
 
       // Flush anything left offline once the (logged-in) dashboard opens.
       // Reconnect-triggered sync is wired once in main.dart (onReconnect);
@@ -92,8 +85,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 // Zone-filtered reports for To Verify / Alerts / Nearby
                 statusProvider.refreshReports(),
                 // User-specific reports for My Reports tab
-                if (auth.currentUser?.uid != null)
-                  statusProvider.refreshReports(userId: auth.currentUser!.uid),
+                if (auth.currentUser?.id != null)
+                  statusProvider.refreshReports(userId: auth.currentUser!.id),
                 context.read<NewsProvider>().fetchNews(),
               ]);
             }
@@ -161,7 +154,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                           auth.userRole == UserRole.user;
                                       await reportsProvider.refreshReports(
                                         userId: isUser
-                                            ? auth.currentUser?.uid
+                                            ? auth.currentUser?.id
                                             : null,
                                       );
                                     },
@@ -228,7 +221,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         builder: (context, provider, _) {
                           final auth = context.read<AuthProvider>();
                           final isUser = auth.userRole == UserRole.user;
-                          final uid = isUser ? auth.currentUser?.uid : null;
+                          final uid = isUser ? auth.currentUser?.id : null;
                           // Using total counts from provider (requires fetch to be populated)
                           // Assuming refreshReports() is called in initState
                           final activeCount = provider.getTotal(
@@ -699,7 +692,7 @@ class _HomeScreenState extends State<HomeScreen> {
       );
     } else if (_selectedFilterIndex == 2) {
       // My Reports
-      final userId = context.read<AuthProvider>().currentUser?.uid;
+      final userId = context.read<AuthProvider>().currentUser?.id;
       return _buildListFeed(
         statusProvider.getReports(null, userId: userId),
         statusProvider.isLoading(null, userId: userId),

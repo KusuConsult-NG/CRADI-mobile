@@ -1,4 +1,4 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:climate_app/core/services/supabase_service.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -11,15 +11,16 @@ class AdminScreen extends StatelessWidget {
   const AdminScreen({super.key});
 
   Future<int> _count(String collection, {Map<String, dynamic>? where}) async {
-    Query<Map<String, dynamic>> q = FirebaseFirestore.instance.collection(
-      collection,
-    );
-    if (where != null) {
-      where.forEach((k, v) => q = q.where(k, isEqualTo: v));
-    }
     try {
-      final snap = await q.count().get().timeout(const Duration(seconds: 5));
-      return snap.count ?? 0;
+      return await SupabaseService()
+          .countDocuments(
+            collectionId: collection,
+            queries: [
+              for (final e in (where ?? const <String, dynamic>{}).entries)
+                FQuery.equal(e.key, e.value),
+            ],
+          )
+          .timeout(const Duration(seconds: 5));
     } on Exception catch (_) {
       return 0; // Return 0 if timeout or offline
     }
@@ -353,7 +354,7 @@ class _HealthCard extends StatelessWidget {
       child: Column(
         children: [
           const _HealthRow(
-            label: 'Firestore',
+            label: 'Database',
             status: 'Connected',
             icon: Icons.cloud_done_outlined,
             color: Colors.green,

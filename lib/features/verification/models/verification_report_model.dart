@@ -99,7 +99,7 @@ class VerificationReport {
     );
   }
 
-  /// Build a [VerificationReport] from a Firestore document map.
+  /// Build a [VerificationReport] from a report document map.
   /// Handles backward-compatible status parsing for legacy docs.
   factory VerificationReport.fromMap(Map<String, dynamic> data, String docId) {
     return VerificationReport(
@@ -175,10 +175,14 @@ class VerificationReport {
 
   static String _formatTime(dynamic raw) {
     if (raw == null) return '';
-    if (raw is String) return raw;
+    // Supabase returns ISO-8601 strings; cached values may be DateTimes.
+    final date = raw is DateTime
+        ? raw.toLocal()
+        : raw is String
+        ? DateTime.tryParse(raw)?.toLocal()
+        : null;
+    if (date == null) return raw.toString();
     try {
-      // Firestore Timestamp has a toDate() method via dynamic dispatch
-      final date = (raw as dynamic).toDate() as DateTime;
       final diff = DateTime.now().difference(date);
       if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
       if (diff.inHours < 24) return '${diff.inHours}h ago';

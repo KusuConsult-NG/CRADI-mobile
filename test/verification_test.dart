@@ -22,7 +22,7 @@ import 'package:climate_app/features/contacts/models/emergency_contact_model.dar
 import 'package:climate_app/core/providers/language_provider.dart';
 import 'package:climate_app/features/verification/providers/reports_status_provider.dart';
 
-// ── Lightweight mocks — no Firebase constructor calls ────────────────────────
+// ── Lightweight mocks — no backend constructor calls ────────────────────────
 
 class MockEmergencyContactsProvider extends ChangeNotifier
     implements EmergencyContactsProvider {

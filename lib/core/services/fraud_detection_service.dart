@@ -1,7 +1,6 @@
 import 'dart:developer' as developer;
-import 'package:climate_app/core/services/firebase_service.dart';
+import 'package:climate_app/core/services/supabase_service.dart';
 import 'package:climate_app/core/constants/app_config.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 
 /// Risk levels for fraud detection
 enum FraudRisk { low, medium, high, critical }
@@ -24,14 +23,14 @@ class FraudAssessment {
 /// Service for detecting fraudulent login attempts.
 ///
 /// Analyzes login patterns to detect new devices, failed attempts, etc.
-/// Now backed by Firestore instead of Appwrite.
+/// Backed by the trusted_devices / login_history tables.
 class FraudDetectionService {
   static final FraudDetectionService _instance =
       FraudDetectionService._internal();
   factory FraudDetectionService() => _instance;
   FraudDetectionService._internal();
 
-  final FirebaseService _firebase = FirebaseService();
+  final SupabaseService _db = SupabaseService();
 
   Future<FraudAssessment> assessLoginRisk({
     required String userId,
@@ -90,7 +89,7 @@ class FraudDetectionService {
     String deviceFingerprint,
   ) async {
     try {
-      final devices = await _firebase.listDocuments(
+      final devices = await _db.listDocuments(
         collectionId: AppConfig.trustedDevicesCollection,
         queries: [
           FQuery.equal('userId', userId),
@@ -107,14 +106,13 @@ class FraudDetectionService {
   Future<int> _getRecentFailedAttempts(String userId) async {
     try {
       final oneHourAgo = DateTime.now().subtract(const Duration(hours: 1));
-      final attempts = await _firebase.listDocuments(
+      final attempts = await _db.listDocuments(
         collectionId: AppConfig.loginHistoryCollection,
         queries: [
           FQuery.equal('userId', userId),
           FQuery.equal('success', false),
-          // `timestamp` is written as a server Timestamp, so compare against
-          // a Timestamp (an ISO string never matches a Timestamp field).
-          FQuery.greaterThan('timestamp', Timestamp.fromDate(oneHourAgo)),
+          // `timestamp` maps to login_history.occurred_at (timestamptz).
+          FQuery.greaterThan('timestamp', oneHourAgo),
         ],
       );
       return attempts.length;
@@ -139,14 +137,13 @@ class FraudDetectionService {
     required String deviceName,
   }) async {
     try {
-      await _firebase.createDocument(
+      await _db.createDocument(
         collectionId: AppConfig.trustedDevicesCollection,
         data: {
           'userId': userId,
           'deviceFingerprint': deviceFingerprint,
           'deviceName': deviceName,
           'trusted': true,
-          'lastUsed': FieldValue.serverTimestamp(),
         },
       );
       developer.log(
@@ -154,6 +151,8 @@ class FraudDetectionService {
         name: 'FraudDetectionService',
       );
     } on Exception catch (e) {
+      // Already registered (unique per user + fingerprint).
+      if (SupabaseService.isUniqueViolation(e)) return;
       developer.log('Error registering trusted device: $e');
       rethrow;
     }
@@ -166,14 +165,13 @@ class FraudDetectionService {
     String? deviceName,
   }) async {
     try {
-      await _firebase.createDocument(
+      await _db.createDocument(
         collectionId: AppConfig.loginHistoryCollection,
         data: {
           'userId': userId,
           'success': success,
           'deviceFingerprint': deviceFingerprint,
           'deviceName': deviceName ?? 'Unknown',
-          'timestamp': FieldValue.serverTimestamp(),
           'riskScore': 0,
         },
       );

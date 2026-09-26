@@ -162,7 +162,7 @@ class _ReportReviewScreenState extends State<ReportReviewScreen> {
                     final isUser = auth.userRole == UserRole.user;
                     Navigator.of(context).pop(); // Close dialog first!
                     reportsProvider.refreshReports(
-                      userId: isUser ? auth.currentUser?.uid : null,
+                      userId: isUser ? auth.currentUser?.id : null,
                     );
                     router.go('/dashboard');
                   },

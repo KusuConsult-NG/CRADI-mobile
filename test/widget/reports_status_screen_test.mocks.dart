@@ -317,6 +317,27 @@ class MockAuthProvider extends _i1.Mock implements _i8.AuthProvider {
           as bool);
 
   @override
+  bool canVoteOn({String? reporterId, String? reportWard}) =>
+      (super.noSuchMethod(
+            Invocation.method(#canVoteOn, [], {
+              #reporterId: reporterId,
+              #reportWard: reportWard,
+            }),
+            returnValue: false,
+          )
+          as bool);
+
+  @override
+  bool canManageReportStatus({String? reporterId}) =>
+      (super.noSuchMethod(
+            Invocation.method(#canManageReportStatus, [], {
+              #reporterId: reporterId,
+            }),
+            returnValue: false,
+          )
+          as bool);
+
+  @override
   _i5.Future<void> reloadUserData() =>
       (super.noSuchMethod(
             Invocation.method(#reloadUserData, []),
@@ -352,8 +373,8 @@ class MockAuthProvider extends _i1.Mock implements _i8.AuthProvider {
     String? state,
     String? lga,
     String? ward,
-    bool? isVerified,
     String? phoneNumber,
+    String? ndpaPolicyVersion,
   }) =>
       (super.noSuchMethod(
             Invocation.method(#signUpWithEmail, [], {
@@ -365,32 +386,8 @@ class MockAuthProvider extends _i1.Mock implements _i8.AuthProvider {
               #state: state,
               #lga: lga,
               #ward: ward,
-              #isVerified: isVerified,
               #phoneNumber: phoneNumber,
-            }),
-            returnValue: _i5.Future<bool>.value(false),
-          )
-          as _i5.Future<bool>);
-
-  @override
-  _i5.Future<bool> signUpWithPhone({
-    required String? phone,
-    String? name,
-    String? address,
-    _i8.UserRole? role,
-    String? state,
-    String? lga,
-    String? ward,
-  }) =>
-      (super.noSuchMethod(
-            Invocation.method(#signUpWithPhone, [], {
-              #phone: phone,
-              #name: name,
-              #address: address,
-              #role: role,
-              #state: state,
-              #lga: lga,
-              #ward: ward,
+              #ndpaPolicyVersion: ndpaPolicyVersion,
             }),
             returnValue: _i5.Future<bool>.value(false),
           )
@@ -413,9 +410,16 @@ class MockAuthProvider extends _i1.Mock implements _i8.AuthProvider {
           as _i5.Future<bool>);
 
   @override
-  _i5.Future<bool> sendOtpForPhone(String? phone) =>
+  _i5.Future<bool> sendOtpForPhone(
+    String? phone, {
+    Map<String, dynamic>? registrationData,
+  }) =>
       (super.noSuchMethod(
-            Invocation.method(#sendOtpForPhone, [phone]),
+            Invocation.method(
+              #sendOtpForPhone,
+              [phone],
+              {#registrationData: registrationData},
+            ),
             returnValue: _i5.Future<bool>.value(false),
           )
           as _i5.Future<bool>);
@@ -456,6 +460,23 @@ class MockAuthProvider extends _i1.Mock implements _i8.AuthProvider {
   _i5.Future<void> sendPasswordResetEmail(String? email) =>
       (super.noSuchMethod(
             Invocation.method(#sendPasswordResetEmail, [email]),
+            returnValue: _i5.Future<void>.value(),
+            returnValueForMissingStub: _i5.Future<void>.value(),
+          )
+          as _i5.Future<void>);
+
+  @override
+  _i5.Future<void> confirmPasswordReset({
+    required String? email,
+    required String? code,
+    required String? newPassword,
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(#confirmPasswordReset, [], {
+              #email: email,
+              #code: code,
+              #newPassword: newPassword,
+            }),
             returnValue: _i5.Future<void>.value(),
             returnValueForMissingStub: _i5.Future<void>.value(),
           )

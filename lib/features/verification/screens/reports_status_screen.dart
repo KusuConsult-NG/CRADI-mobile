@@ -28,7 +28,7 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
       final auth = context.read<AuthProvider>();
       final isUser = auth.userRole == UserRole.user;
       context.read<ReportsStatusProvider>().refreshReports(
-        userId: isUser ? auth.currentUser?.uid : null,
+        userId: isUser ? auth.currentUser?.id : null,
       );
     });
   }
@@ -121,7 +121,7 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
   ) {
     final auth = context.read<AuthProvider>();
     final isUser = auth.userRole == UserRole.user;
-    final uid = isUser ? auth.currentUser?.uid : null;
+    final uid = isUser ? auth.currentUser?.id : null;
 
     final reports = provider.getReports(status, userId: uid);
     final isLoading = provider.isLoading(status, userId: uid);
@@ -195,17 +195,15 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
     ReportsStatusProvider provider,
   ) {
     final auth = context.read<AuthProvider>();
-    final currentUserId = auth.currentUser?.uid;
-    final role = auth.userRole;
-    // Peer verification is limited to verifier roles (see firestore.rules
-    // isVerifier); status management to staff.
-    final canVerify = const {
-      UserRole.ewm,
-      UserRole.ewv,
-      UserRole.ewr,
-      UserRole.admin,
-    }.contains(role);
-    final isStaff = role != null && role != UserRole.user;
+    final currentUserId = auth.currentUser?.id;
+    // Mirrors the database rules: peer votes by approved verifier roles
+    // (EWMs only in their own ward, never on their own report); approve /
+    // reject / reopen by ewv, ewr, ldp_coordinator, project_staff, admin.
+    final canVerify = auth.canVoteOn(
+      reporterId: report.reporterId,
+      reportWard: report.ward,
+    );
+    final isStaff = auth.canManageReportStatus(reporterId: report.reporterId);
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(

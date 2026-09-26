@@ -20,7 +20,7 @@ class EmergencyContact {
     this.isAvailable = true,
   });
 
-  factory EmergencyContact.fromFirestore(Map<String, dynamic> data, String id) {
+  factory EmergencyContact.fromMap(Map<String, dynamic> data, String id) {
     return EmergencyContact(
       id: id,
       name: data['name'] as String? ?? '',
@@ -46,7 +46,7 @@ class EmergencyContact {
     );
   }
 
-  Map<String, dynamic> toFirestore() {
+  Map<String, dynamic> toMap() {
     return {
       'name': name,
       'role': role,

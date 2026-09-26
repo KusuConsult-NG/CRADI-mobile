@@ -4,7 +4,7 @@ import 'dart:developer' as developer;
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as path;
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:climate_app/core/services/supabase_service.dart';
 
 /// Service for storing draft reports offline using Hive
 /// Allows users to create reports without internet and sync later
@@ -185,7 +185,7 @@ class OfflineStorageService {
             as String;
 
     final queueItem = {
-      'data': report, // actual Firestore payload
+      'data': report, // row payload (app field names)
       'docId': docId,
       'collection': collection,
       'createdAt': report['createdAt'] ?? DateTime.now().toIso8601String(),
@@ -287,7 +287,7 @@ class OfflineStorageService {
   /// (reconnect, dashboard open, manual sync) never process the queue twice.
   Future<Map<String, int>>? _syncInFlight;
 
-  /// Sync all pending (and previously failed) queue items to Firestore.
+  /// Sync all pending (and previously failed) queue items to Supabase.
   ///
   /// This is the single implementation of queue syncing. Concurrent calls
   /// share the same in-flight run. Items that have failed
@@ -330,7 +330,7 @@ class OfflineStorageService {
       name: 'OfflineStorageService',
     );
 
-    final firestore = FirebaseFirestore.instance;
+    final db = SupabaseService();
     int successCount = 0;
     int failCount = 0;
 
@@ -344,7 +344,7 @@ class OfflineStorageService {
             (item['collection'] ?? item['collectionId'] ?? 'reports') as String;
         final Map<String, dynamic> data;
         if (item['data'] is Map) {
-          // Current format: the Firestore payload is wrapped under 'data'.
+          // Current format: the row payload is wrapped under 'data'.
           data = Map<String, dynamic>.from(item['data'] as Map);
         } else {
           // Legacy flat format: strip queue-meta keys (including the queue
@@ -369,25 +369,26 @@ class OfflineStorageService {
           ..remove('collection')
           ..remove('collectionId')
           ..remove('docId');
-        // Firestore rules require new reports to be created as 'pending'.
+        // RLS only allows new reports to be inserted as 'pending'.
         if (collection == 'reports') {
-          data['status'] ??= 'pending';
+          data['status'] = 'pending';
         }
-        // Match FirebaseService.createDocument so synced docs sort/query
-        // alongside directly-created ones.
-        data['createdAt'] ??= FieldValue.serverTimestamp();
-        data['updatedAt'] = FieldValue.serverTimestamp();
-        data['syncedAt'] = FieldValue.serverTimestamp();
+        // created_at / updated_at are set by the database.
+        data['syncedAt'] = DateTime.now();
 
-        // If there's an existing doc ID, upsert; otherwise create a new doc.
+        // With a known id, upsert idempotently (a row that already exists
+        // was synced by an earlier attempt and is left untouched);
+        // otherwise insert a new row.
         final docId = item['docId'] as String?;
         if (docId != null && docId.isNotEmpty) {
-          await firestore
-              .collection(collection)
-              .doc(docId)
-              .set(data, SetOptions(merge: true));
+          await db.upsertDocument(
+            collectionId: collection,
+            documentId: docId,
+            data: data,
+            ignoreDuplicates: true,
+          );
         } else {
-          await firestore.collection(collection).add(data);
+          await db.createDocument(collectionId: collection, data: data);
         }
 
         await markAsSynced(queueId);
@@ -682,11 +683,9 @@ class OfflineStorageService {
 
   /// Sanitizes maps before sending them to hive.
   ///
-  /// Hive can only store primitives, lists and maps of those. Firestore types
-  /// are converted (Timestamp → ISO string, GeoPoint → lat/lng map,
-  /// DocumentReference → path) and anything else that Hive cannot serialize
-  /// (e.g. the `$snapshot` DocumentSnapshot attached by FirebaseService) is
-  /// dropped.
+  /// Hive can only store primitives, lists and maps of those. DateTimes are
+  /// converted to ISO strings and anything else that Hive cannot serialize
+  /// is dropped.
   Map<String, dynamic> _sanitizeForHive(Map<dynamic, dynamic> data) {
     final Map<String, dynamic> sanitized = {};
     data.forEach((key, value) {
@@ -702,17 +701,12 @@ class OfflineStorageService {
     if (value == null || value is String || value is num || value is bool) {
       return value;
     }
-    if (value is Timestamp) return value.toDate().toIso8601String();
     if (value is DateTime) return value.toIso8601String();
-    if (value is GeoPoint) {
-      return {'latitude': value.latitude, 'longitude': value.longitude};
-    }
-    if (value is DocumentReference) return value.path;
     if (value is Map) return _sanitizeForHive(value);
     if (value is List) {
       return value.map(_sanitizeValue).where((e) => e != _unsupported).toList();
     }
-    // DocumentSnapshot, FieldValue, etc. cannot be stored in Hive.
+    // Anything else cannot be stored in Hive.
     return _unsupported;
   }
 }

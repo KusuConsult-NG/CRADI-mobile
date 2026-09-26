@@ -1,4 +1,5 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:climate_app/core/constants/app_config.dart';
+import 'package:climate_app/core/services/supabase_service.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:climate_app/core/theme/app_colors.dart';
@@ -30,27 +31,31 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
     'rejected': Colors.red,
   };
 
-  late final Stream<QuerySnapshot<Map<String, dynamic>>> _reportsStream;
+  late final Stream<List<Map<String, dynamic>>> _reportsStream;
 
   @override
   void initState() {
     super.initState();
-    _reportsStream = FirebaseFirestore.instance
-        .collection('reports')
-        .snapshots();
+    _reportsStream = SupabaseService().subscribeToCollection(
+      collectionId: AppConfig.reportsCollection,
+    );
   }
 
   Future<void> _updateStatus(String reportId, String newStatus) async {
     try {
-      await FirebaseFirestore.instance
-          .collection('reports')
-          .doc(reportId)
-          .update({
-            'status': newStatus,
-            'updatedAt': FieldValue.serverTimestamp(),
-            'updatedBy': 'admin',
-          });
-    } on FirebaseException catch (e) {
+      final now = DateTime.now();
+      await SupabaseService().updateDocument(
+        collectionId: AppConfig.reportsCollection,
+        documentId: reportId,
+        data: {
+          'status': newStatus,
+          'updatedBy': SupabaseService().currentUserId,
+          if (newStatus == 'verified') 'verifiedAt': now,
+          if (newStatus == 'approved') 'approvedAt': now,
+          if (newStatus == 'rejected') 'rejectedAt': now,
+        },
+      );
+    } on Exception catch (e) {
       developer.log('Status update failed: $e', name: 'AdminReportsScreen');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -87,8 +92,8 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
     final status = data['status'] as String? ?? 'pending';
     final createdAt = data['createdAt'];
     String timeStr = '';
-    if (createdAt is Timestamp) {
-      final dt = createdAt.toDate();
+    final dt = parseTimestamp(createdAt);
+    if (dt != null) {
       timeStr =
           '${dt.day}/${dt.month}/${dt.year} ${dt.hour}:${dt.minute.toString().padLeft(2, '0')}';
     }
@@ -333,7 +338,7 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
           ),
           // ── List ──
           Expanded(
-            child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+            child: StreamBuilder<List<Map<String, dynamic>>>(
               stream: _reportsStream,
               builder: (context, snap) {
                 if (snap.connectionState == ConnectionState.waiting) {
@@ -351,11 +356,10 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
                     ),
                   );
                 }
-                final allDocs = snap.data?.docs ?? [];
+                final allDocs = snap.data ?? const <Map<String, dynamic>>[];
 
                 // Client-side filtering
-                final docs = allDocs.where((d) {
-                  final data = d.data();
+                final docs = allDocs.where((data) {
                   if (_statusFilter != 'all') {
                     final status = data['status'] as String? ?? 'pending';
                     if (status != _statusFilter) return false;
@@ -364,17 +368,12 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
                 }).toList();
 
                 docs.sort((a, b) {
-                  final aCreatedAt = a.data()['createdAt'];
-                  final bCreatedAt = b.data()['createdAt'];
+                  final aCreatedAt = a['createdAt'];
+                  final bCreatedAt = b['createdAt'];
 
-                  DateTime parseDate(dynamic date) {
-                    if (date is Timestamp) return date.toDate();
-                    if (date is String) {
-                      return DateTime.tryParse(date) ??
-                          DateTime.fromMillisecondsSinceEpoch(0);
-                    }
-                    return DateTime.fromMillisecondsSinceEpoch(0);
-                  }
+                  DateTime parseDate(dynamic date) =>
+                      parseTimestamp(date) ??
+                      DateTime.fromMillisecondsSinceEpoch(0);
 
                   return parseDate(bCreatedAt).compareTo(parseDate(aCreatedAt));
                 });
@@ -390,8 +389,8 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
                 return ListView.builder(
                   itemCount: docs.length,
                   itemBuilder: (_, i) {
-                    final d = docs[i].data();
-                    final id = docs[i].id;
+                    final d = docs[i];
+                    final id = d['\$id'] as String;
                     final hazard = d['hazardType'] as String? ?? 'Unknown';
                     final lga = d['lga'] as String? ?? '';
                     final ward = d['ward'] as String? ?? '';
@@ -399,8 +398,8 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
                     final severity = d['severity'] as String? ?? '';
                     final createdAt = d['createdAt'];
                     String timeStr = '';
-                    if (createdAt is Timestamp) {
-                      final dt = createdAt.toDate();
+                    final dt = parseTimestamp(createdAt);
+                    if (dt != null) {
                       timeStr = '${dt.day}/${dt.month}/${dt.year}';
                     }
 

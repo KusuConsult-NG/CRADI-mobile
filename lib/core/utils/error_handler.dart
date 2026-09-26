@@ -1,5 +1,6 @@
 import 'dart:developer' as developer;
 import 'package:flutter/foundation.dart';
+import 'package:sentry_flutter/sentry_flutter.dart';
 
 /// Secure error handler that prevents sensitive data leakage
 class ErrorHandler {
@@ -12,9 +13,8 @@ class ErrorHandler {
   }
 
   /// Get generic user-friendly message (release builds).
-  /// IMPORTANT: Firebase SDK internal messages (e.g. '[ Pin verification failed')
-  /// must NEVER be surfaced raw to the user — they leak implementation detail
-  /// and confuse end users.
+  /// IMPORTANT: SDK-internal messages must NEVER be surfaced raw to the user —
+  /// they leak implementation detail and confuse end users.
   static String _getGenericMessage(dynamic error) {
     if (error.runtimeType.toString() == 'AuthException') {
       return error.toString();
@@ -31,8 +31,10 @@ class ErrorHandler {
     if (msg.contains('permission') || msg.contains('denied')) {
       return 'You do not have permission to perform this action.';
     }
-    // Firebase SDK internal strings — must be scrubbed
-    if (msg.contains('internal error') || msg.contains('firebase')) {
+    // SDK internal strings — must be scrubbed
+    if (msg.contains('internal error') ||
+        msg.contains('postgrest') ||
+        msg.contains('authapiexception')) {
       return 'An error occurred. Please try again or contact support.';
     }
     return 'An unexpected error occurred. Please try again.';
@@ -126,9 +128,14 @@ class ErrorHandler {
     StackTrace? stackTrace,
     String? context,
   ) {
-    // SECURE: Always sanitize data before sending to external services
-    // Integrate with crash reporting service like Firebase Crashlytics:
-    // final sanitizedError = _sanitizeForLog(error.toString());\n    // FirebaseCrashlytics.instance.recordError(sanitizedError, stackTrace);
+    // SECURE: Always sanitize data before sending to external services.
+    // No-op unless Sentry was initialised (SENTRY_DSN provided).
+    if (!Sentry.isEnabled) return;
+    final sanitizedError = _sanitizeForLog(error.toString());
+    Sentry.captureMessage(
+      context != null ? '[$context] $sanitizedError' : sanitizedError,
+      level: SentryLevel.error,
+    );
   }
 
   /// Handle and display error to user
@@ -157,6 +164,14 @@ class SecureException implements Exception {
 /// Authentication exception
 class AuthException extends SecureException {
   AuthException(super.userMessage, {super.technicalDetails});
+}
+
+/// Sign-in refused because the email address has not been confirmed yet.
+/// A fresh verification code has been sent to [email].
+class EmailNotConfirmedException extends AuthException {
+  EmailNotConfirmedException(this.email)
+    : super('Please verify your email first. We sent a new code to $email.');
+  final String email;
 }
 
 /// Network exception

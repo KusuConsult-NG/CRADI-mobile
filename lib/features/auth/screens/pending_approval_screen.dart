@@ -57,6 +57,44 @@ class PendingApprovalScreen extends StatelessWidget {
               const SizedBox(height: 48),
               SizedBox(
                 width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () async {
+                    final auth = context.read<AuthProvider>();
+                    await auth.reloadUserData();
+                    if (!context.mounted) return;
+                    if (auth.isApproved == true) {
+                      await context.read<ProfileProvider>().loadProfile();
+                      if (context.mounted) context.go('/dashboard');
+                    } else {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                            'Your account is still awaiting approval.',
+                          ),
+                        ),
+                      );
+                    }
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primaryRed,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: Text(
+                    'Check approval status',
+                    style: GoogleFonts.lexend(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
                 child: OutlinedButton(
                   onPressed: () async {
                     await context.read<ProfileProvider>().clearProfile();

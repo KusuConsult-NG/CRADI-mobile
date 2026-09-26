@@ -49,9 +49,8 @@ service-account-key.json
 *service_account*.json
 node_modules/
 
-# Firebase Configuration (contains sensitive API keys)
-android/app/google-services.json
-ios/Runner/GoogleService-Info.plist
+# Runtime configuration (--dart-define-from-file); see env.example.json
+env.json
 
 # Environment variables
 .env

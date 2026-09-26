@@ -66,18 +66,18 @@ Language Support: English and Hausa
 
 ## Creating the Test Account
 
-> **ACTION REQUIRED**: You must create this test account in your Appwrite backend before uploading to Play Store.
+> **ACTION REQUIRED**: You must create this test account in the Supabase project before uploading to Play Store.
 
 ### Steps to Create Test Account:
 
-1. **Go to your Appwrite Console**
-2. **Navigate to Auth → Users**
-3. **Create new user with:**
+1. **Open the Supabase dashboard → Authentication → Users → Add user**
+2. **Create the user with "Auto Confirm User" ticked:**
    - Email: `reviewer@craditest.com`
    - Password: `ReviewTest2026!`
-   - Registration Code: `CRD123456` (add to user document/metadata)
-   - Name: `Play Store Reviewer`
-   - Status: Active/Verified
+   - User metadata: `{"name": "Play Store Reviewer"}`
+3. **In Table Editor → `profiles`**, set on that row: `is_approved = true`,
+   `is_verified = true`, `registration_code = 'CRD123456'`, and the role to
+   grant (e.g. `ewm`) plus `state` / `lga` / `ward`.
 
 4. **Verify the account works:**
    - Test login with these credentials on your device
@@ -96,7 +96,7 @@ Language Support: English and Hausa
 
 If Google reviewers report issues accessing the app:
 
-1. **Verify account exists in Appwrite**
+1. **Verify the account exists in Supabase (Auth → Users) and its `profiles` row is approved**
 2. **Check account is not locked** (rate limiting may block after failed attempts)
 3. **Ensure registration code matches** exactly in your database
 4. **Test credentials yourself** before each submission

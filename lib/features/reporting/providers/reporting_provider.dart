@@ -1,14 +1,12 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:climate_app/core/services/firebase_service.dart';
+import 'package:climate_app/core/services/supabase_service.dart';
 import 'package:climate_app/core/utils/error_handler.dart';
 import 'package:climate_app/core/services/offline_storage_service.dart';
-import 'package:climate_app/core/services/peer_verification_service.dart';
 import 'package:climate_app/core/data/mvp_locations_data.dart';
 import 'package:climate_app/core/providers/connectivity_provider.dart';
 import 'package:climate_app/core/constants/app_config.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'dart:developer' as developer;
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
@@ -45,7 +43,7 @@ bool isAlertSeverity(Object? raw) {
 class ReportingProvider extends ChangeNotifier {
   ReportingProvider();
 
-  final FirebaseService _firebase = FirebaseService();
+  final SupabaseService _db = SupabaseService();
   final ImagePicker _picker = ImagePicker();
 
   String? _hazardType;
@@ -153,7 +151,7 @@ class ReportingProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Submit report using Firestore (with offline support).
+  /// Submit a report (with offline support).
   Future<Map<String, dynamic>> submitReport(BuildContext context) async {
     try {
       _isLoading = true;
@@ -200,30 +198,30 @@ class ReportingProvider extends ChangeNotifier {
         };
       }
 
-      // Get current Firebase user
-      final firebaseUser = FirebaseAuth.instance.currentUser;
-      if (firebaseUser == null) {
+      final uid = _db.currentUserId;
+      if (uid == null) {
         throw Exception('User must be logged in to submit a report');
       }
 
       final String docId = const Uuid().v4();
 
-      // Upload images to Firebase Storage
+      // Upload images to the report-images bucket (path must start with the
+      // user id — storage RLS).
       final List<String> imageUrls = [];
       for (int i = 0; i < _photos.length; i++) {
         final photo = _photos[i];
         final file = File(photo.path);
         final fileName = photo.name;
-        final url = await _firebase.uploadFileFromPath(
-          storagePath:
-              '${AppConfig.reportImagesBucket}/${firebaseUser.uid}/${docId}_${i}_$fileName',
+        final url = await _db.uploadFileFromPath(
+          bucketId: AppConfig.reportImagesBucket,
+          storagePath: '$uid/${docId}_${i}_$fileName',
           file: file,
         );
         imageUrls.add(url);
       }
 
       final reportData = {
-        'userId': firebaseUser.uid,
+        'userId': uid,
         'hazardType': _hazardType,
         'severity': normalizeSeverity(_severity) ?? _severity,
         'latitude': _latitude,
@@ -235,16 +233,14 @@ class ReportingProvider extends ChangeNotifier {
         'lga': _lga,
         'state': MVPLocationsData.getStateForLGA(_lga!),
         'description': _description ?? '',
-        'submittedAt': DateTime.now().toIso8601String(),
+        'submittedAt': DateTime.now().toUtc().toIso8601String(),
         'imageUrls': imageUrls,
         'status': 'pending',
-        'isAlert': isAlertSeverity(_severity),
-        'verificationCount': 0,
       };
 
       try {
         developer.log('Checking network connectivity for submission...');
-        final doc = await _firebase
+        final doc = await _db
             .createDocument(
               collectionId: AppConfig.reportsCollection,
               documentId: docId,
@@ -252,21 +248,8 @@ class ReportingProvider extends ChangeNotifier {
             )
             .timeout(const Duration(seconds: 10));
         final reportId = doc['\$id'] as String;
-
-        // Send peer verification requests
-        try {
-          await PeerVerificationService().sendVerificationRequests(
-            reportId: reportId,
-            ward: _ward!,
-            lga: _lga!,
-            reporterId: firebaseUser.uid,
-          );
-        } on Exception catch (e) {
-          developer.log(
-            'Warning: Verification requests failed: $e',
-            name: 'ReportingProvider',
-          );
-        }
+        // Peer verification requests and escalation scheduling are handled
+        // by database triggers + the backend on insert.
 
         developer.log('Report submitted: $reportId');
         reset();
@@ -307,7 +290,7 @@ class ReportingProvider extends ChangeNotifier {
 
   Future<Map<String, dynamic>>? _syncInFlight;
 
-  /// Sync pending drafts and failed submissions to Firestore.
+  /// Sync pending drafts and failed submissions to the backend.
   ///
   /// This is the single entry point for offline sync. Concurrent calls share
   /// the same in-flight run so items are never uploaded twice.
@@ -324,8 +307,8 @@ class ReportingProvider extends ChangeNotifier {
 
     try {
       final offlineService = OfflineStorageService();
-      final firebaseUser = FirebaseAuth.instance.currentUser;
-      if (firebaseUser == null) throw Exception('User not logged in');
+      final uid = _db.currentUserId;
+      if (uid == null) throw Exception('User not logged in');
 
       // Process sync queue (failed submissions) — single implementation
       // lives in OfflineStorageService (keeps status 'pending', retries
@@ -339,6 +322,12 @@ class ReportingProvider extends ChangeNotifier {
       for (final draft in drafts) {
         try {
           final draftId = draft['id'] as String;
+          // Drafts have millisecond ids; derive a stable UUID so a retried
+          // sync of the same draft never creates a duplicate report.
+          final reportId = const Uuid().v5(
+            Namespace.url.value,
+            'draft:$uid:$draftId',
+          );
           final List<String> imageUrls = [];
           if (draft['imagePaths'] != null) {
             final paths = (draft['imagePaths'] as List).cast<String>();
@@ -346,9 +335,9 @@ class ReportingProvider extends ChangeNotifier {
               final path = paths[i];
               if (File(path).existsSync()) {
                 final fileName = path.split('/').last;
-                final url = await _firebase.uploadFileFromPath(
-                  storagePath:
-                      '${AppConfig.reportImagesBucket}/${firebaseUser.uid}/${draftId}_${i}_$fileName',
+                final url = await _db.uploadFileFromPath(
+                  bucketId: AppConfig.reportImagesBucket,
+                  storagePath: '$uid/${reportId}_${i}_$fileName',
                   file: File(path),
                 );
                 imageUrls.add(url);
@@ -356,28 +345,32 @@ class ReportingProvider extends ChangeNotifier {
             }
           }
 
-          await _firebase.createDocument(
+          await _db.upsertDocument(
             collectionId: AppConfig.reportsCollection,
-            documentId: draftId,
+            documentId: reportId,
+            ignoreDuplicates: true,
             data: {
-              'userId': firebaseUser.uid,
+              'userId': uid,
               'hazardType': draft['hazardType'],
               'severity':
                   normalizeSeverity(draft['severity']) ?? draft['severity'],
               'latitude': draft['latitude'],
               'longitude': draft['longitude'],
-              'locationDetails': draft['locationDetails'],
+              'locationDetails': draft['locationDetails'] ?? '',
+              'location': draft['locationDetails'] ?? '',
+              'address': draft['locationDetails'] ?? '',
               'ward': draft['ward'] ?? 'Unknown',
               'lga': draft['lga'] ?? 'Makurdi',
               'state': MVPLocationsData.getStateForLGA(
                 (draft['lga'] ?? 'Makurdi').toString(),
               ),
-              'description': draft['description'],
-              'submittedAt': DateTime.now().toIso8601String(),
+              'description': draft['description'] ?? '',
+              'submittedAt':
+                  (parseTimestamp(draft['reportDateTime']) ?? DateTime.now())
+                      .toUtc()
+                      .toIso8601String(),
               'imageUrls': imageUrls,
               'status': 'pending',
-              'isAlert': isAlertSeverity(draft['severity']),
-              'verificationCount': 0,
             },
           );
           await offlineService.deleteDraft(draft['id']);

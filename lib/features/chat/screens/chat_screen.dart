@@ -1,7 +1,7 @@
 import 'package:climate_app/core/theme/app_colors.dart';
-import 'package:climate_app/core/services/firebase_service.dart';
+import 'package:climate_app/core/services/supabase_service.dart';
 import 'package:climate_app/core/constants/app_config.dart';
-import 'package:firebase_auth/firebase_auth.dart' as fb_auth;
+import 'package:supabase_flutter/supabase_flutter.dart' as sb;
 import 'package:flutter/material.dart';
 import 'package:flutter_chat_core/flutter_chat_core.dart';
 import 'package:flutter_chat_ui/flutter_chat_ui.dart';
@@ -31,7 +31,7 @@ class ChatScreen extends StatelessWidget {
       ),
       body: Builder(
         builder: (context) {
-          final fbUser = fb_auth.FirebaseAuth.instance.currentUser;
+          final fbUser = SupabaseService().getCurrentUser();
           if (fbUser == null) {
             return const Center(child: Text('Please login to chat'));
           }
@@ -43,7 +43,7 @@ class ChatScreen extends StatelessWidget {
 }
 
 class _ChatView extends StatefulWidget {
-  final fb_auth.User fbUser;
+  final sb.User fbUser;
   const _ChatView({required this.fbUser});
 
   @override
@@ -51,7 +51,7 @@ class _ChatView extends StatefulWidget {
 }
 
 class _ChatViewState extends State<_ChatView> {
-  final FirebaseService _firebase = FirebaseService();
+  final SupabaseService _db = SupabaseService();
   late final InMemoryChatController _chatController;
   bool _isLoading = true;
 
@@ -70,7 +70,7 @@ class _ChatViewState extends State<_ChatView> {
 
   Future<void> _loadMessages() async {
     try {
-      final docs = await _firebase.listDocuments(
+      final docs = await _db.listDocuments(
         collectionId: AppConfig.messagesCollection,
         queries: [
           FQuery.equal('chatId', 'general'),
@@ -84,9 +84,7 @@ class _ChatViewState extends State<_ChatView> {
           id: data['\$id'] as String? ?? const Uuid().v4(),
           authorId: data['senderId'] as String? ?? 'unknown',
           text: data['message'] as String? ?? '',
-          createdAt: data['sentAt'] != null
-              ? DateTime.tryParse(data['sentAt'] as String)
-              : null,
+          createdAt: parseTimestamp(data['sentAt']),
         );
         await _chatController.insertMessage(msg, animated: false);
       }
@@ -98,8 +96,8 @@ class _ChatViewState extends State<_ChatView> {
   }
 
   Future<User?> _resolveUser(UserID id) async {
-    if (id == widget.fbUser.uid) {
-      return User(id: id, name: widget.fbUser.displayName ?? 'Me');
+    if (id == widget.fbUser.id) {
+      return User(id: id, name: _displayName(widget.fbUser, 'Me'));
     }
     return User(id: id);
   }
@@ -112,22 +110,21 @@ class _ChatViewState extends State<_ChatView> {
     // Optimistic insert
     final message = Message.text(
       id: msgId,
-      authorId: user.uid,
+      authorId: user.id,
       text: text.trim(),
       createdAt: DateTime.now(),
     );
     await _chatController.insertMessage(message);
 
     try {
-      await _firebase.createDocument(
+      await _db.createDocument(
         collectionId: AppConfig.messagesCollection,
         data: {
           'chatId': 'general',
-          'senderId': user.uid,
-          'senderName': user.displayName ?? 'User',
+          'senderId': user.id,
+          'senderName': _displayName(user, 'User'),
           'message': text.trim(),
           'type': 'text',
-          'sentAt': DateTime.now().toIso8601String(),
           'read': false,
         },
       );
@@ -149,11 +146,16 @@ class _ChatViewState extends State<_ChatView> {
     }
 
     return Chat(
-      currentUserId: widget.fbUser.uid,
+      currentUserId: widget.fbUser.id,
       chatController: _chatController,
       resolveUser: _resolveUser,
       onMessageSend: _handleMessageSend,
       theme: ChatTheme.fromThemeData(Theme.of(context)),
     );
+  }
+
+  static String _displayName(sb.User user, String fallback) {
+    final n = user.userMetadata?['name'];
+    return (n is String && n.trim().isNotEmpty) ? n : fallback;
   }
 }

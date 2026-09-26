@@ -1,4 +1,4 @@
-import 'package:climate_app/core/services/firebase_service.dart';
+import 'package:climate_app/core/services/supabase_service.dart';
 import 'package:climate_app/core/utils/error_handler.dart';
 import 'package:climate_app/core/constants/app_config.dart';
 import 'package:climate_app/core/theme/app_colors.dart';
@@ -36,15 +36,15 @@ class _VerificationListScreenState extends State<VerificationListScreen> {
     });
 
     try {
-      final currentUserId = context.read<AuthProvider>().currentUser?.uid;
-      final firebase = FirebaseService();
+      final currentUserId = context.read<AuthProvider>().currentUser?.id;
+      final db = SupabaseService();
 
       final queries = <QueryFilter>[FQuery.equal('status', 'pending')];
       if (currentUserId != null) {
         queries.add(FQuery.notEqual('userId', currentUserId));
       }
 
-      final docs = await firebase.listDocuments(
+      final docs = await db.listDocuments(
         collectionId: AppConfig.reportsCollection,
         queries: queries,
         limitCount: 50,

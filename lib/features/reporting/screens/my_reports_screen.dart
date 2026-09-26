@@ -32,7 +32,7 @@ class _MyReportsScreenState extends State<MyReportsScreen>
   }
 
   void _refreshMyReports() {
-    final uid = context.read<AuthProvider>().currentUser?.uid;
+    final uid = context.read<AuthProvider>().currentUser?.id;
     if (uid != null) {
       context.read<ReportsStatusProvider>().refreshReports(userId: uid);
     }
@@ -76,7 +76,7 @@ class _MyReportsScreenState extends State<MyReportsScreen>
       ),
       body: Consumer2<ReportsStatusProvider, AuthProvider>(
         builder: (context, provider, auth, _) {
-          final uid = auth.currentUser?.uid;
+          final uid = auth.currentUser?.id;
           if (uid == null) {
             return Center(
               child: Text(

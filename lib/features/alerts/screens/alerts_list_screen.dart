@@ -398,14 +398,10 @@ class _AlertsListScreenState extends State<AlertsListScreen> {
   }) {
     final auth = context.read<AuthProvider>();
     // Only verifiers (not the report owner) may confirm/decline.
-    final canVerify =
-        const {
-          UserRole.ewm,
-          UserRole.ewv,
-          UserRole.ewr,
-          UserRole.admin,
-        }.contains(auth.userRole) &&
-        report.reporterId != auth.currentUser?.uid;
+    final canVerify = auth.canVoteOn(
+      reporterId: report.reporterId,
+      reportWard: report.ward,
+    );
     final isPending = report.status == ReportStatus.pending && canVerify;
 
     return Container(
@@ -513,7 +509,10 @@ class _AlertsListScreenState extends State<AlertsListScreen> {
                         try {
                           await provider.rejectReport(report.id);
                           if (mounted) {
-                            CustomToast.showSuccess(context, 'Report rejected');
+                            CustomToast.showSuccess(
+                              context,
+                              'Dispute recorded',
+                            );
                           }
                         } on Exception catch (e) {
                           if (mounted) {

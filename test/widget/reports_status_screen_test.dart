@@ -43,6 +43,18 @@ void main() {
     when(mockAuthProvider.userRole).thenReturn(UserRole.user);
     when(mockAuthProvider.currentUser).thenReturn(null);
     when(mockAuthProvider.hasListeners).thenReturn(false);
+    // Permission helpers (mirror the DB rules; unit-tested separately).
+    when(
+      mockAuthProvider.canVoteOn(
+        reporterId: anyNamed('reporterId'),
+        reportWard: anyNamed('reportWard'),
+      ),
+    ).thenReturn(false);
+    when(
+      mockAuthProvider.canManageReportStatus(
+        reporterId: anyNamed('reporterId'),
+      ),
+    ).thenReturn(false);
 
     // ReportsStatusProvider default stubs
     when(mockReportsProvider.hasListeners).thenReturn(false);
@@ -242,6 +254,12 @@ void main() {
     ) async {
       // Only verifier roles may verify.
       when(mockAuthProvider.userRole).thenReturn(UserRole.ewm);
+      when(
+        mockAuthProvider.canVoteOn(
+          reporterId: anyNamed('reporterId'),
+          reportWard: anyNamed('reportWard'),
+        ),
+      ).thenReturn(true);
       // testReport has reporterId 'user-123', currentUser is null
       when(
         mockReportsProvider.getReports(

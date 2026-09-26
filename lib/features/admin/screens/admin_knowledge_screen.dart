@@ -1,4 +1,4 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:climate_app/core/services/supabase_service.dart';
 import 'package:climate_app/core/utils/error_handler.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -30,15 +30,15 @@ class _AdminKnowledgeScreenState extends State<AdminKnowledgeScreen> {
     'General',
   ];
 
-  late final Stream<QuerySnapshot<Map<String, dynamic>>> _knowledgeStream;
+  late final Stream<List<Map<String, dynamic>>> _knowledgeStream;
 
   @override
   void initState() {
     super.initState();
-    _knowledgeStream = FirebaseFirestore.instance
-        .collection(AppConfig.knowledgeBaseCollection)
-        .orderBy('updatedAt', descending: true)
-        .snapshots();
+    _knowledgeStream = SupabaseService().subscribeToCollection(
+      collectionId: AppConfig.knowledgeBaseCollection,
+      queries: [FQuery.orderDesc('updatedAt')],
+    );
   }
 
   Future<void> _deleteGuide(String id) async {
@@ -68,11 +68,11 @@ class _AdminKnowledgeScreenState extends State<AdminKnowledgeScreen> {
     );
     if (confirmed == true) {
       try {
-        await FirebaseFirestore.instance
-            .collection(AppConfig.knowledgeBaseCollection)
-            .doc(id)
-            .delete();
-      } on FirebaseException catch (e) {
+        await SupabaseService().deleteDocument(
+          collectionId: AppConfig.knowledgeBaseCollection,
+          documentId: id,
+        );
+      } on Exception catch (e) {
         developer.log('Guide delete failed: $e', name: 'AdminKnowledgeScreen');
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -160,7 +160,7 @@ class _AdminKnowledgeScreenState extends State<AdminKnowledgeScreen> {
 
           // ── Guides list ──
           Expanded(
-            child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+            child: StreamBuilder<List<Map<String, dynamic>>>(
               stream: _knowledgeStream,
               builder: (context, snap) {
                 if (snap.connectionState == ConnectionState.waiting) {
@@ -174,11 +174,10 @@ class _AdminKnowledgeScreenState extends State<AdminKnowledgeScreen> {
                     ),
                   );
                 }
-                final allDocs = snap.data?.docs ?? [];
+                final allDocs = snap.data ?? const <Map<String, dynamic>>[];
 
                 // Client-side filtering
-                final docs = allDocs.where((d) {
-                  final data = d.data();
+                final docs = allDocs.where((data) {
                   if (_categoryFilter != 'All') {
                     final hazard = data['hazardType'] as String? ?? '';
                     if (hazard != _categoryFilter.toLowerCase()) return false;
@@ -217,8 +216,8 @@ class _AdminKnowledgeScreenState extends State<AdminKnowledgeScreen> {
                   padding: const EdgeInsets.fromLTRB(12, 8, 12, 100),
                   itemCount: docs.length,
                   itemBuilder: (_, i) {
-                    final d = docs[i].data();
-                    final id = docs[i].id;
+                    final d = docs[i];
+                    final id = d['\$id'] as String;
                     final hazardType =
                         d['hazardType'] as String? ??
                         d['category'] as String? ??
@@ -418,22 +417,25 @@ class _GuideFormSheetState extends State<_GuideFormSheet> {
       'source': _sourceCtrl.text.trim(),
       'category': _selectedCategory,
       'hazardType': _selectedCategory.toLowerCase(),
-      'updatedAt': FieldValue.serverTimestamp(),
     };
 
     try {
-      final col = FirebaseFirestore.instance.collection(
-        AppConfig.knowledgeBaseCollection,
-      );
+      final db = SupabaseService();
       if (widget.docId != null) {
-        await col.doc(widget.docId).update(data);
+        await db.updateDocument(
+          collectionId: AppConfig.knowledgeBaseCollection,
+          documentId: widget.docId!,
+          data: data,
+        );
         developer.log(
           'Guide updated: ${widget.docId}',
           name: 'AdminKnowledgeScreen',
         );
       } else {
-        data['createdAt'] = FieldValue.serverTimestamp();
-        await col.add(data);
+        await db.createDocument(
+          collectionId: AppConfig.knowledgeBaseCollection,
+          data: data,
+        );
         developer.log('Guide created', name: 'AdminKnowledgeScreen');
       }
 

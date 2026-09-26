@@ -36,7 +36,7 @@ class _NearbyReportsScreenState extends State<NearbyReportsScreen> {
     setState(() => _isLoading = true);
 
     final profile = context.read<ProfileProvider>();
-    final uid = context.read<AuthProvider>().currentUser?.uid;
+    final uid = context.read<AuthProvider>().currentUser?.id;
 
     // Fetch all reports
     final provider = context.read<ReportsStatusProvider>();

@@ -3,24 +3,11 @@
 -dontwarn com.google.android.play.core.**
 
 # ============================================
-# Appwrite SDK
+# OneSignal (push) — the SDK ships its own consumer rules; these are a
+# belt-and-braces keep for reflection-based handlers.
 # ============================================
--keep class io.appwrite.** { *; }
--keep class io.appwrite.models.** { *; }
--keep class io.appwrite.services.** { *; }
--dontwarn io.appwrite.**
-
-# ============================================
-# Firebase (FCM, Crashlytics, Analytics)
-# ============================================
--keep class com.google.firebase.** { *; }
--keep class com.google.android.gms.** { *; }
--dontwarn com.google.firebase.**
--dontwarn com.google.android.gms.**
-
-# Firebase Messaging
--keep class com.google.firebase.messaging.** { *; }
--keep class com.google.firebase.iid.** { *; }
+-keep class com.onesignal.** { *; }
+-dontwarn com.onesignal.**
 
 # ============================================
 # Hive Database

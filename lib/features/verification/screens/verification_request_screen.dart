@@ -1,4 +1,4 @@
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:climate_app/core/services/supabase_service.dart';
 
 import 'package:climate_app/core/utils/error_handler.dart';
 import 'package:climate_app/core/utils/validators.dart';
@@ -69,7 +69,7 @@ class _VerificationRequestScreenState extends State<VerificationRequestScreen> {
     }
 
     try {
-      final user = FirebaseAuth.instance.currentUser;
+      final user = SupabaseService().getCurrentUser();
 
       if (user == null) {
         if (mounted) {
@@ -84,7 +84,7 @@ class _VerificationRequestScreenState extends State<VerificationRequestScreen> {
         context
             .read<ReportsStatusProvider>()
             .submitVerificationRequest(
-              userId: user.uid,
+              userId: user.id,
               hazardType: _selectedHazard,
               severity: _selectedSeverity,
               description: _descriptionController.text,

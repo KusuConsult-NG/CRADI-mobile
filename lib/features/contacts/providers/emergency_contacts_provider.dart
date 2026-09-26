@@ -1,23 +1,21 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:climate_app/core/services/firebase_service.dart';
+import 'package:climate_app/core/services/supabase_service.dart';
 import 'package:climate_app/features/contacts/models/emergency_contact_model.dart';
 import 'package:climate_app/core/constants/app_config.dart';
 import 'dart:developer' as developer;
 
 class EmergencyContactsProvider extends ChangeNotifier {
-  final FirebaseService _firebase = FirebaseService();
+  final SupabaseService _db = SupabaseService();
 
   Future<List<EmergencyContact>> getContacts() async {
     try {
-      final user = FirebaseAuth.instance.currentUser;
+      final user = _db.getCurrentUser();
       if (user == null) return [];
 
-      // Only the signed-in user's own contacts. Sorted client-side so no
-      // composite (userId, name) index is required.
-      final docs = await _firebase.listDocuments(
+      // Only the signed-in user's own contacts (RLS enforces this too).
+      final docs = await _db.listDocuments(
         collectionId: AppConfig.contactsCollection,
-        queries: [FQuery.equal('userId', user.uid)],
+        queries: [FQuery.equal('userId', user.id)],
       );
 
       return _toSortedContacts(docs);
@@ -29,13 +27,13 @@ class EmergencyContactsProvider extends ChangeNotifier {
 
   Future<void> addContact(EmergencyContact contact) async {
     try {
-      final user = FirebaseAuth.instance.currentUser;
+      final user = _db.getCurrentUser();
       if (user == null) throw Exception('User not logged in');
 
-      final data = contact.toFirestore();
-      data['userId'] = user.uid;
+      final data = contact.toMap();
+      data['userId'] = user.id;
 
-      await _firebase.createDocument(
+      await _db.createDocument(
         collectionId: AppConfig.contactsCollection,
         data: data,
       );
@@ -49,10 +47,10 @@ class EmergencyContactsProvider extends ChangeNotifier {
 
   Future<void> updateContact(String id, EmergencyContact contact) async {
     try {
-      await _firebase.updateDocument(
+      await _db.updateDocument(
         collectionId: AppConfig.contactsCollection,
         documentId: id,
-        data: contact.toFirestore(),
+        data: contact.toMap(),
       );
       developer.log('Contact updated: $id');
       notifyListeners();
@@ -64,7 +62,7 @@ class EmergencyContactsProvider extends ChangeNotifier {
 
   Future<void> deleteContact(String id) async {
     try {
-      await _firebase.deleteDocument(
+      await _db.deleteDocument(
         collectionId: AppConfig.contactsCollection,
         documentId: id,
       );
@@ -95,24 +93,24 @@ class EmergencyContactsProvider extends ChangeNotifier {
 
   /// Real-time stream of the signed-in user's contacts.
   Stream<List<EmergencyContact>> getContactsStream() {
-    final user = FirebaseAuth.instance.currentUser;
+    final user = _db.getCurrentUser();
     if (user == null) return Stream.value(const []);
-    return _firebase
+    return _db
         .subscribeToCollection(
           collectionId: AppConfig.contactsCollection,
-          queries: [FQuery.equal('userId', user.uid)],
+          queries: [FQuery.equal('userId', user.id)],
         )
         .map(_toSortedContacts);
   }
 
   Stream<List<EmergencyContact>> getContactsByCategory(String category) {
-    final user = FirebaseAuth.instance.currentUser;
+    final user = _db.getCurrentUser();
     if (user == null) return Stream.value(const []);
-    return _firebase
+    return _db
         .subscribeToCollection(
           collectionId: AppConfig.contactsCollection,
           queries: [
-            FQuery.equal('userId', user.uid),
+            FQuery.equal('userId', user.id),
             FQuery.equal('category', category),
           ],
         )
@@ -121,10 +119,7 @@ class EmergencyContactsProvider extends ChangeNotifier {
 
   List<EmergencyContact> _toSortedContacts(List<Map<String, dynamic>> docs) {
     return docs
-        .map(
-          (data) =>
-              EmergencyContact.fromFirestore(data, data['\$id'] as String),
-        )
+        .map((data) => EmergencyContact.fromMap(data, data['\$id'] as String))
         .toList()
       ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
   }

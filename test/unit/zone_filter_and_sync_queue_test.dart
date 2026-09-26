@@ -4,7 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 /// Light-weight tests for the monitoring zone filter logic.
 ///
 /// The actual filter runs inside ReportsStatusProvider.fetchReports() which
-/// depends on Firestore. Here we test the pure-function logic that decides
+/// depends on Supabase. Here we test the pure-function logic that decides
 /// whether a report passes the monitoring zone check.
 void main() {
   group('Monitoring Zone Filter Logic', () {

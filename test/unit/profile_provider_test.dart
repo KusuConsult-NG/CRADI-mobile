@@ -1,6 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:climate_app/features/profile/providers/profile_provider.dart';
-import 'package:flutter/services.dart';
 
 /// Comprehensive unit tests for ProfileProvider
 ///
@@ -8,49 +7,8 @@ import 'package:flutter/services.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  setUpAll(() async {
-    // Mock Firebase initialization
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(
-          const MethodChannel('plugins.flutter.io/firebase_core'),
-          (MethodCall methodCall) async {
-            if (methodCall.method == 'Firebase#initializeCore') {
-              return [
-                {
-                  'name': '[DEFAULT]',
-                  'options': {
-                    'apiKey': 'test',
-                    'appId': 'test',
-                    'messagingSenderId': 'test',
-                    'projectId': 'test',
-                  },
-                  'pluginConstants': {},
-                },
-              ];
-            }
-            return null;
-          },
-        );
-
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(
-          const MethodChannel('plugins.flutter.io/firebase_auth'),
-          (MethodCall methodCall) async {
-            return null;
-          },
-        );
-
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(
-          const MethodChannel('plugins.flutter.io/cloud_firestore'),
-          (MethodCall methodCall) async {
-            return null;
-          },
-        );
-  });
-
   group('ProfileProvider', () {
-    // Skip tests that require actual Firebase connection for now
+    // Skip tests that require an actual Supabase connection for now
     // These would need full mocking setup with mockito
 
     test('should have initial structure', () {
@@ -202,9 +160,9 @@ void main() {
       });
     });
 
-    // TODO: Add mocked tests for Firestore integration
+    // TODO: Add mocked tests for Supabase integration
     // - Mock SecureStorageService
-    // - Mock FirebaseFirestore
+    // - Mock SupabaseService
     // - Test sync behavior
     // - Test error handling
   });

@@ -1,39 +1,30 @@
 import 'dart:developer' as developer;
 import 'dart:convert';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:climate_app/core/constants/app_config.dart';
+import 'package:climate_app/core/services/supabase_service.dart';
 import 'package:flutter/material.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:http/http.dart' as http;
 
 /// Service for sending transactional emails.
 ///
-/// Emails are sent through the `sendTransactionalEmail` Cloud Function
-/// (see `firebase-functions/index.js`). The email provider API key lives only
-/// on the server; the client never holds it. Templates are rendered
-/// server-side from `firebase-functions/email_templates.js`.
+/// Emails are sent by the Railway backend (`POST ${BACKEND_URL}/email`); the
+/// email provider API key lives only on the server. Every request carries the
+/// signed-in user's Supabase access token. The backend only allows sending to
+/// the caller's own address unless the caller is approved staff/admin.
 ///
-/// Requests carry the current user's Firebase ID token. The only request
-/// allowed without a token is a `verification` email during registration.
+/// Account verification and password-recovery codes are sent by Supabase Auth
+/// itself and do not go through this service.
 class EmailService {
   static final EmailService _instance = EmailService._internal();
   factory EmailService() => _instance;
   EmailService._internal();
 
-  static const String _functionUrl =
-      'https://us-central1-ewer-8f788.cloudfunctions.net/sendTransactionalEmail';
+  static Uri get _endpoint => Uri.parse('${AppConfig.backendUrl}/email');
 
   // ── Public send methods ────────────────────────────────────────────────────
 
-  Future<bool> sendVerificationCode(
-    String email,
-    String code, {
-    String? name,
-  }) => _send(
-    type: 'verification',
-    to: email,
-    data: {'code': code, 'name': name ?? 'User'},
-  );
-
+  /// [resetLink] must be an https URL (rejected by the backend otherwise).
   Future<bool> sendPasswordReset(String email, String resetLink) =>
       _send(type: 'passwordReset', to: email, data: {'resetLink': resetLink});
 
@@ -80,16 +71,17 @@ class EmailService {
       return false;
     }
 
-    try {
-      final headers = <String, String>{'Content-Type': 'application/json'};
+    if (AppConfig.backendUrl.isEmpty) {
+      developer.log(
+        '[EmailService] BACKEND_URL not configured; cannot send "$type"',
+        name: 'EmailService',
+      );
+      return false;
+    }
 
-      final user = FirebaseAuth.instance.currentUser;
-      final idToken = await user?.getIdToken();
-      if (idToken != null && idToken.isNotEmpty) {
-        headers['Authorization'] = 'Bearer $idToken';
-      } else if (type != 'verification') {
-        // The Cloud Function rejects unauthenticated requests for every
-        // type except the registration OTP.
+    try {
+      final token = SupabaseService().accessToken;
+      if (token == null || token.isEmpty) {
         developer.log(
           '[EmailService] Not signed in; cannot send "$type" email',
           name: 'EmailService',
@@ -97,14 +89,18 @@ class EmailService {
         _showErrorToast();
         return false;
       }
+      final headers = <String, String>{
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      };
 
       final response = await http.post(
-        Uri.parse(_functionUrl),
+        _endpoint,
         headers: headers,
         body: jsonEncode({'type': type, 'to': to, 'data': data}),
       );
 
-      final success = response.statusCode == 200;
+      final success = response.statusCode >= 200 && response.statusCode < 300;
       developer.log(
         '[EmailService] type=$type to=$to status=${response.statusCode} '
         'success=$success',
@@ -113,7 +109,7 @@ class EmailService {
 
       if (!success) {
         developer.log(
-          '[EmailService] Function error body: ${response.body}',
+          '[EmailService] Backend error body: ${response.body}',
           name: 'EmailService',
         );
         _showErrorToast();

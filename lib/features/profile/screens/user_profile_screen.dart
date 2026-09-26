@@ -245,18 +245,21 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
       if (result['email'] != null) {
         emailMessage = await profileProvider.updateEmail(result['email']!);
       }
-      // Update location
-      await profileProvider.updateLocation(
+      // Update location (may be refused for approved staff accounts)
+      final locationMessage = await profileProvider.updateLocation(
         result['state'],
         result['lga'],
         result['ward'],
       );
 
       if (mounted) {
+        final message = [?emailMessage, ?locationMessage].join('\n');
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(emailMessage ?? 'Profile updated successfully!'),
-            backgroundColor: emailMessage == null ? Colors.green : null,
+            content: Text(
+              message.isEmpty ? 'Profile updated successfully!' : message,
+            ),
+            backgroundColor: message.isEmpty ? Colors.green : null,
           ),
         );
       }
@@ -483,9 +486,9 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                   Consumer<app_auth.AuthProvider>(
                     builder: (context, authProvider, _) {
                       String roleText = 'Early Warning Monitor';
-                      if (authProvider.userRole != null) {
+                      if (authProvider.rawUserRole != null) {
                         // Simple formatted string from enum
-                        switch (authProvider.userRole!) {
+                        switch (authProvider.rawUserRole!) {
                           case app_auth.UserRole.user:
                             roleText = 'User';
                             break;
@@ -497,6 +500,12 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                             break;
                           case app_auth.UserRole.ewr:
                             roleText = 'Early Warning Responder';
+                            break;
+                          case app_auth.UserRole.ldpCoordinator:
+                            roleText = 'LDP Coordinator';
+                            break;
+                          case app_auth.UserRole.projectStaff:
+                            roleText = 'Project Staff';
                             break;
                           case app_auth.UserRole.admin:
                             roleText = 'Administrator';

@@ -1,4 +1,5 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:climate_app/core/constants/app_config.dart';
+import 'package:climate_app/core/services/supabase_service.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:climate_app/core/theme/app_colors.dart';
@@ -17,17 +18,19 @@ class _AdminAlertsScreenState extends State<AdminAlertsScreen> {
   final _formKey = GlobalKey<FormState>();
   final _titleCtrl = TextEditingController();
   final _messageCtrl = TextEditingController();
-  late final Stream<QuerySnapshot<Map<String, dynamic>>> _alertsStream;
+  late final Stream<List<Map<String, dynamic>>> _alertsStream;
 
   @override
   void initState() {
     super.initState();
-    _alertsStream = FirebaseFirestore.instance
-        .collection('alerts')
-        .where('isActive', isEqualTo: true)
-        .orderBy('createdAt', descending: true)
-        .limit(20)
-        .snapshots();
+    _alertsStream = SupabaseService().subscribeToCollection(
+      collectionId: AppConfig.alertsCollection,
+      queries: [
+        FQuery.equal('isActive', true),
+        FQuery.orderDesc('createdAt'),
+        FQuery.limit(20),
+      ],
+    );
   }
 
   String _severity = 'warning';
@@ -71,15 +74,18 @@ class _AdminAlertsScreenState extends State<AdminAlertsScreen> {
     setState(() => _sending = true);
 
     try {
-      await FirebaseFirestore.instance.collection('alerts').add({
-        'title': _titleCtrl.text.trim(),
-        'message': _messageCtrl.text.trim(),
-        'severity': _severity,
-        'targetLga': _targetLga,
-        'createdAt': FieldValue.serverTimestamp(),
-        'createdBy': 'admin',
-        'isActive': true,
-      });
+      // created_by defaults to auth.uid(); the backend pushes the alert
+      // from the resulting alert_created event.
+      await SupabaseService().createDocument(
+        collectionId: AppConfig.alertsCollection,
+        data: {
+          'title': _titleCtrl.text.trim(),
+          'message': _messageCtrl.text.trim(),
+          'severity': _severity,
+          'targetLga': _targetLga,
+          'isActive': true,
+        },
+      );
 
       developer.log(
         'Alert broadcast: ${_titleCtrl.text} → $_targetLga',
@@ -117,10 +123,12 @@ class _AdminAlertsScreenState extends State<AdminAlertsScreen> {
 
   Future<void> _dismissAlert(String id) async {
     try {
-      await FirebaseFirestore.instance.collection('alerts').doc(id).update({
-        'isActive': false,
-      });
-    } on FirebaseException catch (_) {
+      await SupabaseService().updateDocument(
+        collectionId: AppConfig.alertsCollection,
+        documentId: id,
+        data: {'isActive': false},
+      );
+    } on Exception catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -374,7 +382,7 @@ class _AdminAlertsScreenState extends State<AdminAlertsScreen> {
           ),
           const SizedBox(height: 12),
 
-          StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+          StreamBuilder<List<Map<String, dynamic>>>(
             stream: _alertsStream,
             builder: (context, snap) {
               if (snap.connectionState == ConnectionState.waiting) {
@@ -392,7 +400,7 @@ class _AdminAlertsScreenState extends State<AdminAlertsScreen> {
                   ),
                 );
               }
-              final docs = snap.data?.docs ?? [];
+              final docs = snap.data ?? const <Map<String, dynamic>>[];
               if (docs.isEmpty) {
                 return Center(
                   child: Padding(
@@ -405,14 +413,13 @@ class _AdminAlertsScreenState extends State<AdminAlertsScreen> {
                 );
               }
               return Column(
-                children: docs.map((doc) {
-                  final d = doc.data();
+                children: docs.map((d) {
                   final severity = d['severity'] as String? ?? 'info';
                   final color = _severityColors[severity] ?? Colors.blue;
                   final createdAt = d['createdAt'];
                   String timeStr = '';
-                  if (createdAt is Timestamp) {
-                    final dt = createdAt.toDate();
+                  final dt = parseTimestamp(createdAt);
+                  if (dt != null) {
                     timeStr = '${dt.day}/${dt.month}/${dt.year}';
                   }
                   return Card(
@@ -476,7 +483,7 @@ class _AdminAlertsScreenState extends State<AdminAlertsScreen> {
                       trailing: IconButton(
                         icon: const Icon(Icons.close, size: 18),
                         tooltip: 'Dismiss alert',
-                        onPressed: () => _dismissAlert(doc.id),
+                        onPressed: () => _dismissAlert(d['\$id'] as String),
                       ),
                       isThreeLine: true,
                     ),

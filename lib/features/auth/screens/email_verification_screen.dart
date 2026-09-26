@@ -7,15 +7,10 @@ import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import 'dart:developer' as developer;
 
+/// Re-checks the signed-in account's verification state (legacy
+/// verification deep-links land here). Codes are entered on the OTP screen.
 class EmailVerificationScreen extends StatefulWidget {
-  final String userId;
-  final String secret;
-
-  const EmailVerificationScreen({
-    super.key,
-    required this.userId,
-    required this.secret,
-  });
+  const EmailVerificationScreen({super.key});
 
   @override
   State<EmailVerificationScreen> createState() =>
@@ -35,9 +30,9 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
 
   Future<void> _verifyEmail() async {
     try {
-      // In Firebase, verification is done by the user entering OTP.
-      // This screen handles deep-links from legacy Appwrite verification emails.
-      // For new users, we just mark the Firebase user as verified via Firestore.
+      // Verification is done by entering the 6-digit code Supabase emails.
+      // This screen handles legacy verification deep-links: it just
+      // re-reads the account state.
       final authProvider = context.read<AuthProvider>();
 
       if (authProvider.currentUser != null) {

@@ -1,17 +1,16 @@
 import 'package:flutter/material.dart';
-import 'package:climate_app/core/services/firebase_service.dart';
+import 'package:climate_app/core/services/supabase_service.dart';
 import 'package:climate_app/core/services/peer_verification_service.dart';
 import 'package:climate_app/features/verification/models/verification_report_model.dart';
 import 'package:climate_app/core/constants/app_config.dart';
 import 'dart:async';
 import 'dart:developer' as developer;
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:uuid/uuid.dart';
 import 'package:climate_app/core/services/offline_storage_service.dart';
 import 'package:climate_app/features/profile/providers/profile_provider.dart';
 import 'package:climate_app/core/data/mvp_locations_data.dart';
 import 'package:climate_app/features/reporting/providers/reporting_provider.dart'
-    show normalizeSeverity, isAlertSeverity;
+    show normalizeSeverity;
 
 /// Thrown when a verification is refused by business rules (self-verification,
 /// distance, not signed in). [message] is safe to show to the user.
@@ -24,7 +23,7 @@ class VerificationRefusedException implements Exception {
 }
 
 class ReportsStatusProvider extends ChangeNotifier {
-  final FirebaseService _firebase = FirebaseService();
+  final SupabaseService _db = SupabaseService();
   final OfflineStorageService _offlineStorage = OfflineStorageService();
   ProfileProvider? _profileProvider;
 
@@ -41,7 +40,9 @@ class ReportsStatusProvider extends ChangeNotifier {
   bool get isSubmitting => _isSubmitting;
 
   final Map<String, List<VerificationReport>> _reportsMap = {};
-  final Map<String, DocumentSnapshot?> _lastDocMap = {};
+
+  /// Offset-based pagination cursor: rows already loaded per key.
+  final Map<String, int> _offsetMap = {};
   final Map<String, bool> _hasMoreMap = {};
   final Map<String, bool> _loadingMap = {};
   final Map<String, int> _totalCounts = {};
@@ -94,7 +95,7 @@ class ReportsStatusProvider extends ChangeNotifier {
       'hazardType': hazardType,
       'severity': severity,
       'status': 'pending',
-      'submittedAt': DateTime.now().toIso8601String(),
+      'submittedAt': DateTime.now().toUtc().toIso8601String(),
       'locationDetails': defaultLocation,
       'location': defaultLocation,
       'address': defaultLocation,
@@ -103,15 +104,20 @@ class ReportsStatusProvider extends ChangeNotifier {
       'state': state,
       'latitude': latitude ?? 0.0,
       'longitude': longitude ?? 0.0,
-      'imageUrls': [],
-      'isAlert': isAlertSeverity(severity),
-      'verificationCount': 0,
+      'imageUrls': <String>[],
+      'type': 'verification_request',
     };
+    // Client-generated id so an offline retry is idempotent.
+    final docId = const Uuid().v4();
 
     try {
       developer.log('Checking network connectivity for submission...');
-      await _firebase
-          .createDocument(collectionId: AppConfig.reportsCollection, data: data)
+      await _db
+          .createDocument(
+            collectionId: AppConfig.reportsCollection,
+            documentId: docId,
+            data: data,
+          )
           .timeout(const Duration(seconds: 10));
       developer.log('Verification request submitted online');
     } on Exception catch (e) {
@@ -119,7 +125,7 @@ class ReportsStatusProvider extends ChangeNotifier {
       try {
         await _offlineStorage.addToSyncQueue({
           ...data,
-          'type': 'verification_request',
+          'docId': docId,
           'collectionId': AppConfig.reportsCollection,
         });
         // Re-throw with offline indicator for UI
@@ -172,7 +178,7 @@ class ReportsStatusProvider extends ChangeNotifier {
       if ((_hasMoreMap[key] == false) || (_loadingMap[key] == true)) return;
     } else {
       _hasMoreMap[key] = true;
-      _lastDocMap[key] = null;
+      _offsetMap[key] = 0;
       _reportsMap[key] = [];
     }
 
@@ -192,7 +198,7 @@ class ReportsStatusProvider extends ChangeNotifier {
         baseQueries.add(FQuery.notEqual('userId', excludeUserId));
       }
 
-      // Build zone filter (may require composite index)
+      // Build zone filter
       final zoneQueries = <QueryFilter>[];
       if (userId == null && _profileProvider?.monitoringZone != null) {
         final zone = _profileProvider!.monitoringZone!;
@@ -233,22 +239,21 @@ class ReportsStatusProvider extends ChangeNotifier {
       List<Map<String, dynamic>> docs;
       try {
         if (!loadMore) {
-          _totalCounts[key] = await _firebase.countDocuments(
+          _totalCounts[key] = await _db.countDocuments(
             collectionId: AppConfig.reportsCollection,
             queries: queries,
           );
         }
-        docs = await _firebase.listDocuments(
+        docs = await _db.listDocuments(
           collectionId: AppConfig.reportsCollection,
           queries: queries,
           limitCount: 20,
-          startAfter: loadMore ? _lastDocMap[key] : null,
+          offset: loadMore ? (_offsetMap[key] ?? 0) : 0,
         );
       } on Exception catch (primaryError) {
         // ── DEFENSIVE FALLBACK ──────────────────────────────────────
-        // If the zone-filtered query fails (usually a missing Firestore
-        // composite index), retry WITHOUT the zone filter so the user
-        // still sees reports rather than an empty screen.
+        // If the zone-filtered query fails, retry WITHOUT the zone filter
+        // so the user still sees reports rather than an empty screen.
         developer.log(
           '⚠️ Primary query failed for key=$key: $primaryError\n'
           '   Retrying without zone filter as fallback...',
@@ -261,16 +266,16 @@ class ReportsStatusProvider extends ChangeNotifier {
         ];
 
         if (!loadMore) {
-          _totalCounts[key] = await _firebase.countDocuments(
+          _totalCounts[key] = await _db.countDocuments(
             collectionId: AppConfig.reportsCollection,
             queries: fallbackQueries,
           );
         }
-        docs = await _firebase.listDocuments(
+        docs = await _db.listDocuments(
           collectionId: AppConfig.reportsCollection,
           queries: fallbackQueries,
           limitCount: 20,
-          startAfter: loadMore ? _lastDocMap[key] : null,
+          offset: loadMore ? (_offsetMap[key] ?? 0) : 0,
         );
 
         developer.log(
@@ -292,22 +297,20 @@ class ReportsStatusProvider extends ChangeNotifier {
         docs.map((data) async {
           final reportStatus = _parseStatus(data['status']);
 
+          // reporter_name is filled in by the database on insert; fall
+          // back to the profile (readable by staff) for older rows.
           String reporterName = 'Community Report';
-          if (data['userId'] != null) {
+          final storedName = data['reporterName'] as String?;
+          if (storedName != null && storedName.trim().isNotEmpty) {
+            reporterName = storedName;
+          } else if (data['userId'] != null) {
             try {
-              final userDoc = await FirebaseFirestore.instance
-                  .collection(AppConfig.usersCollection)
-                  .doc(data['userId'])
-                  .get();
-              if (userDoc.exists && userDoc.data() != null) {
-                // User docs store the display name in `name`
-                // (`fullName` kept as a legacy fallback).
-                final userData = userDoc.data()!;
-                final n = (userData['name'] ?? userData['fullName']) as String?;
-                if (n != null && n.trim().isNotEmpty) {
-                  reporterName = n;
-                }
-              }
+              final userDoc = await _db.getDocument(
+                collectionId: AppConfig.usersCollection,
+                documentId: data['userId'] as String,
+              );
+              final n = userDoc['name'] as String?;
+              if (n != null && n.trim().isNotEmpty) reporterName = n;
             } on Exception catch (_) {}
           }
 
@@ -337,10 +340,8 @@ class ReportsStatusProvider extends ChangeNotifier {
         _reportsMap[key] = newReports;
       }
 
-      // Store pagination cursor
-      if (docs.isNotEmpty) {
-        _lastDocMap[key] = docs.last['\$snapshot'];
-      }
+      // Advance pagination cursor
+      _offsetMap[key] = (loadMore ? (_offsetMap[key] ?? 0) : 0) + docs.length;
     } on Exception catch (e, stack) {
       developer.log(
         'Error fetching reports for key=$key: $e',
@@ -356,7 +357,7 @@ class ReportsStatusProvider extends ChangeNotifier {
 
   Future<List<VerificationReport>> getAllReports() async {
     try {
-      final docs = await _firebase.listDocuments(
+      final docs = await _db.listDocuments(
         collectionId: AppConfig.reportsCollection,
         limitCount: 100, // Safety cap — no unbounded reads
       );
@@ -390,7 +391,7 @@ class ReportsStatusProvider extends ChangeNotifier {
     required bool isConfirmed,
     String? userId,
   }) async {
-    final uid = userId ?? FirebaseAuth.instance.currentUser?.uid;
+    final uid = userId ?? _db.currentUserId;
     if (uid == null) {
       throw const VerificationRefusedException(
         'You must be signed in to verify reports.',
@@ -416,14 +417,9 @@ class ReportsStatusProvider extends ChangeNotifier {
         isConfirmed: true,
         userId: userId,
       );
-      // Staff verification from this screen marks the report verified
-      // (only reached when the verification above was accepted).
-      await _firebase.updateDocument(
-        collectionId: AppConfig.reportsCollection,
-        documentId: reportId,
-        data: {'status': 'verified'},
-      );
-      developer.log('Report verified: $reportId');
+      // One peer vote only: the verifications_after_insert trigger moves
+      // the report to 'verified' once the confirmation threshold is met.
+      developer.log('Report confirmation recorded: $reportId');
       notifyListeners();
       fetchReports(status: ReportStatus.pending);
       fetchReports(status: ReportStatus.verified);
@@ -435,10 +431,10 @@ class ReportsStatusProvider extends ChangeNotifier {
 
   Future<void> approveReport(String reportId) async {
     try {
-      await _firebase.updateDocument(
+      await _db.updateDocument(
         collectionId: AppConfig.reportsCollection,
         documentId: reportId,
-        data: {'status': 'approved'},
+        data: {'status': 'approved', 'approvedAt': DateTime.now()},
       );
       developer.log('Report approved: $reportId');
       notifyListeners();
@@ -457,12 +453,8 @@ class ReportsStatusProvider extends ChangeNotifier {
         isConfirmed: false,
         userId: userId,
       );
-      await _firebase.updateDocument(
-        collectionId: AppConfig.reportsCollection,
-        documentId: reportId,
-        data: {'status': 'rejected'},
-      );
-      developer.log('Report rejected: $reportId');
+      // A dispute is one peer vote; it does not change the report status.
+      developer.log('Report dispute recorded: $reportId');
       notifyListeners();
       fetchReports(status: ReportStatus.pending);
       fetchReports(status: ReportStatus.rejected);
@@ -474,7 +466,7 @@ class ReportsStatusProvider extends ChangeNotifier {
 
   Future<void> moveBackToPending(String reportId) async {
     try {
-      await _firebase.updateDocument(
+      await _db.updateDocument(
         collectionId: AppConfig.reportsCollection,
         documentId: reportId,
         data: {'status': 'pending'},
@@ -577,20 +569,8 @@ class ReportsStatusProvider extends ChangeNotifier {
 
   String _formatTimeAgo(dynamic timestamp) {
     if (timestamp == null) return 'Unknown';
-    DateTime dateTime;
-    if (timestamp is String) {
-      try {
-        dateTime = DateTime.parse(timestamp);
-      } on Exception {
-        return 'Unknown';
-      }
-    } else if (timestamp is Timestamp) {
-      dateTime = timestamp.toDate();
-    } else if (timestamp is DateTime) {
-      dateTime = timestamp;
-    } else {
-      return 'Unknown';
-    }
+    final dateTime = parseTimestamp(timestamp);
+    if (dateTime == null) return 'Unknown';
 
     final diff = DateTime.now().difference(dateTime);
     if (diff.isNegative || diff.inMinutes < 1) return 'Just now';

@@ -1,27 +1,26 @@
 import 'package:climate_app/core/services/secure_storage_service.dart';
-import 'package:climate_app/core/services/firebase_service.dart';
+import 'package:climate_app/core/services/supabase_service.dart';
 import 'package:climate_app/core/services/offline_storage_service.dart';
 import 'package:climate_app/core/constants/app_config.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' as sb;
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'dart:io';
 import 'dart:developer' as developer;
 
-/// Provider for managing user profile data with Firebase + Firestore
+/// Provider for managing user profile data (Supabase `profiles` row).
 class ProfileProvider extends ChangeNotifier {
   ProfileProvider({
-    FirebaseService? firebaseService,
+    SupabaseService? supabaseService,
     Connectivity? connectivity,
-  }) : _firebase = firebaseService ?? FirebaseService(),
+  }) : _db = supabaseService ?? SupabaseService(),
        _connectivity = connectivity ?? Connectivity() {
     loadProfile();
   }
 
   final SecureStorageService _storage = SecureStorageService();
-  final FirebaseService _firebase;
+  final SupabaseService _db;
   final OfflineStorageService _offlineStorage = OfflineStorageService();
   Map<String, dynamic>? _userProfile;
   final Connectivity _connectivity;
@@ -53,17 +52,14 @@ class ProfileProvider extends ChangeNotifier {
   bool get biometricsEnabled => _biometricsEnabled;
   bool get isLoading => _isLoading;
 
-  /// Get current user's reports as a real-time Firestore stream.
+  /// Get current user's reports as a realtime stream.
   Stream<List<Map<String, dynamic>>> getUserReportsStream() {
-    final user = FirebaseAuth.instance.currentUser;
+    final user = _db.getCurrentUser();
     if (user == null) return const Stream.empty();
 
-    return _firebase.subscribeToCollection(
+    return _db.subscribeToCollection(
       collectionId: AppConfig.reportsCollection,
-      queries: [
-        FQuery.equal('userId', user.uid),
-        FQuery.orderDesc('createdAt'),
-      ],
+      queries: [FQuery.equal('userId', user.id), FQuery.orderDesc('createdAt')],
     );
   }
 
@@ -72,20 +68,20 @@ class ProfileProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final user = FirebaseAuth.instance.currentUser;
+      final user = _db.getCurrentUser();
 
       if (user != null) {
         _email = user.email ?? '';
         // ── Fast path: load from secure-storage cache immediately ──────────
         // This ensures the name is correct on the very first frame,
-        // without waiting for the Firestore round-trip.
+        // without waiting for the network round-trip.
         final cachedEmail = await _storage.read('profile_email');
         if (cachedEmail == user.email) {
           final cachedName = await _storage.read('profile_name');
           if (cachedName != null && cachedName.isNotEmpty) {
             _name = cachedName;
           } else {
-            _name = user.displayName ?? 'User';
+            _name = _metadataName(user);
           }
           _phone = await _storage.read('profile_phone') ?? '';
           _profileImagePath = await _storage.read('profile_image');
@@ -99,26 +95,24 @@ class ProfileProvider extends ChangeNotifier {
           final bioEnabled = await _storage.read('biometric_enabled');
           _biometricsEnabled = bioEnabled == 'true';
           // Notify immediately so the UI shows cached data, then continue
-          // fetching from Firestore to refresh.
+          // fetching from the server to refresh.
           notifyListeners();
         } else {
-          _name = user.displayName ?? 'User';
+          _name = _metadataName(user);
         }
-        _registrationDate = user.metadata.creationTime;
+        _registrationDate = parseTimestamp(user.createdAt);
 
-        // Load from Firestore (source of truth)
+        // Load the profiles row (source of truth)
         try {
-          final doc = await _firebase.getDocument(
+          final doc = await _db.getDocument(
             collectionId: AppConfig.usersCollection,
-            documentId: user.uid,
+            documentId: user.id,
           );
 
           if (doc.isNotEmpty) {
-            // Sanitize the Firestore document BEFORE storing in _userProfile.
-            // Firestore returns Timestamp, GeoPoint, and DocumentReference objects
-            // which Hive cannot serialize. By converting here, every downstream
-            // call that merges into or caches _userProfile is safe by default.
-            _userProfile = _sanitizeFirestoreDoc(doc);
+            // Rows are plain JSON (timestamps are ISO strings), so they can
+            // be cached in Hive as-is.
+            _userProfile = Map<String, dynamic>.from(doc);
             await _offlineStorage.cacheUserProfile(_userProfile!);
 
             _name = doc['name'] ?? _name;
@@ -138,7 +132,8 @@ class ProfileProvider extends ChangeNotifier {
               _monitoringZone = await _storage.read('monitoring_zone');
             }
 
-            if (doc['profileImageUrl'] != null) {
+            final imageUrl = doc['profileImageUrl'] as String?;
+            if (imageUrl != null && imageUrl.isNotEmpty) {
               _profileImagePath = doc['profileImageUrl'] as String;
             }
 
@@ -157,10 +152,10 @@ class ProfileProvider extends ChangeNotifier {
               _biometricsEnabled.toString(),
             );
 
-            developer.log('Profile loaded from Firestore: ${user.uid}');
+            developer.log('Profile loaded: ${user.id}');
           }
         } on Exception catch (e) {
-          developer.log('Firestore error, using local fallback: $e');
+          developer.log('Profile fetch error, using local fallback: $e');
           final cached = _offlineStorage.getCachedUserProfile();
           if (cached != null) {
             _userProfile = cached;
@@ -195,10 +190,10 @@ class ProfileProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Sync changes to Firestore
-  Future<void> _syncToFirestore(Map<String, dynamic> data) async {
+  /// Push profile changes to the `profiles` row.
+  Future<void> _syncToServer(Map<String, dynamic> data) async {
     try {
-      final user = FirebaseAuth.instance.currentUser;
+      final user = _db.getCurrentUser();
       if (user == null) return;
 
       final connectivityResults = await _connectivity.checkConnectivity();
@@ -211,15 +206,15 @@ class ProfileProvider extends ChangeNotifier {
         return;
       }
 
-      await _firebase.updateDocument(
+      await _db.updateDocument(
         collectionId: AppConfig.usersCollection,
-        documentId: user.uid,
+        documentId: user.id,
         data: data,
       );
 
-      developer.log('Profile synced to Firestore', name: 'ProfileProvider');
+      developer.log('Profile synced', name: 'ProfileProvider');
     } on Exception catch (e) {
-      developer.log('Error syncing to Firestore: $e', name: 'ProfileProvider');
+      developer.log('Error syncing profile: $e', name: 'ProfileProvider');
     }
   }
 
@@ -234,22 +229,21 @@ class ProfileProvider extends ChangeNotifier {
     await _storage.write('profile_name', name);
     await _updateLocalState({'name': name});
     notifyListeners();
-    await _syncToFirestore({'name': name});
+    await _syncToServer({'name': name});
   }
 
   /// Request an email change.
   ///
-  /// The sign-in email lives in Firebase Auth, so this sends a verification
-  /// link to [email] via `verifyBeforeUpdateEmail`. The change only takes
-  /// effect once the user clicks that link; the local profile and Firestore
-  /// doc keep the current email until then (AuthProvider syncs the Firestore
-  /// doc on the next sign-in after verification).
+  /// The sign-in email lives in Supabase Auth: `updateUser(email:)` makes
+  /// Supabase send a confirmation link to the new address. The change only
+  /// takes effect once it is confirmed; a database trigger then mirrors the
+  /// new email into the `profiles` row.
   ///
   /// Returns a user-facing message describing the outcome, or `null` when
   /// [email] is unchanged. Never throws.
   Future<String?> updateEmail(String email) async {
     final newEmail = email.trim();
-    final user = FirebaseAuth.instance.currentUser;
+    final user = _db.getCurrentUser();
     if (newEmail.isEmpty ||
         newEmail.toLowerCase() == (user?.email ?? _email).toLowerCase()) {
       return null;
@@ -259,25 +253,26 @@ class ProfileProvider extends ChangeNotifier {
     }
 
     try {
-      await user.verifyBeforeUpdateEmail(newEmail);
+      await _db.auth.updateUser(sb.UserAttributes(email: newEmail));
       developer.log(
-        'Email change verification sent to $newEmail',
+        'Email change confirmation sent to $newEmail',
         name: 'ProfileProvider',
       );
-      return 'A verification link has been sent to $newEmail. Your email '
-          'will change after you click the link.';
-    } on FirebaseAuthException catch (e) {
+      return 'A confirmation link has been sent to $newEmail. Your email '
+          'will change after you confirm it.';
+    } on sb.AuthException catch (e) {
       developer.log(
         'updateEmail error: ${e.code} ${e.message}',
         name: 'ProfileProvider',
       );
       switch (e.code) {
-        case 'requires-recent-login':
+        case 'reauthentication_needed':
           return 'For security, please log out and sign in again before '
               'changing your email.';
-        case 'invalid-email':
+        case 'validation_failed':
+        case 'email_address_invalid':
           return 'Please enter a valid email address.';
-        case 'email-already-in-use':
+        case 'email_exists':
           return 'That email is already in use by another account.';
         default:
           return 'Could not update email. Please try again.';
@@ -293,7 +288,7 @@ class ProfileProvider extends ChangeNotifier {
     await _storage.write('profile_phone', phone);
     await _updateLocalState({'phone': phone});
     notifyListeners();
-    await _syncToFirestore({'phone': phone});
+    await _syncToServer({'phone': phone});
   }
 
   Future<void> updateProfileImage(String imagePath) async {
@@ -301,44 +296,42 @@ class ProfileProvider extends ChangeNotifier {
     await _storage.write('profile_image', imagePath);
     await _updateLocalState({'profileImageUrl': imagePath});
     notifyListeners();
-    await _syncToFirestore({'profileImageUrl': imagePath});
+    await _syncToServer({'profileImageUrl': imagePath});
   }
 
-  /// Upload profile image to Firebase Storage and update Firestore
+  /// Upload profile image to the `profile-images` bucket and store its URL.
   Future<void> uploadProfileImage(XFile imageFile) async {
     try {
       _isLoading = true;
       notifyListeners();
 
-      final user = FirebaseAuth.instance.currentUser;
+      final user = _db.getCurrentUser();
       if (user == null) {
         throw Exception('User must be logged in to upload profile image');
       }
 
       final file = File(imageFile.path);
-      final ext = imageFile.path.split('.').last.toLowerCase();
-      final validExt = (ext == 'png' || ext == 'jpg' || ext == 'jpeg')
-          ? ext
-          : 'jpg';
       final timestamp = DateTime.now().millisecondsSinceEpoch;
-      final storagePath =
-          'profile_images/${user.uid}/profile_$timestamp.$validExt';
+      // Images are re-encoded as JPEG before upload. The first path segment
+      // must be the user id (storage RLS).
+      final storagePath = '${user.id}/profile_$timestamp.jpg';
 
       developer.log(
-        'Uploading profile image to Firebase Storage: $storagePath',
+        'Uploading profile image: $storagePath',
         name: 'ProfileProvider',
       );
 
-      final fileUrl = await _firebase.uploadFileFromPath(
+      final fileUrl = await _db.uploadFileFromPath(
+        bucketId: AppConfig.profileImagesBucket,
         storagePath: storagePath,
         file: file,
-        contentType: 'image/$validExt',
+        contentType: 'image/jpeg',
       );
 
       _profileImagePath = fileUrl;
       await _storage.write('profile_image', fileUrl);
       await _updateLocalState({'profileImageUrl': fileUrl});
-      await _syncToFirestore({'profileImageUrl': fileUrl});
+      await _syncToServer({'profileImageUrl': fileUrl});
 
       developer.log('Profile image uploaded: $fileUrl');
     } on Exception catch (e) {
@@ -350,7 +343,35 @@ class ProfileProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> updateLocation(String? state, String? lga, String? ward) async {
+  /// Updates the profile location. Returns a user-facing message when the
+  /// server refuses the change (approved staff accounts can only be moved
+  /// by an admin), otherwise null.
+  Future<String?> updateLocation(
+    String? state,
+    String? lga,
+    String? ward,
+  ) async {
+    if (state == _state && lga == _lga && ward == _ward) return null;
+
+    final user = _db.getCurrentUser();
+    if (user != null) {
+      try {
+        await _db.updateDocument(
+          collectionId: AppConfig.usersCollection,
+          documentId: user.id,
+          data: {'state': state, 'lga': lga, 'ward': ward},
+        );
+      } on Exception catch (e) {
+        if (SupabaseService.isPermissionDenied(e) ||
+            e is DocumentNotFoundException) {
+          return 'Your location is managed by an administrator. '
+              'Please ask an admin to change the location of a staff account.';
+        }
+        // Offline / transient: keep the change locally (as before).
+        developer.log('Location sync failed: $e', name: 'ProfileProvider');
+      }
+    }
+
     _state = state;
     _lga = lga;
     _ward = ward;
@@ -359,7 +380,7 @@ class ProfileProvider extends ChangeNotifier {
     if (ward != null) await _storage.write('profile_ward', ward);
     await _updateLocalState({'state': state, 'lga': lga, 'ward': ward});
     notifyListeners();
-    await _syncToFirestore({'state': state, 'lga': lga, 'ward': ward});
+    return null;
   }
 
   Future<void> updateMonitoringZone(String zone) async {
@@ -368,7 +389,7 @@ class ProfileProvider extends ChangeNotifier {
     await _storage.write('monitoring_zone', effectiveZone ?? '');
     await _updateLocalState({'monitoringZone': effectiveZone ?? ''});
     notifyListeners();
-    await _syncToFirestore({'monitoringZone': effectiveZone ?? ''});
+    await _syncToServer({'monitoringZone': effectiveZone ?? ''});
   }
 
   Future<void> setBiometricsEnabled(bool enabled) async {
@@ -376,48 +397,11 @@ class ProfileProvider extends ChangeNotifier {
     await _storage.write('biometric_enabled', enabled.toString());
     await _updateLocalState({'biometricsEnabled': enabled});
     notifyListeners();
-    await _syncToFirestore({'biometricsEnabled': enabled});
+    await _syncToServer({'biometricsEnabled': enabled});
   }
 
-  Future<void> updateFCMToken(String token) async {
-    await _updateLocalState({'fcmToken': token});
-    await _syncToFirestore({'fcmToken': token});
-  }
-
-  /// Recursively converts Firestore-specific types to Hive-safe primitives.
-  /// Call this on any raw Firestore document map before storing in [_userProfile]
-  /// or writing to a Hive box — Hive has no built-in adapter for [Timestamp],
-  /// [GeoPoint], or [DocumentReference].
-  Map<String, dynamic> _sanitizeFirestoreDoc(Map<String, dynamic> data) {
-    final result = <String, dynamic>{};
-    data.forEach((key, value) {
-      if (value is Timestamp) {
-        result[key] = value.toDate().toIso8601String();
-      } else if (value is GeoPoint) {
-        result[key] = {
-          'latitude': value.latitude,
-          'longitude': value.longitude,
-        };
-      } else if (value is DocumentReference) {
-        result[key] = value.path;
-      } else if (value is Map<String, dynamic>) {
-        result[key] = _sanitizeFirestoreDoc(value);
-      } else if (value is List) {
-        result[key] = value.map((e) {
-          if (e is Timestamp) return e.toDate().toIso8601String();
-          if (e is GeoPoint) {
-            return {'latitude': e.latitude, 'longitude': e.longitude};
-          }
-          if (e is DocumentReference) return e.path;
-          if (e is Map<String, dynamic>) return _sanitizeFirestoreDoc(e);
-          return e;
-        }).toList();
-      } else if (value is DateTime) {
-        result[key] = value.toIso8601String();
-      } else {
-        result[key] = value;
-      }
-    });
-    return result;
+  static String _metadataName(sb.User user) {
+    final n = user.userMetadata?['name'];
+    return (n is String && n.trim().isNotEmpty) ? n : 'User';
   }
 }

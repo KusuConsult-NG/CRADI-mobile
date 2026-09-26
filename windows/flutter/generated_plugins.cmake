@@ -3,25 +3,22 @@
 #
 
 list(APPEND FLUTTER_PLUGIN_LIST
-  cloud_firestore
+  app_links
   connectivity_plus
   file_selector_windows
-  firebase_auth
-  firebase_core
-  firebase_remote_config
-  firebase_storage
   flutter_secure_storage_windows
   flutter_tts
   geolocator_windows
   local_auth_windows
   permission_handler_windows
+  sentry_flutter
   share_plus
   speech_to_text_windows
   url_launcher_windows
 )
 
 list(APPEND FLUTTER_FFI_PLUGIN_LIST
-  flutter_local_notifications_windows
+  jni
 )
 
 set(PLUGIN_BUNDLED_LIBRARIES)

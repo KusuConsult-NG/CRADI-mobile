@@ -12,32 +12,14 @@ class SecurityService {
   factory SecurityService() => _instance;
   SecurityService._internal();
 
-  /// Map of critical domains to their expected SHA-256 public key fingerprints.
+  /// Map of critical domains to their expected SHA-256 SPKI fingerprints.
   ///
-  /// NOTE: These fingerprints rotate periodically. In a production environment,
-  /// implementing a backup/fallback pin or a Remote Config-driven pin update
-  /// mechanism is recommended to prevent app breakage when Google rotates certs.
-  ///
-  /// Current pins extracted via:
-  /// openssl s_client -servername firestore.googleapis.com -connect firestore.googleapis.com:443 | openssl x509 -pubkey -noout | openssl pkey -pubin -outform der | openssl dgst -sha256 -binary | openssl enc -base64
+  /// Empty: pinning is not enforced. To enable it, add the Supabase project
+  /// host (`<ref>.supabase.co`) and the Railway backend host with a current
+  /// and a backup pin, e.g. extracted via:
+  /// openssl s_client -servername HOST -connect HOST:443 | openssl x509 -pubkey -noout | openssl pkey -pubin -outform der | openssl dgst -sha256 -binary | openssl enc -base64
   // ignore: unused_field
-  static const Map<String, List<String>> _pinnedDomains = {
-    // Google APIs / Firebase endpoints
-    'firestore.googleapis.com': [
-      // Primary pin (example format, needs actual Google GTS CA 1C3 pin)
-      'JxqVz+aT8iT7x8Y1jE6wz5575X+1T5nTb+8P1f11N/Q=',
-      // Backup pin (Root CA)
-      'hxqRlPTu1bMS/0DITB1SSu0vd4u/8l8TjPgfaAp63Gc=',
-    ],
-    'identitytoolkit.googleapis.com': [
-      'JxqVz+aT8iT7x8Y1jE6wz5575X+1T5nTb+8P1f11N/Q=',
-      'hxqRlPTu1bMS/0DITB1SSu0vd4u/8l8TjPgfaAp63Gc=',
-    ],
-    'firebasestorage.googleapis.com': [
-      'JxqVz+aT8iT7x8Y1jE6wz5575X+1T5nTb+8P1f11N/Q=',
-      'hxqRlPTu1bMS/0DITB1SSu0vd4u/8l8TjPgfaAp63Gc=',
-    ],
-  };
+  static const Map<String, List<String>> _pinnedDomains = {};
 
   /// Initialize SSL pinning. Should be called early in main().
   Future<void> initializePinning() async {

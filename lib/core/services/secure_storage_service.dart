@@ -42,27 +42,16 @@ class SecureStorageService {
     return await _storage.read(key: _keyRefreshToken);
   }
 
-  // Credentials management for Biometric Auto-Login
-  static const String _keyUserEmail = 'user_email';
-  static const String _keyUserPassword = 'user_password';
+  // Legacy keys: older builds stored the plaintext email/password for
+  // biometric re-login. Biometric unlock now reuses the persisted Supabase
+  // session instead; these keys are only ever deleted.
+  static const String _legacyKeyUserEmail = 'user_email';
+  static const String _legacyKeyUserPassword = 'user_password';
 
-  Future<void> saveUserCredentials(String email, String password) async {
-    await _storage.write(key: _keyUserEmail, value: email);
-    await _storage.write(key: _keyUserPassword, value: password);
-  }
-
-  Future<Map<String, String>?> getUserCredentials() async {
-    final email = await _storage.read(key: _keyUserEmail);
-    final password = await _storage.read(key: _keyUserPassword);
-    if (email != null && password != null) {
-      return {'email': email, 'password': password};
-    }
-    return null;
-  }
-
-  Future<void> clearUserCredentials() async {
-    await _storage.delete(key: _keyUserEmail);
-    await _storage.delete(key: _keyUserPassword);
+  /// Remove credentials persisted by older app versions.
+  Future<void> purgeLegacyCredentials() async {
+    await _storage.delete(key: _legacyKeyUserEmail);
+    await _storage.delete(key: _legacyKeyUserPassword);
   }
 
   // User data management
@@ -216,8 +205,6 @@ class SecureStorageService {
       // Keep preferences like biometric enabled, but clear auth and user data
       final biometricEnabled = await isBiometricEnabled();
       final phoneNumber = await getPhoneNumber();
-      final email = await _storage.read(key: _keyUserEmail);
-      final password = await _storage.read(key: _keyUserPassword);
 
       await _storage.deleteAll();
 
@@ -226,9 +213,6 @@ class SecureStorageService {
         await setBiometricEnabled(true);
         if (phoneNumber != null) {
           await savePhoneNumber(phoneNumber);
-        }
-        if (email != null && password != null) {
-          await saveUserCredentials(email, password);
         }
       }
       return;

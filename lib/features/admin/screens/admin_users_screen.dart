@@ -1,4 +1,5 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:climate_app/core/constants/app_config.dart';
+import 'package:climate_app/core/services/supabase_service.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:climate_app/core/theme/app_colors.dart';
@@ -19,12 +20,14 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
   String _searchQuery = '';
   final TextEditingController _searchCtrl = TextEditingController();
 
-  late final Stream<QuerySnapshot<Map<String, dynamic>>> _usersStream;
+  late final Stream<List<Map<String, dynamic>>> _usersStream;
 
   @override
   void initState() {
     super.initState();
-    _usersStream = FirebaseFirestore.instance.collection('users').snapshots();
+    _usersStream = SupabaseService().subscribeToCollection(
+      collectionId: AppConfig.usersCollection,
+    );
   }
 
   @override
@@ -63,7 +66,8 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          e is FirebaseException && e.code == 'permission-denied'
+          SupabaseService.isPermissionDenied(e) ||
+                  e is DocumentNotFoundException
               ? 'You do not have permission to change this user.'
               : 'Update failed. Please try again.',
         ),
@@ -72,12 +76,17 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
     );
   }
 
+  Future<void> _update(String uid, Map<String, dynamic> data) =>
+      SupabaseService().updateDocument(
+        collectionId: AppConfig.usersCollection,
+        documentId: uid,
+        data: data,
+      );
+
   Future<void> _setApproval(String uid, bool approved) async {
     try {
-      await FirebaseFirestore.instance.collection('users').doc(uid).update({
-        'isApproved': approved,
-      });
-    } on FirebaseException catch (e) {
+      await _update(uid, {'isApproved': approved});
+    } on Exception catch (e) {
       _showWriteError(e);
       return;
     }
@@ -136,11 +145,8 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
               Navigator.pop(ctx);
               if (selected != null && selected != currentRole) {
                 try {
-                  await FirebaseFirestore.instance
-                      .collection('users')
-                      .doc(uid)
-                      .update({'role': selected});
-                } on FirebaseException catch (e) {
+                  await _update(uid, {'role': selected});
+                } on Exception catch (e) {
                   _showWriteError(e);
                   return;
                 }
@@ -152,7 +158,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
                       content: Text(
-                        'Role updated. User must re-login for it to take effect.',
+                        'Role updated. It takes effect once the user is approved.',
                       ),
                     ),
                   );
@@ -168,10 +174,8 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
 
   Future<void> _setDisabled(String uid, bool disabled) async {
     try {
-      await FirebaseFirestore.instance.collection('users').doc(uid).update({
-        'isDisabled': disabled,
-      });
-    } on FirebaseException catch (e) {
+      await _update(uid, {'isDisabled': disabled});
+    } on Exception catch (e) {
       _showWriteError(e);
       return;
     }
@@ -288,7 +292,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
           ),
           // ── List ──
           Expanded(
-            child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+            child: StreamBuilder<List<Map<String, dynamic>>>(
               stream: _usersStream,
               builder: (context, snap) {
                 if (snap.connectionState == ConnectionState.waiting) {
@@ -306,9 +310,8 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
                     ),
                   );
                 }
-                final allDocs = snap.data?.docs ?? [];
-                final docs = allDocs.where((d) {
-                  final data = d.data();
+                final allDocs = snap.data ?? const <Map<String, dynamic>>[];
+                final docs = allDocs.where((data) {
                   // Apply role filter
                   if (_roleFilter != 'all') {
                     final role = data['role'] as String? ?? 'user';
@@ -337,17 +340,12 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
                 }).toList();
 
                 docs.sort((a, b) {
-                  final aCreatedAt = a.data()['createdAt'];
-                  final bCreatedAt = b.data()['createdAt'];
+                  final aCreatedAt = a['createdAt'];
+                  final bCreatedAt = b['createdAt'];
 
-                  DateTime parseDate(dynamic date) {
-                    if (date is Timestamp) return date.toDate();
-                    if (date is String) {
-                      return DateTime.tryParse(date) ??
-                          DateTime.fromMillisecondsSinceEpoch(0);
-                    }
-                    return DateTime.fromMillisecondsSinceEpoch(0);
-                  }
+                  DateTime parseDate(dynamic date) =>
+                      parseTimestamp(date) ??
+                      DateTime.fromMillisecondsSinceEpoch(0);
 
                   return parseDate(bCreatedAt).compareTo(parseDate(aCreatedAt));
                 });
@@ -363,8 +361,8 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
                 return ListView.builder(
                   itemCount: docs.length,
                   itemBuilder: (_, i) {
-                    final d = docs[i].data();
-                    final uid = docs[i].id;
+                    final d = docs[i];
+                    final uid = d['\$id'] as String;
                     final name = d['name'] as String? ?? 'Unknown';
                     final email = d['email'] as String? ?? '';
                     final role = d['role'] as String? ?? 'user';
