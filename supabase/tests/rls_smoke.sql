@@ -112,3 +112,23 @@ set role authenticated; select as_user('00000000-0000-0000-0000-00000000000b');
 insert into verifications(report_id,is_confirmed,comment) values ('10000000-0000-0000-0000-000000000004',false,'not true');
 reset role;
 select event_type from notification_outbox where payload->>'report_id'='10000000-0000-0000-0000-000000000004' order by id;
+
+\echo '=== round 4: reopen, lga scoping, audit ==='
+select set_config('request.jwt.claim.sub','',false);
+insert into auth.users values ('00000000-0000-0000-0000-000000000011','e4@x.com',null,'{"name":"E4","role":"ewm","ward":"W1","lga":"L2"}',now(),null);
+update profiles set is_approved=true where email='e4@x.com';
+set role authenticated;
+\echo '--- ewm with same ward name in another LGA sees 0 of L1 reports'
+select as_user('00000000-0000-0000-0000-000000000011');
+select count(*) as other_lga_sees from reports where lga='L1';
+\echo '--- ewm cannot reopen (expect ERROR)'
+select reopen_report('10000000-0000-0000-0000-000000000001');
+\echo '--- ewv reopens verified report 1 (expect ok) and it can be re-verified'
+select as_user('00000000-0000-0000-0000-00000000000f');
+select reopen_report('10000000-0000-0000-0000-000000000001');
+reset role;
+select status, verification_count, escalated from reports where id='10000000-0000-0000-0000-000000000001';
+select count(*) as votes_left from verifications where report_id='10000000-0000-0000-0000-000000000001';
+select count(*) as pending_escalations from scheduled_escalations where report_id='10000000-0000-0000-0000-000000000001' and status='pending';
+\echo '--- approval was audited'
+select action from verification_overrides where report_id='10000000-0000-0000-0000-000000000002';
