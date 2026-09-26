@@ -15,6 +15,31 @@ remove its deployment) so imported rows cannot push to real users, then re-run w
 Scale it back up after the import. See README "Prerequisites".`;
 }
 
+/**
+ * The outbox id to suppress from: the lowest baseline recorded by any --apply
+ * run in the state file (each run saves its baseline before writing), so
+ * events left behind by an earlier run that was killed before its final
+ * suppression are still neutralised. `current` is this run's baseline.
+ */
+export function suppressionBaseline(runs, current = null) {
+  const ids = [...(runs ?? []).map((r) => r?.outboxBaseline), current]
+    .filter((v) => typeof v === 'number' && Number.isFinite(v));
+  return ids.length ? Math.min(...ids) : null;
+}
+
+/**
+ * Every report / alert id this migration ever assigned (state file ids, which
+ * are saved before rows are written) plus `legacyReportIds` (Supabase reports
+ * with a legacy_firebase_id), as the sets suppressSideEffects matches against.
+ */
+export function importedIdSets(stateData, legacyReportIds = []) {
+  const ids = stateData?.ids ?? {};
+  return {
+    reportIds: new Set([...Object.values(ids.reports ?? {}), ...legacyReportIds].map(String)),
+    alertIds: new Set(Object.values(ids.alerts ?? {}).map(String)),
+  };
+}
+
 /** Outbox rows whose payload references an imported report or alert. */
 export function importedEvents(rows, { reportIds, alertIds }) {
   return rows.filter((r) => {

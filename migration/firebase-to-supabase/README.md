@@ -29,9 +29,14 @@ records created since the last run. Re-running does not duplicate rows.
 | `ndpa_consents` | `ndpa_consents` | `uid` (or the doc id) → `user_id` |
 
 The Supabase schema already seeds the 10 standard safety guides the app used to
-bundle (migration `20260927040000_builtin_content.sql`, rows without a legacy id).
-If the Firebase `knowledge_base` held copies of them, review the Knowledge Base page
-after importing and delete any duplicates.
+bundle (migration `20260927040000_builtin_content.sql`, fixed ids, no legacy id).
+Firebase `knowledge_base` documents whose title matches one of them (ignoring case,
+whitespace and punctuation; `&` counts as `and`) are **skipped** and listed as
+`replaced by built-in guide '…'`, so the guides are not duplicated. Any other copy (for
+example one saved under a different title) is imported; review the Knowledge Base page
+after importing and delete it if needed. The seeded titles live in
+[`src/builtinContent.js`](src/builtinContent.js); a test parses them from the SQL file so
+the list cannot drift.
 
 The following are **not migrated**:
 - `scheduled_escalations`. These are historic, and old reports must not escalate.
@@ -46,6 +51,18 @@ The following are **not migrated**:
   `low | medium | high | critical`. An unknown severity becomes `medium` and is listed as a warning.
 - **Alert severity:** `info | warning | critical`. Report-style severities are mapped: high/medium → warning, low → info.
 - **Roles:** matching ignores case and punctuation (`EWM`, `tech_support` …). An unknown role becomes `user`.
+- **Report text limits:** the schema's check constraints are applied: `hazard_type` 1–60 characters,
+  `description` ≤ 2000, `location`/`location_details`/`address` ≤ 500, `ward`/`lga`/`state` ≤ 120, at most
+  10 `image_urls`. Longer values are cut (and extra images dropped) with a warning. Chat `message` text is
+  cut to 2000 characters the same way.
+- **Authority `coverage_state`:** mapped case-insensitively to the canonical state names that
+  `reports.state` holds (36 states + `FCT`, as in the app's `nigeria_locations_data.dart`): `Benue State` → `Benue`,
+  `Nassarawa` → `Nasarawa`, `Abuja` / `Federal Capital Territory` → `FCT`. An unrecognised value becomes `null`
+  with a warning.
+- **Verification overrides:** actions map to `approved | rejected | verified`. An override whose validator
+  was not migrated is kept with `validator_id = null` and a warning.
+- **Missing reports:** an alert whose report does not exist in Supabase (not migrated, or its write failed)
+  is kept with `report_id = null` and a warning. Verifications and overrides of such a report are skipped.
 - **Timestamps:** Firestore Timestamps, serialized `{_seconds}`, ISO strings (for example `reports.submittedAt`,
   `messages.sentAt`, `users.lastLoginAt`) and epoch numbers are all accepted.
 - **Phone accounts:** Firebase Auth emails of the form `<digits>@ewer.phone` become Supabase phone users
@@ -169,16 +186,26 @@ email and no phone are skipped.
   no legacy column. Their Firestore id → UUID mapping is kept in **`migration-state.json`** (gitignored)
   and rows are upserted on `id`. **Back this file up after an apply run.** Without it, a re-run inserts
   those tables again.
-- `verifications`, `trusted_devices` and `ndpa_consents` upsert on their natural unique keys.
+- `verifications`, `trusted_devices` and `ndpa_consents` upsert on their natural unique keys. Existing rows
+  are updated, so a re-run applies changes made in Firebase since the last run (a changed vote fires
+  `verifications_after_update`, which the report finalize step and side-effect suppression handle like inserts).
 - Copied Storage objects are recorded in the state file, so they are not copied again.
 - Ids are saved to the state file **before** rows are written, so a crash can't create a second id
   for the same document.
 
 ### Side-effect suppression
 
-1. Before writing, the script records `max(notification_outbox.id)` (the baseline is logged).
+1. Before writing, the script records `max(notification_outbox.id)` in the state file (the baseline is
+   logged). Suppression starts from the **lowest baseline of any run** in the state file, and matches
+   **every report and alert id in the state file** (plus every report with a legacy id), not only this
+   run's. So if a run is killed before its final suppression, the next `--apply` run (even with
+   `--only=none`) neutralises the events it left behind.
+   Keep the backend stopped from the first `--apply` run until the last one: an event a real user
+   triggered on an imported report in between, and that the backend has not processed yet, would
+   also be suppressed.
 2. Alerts are inserted with `is_active = false`, so no `alert_created` event is queued. `is_active` is
-   then restored; alerts have no update trigger.
+   then restored; alerts have no update trigger. An alert that cannot be re-activated is listed as a
+   warning and left inactive; the run continues.
 3. **Report finalize.** Two things can change a report during import. The verifications trigger
    recomputes `verification_count` and can move a report to `verified`. The reports insert trigger
    rewrites `escalation_scheduled_at` and `escalation_status`. After verifications are imported, each
@@ -187,7 +214,8 @@ email and no phone are skipped.
    taken from Firestore: it is then recounted from the imported confirmed verifications, the same
    way the database triggers maintain it.
 4. After **each** writing step (reports, alerts, verifications, report finalize) and once more at the
-   end (in a `finally` block, so this also runs after a failure):
+   end (in a `finally` block, so this also runs after a failure, and on **Ctrl-C / SIGTERM**: the run stops
+   after the current request, saves the state file, suppresses, then exits; a second signal exits at once):
    - every not-yet-processed `notification_outbox` row with `id > baseline` **whose payload
      `report_id` / `alert_id` is an imported report or alert** gets `processed_at = now()` and
      `last_error = 'migration import'`. Events of real users created during the import are left alone;
@@ -201,11 +229,16 @@ email and no phone are skipped.
 ### Storage
 
 Every object under `report_images/` and `profile_images/` is downloaded and uploaded to
-`report-images` or `profile-images` at `{newUserId}/{rest of path}`. The content type is inferred from
-the file extension when Firebase recorded a generic type. Row URLs are rewritten by matching the
-decoded object path inside Firebase download URLs (`firebasestorage.googleapis.com/v0/b/…/o/…`,
-`storage.googleapis.com`, `gs://`). URLs that point elsewhere, or at objects that were not copied,
-are left unchanged. Local file paths saved by old app versions are dropped.
+`report-images` or `profile-images` at `{newUserId}/{rest of path}`. Both buckets accept only
+`image/jpeg`, `image/png`, `image/webp` and `image/heic` up to 5 MB. `image/jpg` is uploaded as
+`image/jpeg`, and a missing or generic type (`application/octet-stream`) is inferred from the file
+extension. Objects of any other type, or larger than 5 MB, are not copied: they are listed under
+*Skipped — storage* (in the dry run too) and a note says that the row URLs referencing them could not
+be rewritten. Row URLs are rewritten by matching the decoded object path inside Firebase download URLs
+(`firebasestorage.googleapis.com/v0/b/…/o/…`, `storage.googleapis.com`, `gs://`). http(s) URLs that point
+elsewhere, or at objects that were not copied, are left unchanged. `gs://` references that could not be
+rewritten are dropped with a warning (the app cannot load them), as are local file paths saved by old
+app versions.
 
 ## Validation report
 
@@ -244,10 +277,14 @@ Delete `authorities` and admin-created `alerts` rows by the ids in `migration-st
 ## Development
 
 ```bash
-npm test     # node:test unit tests for src/transform.js
+npm test     # node:test unit tests
 ```
 
 - `src/transform.js`: pure mapping and normalisation functions (tested).
 - `src/migrate.js`: the runner (I/O and ordering).
 - `src/clients.js`: env loading, Firebase Admin and Supabase clients, paginated readers.
 - `src/state.js`: the `migration-state.json` store.
+- `src/sideEffects.js`: outbox / escalation suppression (tested).
+- `src/lifecycle.js`: SIGINT/SIGTERM handling (tested).
+- `src/steps.js`: Supabase-side step helpers: alert re-activation, report existence checks (tested).
+- `src/builtinContent.js`: titles of the seeded built-in guides (tested against the SQL).

@@ -12,11 +12,17 @@ import {
   loadDotEnv, firebaseClients, supabaseClient, readCollection, listFirebaseAuthUsers,
 } from './clients.js';
 import { IN_CHUNK, must, selectAll } from './db.js';
-import { BACKEND_STOPPED_FLAG, applyPreflight, suppressSideEffects } from './sideEffects.js';
+import {
+  BACKEND_STOPPED_FLAG, applyPreflight, importedIdSets, suppressionBaseline, suppressSideEffects,
+} from './sideEffects.js';
 import { MigrationState } from './state.js';
 import { migrationAppMetadata, migrationStart, reuseRefusal } from './authLink.js';
 import {
-  isUuid, isPhoneEmail, rewriteUrl, storageTargetFor, FIREBASE_STORAGE_PREFIXES,
+  SIGNAL_EXIT_CODES, StopRequested, deferred, installStopHandlers, onceAsync, throwIfStopped,
+} from './lifecycle.js';
+import { VERIFICATIONS_UPSERT, existingReportResolver, reactivateAlerts } from './steps.js';
+import {
+  isUuid, isPhoneEmail, rewriteUrl, storageTargetFor, storageUploadPlan, FIREBASE_STORAGE_PREFIXES,
   transformUser, transformReport, transformVerification, transformVerificationOverride,
   transformAlert, transformMessage, transformContact, transformKnowledge, transformAuthority,
   transformTrustedDevice, transformLoginHistory, transformNdpaConsent,
@@ -35,6 +41,9 @@ const STEPS = [
 
 const BAN_FOREVER = '876000h';
 const CHUNK = 200;
+
+// Set by the SIGINT/SIGTERM handler; write loops stop at the next request.
+const stop = { signal: null };
 
 // ── CLI ──────────────────────────────────────────────────────────────────────
 
@@ -164,6 +173,7 @@ async function mapLimit(items, limit, fn) {
   let next = 0;
   const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
     while (next < items.length) {
+      throwIfStopped(stop);
       const i = next++;
       results[i] = await fn(items[i], i);
     }
@@ -182,6 +192,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 async function upsertEntries(sb, report, table, entries, options) {
   let written = 0;
   for (let i = 0; i < entries.length; i += CHUNK) {
+    throwIfStopped(stop);
     const chunk = entries.slice(i, i + CHUNK);
     const { error } = await sb.from(table).upsert(chunk.map((e) => e.row), options);
     if (!error) {
@@ -228,11 +239,13 @@ async function main() {
   if (SKIP_STORAGE) console.log('Storage copy skipped; URLs of objects not copied by an earlier run stay on Firebase.');
 
   // Seed id maps from Supabase so a lost state file never causes duplicates.
+  let legacyReportIds = [];
   if (sb) {
     const profiles = await selectAll(sb, 'profiles', 'id,legacy_firebase_uid', (q) => q.not('legacy_firebase_uid', 'is', null));
     for (const p of profiles) state.data.users[p.legacy_firebase_uid] = p.id;
     const reports = await selectAll(sb, 'reports', 'id,legacy_firebase_id', (q) => q.not('legacy_firebase_id', 'is', null));
     for (const r of reports) state.setId('reports', r.legacy_firebase_id, r.id);
+    legacyReportIds = reports.map((r) => r.id);
   }
 
   // ── Read Firebase ──────────────────────────────────────────────────────────
@@ -270,9 +283,11 @@ async function main() {
   const plans = new Map(allUids.map((uid) => [uid, planUser(uid)]));
 
   // ── Side-effect baseline ───────────────────────────────────────────────────
+  // Every report/alert id any run assigned (state file) or that carries a
+  // legacy id, not only this run's: a run killed before its final
+  // suppression leaves events for them, and this run neutralises those too.
   let outboxBaseline = null;
-  const touchedReportIds = new Set();
-  const touchedAlertIds = new Set();
+  const { reportIds: touchedReportIds, alertIds: touchedAlertIds } = importedIdSets(state.data, legacyReportIds);
   const suppressed = { outbox: 0, escalations: 0 };
   // Run after every writing step (and in `finally`), so events queued for
   // imported rows are neutralised within one step, not only at the very end.
@@ -285,11 +300,36 @@ async function main() {
   };
   if (APPLY) {
     const rows = must(await sb.from('notification_outbox').select('id').order('id', { ascending: false }).limit(1), 'outbox baseline');
-    outboxBaseline = rows[0]?.id ?? 0;
-    console.log(`notification_outbox baseline id: ${outboxBaseline}`);
-    state.data.runs.push({ startedAt: now, outboxBaseline, only: only ? [...only] : null });
+    const current = rows[0]?.id ?? 0;
+    state.data.runs.push({ startedAt: now, outboxBaseline: current, only: only ? [...only] : null });
     state.save();
+    // Suppress from the earliest run's baseline (saved before that run wrote anything).
+    outboxBaseline = suppressionBaseline(state.data.runs, current);
+    console.log(`notification_outbox baseline id: ${current}${outboxBaseline !== current
+      ? ` (suppressing from ${outboxBaseline}, the earliest recorded run)` : ''}`);
   }
+
+  // Save state and neutralise side effects exactly once, from `finally` or
+  // from the SIGINT/SIGTERM handler, whichever gets there first.
+  const finish = onceAsync(async () => {
+    if (!APPLY) return;
+    state.save();
+    await suppress();
+    report.notes.push(`Marked ${suppressed.outbox} notification_outbox event(s) for imported reports/alerts as processed (last_error 'migration import').`);
+    report.notes.push(`Marked ${suppressed.escalations} scheduled_escalations created for imported reports as skipped.`);
+  });
+  const unwound = deferred();
+  installStopHandlers({ stop, finish, unwound: unwound.promise });
+
+  // Report ids that exist in Supabase (apply only), loaded once reports are
+  // written: alerts, verifications and overrides must not reference a report
+  // whose write failed.
+  let existingReports = null;
+  const loadExistingReports = async () => {
+    if (APPLY && !existingReports) existingReports = new Set((await selectAll(sb, 'reports', 'id')).map((r) => r.id));
+    return existingReports;
+  };
+  const withExistingReports = async () => ({ ...ctx, report: existingReportResolver(ctx.report, await loadExistingReports()) });
 
   try {
     // ── 1. Users (auth accounts) ────────────────────────────────────────────
@@ -366,15 +406,14 @@ async function main() {
     }
 
     if (inScope('alerts')) {
-      await importAlerts({ fb, sb, state, report, ctx, touched: touchedAlertIds });
+      await importAlerts({ fb, sb, state, report, ctx: await withExistingReports(), touched: touchedAlertIds });
       await suppress();
     }
 
     if (inScope('verifications')) {
-      const entries = await importCollection({ fb, sb, state, report, ctx, source: 'verifications', table: 'verifications',
-        transform: transformVerification, strategy: 'natural',
-        upsert: { onConflict: 'report_id,verifier_id', ignoreDuplicates: true },
-        key: (r) => `${r.report_id}|${r.verifier_id}` });
+      const entries = await importCollection({ fb, sb, state, report, ctx: await withExistingReports(),
+        source: 'verifications', table: 'verifications', transform: transformVerification, strategy: 'natural',
+        upsert: VERIFICATIONS_UPSERT, key: (r) => `${r.report_id}|${r.verifier_id}` });
       // The verification trigger can change a report's status (→ report_status_changed).
       if (APPLY) entries.forEach((e) => touchedReportIds.add(e.row.report_id));
       await suppress();
@@ -384,12 +423,12 @@ async function main() {
     // status, and the insert trigger rewrites escalation fields. Re-apply
     // the Firestore values to every report that exists in Supabase.
     if (APPLY && reportEntries) {
-      await finalizeReports(sb, report, reportEntries, touchedReportIds);
+      await finalizeReports(sb, report, reportEntries, touchedReportIds, await loadExistingReports());
       await suppress();
     }
 
     if (inScope('verification_overrides')) {
-      await importCollection({ fb, sb, state, report, ctx, source: 'verification_overrides',
+      await importCollection({ fb, sb, state, report, ctx: await withExistingReports(), source: 'verification_overrides',
         table: 'verification_overrides', transform: transformVerificationOverride, strategy: 'state' });
     }
 
@@ -416,12 +455,8 @@ async function main() {
         transform: transformNdpaConsent, strategy: 'natural', upsert: { onConflict: 'user_id' }, key: (r) => r.user_id });
     }
   } finally {
-    if (APPLY) {
-      state.save();
-      await suppress();
-      report.notes.push(`Marked ${suppressed.outbox} notification_outbox event(s) for imported reports/alerts as processed (last_error 'migration import').`);
-      report.notes.push(`Marked ${suppressed.escalations} scheduled_escalations created for imported reports as skipped.`);
-    }
+    unwound.resolve();
+    await finish();
   }
 
   // ── 7. Password resets ─────────────────────────────────────────────────────
@@ -594,8 +629,7 @@ const FINAL_REPORT_COLUMNS = [
   'escalation_status',
 ];
 
-async function finalizeReports(sb, report, entries, touched) {
-  const inDb = new Set((await selectAll(sb, 'reports', 'id')).map((r) => r.id));
+async function finalizeReports(sb, report, entries, touched, inDb) {
   const present = entries.filter((e) => inDb.has(e.row.id));
   let done = 0;
   await mapLimit(present, 8, async (e) => {
@@ -630,8 +664,6 @@ async function recountVerifications(sb, report, entries) {
 
 // ── Storage ──────────────────────────────────────────────────────────────────
 
-const EXT_TYPES = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', heic: 'image/heic' };
-
 async function copyStorage(fb, sb, state, report, urlMap, resolveUser) {
   const r = report.t('storage');
   const files = [];
@@ -642,25 +674,35 @@ async function copyStorage(fb, sb, state, report, urlMap, resolveUser) {
   r.source = files.length;
   let bytes = 0;
   const todo = [];
+  let refused = 0;
   for (const f of files) {
     const target = storageTargetFor(f.name, resolveUser);
     if (!target) { report.skip('storage', f.name, 'owner not migrated or unexpected path'); continue; }
+    const copied = Boolean(state.data.storage[f.name]);
+    // Types the buckets refuse and objects over their size limit are
+    // reported here, in the dry run as well as on apply.
+    const plan = copied ? {} : storageUploadPlan(f.name, f.metadata);
+    if (plan.skip) { report.skip('storage', f.name, plan.skip); refused += 1; continue; }
     r.ready += 1;
     bytes += Number(f.metadata?.size ?? 0);
-    report.sample('storage', { from: f.name, to: `${target.bucket}/${target.path}` });
-    if (state.data.storage[f.name]) continue;
-    todo.push({ f, target });
+    report.sample('storage', { from: f.name, to: `${target.bucket}/${target.path}`, contentType: plan.contentType });
+    if (copied) continue;
+    todo.push({ f, target, contentType: plan.contentType });
   }
-  console.log(`Storage: ${files.length} objects (${(bytes / 1e6).toFixed(1)} MB in scope), ${todo.length} still to copy.`);
+  console.log(`Storage: ${files.length} objects (${(bytes / 1e6).toFixed(1)} MB in scope), ${todo.length} still to copy`
+    + `${refused ? `, ${refused} refused by the bucket limits` : ''}.`);
+  if (refused) {
+    report.notes.push(`${refused} Storage object(s) cannot be copied (type not allowed or over the 5 MB bucket limit; see "Skipped — storage"). `
+      + 'Row URLs that reference them could not be rewritten: http(s) Firebase URLs are kept as they are, gs:// references are dropped.');
+  }
   if (!APPLY) return;
 
   let done = 0;
-  await mapLimit(todo, 4, async ({ f, target }) => {
+  await mapLimit(todo, 4, async ({ f, target, contentType }) => {
     try {
       const [buf] = await f.download();
-      const ext = f.name.split('.').pop()?.toLowerCase();
-      let contentType = f.metadata?.contentType;
-      if (!contentType || !contentType.startsWith('image/')) contentType = EXT_TYPES[ext] ?? 'image/jpeg';
+      const sizePlan = storageUploadPlan(f.name, { contentType, size: buf.length });
+      if (sizePlan.skip) { report.skip('storage', f.name, sizePlan.skip); return; }
       const { error } = await sb.storage.from(target.bucket).upload(target.path, buf, { contentType, upsert: true });
       if (error) { report.skip('storage', f.name, `upload failed: ${error.message}`); return; }
       const url = sb.storage.from(target.bucket).getPublicUrl(target.path).data.publicUrl;
@@ -724,10 +766,9 @@ async function importAlerts({ fb, sb, state, report, ctx, touched }) {
   entries.forEach((e) => touched.add(e.row.id));
   const inactive = entries.map((e) => ({ ...e, row: { ...e.row, is_active: false } }));
   report.t('alerts').written += await upsertEntries(sb, report, 'alerts', inactive, { onConflict: 'id' });
-  const activeIds = entries.filter((e) => e.row.is_active).map((e) => e.row.id);
-  for (let i = 0; i < activeIds.length; i += IN_CHUNK) {
-    must(await sb.from('alerts').update({ is_active: true }).in('id', activeIds.slice(i, i + IN_CHUNK)), 'reactivate alerts');
-  }
+  // A failed re-activation is reported per alert; it does not abort the run.
+  const reactivated = await reactivateAlerts(sb, entries, (id, reason) => report.warn('alerts', id, reason));
+  console.log(`Alerts: re-activated ${reactivated} alert(s).`);
 }
 
 // ── Password resets ──────────────────────────────────────────────────────────
@@ -756,6 +797,7 @@ async function sendPasswordResets(sb, state, report, plans) {
   if (!APPLY) { report.notes.push('Password resets are only sent with --apply.'); return; }
 
   for (const { uid, email } of targets) {
+    throwIfStopped(stop);
     const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo });
     if (error) {
       if (error.status === 429 || /rate limit/i.test(error.message)) {
@@ -774,6 +816,10 @@ async function sendPasswordResets(sb, state, report, plans) {
 }
 
 main().catch((e) => {
+  if (e instanceof StopRequested) {
+    console.error(`\nMigration stopped by ${e.signal}. State saved; re-run to continue.`);
+    process.exit(SIGNAL_EXIT_CODES[e.signal] ?? 1);
+  }
   console.error(`\nMigration failed: ${e.stack ?? e.message}`);
   process.exit(1);
 });

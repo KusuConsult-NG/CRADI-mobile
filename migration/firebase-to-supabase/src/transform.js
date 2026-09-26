@@ -15,6 +15,8 @@
 
 import { randomUUID } from 'node:crypto';
 
+import { builtinGuideFor } from './builtinContent.js';
+
 // ── Scalars ──────────────────────────────────────────────────────────────────
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -91,6 +93,18 @@ export function decodeHtmlEntities(text) {
 /** asText for user-entered free text: also undoes legacy HTML escaping. */
 export function asFreeText(value, fallback = '') {
   return decodeHtmlEntities(asText(value, fallback));
+}
+
+/**
+ * Cut `text` to at most `max` characters (Unicode code points, as Postgres
+ * char_length counts them), pushing a warning naming `field` when it had to.
+ */
+export function capText(text, max, field, warnings) {
+  if (typeof text !== 'string') return text;
+  const chars = Array.from(text);
+  if (chars.length <= max) return text;
+  warnings.push(`${field} truncated from ${chars.length} to ${max} characters`);
+  return chars.slice(0, max).join('').trimEnd();
 }
 
 export function asNullableFreeText(value) {
@@ -197,11 +211,59 @@ export function normalizeRole(raw) {
   return null;
 }
 
+// verification_overrides.action allows 'approved', 'rejected' and 'verified'
+// (20260926020000_workflow_hardening.sql).
 export function normalizeOverrideAction(raw) {
   const value = asText(raw).toLowerCase();
   if (['approved', 'approve', 'validated', 'validate', 'resolved'].includes(value)) return 'approved';
   if (['rejected', 'reject', 'declined', 'decline'].includes(value)) return 'rejected';
+  if (['verified', 'verify', 'acknowledged', 'acknowledge'].includes(value)) return 'verified';
   return null;
+}
+
+// Canonical state names, as reports.state stores them (the app's
+// lib/core/data/nigeria_locations_data.dart): 36 states + FCT.
+export const NIGERIAN_STATES = [
+  'Abia', 'Adamawa', 'Akwa Ibom', 'Anambra', 'Bauchi', 'Bayelsa', 'Benue', 'Borno', 'Cross River',
+  'Delta', 'Ebonyi', 'Edo', 'Ekiti', 'Enugu', 'FCT', 'Gombe', 'Imo', 'Jigawa', 'Kaduna', 'Kano',
+  'Katsina', 'Kebbi', 'Kogi', 'Kwara', 'Lagos', 'Nasarawa', 'Niger', 'Ogun', 'Ondo', 'Osun', 'Oyo',
+  'Plateau', 'Rivers', 'Sokoto', 'Taraba', 'Yobe', 'Zamfara',
+];
+
+const stateKey = (s) => s.toLowerCase().replace(/[^a-z]/g, '');
+
+// Common alternative spellings → canonical name (keys as produced by stateKey).
+const STATE_ALIASES = {
+  nassarawa: 'Nasarawa',
+  nasarrawa: 'Nasarawa',
+  nassarrawa: 'Nasarawa',
+  federalcapitalterritory: 'FCT',
+  federalcapitalterritoryabuja: 'FCT',
+  abuja: 'FCT',
+  abujafct: 'FCT',
+  fctabuja: 'FCT',
+  crossrivers: 'Cross River',
+  akwaibomm: 'Akwa Ibom',
+  plateu: 'Plateau',
+  platue: 'Plateau',
+  benui: 'Benue',
+};
+
+const STATE_BY_KEY = new Map([
+  ...NIGERIAN_STATES.map((s) => [stateKey(s), s]),
+  ...Object.entries(STATE_ALIASES),
+]);
+
+/**
+ * Map a free-text state ('benue', 'Benue State', 'NASSARAWA', 'Abuja',
+ * 'Federal Capital Territory') to its canonical name, or null.
+ */
+export function normalizeNigerianState(raw) {
+  const key = stateKey(asText(raw));
+  if (!key) return null;
+  return STATE_BY_KEY.get(key)
+    ?? (key.endsWith('state') ? STATE_BY_KEY.get(key.slice(0, -'state'.length)) : undefined)
+    ?? null;
 }
 
 // ── Phone accounts ───────────────────────────────────────────────────────────
@@ -325,6 +387,58 @@ export function cleanImageUrl(value) {
   return /^https?:\/\//i.test(text) ? text : '';
 }
 
+/**
+ * Rewrite a stored image reference through ctx.url first (so gs:// and
+ * Firebase URLs of copied objects become Supabase URLs), then keep it only if
+ * it is http(s). A gs:// reference that could not be rewritten is dropped
+ * with a warning (the app cannot load it).
+ */
+export function imageUrl(value, ctx, warnings) {
+  const text = asText(value);
+  if (!text) return '';
+  const rewritten = cleanImageUrl(ctx.url(text));
+  if (!rewritten && warnings && /^gs:\/\//i.test(text)) {
+    warnings.push(`image ${text} has no copied Supabase Storage object; dropped`);
+  }
+  return rewritten;
+}
+
+// ── Storage uploads ──────────────────────────────────────────────────────────
+
+// Both buckets (20260925000000_init.sql): 5 MB, jpeg/png/webp/heic only.
+export const STORAGE_ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/heic'];
+export const STORAGE_MAX_BYTES = 5 * 1024 * 1024;
+
+const EXT_TYPES = { jpg: 'image/jpeg', jpeg: 'image/jpeg', jpe: 'image/jpeg', png: 'image/png', webp: 'image/webp', heic: 'image/heic' };
+const TYPE_ALIASES = { 'image/jpg': 'image/jpeg', 'image/pjpeg': 'image/jpeg' };
+const GENERIC_TYPES = new Set(['', 'application/octet-stream', 'binary/octet-stream', 'application/binary', 'image/*']);
+
+/**
+ * Decide how to upload a Storage object: { contentType } or { skip: reason }.
+ * image/jpg → image/jpeg; a missing or generic type is inferred from the
+ * extension; types the buckets refuse and objects over the size limit are
+ * skipped. `metadata` is the Firebase object metadata ({ contentType, size }).
+ */
+export function storageUploadPlan(name, metadata = {}) {
+  const size = Number(metadata?.size);
+  if (Number.isFinite(size) && size > STORAGE_MAX_BYTES) {
+    return { skip: `larger than the ${STORAGE_MAX_BYTES / 1048576} MB bucket limit (${(size / 1048576).toFixed(1)} MB)` };
+  }
+  const recorded = asText(metadata?.contentType).toLowerCase().split(';')[0].trim();
+  let contentType = TYPE_ALIASES[recorded] ?? recorded;
+  if (GENERIC_TYPES.has(contentType)) {
+    const ext = String(name ?? '').split('/').pop().split('.').slice(1).pop()?.toLowerCase();
+    contentType = (ext && EXT_TYPES[ext]) ?? '';
+    if (!contentType) {
+      return { skip: `content type ${recorded || '(missing)'} and extension ${ext ? `'.${ext}'` : '(none)'} not allowed by the bucket (${STORAGE_ALLOWED_TYPES.join(', ')})` };
+    }
+  }
+  if (!STORAGE_ALLOWED_TYPES.includes(contentType)) {
+    return { skip: `content type ${contentType} not allowed by the bucket (${STORAGE_ALLOWED_TYPES.join(', ')})` };
+  }
+  return { contentType };
+}
+
 // ── Row transformers ─────────────────────────────────────────────────────────
 
 function result(row, warnings = []) {
@@ -394,7 +508,7 @@ export function transformUser(uid, authRecord, doc, ctx) {
     is_verified: verified || kind === 'phone',
     biometrics_enabled: asBool(d.biometricsEnabled, false),
     monitoring_zone: asText(d.monitoringZone),
-    profile_image_url: ctx.url(cleanImageUrl(d.profileImageUrl || a.photoURL)),
+    profile_image_url: imageUrl(d.profileImageUrl || a.photoURL, ctx, warnings),
     registration_code: asNullableText(d.registrationCode),
     last_login_at: toIso(d.lastLoginAt) ?? toIso(a.metadata?.lastSignInTime),
     legacy_firebase_uid: uid,
@@ -404,6 +518,21 @@ export function transformUser(uid, authRecord, doc, ctx) {
   if (!authRecord) warnings.push('no Firebase Auth record; created from Firestore document only');
   return { ...result({ auth, profile }, warnings), kind };
 }
+
+export const REPORT_TEXT_LIMITS = {
+  hazard_type: 60,
+  description: 2000,
+  location: 500,
+  location_details: 500,
+  address: 500,
+  ward: 120,
+  lga: 120,
+  state: 120,
+};
+export const REPORT_MAX_IMAGES = 10;
+// messages_before_write (20260927000000_security_hardening.sql) cuts
+// messages.message to 2000 characters.
+export const MESSAGE_MAX_CHARS = 2000;
 
 export function transformReport(id, d, ctx) {
   const warnings = [];
@@ -430,24 +559,31 @@ export function transformReport(id, d, ctx) {
   const geo = d.location && typeof d.location === 'object' ? d.location : null;
   const locationText = geo ? '' : asFreeText(d.location);
   const images = Array.isArray(d.imageUrls) ? d.imageUrls : d.imageUrl ? [d.imageUrl] : [];
+  let imageUrls = images.map((u) => imageUrl(u, ctx, warnings)).filter(Boolean);
+  if (imageUrls.length > REPORT_MAX_IMAGES) {
+    warnings.push(`${imageUrls.length} images; only the first ${REPORT_MAX_IMAGES} kept`);
+    imageUrls = imageUrls.slice(0, REPORT_MAX_IMAGES);
+  }
+  // Length limits: reports_*_len checks in 20260927000000_security_hardening.sql.
+  const cap = (text, field) => capText(text, REPORT_TEXT_LIMITS[field], field, warnings);
 
   const updatedByUid = refId(d.updatedBy);
   return result({
     user_id: userId,
     reporter_name: asNullableFreeText(d.reporterName),
-    hazard_type: asText(d.hazardType) || asText(d.type) || 'unknown',
+    hazard_type: cap(asText(d.hazardType) || asText(d.type) || 'unknown', 'hazard_type'),
     severity,
     latitude: asNumber(d.latitude) ?? asNumber(geo?.latitude ?? geo?._latitude),
     longitude: asNumber(d.longitude) ?? asNumber(geo?.longitude ?? geo?._longitude),
-    location_details: asFreeText(d.locationDetails) || locationText,
-    location: locationText || asFreeText(d.locationDetails),
-    address: asFreeText(d.address),
-    ward: asText(d.ward),
-    lga,
-    state: asText(d.state),
-    description: asFreeText(d.description),
+    location_details: cap(asFreeText(d.locationDetails) || locationText, 'location_details'),
+    location: cap(locationText || asFreeText(d.locationDetails), 'location'),
+    address: cap(asFreeText(d.address), 'address'),
+    ward: cap(asText(d.ward), 'ward'),
+    lga: cap(lga, 'lga'),
+    state: cap(asText(d.state), 'state'),
+    description: cap(asFreeText(d.description), 'description'),
     submitted_at: submitted ?? ctx.now,
-    image_urls: images.map(cleanImageUrl).filter(Boolean).map(ctx.url),
+    image_urls: imageUrls,
     status,
     type: asNullableText(d.type),
     is_alert: severity === 'high' || severity === 'critical',
@@ -491,18 +627,21 @@ export function transformVerificationOverride(id, d, ctx) {
   const reportFb = refId(d.reportId);
   const reportId = reportFb ? ctx.report(reportFb) : null;
   if (!reportId) return skipped(`report ${reportFb ?? '(missing)'} not migrated`);
-  const validatorFb = refId(d.validatorId ?? d.userId);
-  const validatorId = validatorFb ? ctx.user(validatorFb) : null;
-  if (!validatorId) return skipped(`validator ${validatorFb ?? '(missing)'} not migrated`);
   const action = normalizeOverrideAction(d.action);
   if (!action) return skipped(`unknown action '${d.action}'`);
+  // validator_id is nullable (audit rows outlive their validator), so the
+  // override is kept even when the validator was not migrated.
+  const warnings = [];
+  const validatorFb = refId(d.validatorId ?? d.userId);
+  const validatorId = validatorFb ? ctx.user(validatorFb) : null;
+  if (!validatorId) warnings.push(`validator ${validatorFb ?? '(missing)'} not migrated; validator_id set to null`);
   return result({
     report_id: reportId,
     validator_id: validatorId,
     action,
     reason: asFreeText(d.reason),
     created_at: toIso(d.timestamp) ?? toIso(d.createdAt) ?? ctx.now,
-  });
+  }, warnings);
 }
 
 export function transformAlert(id, d, ctx) {
@@ -540,7 +679,8 @@ export function transformMessage(id, d, ctx) {
   const senderFb = refId(d.senderId ?? d.userId);
   const senderId = senderFb ? ctx.user(senderFb) : null;
   if (!senderId) return skipped(`sender ${senderFb ?? '(missing)'} not migrated`);
-  const message = asFreeText(d.message ?? d.text);
+  const warnings = [];
+  const message = capText(asFreeText(d.message ?? d.text), MESSAGE_MAX_CHARS, 'message', warnings);
   if (!message) return skipped('empty message');
   const sent = toIso(d.sentAt) ?? toIso(d.createdAt) ?? toIso(d.timestamp) ?? ctx.now;
   return result({
@@ -552,7 +692,7 @@ export function transformMessage(id, d, ctx) {
     sent_at: sent,
     read: asBool(d.read, false),
     created_at: toIso(d.createdAt) ?? sent,
-  });
+  }, warnings);
 }
 
 export function transformContact(id, d, ctx) {
@@ -577,17 +717,22 @@ export function transformContact(id, d, ctx) {
 export function transformKnowledge(id, d, ctx) {
   const title = asText(d.title);
   if (!title) return skipped('missing title');
-  const image = cleanImageUrl(d.imageUrl);
+  // The schema seeds the app's built-in guides (fixed ids, no legacy id);
+  // importing Firestore copies of them would list each guide twice.
+  const builtin = builtinGuideFor(title);
+  if (builtin) return skipped(`replaced by built-in guide '${builtin}'`);
+  const warnings = [];
+  const image = imageUrl(d.imageUrl, ctx, warnings);
   return result({
     title,
     content: asText(d.content),
     source: asText(d.source),
     category: asText(d.category) || 'General',
     hazard_type: asText(d.hazardType) || 'general',
-    image_url: image ? ctx.url(image) : null,
+    image_url: image || null,
     legacy_firebase_id: id,
     created_at: toIso(d.createdAt) ?? toIso(d.updatedAt) ?? ctx.now,
-  });
+  }, warnings);
 }
 
 export function transformAuthority(id, d, ctx) {
@@ -595,9 +740,12 @@ export function transformAuthority(id, d, ctx) {
   if (!phone) return skipped('missing phone');
   const lga = asText(d.coverageLGA ?? d.coverageLga ?? d.coverage_lga ?? d.lga);
   if (!lga) return skipped('missing coverage LGA');
-  // "Benue State" → "Benue", matching reports.state.
-  const state = asText(d.coverageState ?? d.coverage_state ?? d.state).replace(/\s+state$/i, '').trim() || null;
+  // "Benue State" / "benue" → "Benue", "Abuja" → "FCT": the canonical names
+  // reports.state holds, which coverage_state is matched against.
   const warnings = [];
+  const rawState = asText(d.coverageState ?? d.coverage_state ?? d.state);
+  const state = normalizeNigerianState(rawState);
+  if (rawState && !state) warnings.push(`unknown state '${rawState}'; coverage_state set to null`);
   // LGA names that exist in more than one state: without a state the
   // authority is texted for reports from every one of them.
   if (!state && AMBIGUOUS_LGAS.has(lga.toLowerCase())) {

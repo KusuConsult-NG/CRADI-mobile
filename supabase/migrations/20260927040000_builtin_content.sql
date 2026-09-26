@@ -1,8 +1,8 @@
 -- Built-in content moves out of the app and into the database, where admins
 -- manage it (web admin: Knowledge Base, News Links, Settings):
 -- 1. The 10 safety guides the app used to bundle are seeded into
---    knowledge_base (the placeholder SEMA phone number is replaced with a
---    pointer to the app's Emergency Contacts screen).
+--    knowledge_base (the placeholder SEMA phone number is replaced with
+--    advice to call 112; admins can add the real SEMA number here).
 -- 2. news_links: curated links the app shows when the live ReliefWeb feed is
 --    unavailable (previously hard-coded, one with a dead '#' link).
 -- 3. support_email setting (previously hard-coded in the Help screen).
@@ -29,7 +29,7 @@ insert into public.knowledge_base (id, title, content, source, category, hazard_
 
 **Emergency Contacts:**
 • National Emergency Toll-Free: 112
-• Your State Emergency Management Agency (SEMA): see Emergency Contacts in the app
+• Your State Emergency Management Agency (SEMA): call 112 and ask to be connected, or use the number announced on local radio
 • NEMA North Central Office: Jos, Plateau State$seed$, 'Benue SEMA / NEMA', 'Flood', 'flood', 'https://images.unsplash.com/photo-1504701954957-2010ec3bcec1?auto=format&fit=crop&q=80&w=800'),
   ('fa566a96-2090-5ac6-af78-034f16d23451', 'Gully Erosion Mitigation (Nasarawa/Plateau Context)', $seed$**Recognizing Erosion Threats:**
 • Sudden cracks appearing in community roads or near building foundations.

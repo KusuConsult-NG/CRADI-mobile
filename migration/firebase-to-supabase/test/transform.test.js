@@ -8,6 +8,8 @@ import {
   transformUser, transformReport, transformVerification, transformVerificationOverride,
   transformAlert, transformMessage, transformContact, transformKnowledge, transformAuthority,
   transformTrustedDevice, transformLoginHistory, transformNdpaConsent, decodeHtmlEntities,
+  capText, imageUrl, normalizeNigerianState, NIGERIAN_STATES, storageUploadPlan, STORAGE_MAX_BYTES,
+  REPORT_TEXT_LIMITS,
 } from '../src/transform.js';
 
 const NOW = '2026-09-25T00:00:00.000Z';
@@ -381,5 +383,113 @@ describe('legacy HTML-escaped free text', () => {
     const contact = transformContact('c', { userId: 'alice', phone: '0803', name: 'Mama&#x27;s', organization: 'Red &quot;Cross&quot;' }, ctx);
     assert.equal(contact.row.name, "Mama's");
     assert.equal(contact.row.organization, 'Red "Cross"');
+  });
+});
+
+describe('audit fixes', () => {
+  const GS = 'gs://ewer-8f788.appspot.com/report_images/alice/x.jpg';
+  const copied = new Map([['report_images/alice/x.jpg', 'https://sb.example/storage/v1/object/public/report-images/u/x.jpg']]);
+  const ctxCopied = { ...ctx, url: (u) => rewriteUrl(u, copied) };
+
+  test('report text fields are cut to the check-constraint limits, with warnings', () => {
+    const long = (n, ch = 'x') => ch.repeat(n);
+    const { row, warnings } = transformReport('big', {
+      userId: 'alice', severity: 'high', hazardType: long(80), description: long(2500), locationDetails: long(600),
+      address: long(501), ward: long(121), lga: long(200), state: long(130),
+      imageUrls: Array.from({ length: 12 }, (_, i) => `https://img/${i}.jpg`),
+    }, ctx);
+    for (const [field, max] of Object.entries(REPORT_TEXT_LIMITS)) {
+      assert.ok(Array.from(row[field]).length <= max, `${field} ≤ ${max}`);
+    }
+    assert.equal(row.hazard_type.length, 60);
+    assert.equal(row.description.length, 2000);
+    assert.equal(row.location.length, 500);
+    assert.equal(row.image_urls.length, 10);
+    assert.deepEqual(row.image_urls.slice(-1), ['https://img/9.jpg']);
+    for (const f of ['hazard_type', 'description', 'location_details', 'location', 'address', 'ward', 'lga', 'state']) {
+      assert.ok(warnings.some((w) => w.startsWith(`${f} truncated`)), `warning for ${f}`);
+    }
+    assert.ok(warnings.some((w) => w.includes('12 images; only the first 10 kept')));
+    // Within limits: no truncation warnings.
+    assert.deepEqual(transformReport('ok', { userId: 'alice', severity: 'high', lga: 'Makurdi', hazardType: 'flood', submittedAt: NOW }, ctx).warnings, []);
+  });
+
+  test('capText counts code points like char_length', () => {
+    const w = [];
+    assert.equal(capText('😀'.repeat(3), 3, 'f', w), '😀😀😀');
+    assert.deepEqual(w, []);
+    assert.equal(capText('😀'.repeat(4), 3, 'f', w), '😀😀😀');
+    assert.deepEqual(w, ['f truncated from 4 to 3 characters']);
+  });
+
+  test('message text is cut to 2000 characters with a warning', () => {
+    const t = transformMessage('m', { senderId: 'alice', message: 'y'.repeat(2100) }, ctx);
+    assert.equal(t.row.message.length, 2000);
+    assert.deepEqual(t.warnings, ['message truncated from 2100 to 2000 characters']);
+    assert.deepEqual(transformMessage('m2', { senderId: 'alice', message: 'short' }, ctx).warnings, []);
+  });
+
+  test('gs:// image references are rewritten before filtering to http(s)', () => {
+    assert.equal(imageUrl(GS, ctxCopied), copied.get('report_images/alice/x.jpg'));
+    const w = [];
+    assert.equal(imageUrl('gs://ewer-8f788.appspot.com/report_images/alice/other.jpg', ctxCopied, w), '');
+    assert.equal(w.length, 1);
+    assert.equal(imageUrl('/data/local.jpg', ctxCopied, w), '');
+    assert.equal(w.length, 1, 'local paths are dropped silently');
+
+    const rep = transformReport('r', { userId: 'alice', severity: 'low', lga: 'X', imageUrls: [GS, '/tmp/a.jpg'] }, ctxCopied);
+    assert.deepEqual(rep.row.image_urls, [copied.get('report_images/alice/x.jpg')]);
+    const user = transformUser('alice', { uid: 'alice', email: 'a@b.co' }, { profileImageUrl: GS }, ctxCopied);
+    assert.equal(user.row.profile.profile_image_url, copied.get('report_images/alice/x.jpg'));
+    const kb = transformKnowledge('k', { title: 'Local guide', imageUrl: GS }, ctxCopied);
+    assert.equal(kb.row.image_url, copied.get('report_images/alice/x.jpg'));
+    assert.equal(transformKnowledge('k2', { title: 'Local guide', imageUrl: 'gs://b/other.png' }, ctxCopied).row.image_url, null);
+  });
+
+  test('coverage_state is mapped to the canonical state names', () => {
+    assert.equal(NIGERIAN_STATES.length, 37);
+    const cases = {
+      benue: 'Benue', 'BENUE STATE': 'Benue', 'Nassarawa': 'Nasarawa', 'nasarawa state': 'Nasarawa',
+      'Federal Capital Territory': 'FCT', Abuja: 'FCT', fct: 'FCT', 'FCT-Abuja': 'FCT', 'akwa-ibom': 'Akwa Ibom',
+      'Cross Rivers': 'Cross River', ' plateau ': 'Plateau', Rivers: 'Rivers', Niger: 'Niger',
+    };
+    for (const [raw, want] of Object.entries(cases)) assert.equal(normalizeNigerianState(raw), want, raw);
+    for (const s of NIGERIAN_STATES) assert.equal(normalizeNigerianState(s.toUpperCase()), s);
+    assert.equal(normalizeNigerianState('Atlantis'), null);
+    assert.equal(normalizeNigerianState(''), null);
+
+    const t = transformAuthority('au', { phone: '+234', lga: 'Lafia', coverageState: 'NASSARAWA' }, ctx);
+    assert.equal(t.row.coverage_state, 'Nasarawa');
+    assert.deepEqual(t.warnings, []);
+    const bad = transformAuthority('au2', { phone: '+234', lga: 'Makurdi', state: 'Middle Belt' }, ctx);
+    assert.equal(bad.row.coverage_state, null);
+    assert.deepEqual(bad.warnings, ["unknown state 'Middle Belt'; coverage_state set to null"]);
+  });
+
+  test('verification overrides: action verified; unmigrated validator kept as null', () => {
+    assert.equal(normalizeOverrideAction('verified'), 'verified');
+    assert.equal(normalizeOverrideAction('Verify'), 'verified');
+    const v = transformVerificationOverride('o', { reportId: 'r1', validatorId: 'alice', action: 'verified' }, ctx);
+    assert.equal(v.row.action, 'verified');
+    const ghost = transformVerificationOverride('o2', { reportId: 'r1', validatorId: 'ghost', action: 'approve' }, ctx);
+    assert.equal(ghost.skip, null);
+    assert.equal(ghost.row.validator_id, null);
+    assert.deepEqual(ghost.warnings, ['validator ghost not migrated; validator_id set to null']);
+    const none = transformVerificationOverride('o3', { reportId: 'r1', action: 'rejected' }, ctx);
+    assert.equal(none.row.validator_id, null);
+    assert.equal(none.warnings.length, 1);
+  });
+
+  test('storage upload plan: jpg alias, extension inference, disallowed types and size limit', () => {
+    assert.deepEqual(storageUploadPlan('report_images/a/1.jpg', { contentType: 'image/jpg', size: '100' }), { contentType: 'image/jpeg' });
+    assert.deepEqual(storageUploadPlan('report_images/a/1.PNG', { contentType: 'application/octet-stream' }), { contentType: 'image/png' });
+    assert.deepEqual(storageUploadPlan('report_images/a/1.heic', {}), { contentType: 'image/heic' });
+    assert.deepEqual(storageUploadPlan('report_images/a/1.webp', { contentType: 'image/webp; charset=binary' }), { contentType: 'image/webp' });
+    assert.match(storageUploadPlan('report_images/a/1.gif', { contentType: 'image/gif' }).skip, /image\/gif not allowed/);
+    assert.match(storageUploadPlan('report_images/a/clip.mp4', { contentType: 'video/mp4' }).skip, /video\/mp4 not allowed/);
+    assert.match(storageUploadPlan('report_images/a/noext', {}).skip, /\(missing\) and extension \(none\) not allowed/);
+    assert.match(storageUploadPlan('report_images/a/doc.pdf', { contentType: 'application/octet-stream' }).skip, /'\.pdf' not allowed/);
+    assert.match(storageUploadPlan('report_images/a/big.jpg', { contentType: 'image/jpeg', size: STORAGE_MAX_BYTES + 1 }).skip, /larger than the 5 MB bucket limit/);
+    assert.deepEqual(storageUploadPlan('report_images/a/edge.jpg', { contentType: 'image/jpeg', size: STORAGE_MAX_BYTES }), { contentType: 'image/jpeg' });
   });
 });
