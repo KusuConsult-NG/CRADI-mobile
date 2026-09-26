@@ -237,6 +237,15 @@ class _ChatViewState extends State<_ChatView> {
       resolveUser: _resolveUser,
       onMessageSend: _handleMessageSend,
       theme: ChatTheme.fromThemeData(Theme.of(context)),
+      // flutter_chat_ui hard-codes its English placeholders, so the empty
+      // state and the composer hint stay untranslated unless they are built
+      // here (every other string on this screen comes from the ARBs).
+      builders: Builders(
+        emptyChatListBuilder: (context) =>
+            EmptyChatList(text: context.l10n.chatEmpty),
+        composerBuilder: (context) =>
+            Composer(hintText: context.l10n.chatComposerHint),
+      ),
     );
   }
 

@@ -417,21 +417,25 @@ class SupabaseService {
   }
 
   /// Upload an image file and return its public URL. The image is always
-  /// re-encoded as JPEG (max 1920px @ 85%) without EXIF metadata (camera
-  /// GPS position, device details); an image that can't be re-encoded is
-  /// refused rather than uploaded with its metadata.
+  /// re-encoded as JPEG (by default max 1920px @ 85%, overridable with
+  /// [maxDimension] / [quality] so the same path can produce a thumbnail)
+  /// without EXIF metadata (camera GPS position, device details); an image
+  /// that can't be re-encoded is refused rather than uploaded with its
+  /// metadata.
   Future<String> uploadFileFromPath({
     required String bucketId,
     required String storagePath,
     required File file,
     String? contentType,
     bool upsert = false,
+    int maxDimension = 1920,
+    int quality = 85,
   }) async {
     final compressed = await FlutterImageCompress.compressWithFile(
       file.absolute.path,
-      minWidth: 1920,
-      minHeight: 1920,
-      quality: 85,
+      minWidth: maxDimension,
+      minHeight: maxDimension,
+      quality: quality,
       format: CompressFormat.jpeg,
       keepExif: false, // strip EXIF, incl. GPS position
     );

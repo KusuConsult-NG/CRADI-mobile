@@ -13,6 +13,7 @@ import 'package:climate_app/core/l10n/l10n.dart';
 import 'package:climate_app/core/l10n/severity_label.dart';
 import 'package:climate_app/core/constants/hazards.dart';
 import 'package:climate_app/features/verification/models/verification_report_model.dart';
+import 'package:climate_app/core/widgets/app_network_image.dart';
 
 /// Admin Reports Overview screen.
 /// Lists all reports across all LGAs with status filters and manual actions.
@@ -392,12 +393,15 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
                                 padding: const EdgeInsets.only(right: 8),
                                 child: ClipRRect(
                                   borderRadius: BorderRadius.circular(8),
-                                  child: Image.network(
-                                    imageUrls[index],
+                                  // 120x120 box: thumbnail, falling back to
+                                  // the full image when there is none.
+                                  child: AppNetworkImage.thumbnail(
+                                    url: imageUrls[index],
                                     width: 120,
                                     height: 120,
                                     fit: BoxFit.cover,
-                                    errorBuilder: (_, error, stackTrace) =>
+                                    renderWidth: 240,
+                                    errorWidget: (_) =>
                                         Container(
                                           width: 120,
                                           height: 120,

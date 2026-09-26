@@ -2417,6 +2417,12 @@ class AppLocalizationsHa extends AppLocalizations {
   }
 
   @override
+  String get chatEmpty => 'Babu saƙonni tukuna';
+
+  @override
+  String get chatComposerHint => 'Rubuta saƙo';
+
+  @override
   String get contactsNameRequired => 'Ana buƙatar suna';
 
   @override

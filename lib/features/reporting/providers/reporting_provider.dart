@@ -7,6 +7,7 @@ import 'package:climate_app/core/services/offline_storage_service.dart';
 import 'package:climate_app/core/data/mvp_locations_data.dart';
 import 'package:climate_app/core/providers/connectivity_provider.dart';
 import 'package:climate_app/core/constants/app_config.dart';
+import 'package:climate_app/core/utils/image_url_resolver.dart';
 import 'dart:developer' as developer;
 import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' show PostgrestException;
@@ -78,6 +79,38 @@ class ReportingProvider extends ChangeNotifier {
       if (path is String && path.startsWith('$uid/')) return path;
     }
     return reportPhotoStoragePath(uid, reportId, index, fileName);
+  }
+
+  /// Longest-edge target and JPEG quality of the thumbnail uploaded next to
+  /// every report photo. List and grid views render a box of at most ~200
+  /// logical pixels, so ~320px covers it on a 1.5x screen at a fraction of
+  /// the bytes of the 1024px original.
+  static const int thumbnailMaxDimension = 320;
+  static const int thumbnailQuality = 70;
+
+  /// Uploads the small preview that goes next to the photo at
+  /// [storagePath] (same folder, `_thumb.jpg` — see
+  /// [ImageUrlResolver.thumbStoragePath], which is also how display code
+  /// finds it again).
+  ///
+  /// Best effort: a report is never rejected because its thumbnail failed,
+  /// and views fall back to the full-size image. Idempotent — the path is
+  /// deterministic and an object an earlier attempt already stored is
+  /// reused (upsert is off; storage has no update policy for evidence).
+  Future<void> _uploadThumbnail(File file, String storagePath) async {
+    try {
+      await _db
+          .uploadFileFromPath(
+            bucketId: AppConfig.reportImagesBucket,
+            storagePath: ImageUrlResolver.thumbStoragePath(storagePath),
+            file: file,
+            maxDimension: thumbnailMaxDimension,
+            quality: thumbnailQuality,
+          )
+          .timeout(photoUploadTimeout);
+    } on Exception catch (e) {
+      developer.log('Thumbnail upload failed for $storagePath: $e');
+    }
   }
 
   /// Maximum length of the free-text description.
@@ -323,6 +356,7 @@ class ReportingProvider extends ChangeNotifier {
               )
               .timeout(photoUploadTimeout);
           imageUrls.add(url);
+          await _uploadThumbnail(File(_photos[i].path), storagePaths[i]);
         }
       } on Exception catch (e) {
         // The connection dropped while uploading photos: keep the report
@@ -491,18 +525,20 @@ class ReportingProvider extends ChangeNotifier {
               final path = paths[i];
               if (File(path).existsSync()) {
                 final fileName = path.split('/').last;
+                final storagePath = draftPhotoStoragePath(
+                  draft,
+                  uid: uid,
+                  reportId: reportId,
+                  index: i,
+                  fileName: fileName,
+                );
                 final url = await _db.uploadFileFromPath(
                   bucketId: AppConfig.reportImagesBucket,
-                  storagePath: draftPhotoStoragePath(
-                    draft,
-                    uid: uid,
-                    reportId: reportId,
-                    index: i,
-                    fileName: fileName,
-                  ),
+                  storagePath: storagePath,
                   file: File(path),
                 );
                 imageUrls.add(url);
+                await _uploadThumbnail(File(path), storagePath);
               }
             }
           }

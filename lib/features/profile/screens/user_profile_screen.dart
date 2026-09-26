@@ -12,6 +12,7 @@ import 'package:climate_app/core/services/biometric_service.dart';
 import 'package:climate_app/features/contacts/providers/emergency_contacts_provider.dart';
 import 'package:climate_app/core/widgets/location_selector_widget.dart';
 import 'package:climate_app/core/widgets/language_selector_sheet.dart';
+import 'package:climate_app/core/widgets/app_network_image.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:climate_app/shared/widgets/dispose_controllers_on_unmount.dart';
@@ -959,21 +960,21 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                     ),
                   )
                 : imagePath.startsWith('http')
-                ? Image.network(
-                    imagePath,
+                // 120px avatar: cached, and rendered at 240px (2x) by the
+                // CDN when one is configured.
+                ? AppNetworkImage(
+                    url: imagePath,
                     fit: BoxFit.cover,
-                    loadingBuilder: (context, child, loadingProgress) {
-                      if (loadingProgress == null) return child;
-                      return Center(
-                        child: CircularProgressIndicator(
-                          value: loadingProgress.expectedTotalBytes != null
-                              ? loadingProgress.cumulativeBytesLoaded /
-                                    loadingProgress.expectedTotalBytes!
-                              : null,
-                        ),
-                      );
-                    },
-                    errorBuilder: (context, error, stackTrace) {
+                    renderWidth: 240,
+                    renderQuality: 80,
+                    progressIndicatorBuilder: (context, progress) => Center(
+                      child: CircularProgressIndicator(
+                        value: progress.totalSize != null
+                            ? progress.downloaded / progress.totalSize!
+                            : null,
+                      ),
+                    ),
+                    errorWidget: (context) {
                       return Container(
                         color: Colors.grey.shade200,
                         child: Icon(

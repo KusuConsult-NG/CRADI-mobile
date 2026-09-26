@@ -4,6 +4,7 @@ import 'package:climate_app/core/l10n/l10n.dart';
 import 'package:climate_app/core/providers/connectivity_provider.dart';
 import 'package:climate_app/core/services/offline_storage_service.dart';
 import 'package:climate_app/core/services/supabase_service.dart';
+import 'package:climate_app/core/utils/image_url_resolver.dart';
 import 'package:climate_app/features/reporting/providers/reporting_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -21,6 +22,10 @@ class _FakeDb implements SupabaseService {
   final Exception? uploadError;
   final List<String> uploadedPaths = [];
   final List<String> attemptedPaths = [];
+
+  /// Thumbnail uploads, kept apart from the full-size ones: they are a
+  /// best-effort extra and must not shift the [failUploadAt] numbering.
+  final List<String> uploadedThumbPaths = [];
   final List<String?> createdIds = [];
   final List<String?> upsertedIds = [];
   final List<Map<String, dynamic>> upsertedData = [];
@@ -35,7 +40,13 @@ class _FakeDb implements SupabaseService {
     required File file,
     String? contentType,
     bool upsert = false,
+    int maxDimension = 1920,
+    int quality = 85,
   }) async {
+    if (storagePath.endsWith('_thumb.jpg')) {
+      uploadedThumbPaths.add(storagePath);
+      return 'https://storage.example/$storagePath';
+    }
     final n = attemptedPaths.length;
     attemptedPaths.add(storagePath);
     if (n == failUploadAt) throw uploadError!;
@@ -217,6 +228,13 @@ void main() {
       expect(db.uploadedPaths, [
         ReportingProvider.reportPhotoStoragePath('u1', reportId, 0, 'a.jpg'),
       ]);
+      // A thumbnail was stored next to the photo that did upload, and only
+      // that one.
+      expect(db.uploadedThumbPaths, [
+        ImageUrlResolver.thumbStoragePath(
+          ReportingProvider.reportPhotoStoragePath('u1', reportId, 0, 'a.jpg'),
+        ),
+      ]);
 
       // Back online: the draft sync uploads to the same objects (the first
       // one is reused, not orphaned) and inserts the report under the same
@@ -231,6 +249,13 @@ void main() {
       );
       expect(sync!['synced'], 1);
       expect(syncDb.attemptedPaths, draft['imageStoragePaths']);
+      // The sync uploads both sizes, at the same deterministic paths.
+      expect(
+        syncDb.uploadedThumbPaths,
+        (draft['imageStoragePaths'] as List)
+            .map((p) => ImageUrlResolver.thumbStoragePath(p as String))
+            .toList(),
+      );
       expect(syncDb.upsertedIds, [reportId]);
       expect(
         syncDb.upsertedData.single['imageUrls'],

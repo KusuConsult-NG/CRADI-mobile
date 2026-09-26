@@ -2403,6 +2403,12 @@ class AppLocalizationsYo extends AppLocalizations {
   }
 
   @override
+  String get chatEmpty => 'Kò tíì sí ìfiránṣẹ́';
+
+  @override
+  String get chatComposerHint => 'Kọ ìfiránṣẹ́';
+
+  @override
   String get contactsNameRequired => 'Orúkọ pọn dandan';
 
   @override

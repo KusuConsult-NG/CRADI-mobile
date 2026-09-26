@@ -1,4 +1,4 @@
-import 'package:cached_network_image/cached_network_image.dart';
+import 'package:climate_app/core/widgets/app_network_image.dart';
 import 'package:climate_app/features/knowledge_base/knowledge_categories.dart';
 import 'package:flutter/material.dart';
 
@@ -22,13 +22,16 @@ class GuideImage extends StatelessWidget {
   Widget build(BuildContext context) {
     final url = guideImageUrl(guide);
     if (url == null) return GuideImagePlaceholder(guide: guide);
-    return CachedNetworkImage(
-      imageUrl: url,
+    return AppNetworkImage(
+      url: url,
       fit: BoxFit.cover,
       width: double.infinity,
       height: double.infinity,
-      placeholder: (context, url) => GuideImagePlaceholder(guide: guide),
-      errorWidget: (context, url, error) => GuideImagePlaceholder(guide: guide),
+      // Card-sized: ask the CDN (when configured) for a small render.
+      renderWidth: 480,
+      renderQuality: 70,
+      placeholder: (context) => GuideImagePlaceholder(guide: guide),
+      errorWidget: (context) => GuideImagePlaceholder(guide: guide),
     );
   }
 }

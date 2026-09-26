@@ -3082,6 +3082,14 @@
       }
     }
   },
+  "chatEmpty": "No messages yet",
+  "@chatEmpty": {
+    "description": "Shown in the chat screen when there are no messages yet."
+  },
+  "chatComposerHint": "Type a message",
+  "@chatComposerHint": {
+    "description": "Placeholder in the chat message composer."
+  },
   "contactsNameRequired": "Name is required",
   "@contactsNameRequired": {
     "description": "Validation error for an empty contact name."

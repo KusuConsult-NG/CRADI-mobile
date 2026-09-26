@@ -13,6 +13,7 @@ import 'package:climate_app/features/verification/widgets/report_verifications_s
 import 'package:climate_app/features/verification/widgets/report_vote_actions.dart';
 import 'package:climate_app/core/l10n/l10n.dart';
 import 'package:climate_app/core/utils/screen_security.dart';
+import 'package:climate_app/core/widgets/app_network_image.dart';
 
 /// Screen that displays full report details, with the actions the
 /// signed-in user may take on it (peer vote, staff approve / reject /
@@ -207,12 +208,15 @@ class _ReportViewScreenState extends State<ReportViewScreen>
                       itemBuilder: (context, index) {
                         return ClipRRect(
                           borderRadius: BorderRadius.circular(12),
-                          child: Image.network(
-                            report.imageUrls[index],
+                          // 200x200 box: the thumbnail uploaded next to the
+                          // photo, falling back to the full-size image for
+                          // reports that predate thumbnails.
+                          child: AppNetworkImage.thumbnail(
+                            url: report.imageUrls[index],
                             width: 200,
                             height: 200,
                             fit: BoxFit.cover,
-                            errorBuilder: (_, error, stackTrace) => Container(
+                            errorWidget: (_) => Container(
                               width: 200,
                               height: 200,
                               color: Colors.grey.shade200,

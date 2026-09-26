@@ -2398,6 +2398,12 @@ class AppLocalizationsPcm extends AppLocalizations {
   }
 
   @override
+  String get chatEmpty => 'No message dey yet';
+
+  @override
+  String get chatComposerHint => 'Type message';
+
+  @override
   String get contactsNameRequired => 'You must put name';
 
   @override

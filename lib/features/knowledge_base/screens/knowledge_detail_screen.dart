@@ -10,6 +10,7 @@ import 'package:go_router/go_router.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:climate_app/core/l10n/l10n.dart';
+import 'package:climate_app/core/widgets/app_network_image.dart';
 
 class KnowledgeDetailScreen extends StatefulWidget {
   final Map<String, dynamic> guide;
@@ -257,10 +258,14 @@ class _KnowledgeDetailScreenState extends State<KnowledgeDetailScreen> {
                 borderRadius: BorderRadius.circular(16),
                 child: AspectRatio(
                   aspectRatio: 16 / 9,
-                  child: Image.network(
-                    guideImageUrl(guide)!,
+                  // Admin-set guide images are usually off-site, so the CDN
+                  // rewrite is a no-op for them; the disk cache still means
+                  // one download per guide instead of one per rebuild.
+                  child: AppNetworkImage(
+                    url: guideImageUrl(guide)!,
                     fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) {
+                    renderWidth: 720,
+                    errorWidget: (context) {
                       return _buildFallbackImage(categoryIcon, categoryColor);
                     },
                   ),
@@ -320,14 +325,25 @@ class _KnowledgeDetailScreenState extends State<KnowledgeDetailScreen> {
             const SizedBox(height: 12),
             Consumer<KnowledgeProvider>(
               builder: (context, knowledgeProvider, child) {
-                // Find guides with the same category/tag
+                // Guides in the same category. Stored categories are not
+                // normalised ('Flood' / 'Floods' / 'flooding' all exist), so
+                // resolve them through the shared category list instead of
+                // comparing the raw strings.
                 final currentCategory =
                     guide['category'] ?? guide['hazardType'] ?? 'General';
+                final target = knowledgeCategoryFor(currentCategory);
                 final relatedGuides = knowledgeProvider.guides
                     .where((g) {
+                      // Ignore the guide being shown.
+                      if (g[r'$id'] != null && guide[r'$id'] != null) {
+                        if (g[r'$id'] == guide[r'$id']) return false;
+                      } else if (g['title'] == guide['title']) {
+                        return false;
+                      }
+                      if (target != null) {
+                        return guideMatchesCategory(g, target.label);
+                      }
                       final cat = g['category'] ?? g['hazardType'] ?? 'General';
-                      // Ignore exact same guide
-                      if (g['title'] == guide['title']) return false;
                       return cat.toString().toLowerCase() ==
                           currentCategory.toString().toLowerCase();
                     })

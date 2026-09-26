@@ -2404,6 +2404,12 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get chatEmpty => 'No messages yet';
+
+  @override
+  String get chatComposerHint => 'Type a message';
+
+  @override
   String get contactsNameRequired => 'Name is required';
 
   @override

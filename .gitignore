@@ -73,3 +73,10 @@ test_sms.dart
 *.p12
 *.pem
 key.properties
+
+# Browser smoke-test harness output (screenshots + reports are large and regenerated)
+web_smoke/screenshots/
+web_smoke/report*.json
+web_smoke/language-texts.json
+web_smoke/build/
+web_smoke/node_modules/

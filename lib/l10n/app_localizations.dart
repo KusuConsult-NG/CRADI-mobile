@@ -4208,6 +4208,18 @@ abstract class AppLocalizations {
   /// **'Message not sent. {error}'**
   String chatSendFailed(String error);
 
+  /// Shown in the chat screen when there are no messages yet.
+  ///
+  /// In en, this message translates to:
+  /// **'No messages yet'**
+  String get chatEmpty;
+
+  /// Placeholder in the chat message composer.
+  ///
+  /// In en, this message translates to:
+  /// **'Type a message'**
+  String get chatComposerHint;
+
   /// Validation error for an empty contact name.
   ///
   /// In en, this message translates to:

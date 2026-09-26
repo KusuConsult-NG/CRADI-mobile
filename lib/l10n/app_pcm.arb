@@ -684,6 +684,8 @@
   "chatMe": "Me",
   "chatRateLimited": "{reason}. Abeg wait small.",
   "chatSendFailed": "Message no send. {error}",
+  "chatEmpty": "No message dey yet",
+  "chatComposerHint": "Type message",
   "contactsNameRequired": "You must put name",
   "contactsNameTooLong": "Name too long",
   "contactsPhoneDigitsOnly": "Use only numbers (you fit start with +)",

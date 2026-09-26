@@ -684,6 +684,8 @@
   "chatMe": "Èmi",
   "chatRateLimited": "{reason}. Jọ̀wọ́ dúró díẹ̀.",
   "chatSendFailed": "A kò fi ìfiránṣẹ́ ránṣẹ́. {error}",
+  "chatEmpty": "Kò tíì sí ìfiránṣẹ́",
+  "chatComposerHint": "Kọ ìfiránṣẹ́",
   "contactsNameRequired": "Orúkọ pọn dandan",
   "contactsNameTooLong": "Orúkọ ti gùn jù",
   "contactsPhoneDigitsOnly": "Lo nọ́mbà nìkan (ó lè bẹ̀rẹ̀ pẹ̀lú +)",

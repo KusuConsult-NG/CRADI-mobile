@@ -101,6 +101,17 @@ cp env.example.json env.json   # env.json is git-ignored
 | `SUPABASE_ANON_KEY` | yes | anon / publishable key (never the service-role key) |
 | `ONESIGNAL_APP_ID` | for push | push is disabled when empty |
 | `SENTRY_DSN` | no | crash reporting is disabled when empty |
+| `IMAGEKIT_URL_ENDPOINT` | no | ImageKit CDN in front of Supabase Storage; images are fetched straight from Supabase when empty |
+
+`IMAGEKIT_URL_ENDPOINT` is a delivery-only optimisation (no SDK, no
+upload-side integration). Set it to an ImageKit URL endpoint, e.g.
+`https://ik.imagekit.io/<imagekit_id>`, whose origin is this project's
+Supabase Storage public base
+(`https://<ref>.supabase.co/storage/v1/object/public/`). The app then
+requests `<endpoint>/<bucket>/<object path>?tr=w-…,q-…` so photos are
+resized at the edge instead of downloading the full-size original; every
+other URL (off-site knowledge-base images, signed URLs) is left untouched.
+Leaving it empty changes nothing.
 
 Run / build with the file:
 

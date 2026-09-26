@@ -684,6 +684,8 @@
   "chatMe": "Mụ",
   "chatRateLimited": "{reason}. Biko chere ntakịrị.",
   "chatSendFailed": "E zighị ozi ahụ. {error}",
+  "chatEmpty": "Enweghị ozi ugbu a",
+  "chatComposerHint": "Dee ozi",
   "contactsNameRequired": "Aha dị mkpa",
   "contactsNameTooLong": "Aha dị ogologo karịa",
   "contactsPhoneDigitsOnly": "Jiri naanị nọmba (ị nwere ike iji + bido)",

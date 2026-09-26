@@ -2387,6 +2387,12 @@ class AppLocalizationsIg extends AppLocalizations {
   }
 
   @override
+  String get chatEmpty => 'Enweghị ozi ugbu a';
+
+  @override
+  String get chatComposerHint => 'Dee ozi';
+
+  @override
   String get contactsNameRequired => 'Aha dị mkpa';
 
   @override

@@ -368,7 +368,15 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
           ),
 
           const SizedBox(height: 12),
-          Row(
+          // A Wrap, not a Row: in languages with longer labels (Hausa,
+          // Yoruba, Igbo) a fixed share of the row squeezes the action
+          // buttons until their text breaks mid-word. Wrapping moves the
+          // action group onto its own full-width line instead.
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 8,
+            runSpacing: 4,
             children: [
               TextButton(
                 onPressed: () {
@@ -382,14 +390,11 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
                   ),
                 ),
               ),
-              const Spacer(),
-              Flexible(
-                flex: 4,
-                child: Wrap(
-                  alignment: WrapAlignment.end,
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
+              Wrap(
+                alignment: WrapAlignment.end,
+                spacing: 8,
+                runSpacing: 8,
+                children: [
                     if (canVerify &&
                         report.status == ReportStatus.pending &&
                         report.reporterId != currentUserId) ...[
@@ -488,8 +493,7 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
                           style: GoogleFonts.lexend(fontSize: 13),
                         ),
                       ),
-                  ],
-                ),
+                ],
               ),
             ],
           ),

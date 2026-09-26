@@ -744,6 +744,8 @@
   "chatMe": "Ni",
   "chatRateLimited": "{reason}. Don Allah jira ɗan lokaci.",
   "chatSendFailed": "Ba a aika saƙon ba. {error}",
+  "chatEmpty": "Babu saƙonni tukuna",
+  "chatComposerHint": "Rubuta saƙo",
   "contactsNameRequired": "Ana buƙatar suna",
   "contactsNameTooLong": "Suna ya yi tsawo",
   "contactsPhoneDigitsOnly": "Yi amfani da lambobi kawai (za a iya farawa da +)",

@@ -423,6 +423,31 @@ All runtime configuration is compile-time (`String.fromEnvironment`) in
 | `SUPABASE_ANON_KEY` | **yes** | anon / publishable key | as above |
 | `ONESIGNAL_APP_ID` | for push | `2e6f30a8-ef18-4091-9961-e6a6fe862322` | push is disabled |
 | `SENTRY_DSN` | no | Sentry DSN | crash reporting disabled |
+| `IMAGEKIT_URL_ENDPOINT` | no | `https://ik.imagekit.io/<imagekit_id>` | images are fetched straight from Supabase Storage; every URL is left untouched |
+
+#### `IMAGEKIT_URL_ENDPOINT` (optional CDN)
+
+Delivery only — there is no ImageKit SDK in the app and nothing is uploaded
+to ImageKit. When set, `ImageUrlResolver`
+(`lib/core/utils/image_url_resolver.dart`) rewrites Supabase Storage
+**public** object URLs to be served through ImageKit, and adds the
+width/quality the view actually needs:
+
+```
+https://<ref>.supabase.co/storage/v1/object/public/report-images/<uid>/x.jpg
+  ->  https://ik.imagekit.io/<imagekit_id>/report-images/<uid>/x.jpg?tr=w-320,q-70
+```
+
+To make that work, create the URL endpoint in the ImageKit dashboard and
+attach a **web server origin** whose base URL is
+`https://<ref>.supabase.co/storage/v1/object/public/`, so the path ImageKit
+receives is `<bucket>/<object path>`. (ImageKit serves an origin file at
+`<endpoint>/<rest-of-the-path>` and takes transformations either as a `tr:`
+path segment or as a `tr` query parameter — the app uses the query form.)
+
+Buckets are public-read, so no ImageKit credentials are involved. Anything
+that is not a Supabase public storage URL — admin-set knowledge-base images
+on other hosts, signed URLs, local file paths — is left exactly as it is.
 
 `AppConfig` also holds non-configurable constants (the Android
 `applicationId`, the Play Store URL, table names and the two storage bucket
@@ -432,7 +457,8 @@ names) — nothing to set there.
 
 ```bash
 cp env.example.json env.json     # env.json is git-ignored
-# edit env.json: SUPABASE_URL, SUPABASE_ANON_KEY, ONESIGNAL_APP_ID, SENTRY_DSN
+# edit env.json: SUPABASE_URL, SUPABASE_ANON_KEY, ONESIGNAL_APP_ID, SENTRY_DSN,
+#                IMAGEKIT_URL_ENDPOINT (optional)
 flutter pub get
 flutter run   --dart-define-from-file=env.json
 flutter build apk --release --no-tree-shake-icons --dart-define-from-file=env.json
@@ -440,7 +466,8 @@ flutter build apk --release --no-tree-shake-icons --dart-define-from-file=env.js
 
 `env.example.json` is the template and contains only placeholders. The CI
 release job writes `env.json` from the repository secrets `SUPABASE_URL`,
-`SUPABASE_ANON_KEY`, `ONESIGNAL_APP_ID` and `SENTRY_DSN`.
+`SUPABASE_ANON_KEY`, `ONESIGNAL_APP_ID` and `SENTRY_DSN`
+(`IMAGEKIT_URL_ENDPOINT` is left empty unless the secret is set).
 Signing: see `docs/KEYSTORE_SETUP.md`.
 
 > **The OneSignal REST API key must never be passed to the app** — not in

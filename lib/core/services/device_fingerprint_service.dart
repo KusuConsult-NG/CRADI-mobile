@@ -74,18 +74,22 @@ class DeviceFingerprintService {
   /// Get human-readable device name for display
   Future<String> getDeviceName() async {
     try {
+      // `dart:io`'s Platform throws on the web, so kIsWeb must be checked
+      // first (as [generateFingerprint] and [getPlatform] do).
+      if (kIsWeb) {
+        final webInfo = await _deviceInfo.webBrowserInfo;
+        return 'Web (${webInfo.browserName})';
+      }
       if (Platform.isAndroid) {
         final androidInfo = await _deviceInfo.androidInfo;
         return '${androidInfo.manufacturer} ${androidInfo.model}';
       } else if (Platform.isIOS) {
         final iosInfo = await _deviceInfo.iosInfo;
         return '${iosInfo.name} (${iosInfo.model})';
-      } else if (kIsWeb) {
-        final webInfo = await _deviceInfo.webBrowserInfo;
-        return 'Web (${webInfo.browserName})';
       }
       return 'Unknown Device';
-    } on Exception {
+      // A missing platform channel surfaces as an Error, not an Exception.
+    } on Object {
       return 'Unknown Device';
     }
   }
