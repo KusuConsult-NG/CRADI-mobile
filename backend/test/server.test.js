@@ -8,7 +8,7 @@ import { logger } from './helpers.js';
 test('loadConfig: defaults, missing required, feature flags', () => {
   const { config, missing, status } = loadConfig({ PORT: '3000' });
   assert.deepEqual(missing, ['SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY']);
-  assert.deepEqual(status, { supabase: false, onesignal: false, resend: false });
+  assert.deepEqual(status, { supabase: false, onesignal: false, resend: false, sms: false });
   assert.equal(config.port, 3000);
   assert.equal(config.fromEmail, 'noreply@cradi.ng');
   assert.equal(config.fromName, 'EWER Alert System');
@@ -24,7 +24,7 @@ test('loadConfig: defaults, missing required, feature flags', () => {
     CORS_ORIGINS: 'https://a.com, https://b.com',
   });
   assert.deepEqual(full.missing, []);
-  assert.deepEqual(full.status, { supabase: true, onesignal: true, resend: true });
+  assert.deepEqual(full.status, { supabase: true, onesignal: true, resend: true, sms: false });
   assert.deepEqual(full.config.corsOrigins, ['https://a.com', 'https://b.com']);
 });
 

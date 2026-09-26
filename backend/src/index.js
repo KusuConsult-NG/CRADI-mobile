@@ -10,6 +10,8 @@ import { loopHealth, startLoop } from './loop.js';
 import { createOneSignal } from './onesignal.js';
 import { BATCH_SIZE, createHandlers, runOutboxBatch } from './outbox.js';
 import { createRepo } from './repo.js';
+import { createAuthoritySms } from './sms/authorities.js';
+import { createSmsProvider } from './sms/providers.js';
 import { createHttpServer } from './server.js';
 
 const { config, missing, status } = loadConfig();
@@ -21,6 +23,12 @@ if (missing.length) {
   });
 }
 if (!status.onesignal) log.warn('config.onesignal_missing', { hint: 'ONESIGNAL_APP_ID / ONESIGNAL_REST_API_KEY unset; pushes are skipped.' });
+if (!status.sms) {
+  log.warn('config.sms_missing', {
+    provider: config.smsProvider ?? null,
+    hint: "SMS_PROVIDER unset/unknown or its credentials incomplete ('termii': TERMII_API_KEY + SMS_SENDER_ID; 'twilio': TWILIO_ACCOUNT_SID + TWILIO_AUTH_TOKEN + TWILIO_FROM); authority SMS are skipped.",
+  });
+}
 if (!status.resend) log.warn('config.resend_missing', { hint: 'RESEND_API_KEY unset; POST /email returns 503.' });
 
 const supabase = status.supabase
@@ -39,7 +47,8 @@ const push = createOneSignal({
 
 const loops = [];
 if (repo) {
-  const handlers = createHandlers({ repo, push });
+  const authoritySms = createAuthoritySms({ repo, sms: createSmsProvider(config) });
+  const handlers = createHandlers({ repo, push, authoritySms });
   loops.push(
     startLoop('outbox', async () => (await runOutboxBatch({ repo, handlers, limit: BATCH_SIZE })) >= BATCH_SIZE, config.workerPollMs),
     startLoop('escalations', async () => void (await runEscalations({ repo, push })), config.escalationPollMs),

@@ -48,6 +48,18 @@ async function recordFailure(esc, message, { repo, now }) {
   return { attempt, gaveUp: false };
 }
 
+/**
+ * Pushes an escalation to LGA coordinators/EWRs + project staff/EWVs anywhere
+ * (shared by the timeout cron and the dispute handler). Returns the recipient count.
+ */
+export async function notifyEscalationRecipients(report, notification, { repo, push, key }) {
+  const lists = [];
+  for (const q of escalationQueries(report)) lists.push(await repo.findProfiles(q));
+  const ids = selectRecipientIds(lists, { excludeId: report.user_id });
+  await push.sendToUsers(ids, notification, { key });
+  return ids.length;
+}
+
 export async function processEscalation(esc, { repo, push, logger = defaultLog }) {
   const report = await repo.getReport(esc.report_id);
   if (!report) {
@@ -59,15 +71,24 @@ export async function processEscalation(esc, { repo, push, logger = defaultLog }
     return 'skipped';
   }
 
+  // Escalated by another path (e.g. a peer dispute) that already notified.
+  // A report escalated by this cron on an earlier, failed attempt carries
+  // ESCALATION_REASON and goes on to (idempotently) retry the push.
+  if (report.escalated && report.escalation_reason && report.escalation_reason !== ESCALATION_REASON) {
+    await repo.finishEscalation(esc.id, 'skipped', `Already escalated: ${report.escalation_reason}`.slice(0, 500));
+    return 'skipped';
+  }
+
   await repo.markReportEscalated(report.id, ESCALATION_REASON);
 
-  const lists = [];
-  for (const q of escalationQueries(report)) lists.push(await repo.findProfiles(q));
-  const ids = selectRecipientIds(lists, { excludeId: report.user_id });
-  await push.sendToUsers(ids, escalationNotification(report), { key: `escalation:${esc.id}` });
+  const recipients = await notifyEscalationRecipients(report, escalationNotification(report), {
+    repo,
+    push,
+    key: `escalation:${esc.id}`,
+  });
 
   const won = await repo.finishEscalation(esc.id, 'processed', ESCALATION_REASON);
-  logger.info('escalation.processed', { escalation_id: esc.id, report_id: report.id, recipients: ids.length, won });
+  logger.info('escalation.processed', { escalation_id: esc.id, report_id: report.id, recipients, won });
   return 'processed';
 }
 

@@ -29,8 +29,16 @@ export function fakePush({ failOn } = {}) {
 }
 
 /** In-memory repo with the same interface as src/repo.js. */
-export function fakeRepo({ reports = [], alerts = [], profiles = [], events = [], escalations = [] } = {}) {
-  const state = { reports, alerts, profiles, events, escalations, profileQueries: [] };
+export function fakeRepo({
+  reports = [],
+  alerts = [],
+  profiles = [],
+  events = [],
+  escalations = [],
+  authorities = [],
+  settings = {},
+} = {}) {
+  const state = { reports, alerts, profiles, events, escalations, authorities, settings, profileQueries: [], authorityQueries: [] };
   return {
     state,
     async claimOutboxEvents(limit) {
@@ -88,6 +96,18 @@ export function fakeRepo({ reports = [], alerts = [], profiles = [], events = []
       e.reason = message;
       if (retryAt) e.escalate_at = retryAt;
     },
+    async getSettings(keys) {
+      return Object.fromEntries(keys.filter((k) => k in state.settings).map((k) => [k, state.settings[k]]));
+    },
+    async findAuthorities(lga, limit) {
+      state.authorityQueries.push({ lga, limit });
+      return state.authorities.filter((a) => a.coverage_lga === lga).slice(0, limit);
+    },
+    async finishPendingEscalationForReport(reportId, status, reason = null) {
+      const rows = state.escalations.filter((e) => e.report_id === reportId && e.status === 'pending');
+      rows.forEach((e) => Object.assign(e, { status, reason, processed_at: 'now' }));
+      return rows.length > 0;
+    },
     async markReportEscalated(reportId, reason) {
       const r = state.reports.find((x) => x.id === reportId);
       if (!r || r.status !== 'pending' || r.escalated) return false;
@@ -106,3 +126,29 @@ export const profile = (id, role, extra = {}) => ({
   is_disabled: false,
   ...extra,
 });
+
+/** Records SMS sends; `failFor` is a set of E.164 numbers (or true for all) that throw. */
+export function fakeSms({ configured = true, failFor = null } = {}) {
+  const sent = [];
+  return {
+    name: 'fake',
+    configured,
+    sent,
+    async send(to, text) {
+      if (failFor === true || failFor?.has?.(to)) throw new Error(`sms to ${to} failed`);
+      sent.push({ to, text });
+      return { id: `m${sent.length}` };
+    },
+  };
+}
+
+/** fetch stub: records calls and answers with `status`/`json`. */
+export function fakeFetch({ status = 200, json = {} } = {}) {
+  const calls = [];
+  const fn = async (url, init) => {
+    calls.push({ url, init });
+    return { ok: status >= 200 && status < 300, status, json: async () => json };
+  };
+  fn.calls = calls;
+  return fn;
+}

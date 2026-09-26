@@ -7,6 +7,7 @@ export const ESCALATION_GLOBAL_ROLES = ['project_staff', 'ewv'];
 export const RECIPIENT_LIMIT = 50;
 // Worded without a duration: the timeout is app_settings.escalation_timeout_minutes.
 export const ESCALATION_REASON = 'Auto-escalation: Not verified within the escalation timeout';
+export const DISPUTE_REASON = 'Disputed by a peer monitor';
 
 /** Profile filter for peer verifiers of a report (same ward AND lga, not the reporter). */
 export function verifierQuery(report) {
@@ -125,5 +126,14 @@ export function escalationNotification(report) {
     title: '⏰ Unverified Report Escalated',
     body: `A ${hazardType} report${report.lga ? ` in ${report.lga}` : ''} has not been verified in time.`,
     data: { type: 'escalation_auto', report_id: report.id, lga: report.lga ?? null },
+  };
+}
+
+export function disputeEscalationNotification(report) {
+  const hazardType = report.hazard_type || 'hazard';
+  return {
+    title: '⚠️ Disputed Report Escalated',
+    body: `A ${hazardType} report${report.lga ? ` in ${report.lga}` : ''} was disputed by a peer monitor and needs review.`,
+    data: { type: 'escalation', report_id: report.id, lga: report.lga ?? null },
   };
 }

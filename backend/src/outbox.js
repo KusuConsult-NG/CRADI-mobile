@@ -7,8 +7,11 @@
 // key derived from the outbox id, so OneSignal drops duplicates on retry.
 import { errMessage, log as defaultLog } from './log.js';
 import { sanitizeTag } from './tags.js';
+import { notifyEscalationRecipients } from './escalations.js';
 import {
+  DISPUTE_REASON,
   adminAlertNotification,
+  disputeEscalationNotification,
   alertTarget,
   reporterStatusNotification,
   selectRecipientIds,
@@ -23,7 +26,11 @@ export const BATCH_SIZE = 50;
 /** Thrown for events that can never succeed; they are marked processed with this note. */
 export class PermanentEventError extends Error {}
 
-export function createHandlers({ repo, push, logger = defaultLog }) {
+/**
+ * deps: repo, push (OneSignal), optional authoritySms (src/sms/authorities.js;
+ * when omitted, approvals send no SMS).
+ */
+export function createHandlers({ repo, push, authoritySms = null, logger = defaultLog }) {
   return {
     async report_created(event) {
       const reportId = event.payload?.report_id;
@@ -55,6 +62,7 @@ export function createHandlers({ repo, push, logger = defaultLog }) {
       }
 
       let broadcast = false;
+      let sms = null;
       if (shouldBroadcastApproval(oldStatus, newStatus)) {
         const lgaTag = sanitizeTag(report.lga);
         if (lgaTag) {
@@ -63,6 +71,8 @@ export function createHandlers({ repo, push, logger = defaultLog }) {
           });
           broadcast = true;
         }
+        // Pushes above are idempotent on retry; the SMS module dedupes per report itself.
+        if (authoritySms) sms = await authoritySms.notifyApproved(report);
       }
       logger.info('outbox.report_status_changed', {
         event_id: event.id,
@@ -70,6 +80,41 @@ export function createHandlers({ repo, push, logger = defaultLog }) {
         old_status: oldStatus,
         new_status: newStatus,
         broadcast,
+        sms,
+      });
+      return null;
+    },
+
+    // A peer submitted is_confirmed=false on a pending report: escalate it now
+    // instead of waiting for the timeout, and notify the same recipients.
+    async report_disputed(event) {
+      const { report_id: reportId, verification_id: verificationId } = event.payload ?? {};
+      if (!reportId) throw new PermanentEventError('invalid payload: report_id missing');
+      const report = await repo.getReport(reportId);
+      if (!report) return 'report not found';
+      if (report.status !== 'pending') return `report no longer pending (${report.status})`;
+
+      // A retry of this handler finds the report already escalated by it; carry
+      // on so the (idempotent) push is re-attempted. Any other escalated report
+      // (timeout, or an earlier dispute) has already been notified.
+      const resuming = (event.attempts ?? 1) > 1 && report.escalated && report.escalation_reason === DISPUTE_REASON;
+      if (report.escalated && !resuming) return 'report already escalated';
+      if (!report.escalated && !(await repo.markReportEscalated(report.id, DISPUTE_REASON))) {
+        return 'report already escalated';
+      }
+      // Stop the timeout cron from escalating (and notifying) it a second time.
+      await repo.finishPendingEscalationForReport(report.id, 'processed', DISPUTE_REASON);
+
+      const recipients = await notifyEscalationRecipients(report, disputeEscalationNotification(report), {
+        repo,
+        push,
+        key: `outbox:${event.id}:dispute`,
+      });
+      logger.info('outbox.report_disputed', {
+        event_id: event.id,
+        report_id: reportId,
+        verification_id: verificationId ?? null,
+        recipients,
       });
       return null;
     },

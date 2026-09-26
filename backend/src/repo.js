@@ -3,7 +3,7 @@
 // be tested with an in-memory fake.
 
 const REPORT_COLUMNS =
-  'id, user_id, hazard_type, severity, ward, lga, state, status, rejection_reason, escalated';
+  'id, user_id, hazard_type, severity, ward, lga, state, description, status, rejection_reason, escalated, escalation_reason';
 const ALERT_COLUMNS = 'id, title, message, severity, target_lga, is_active';
 
 function check({ data, error }, what) {
@@ -117,6 +117,44 @@ export function createRepo(supabase) {
           .eq('status', 'pending'),
         'note escalation error',
       );
+    },
+
+    /** app_settings values (jsonb) for `keys`, as { key: value }; missing keys are absent. */
+    async getSettings(keys) {
+      const rows = check(
+        await supabase.from('app_settings').select('key, value').in('key', keys),
+        'load app settings',
+      );
+      return Object.fromEntries((rows ?? []).map((r) => [r.key, r.value]));
+    },
+
+    /** Authorities whose coverage_lga equals `lga` (exact match, as stored on the report). */
+    async findAuthorities(lga, limit) {
+      return (
+        check(
+          await supabase
+            .from('authorities')
+            .select('id, name, organization, phone, coverage_lga')
+            .eq('coverage_lga', lga)
+            .order('created_at', { ascending: true })
+            .limit(limit),
+          'find authorities',
+        ) ?? []
+      );
+    },
+
+    /** Finishes the report's pending scheduled escalation (if any). Returns true if a row was updated. */
+    async finishPendingEscalationForReport(reportId, status, reason = null) {
+      const rows = check(
+        await supabase
+          .from('scheduled_escalations')
+          .update({ status, reason, processed_at: new Date().toISOString() })
+          .eq('report_id', reportId)
+          .eq('status', 'pending')
+          .select('id'),
+        'finish report escalation',
+      );
+      return (rows ?? []).length > 0;
     },
 
     /** Flags a still-pending, not-yet-escalated report. Status stays 'pending'. */
