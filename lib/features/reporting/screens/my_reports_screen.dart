@@ -80,6 +80,10 @@ class _MyReportsScreenState extends State<MyReportsScreen>
         elevation: 0,
         bottom: TabBar(
           controller: _tabController,
+          // Scrollable for the same reason as the other tab bars: a longer
+          // translation or a large system font must not be clipped.
+          isScrollable: true,
+          tabAlignment: TabAlignment.start,
           indicatorColor: AppColors.successGreen,
           labelColor: AppColors.textPrimary,
           unselectedLabelColor: AppColors.textSecondary,

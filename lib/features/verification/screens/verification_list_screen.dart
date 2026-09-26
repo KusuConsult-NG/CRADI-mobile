@@ -14,6 +14,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:climate_app/core/l10n/l10n.dart';
 import 'package:climate_app/core/l10n/severity_label.dart';
+import 'package:climate_app/core/widgets/severity_marker.dart';
 
 /// Verification list screen — shows reports pending community verification.
 class VerificationListScreen extends StatefulWidget {
@@ -100,22 +101,17 @@ class _VerificationListScreenState extends State<VerificationListScreen> {
     }
   }
 
-  String _severityLabel(String? severity) {
-    // Tolerate legacy labels such as 'High Severity'.
-    final label = severityLabel(context.l10n, severity);
-    switch (normalizeSeverity(severity)) {
-      case 'critical':
-        return '🔴 $label';
-      case 'high':
-        return '🟠 $label';
-      case 'medium':
-        return '🟡 $label';
-      case 'low':
-        return '🟢 $label';
-      default:
-        return label;
-    }
-  }
+  // Tolerate legacy labels such as 'High Severity'.
+  String _severityLabel(String? severity) =>
+      severityLabel(context.l10n, severity);
+
+  /// Severity as a coloured dot plus its written label — the colour alone
+  /// never carries the meaning, and unlike the emoji markers this used to
+  /// use it cannot render as a tofu box where no emoji font is installed.
+  Widget _severityMarker(String? severity) => SeverityMarker(
+    label: _severityLabel(severity),
+    color: _severityColor(severity),
+  );
 
   Color _severityColor(String? severity) {
     switch (normalizeSeverity(severity)) {
@@ -264,20 +260,7 @@ class _VerificationListScreenState extends State<VerificationListScreen> {
                               ),
                             ),
                           const SizedBox(height: 4),
-                          Semantics(
-                            label: context.l10n.a11ySeverityLabel(
-                              _severityLabel(severity),
-                            ),
-                            excludeSemantics: true,
-                            child: Text(
-                              _severityLabel(severity),
-                              style: GoogleFonts.lexend(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w500,
-                                color: _severityColor(severity),
-                              ),
-                            ),
-                          ),
+                          _severityMarker(severity),
                         ],
                       ),
                       trailing: const Icon(

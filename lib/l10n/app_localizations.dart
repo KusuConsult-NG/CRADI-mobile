@@ -5201,7 +5201,7 @@ abstract class AppLocalizations {
   /// Target option sending an alert to every LGA.
   ///
   /// In en, this message translates to:
-  /// **'🌍 All Areas'**
+  /// **'All Areas'**
   String get adminAlertAllAreas;
 
   /// Label of the alert title field.

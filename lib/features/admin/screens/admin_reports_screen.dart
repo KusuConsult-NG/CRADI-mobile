@@ -401,13 +401,12 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
                                     height: 120,
                                     fit: BoxFit.cover,
                                     renderWidth: 240,
-                                    errorWidget: (_) =>
-                                        Container(
-                                          width: 120,
-                                          height: 120,
-                                          color: Colors.grey.shade200,
-                                          child: const Icon(Icons.broken_image),
-                                        ),
+                                    errorWidget: (_) => Container(
+                                      width: 120,
+                                      height: 120,
+                                      color: Colors.grey.shade200,
+                                      child: const Icon(Icons.broken_image),
+                                    ),
                                   ),
                                 ),
                               );

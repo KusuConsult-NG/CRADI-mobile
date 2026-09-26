@@ -2,8 +2,9 @@ import 'package:climate_app/features/verification/widgets/verification_request_b
 import 'package:climate_app/core/services/remote_config_service.dart';
 import 'package:climate_app/core/constants/hazards.dart';
 import 'package:climate_app/core/theme/app_colors.dart';
-import 'package:climate_app/core/design/animated_card.dart';
 import 'package:climate_app/core/design/typography.dart';
+import 'package:climate_app/features/dashboard/widgets/dashboard_stat_card.dart';
+import 'package:climate_app/features/dashboard/widgets/home_feed_filter_bar.dart';
 import 'package:flutter/material.dart';
 import 'dart:io';
 import 'package:go_router/go_router.dart';
@@ -257,14 +258,11 @@ class _HomeScreenState extends State<HomeScreen> {
                                   onTap: () => context.push(
                                     '/reports-status?tab=verified',
                                   ),
-                                  child: _buildStatCard(
+                                  child: DashboardStatCard(
                                     count: '$activeCount',
                                     label: context.l10n.active,
                                     icon: Icons.warning_amber,
                                     color: AppColors.warningYellow,
-                                    bgColor: AppColors.warningYellow.withValues(
-                                      alpha: 0.1,
-                                    ),
                                   ),
                                 ),
                               ),
@@ -274,14 +272,11 @@ class _HomeScreenState extends State<HomeScreen> {
                                   onTap: () => context.push(
                                     '/reports-status?tab=pending',
                                   ),
-                                  child: _buildStatCard(
+                                  child: DashboardStatCard(
                                     count: '$pendingCount',
                                     label: context.l10n.pending,
                                     icon: Icons.schedule,
                                     color: Colors.orange,
-                                    bgColor: Colors.orange.withValues(
-                                      alpha: 0.1,
-                                    ),
                                   ),
                                 ),
                               ),
@@ -291,14 +286,11 @@ class _HomeScreenState extends State<HomeScreen> {
                                   onTap: () => context.push(
                                     '/reports-status?tab=approved',
                                   ),
-                                  child: _buildStatCard(
+                                  child: DashboardStatCard(
                                     count: '$approvedCount',
                                     label: context.l10n.approved,
                                     icon: Icons.check_circle,
                                     color: AppColors.successGreen,
-                                    bgColor: AppColors.successGreen.withValues(
-                                      alpha: 0.1,
-                                    ),
                                   ),
                                 ),
                               ),
@@ -354,32 +346,31 @@ class _HomeScreenState extends State<HomeScreen> {
                       // Biometrics Card Removed
 
                       // Filter Tabs (Sticky-ish behavior handled by placement here)
-                      Container(
-                        decoration: BoxDecoration(
-                          color: const Color(
-                            0xFFE7F3EB,
-                          ), // Light greenish tint from design, adapted
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        padding: const EdgeInsets.all(6),
-                        child: Row(
-                          children: [
-                            // Only peer verifiers have anything to verify;
-                            // everyone else starts on My Reports.
-                            if (AuthProvider.verifierRoles.contains(
-                              context.watch<AuthProvider>().userRole,
-                            ))
-                              _buildFilterTab(0, context.l10n.toVerify),
-                            _buildFilterTab(1, context.l10n.alerts),
-                            _buildFilterTab(2, context.l10n.myReports),
-                            // Plain users can only read their own reports
-                            // (RLS), so a "nearby" feed would always be
-                            // empty for them.
-                            if (context.watch<AuthProvider>().userRole !=
-                                UserRole.user)
-                              _buildFilterTab(3, context.l10n.homeTabNearby),
-                          ],
-                        ),
+                      Builder(
+                        builder: (context) {
+                          final role = context.watch<AuthProvider>().userRole;
+                          return HomeFeedFilterBar(
+                            filters: [
+                              // Only peer verifiers have anything to verify;
+                              // everyone else starts on My Reports.
+                              if (AuthProvider.verifierRoles.contains(role))
+                                HomeFeedFilter(0, context.l10n.toVerify),
+                              HomeFeedFilter(1, context.l10n.alerts),
+                              HomeFeedFilter(2, context.l10n.myReports),
+                              // Plain users can only read their own reports
+                              // (RLS), so a "nearby" feed would always be
+                              // empty for them.
+                              if (role != UserRole.user)
+                                HomeFeedFilter(3, context.l10n.homeTabNearby),
+                            ],
+                            selectedIndex: effectiveFeedTab(
+                              _selectedFilterIndex,
+                              role,
+                            ),
+                            onSelected: (index) =>
+                                setState(() => _selectedFilterIndex = index),
+                          );
+                        },
                       ),
                       const SizedBox(height: 16),
 
@@ -610,120 +601,6 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         trailing: const Icon(Icons.chevron_right),
         onTap: onTap,
-      ),
-    );
-  }
-
-  Widget _buildStatCard({
-    required String count,
-    required String label,
-    required IconData icon,
-    required Color color,
-    required Color bgColor,
-  }) {
-    return AnimatedCard(
-      borderRadius: 20,
-      backgroundColor: Colors.white,
-      padding: const EdgeInsets.all(18),
-      shadows: [
-        BoxShadow(
-          color: color.withValues(alpha: 0.15),
-          blurRadius: 25,
-          offset: const Offset(0, 12),
-        ),
-        BoxShadow(
-          color: Colors.black.withValues(alpha: 0.06),
-          blurRadius: 15,
-          offset: const Offset(0, 6),
-        ),
-      ],
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      color.withValues(alpha: 0.2),
-                      color.withValues(alpha: 0.1),
-                    ],
-                  ),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: color.withValues(alpha: 0.3),
-                    width: 1,
-                  ),
-                ),
-                child: Icon(icon, color: color, size: 22),
-              ),
-              Container(
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(
-                  color: Colors.grey.withValues(alpha: 0.08),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(Icons.arrow_forward, color: color, size: 16),
-              ),
-            ],
-          ),
-          const SizedBox(height: 20),
-          Text(
-            count,
-            style: PremiumTypography.heading2(
-              context,
-              color: AppColors.textPrimary,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(label, style: PremiumTypography.subtitle(context)),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildFilterTab(int index, String label) {
-    final bool isSelected =
-        effectiveFeedTab(
-          _selectedFilterIndex,
-          context.read<AuthProvider>().userRole,
-        ) ==
-        index;
-    return Expanded(
-      child: GestureDetector(
-        onTap: () => setState(() => _selectedFilterIndex = index),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          decoration: BoxDecoration(
-            color: isSelected ? Colors.white : Colors.transparent,
-            borderRadius: BorderRadius.circular(8),
-            boxShadow: isSelected
-                ? [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.05),
-                      blurRadius: 4,
-                      offset: const Offset(0, 2),
-                    ),
-                  ]
-                : null,
-          ),
-          alignment: Alignment.center,
-          child: Text(
-            label,
-            style: GoogleFonts.lexend(
-              fontSize: 13,
-              fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-              color: isSelected
-                  ? AppColors.textPrimary
-                  : AppColors.textSecondary,
-            ),
-          ),
-        ),
       ),
     );
   }

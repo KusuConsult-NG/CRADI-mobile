@@ -2969,7 +2969,7 @@ class AppLocalizationsYo extends AppLocalizations {
   String get adminAlertTargetArea => 'Agbègbè Àfojúsùn';
 
   @override
-  String get adminAlertAllAreas => '🌍 Gbogbo Agbègbè';
+  String get adminAlertAllAreas => 'Gbogbo Agbègbè';
 
   @override
   String get adminAlertTitleLabel => 'Àkọlé Ìkìlọ̀';

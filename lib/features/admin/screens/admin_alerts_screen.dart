@@ -302,9 +302,25 @@ class _AdminAlertsScreenState extends State<AdminAlertsScreen> {
                     ),
                     items: [
                       DropdownMenuItem<String?>(
-                        child: Text(
-                          context.l10n.adminAlertAllAreas,
-                          style: GoogleFonts.lexend(fontSize: 14),
+                        // A drawn globe, not a typed one: the emoji this
+                        // replaces is a tofu box without an emoji font.
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              Icons.public,
+                              size: 16,
+                              color: AppColors.textSecondary,
+                            ),
+                            const SizedBox(width: 6),
+                            Flexible(
+                              child: Text(
+                                context.l10n.adminAlertAllAreas,
+                                style: GoogleFonts.lexend(fontSize: 14),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                       for (final st in _states)

@@ -3832,7 +3832,7 @@
   "@adminAlertTargetArea": {
     "description": "Label of the target LGA selector."
   },
-  "adminAlertAllAreas": "🌍 All Areas",
+  "adminAlertAllAreas": "All Areas",
   "@adminAlertAllAreas": {
     "description": "Target option sending an alert to every LGA."
   },

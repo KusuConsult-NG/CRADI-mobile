@@ -849,7 +849,7 @@
   "adminAlertDismissFailed": "We no fit dismiss alert.",
   "adminAlertCompose": "Write Alert",
   "adminAlertTargetArea": "Area Wey E Go",
-  "adminAlertAllAreas": "🌍 All Areas",
+  "adminAlertAllAreas": "All Areas",
   "adminAlertTitleLabel": "Alert Title",
   "adminAlertRequired": "You must fill am",
   "adminAlertMessageLabel": "Message",

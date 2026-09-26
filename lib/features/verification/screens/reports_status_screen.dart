@@ -106,6 +106,10 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
         elevation: 0,
         bottom: TabBar(
           controller: _tabController,
+          // Four status labels do not fit a 320 px screen in English, let
+          // alone in ha/yo/ig/pcm: scroll rather than clip them.
+          isScrollable: true,
+          tabAlignment: TabAlignment.start,
           labelColor: AppColors.primaryRed,
           unselectedLabelColor: AppColors.textSecondary,
           indicatorColor: AppColors.primaryRed,
@@ -395,104 +399,104 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
                 spacing: 8,
                 runSpacing: 8,
                 children: [
-                    if (canVerify &&
-                        report.status == ReportStatus.pending &&
-                        report.reporterId != currentUserId) ...[
-                      ElevatedButton(
-                        onPressed: () => _runAction(
-                          () => provider.verifyReport(report.id),
-                          context.l10n.reportVerified,
-                        ),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.primaryRed,
-                          foregroundColor: Colors.white,
-                          elevation: 0,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                        ),
-                        child: Text(context.l10n.verifyReport),
+                  if (canVerify &&
+                      report.status == ReportStatus.pending &&
+                      report.reporterId != currentUserId) ...[
+                    ElevatedButton(
+                      onPressed: () => _runAction(
+                        () => provider.verifyReport(report.id),
+                        context.l10n.reportVerified,
                       ),
-                      // A peer "no" vote: it does not reject the report.
-                      OutlinedButton(
-                        onPressed: () => _disputeWithComment(report, provider),
-                        style: OutlinedButton.styleFrom(
-                          side: const BorderSide(color: Colors.orange),
-                          foregroundColor: Colors.orange.shade800,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                        ),
-                        child: Text(context.l10n.voteDispute),
-                      ),
-                    ],
-                    if (isStaff && report.status == ReportStatus.verified)
-                      ElevatedButton(
-                        onPressed: () => _runAction(
-                          () => provider.approveReport(report.id),
-                          context.l10n.reportResolvedItem,
-                        ),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.blue,
-                          foregroundColor: Colors.white,
-                          elevation: 0,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 10,
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                        ),
-                        child: Text(
-                          context.l10n.markResolved,
-                          style: GoogleFonts.lexend(fontSize: 13),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primaryRed,
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
                         ),
                       ),
-                    if (isStaff &&
-                        (report.status == ReportStatus.pending ||
-                            report.status == ReportStatus.verified))
-                      OutlinedButton(
-                        onPressed: () => _confirmStaffReject(report, provider),
-                        style: OutlinedButton.styleFrom(
-                          side: const BorderSide(color: Colors.red),
-                          foregroundColor: Colors.red,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 10,
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                        ),
-                        child: Text(
-                          context.l10n.reject,
-                          style: GoogleFonts.lexend(fontSize: 13),
+                      child: Text(context.l10n.verifyReport),
+                    ),
+                    // A peer "no" vote: it does not reject the report.
+                    OutlinedButton(
+                      onPressed: () => _disputeWithComment(report, provider),
+                      style: OutlinedButton.styleFrom(
+                        side: const BorderSide(color: Colors.orange),
+                        foregroundColor: Colors.orange.shade800,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
                         ),
                       ),
-                    if (isStaff && report.status != ReportStatus.pending)
-                      OutlinedButton(
-                        onPressed: () => _runAction(
-                          () => provider.moveBackToPending(report.id),
-                          report.status == ReportStatus.verified
-                              ? context.l10n.reportMovedPending
-                              : context.l10n.reportReopenedPending,
+                      child: Text(context.l10n.voteDispute),
+                    ),
+                  ],
+                  if (isStaff && report.status == ReportStatus.verified)
+                    ElevatedButton(
+                      onPressed: () => _runAction(
+                        () => provider.approveReport(report.id),
+                        context.l10n.reportResolvedItem,
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blue,
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 10,
                         ),
-                        style: OutlinedButton.styleFrom(
-                          side: BorderSide(color: Colors.grey.shade300),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 10,
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                        ),
-                        child: Text(
-                          context.l10n.reopen,
-                          style: GoogleFonts.lexend(fontSize: 13),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
                         ),
                       ),
+                      child: Text(
+                        context.l10n.markResolved,
+                        style: GoogleFonts.lexend(fontSize: 13),
+                      ),
+                    ),
+                  if (isStaff &&
+                      (report.status == ReportStatus.pending ||
+                          report.status == ReportStatus.verified))
+                    OutlinedButton(
+                      onPressed: () => _confirmStaffReject(report, provider),
+                      style: OutlinedButton.styleFrom(
+                        side: const BorderSide(color: Colors.red),
+                        foregroundColor: Colors.red,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 10,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      child: Text(
+                        context.l10n.reject,
+                        style: GoogleFonts.lexend(fontSize: 13),
+                      ),
+                    ),
+                  if (isStaff && report.status != ReportStatus.pending)
+                    OutlinedButton(
+                      onPressed: () => _runAction(
+                        () => provider.moveBackToPending(report.id),
+                        report.status == ReportStatus.verified
+                            ? context.l10n.reportMovedPending
+                            : context.l10n.reportReopenedPending,
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        side: BorderSide(color: Colors.grey.shade300),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 10,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      child: Text(
+                        context.l10n.reopen,
+                        style: GoogleFonts.lexend(fontSize: 13),
+                      ),
+                    ),
                 ],
               ),
             ],

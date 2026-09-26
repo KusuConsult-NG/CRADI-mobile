@@ -2951,7 +2951,7 @@ class AppLocalizationsIg extends AppLocalizations {
   String get adminAlertTargetArea => 'Mpaghara A Chọrọ';
 
   @override
-  String get adminAlertAllAreas => '🌍 Mpaghara Niile';
+  String get adminAlertAllAreas => 'Mpaghara Niile';
 
   @override
   String get adminAlertTitleLabel => 'Isiokwu Ọkwa';

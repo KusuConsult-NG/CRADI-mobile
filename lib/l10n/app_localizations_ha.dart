@@ -2987,7 +2987,7 @@ class AppLocalizationsHa extends AppLocalizations {
   String get adminAlertTargetArea => 'Yankin da Ake Nufi';
 
   @override
-  String get adminAlertAllAreas => '🌍 Dukkan Yankuna';
+  String get adminAlertAllAreas => 'Dukkan Yankuna';
 
   @override
   String get adminAlertTitleLabel => 'Taken Faɗakarwa';

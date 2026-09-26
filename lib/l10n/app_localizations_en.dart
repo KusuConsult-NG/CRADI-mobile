@@ -2968,7 +2968,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get adminAlertTargetArea => 'Target Area';
 
   @override
-  String get adminAlertAllAreas => '🌍 All Areas';
+  String get adminAlertAllAreas => 'All Areas';
 
   @override
   String get adminAlertTitleLabel => 'Alert Title';

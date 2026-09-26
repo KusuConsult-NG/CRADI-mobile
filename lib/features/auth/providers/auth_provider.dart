@@ -1399,6 +1399,11 @@ class AuthProvider extends ChangeNotifier {
   Future<bool> isBiometricAvailable() =>
       _biometricService.isBiometricAvailable();
 
+  /// Whether the biometric-login setting can be offered at all (hardware
+  /// present *and* a fingerprint/face enrolled). Settings and Profile both
+  /// gate their control on this.
+  Future<bool> isBiometricUsable() => _biometricService.isBiometricUsable();
+
   // ─────────────────────────── Session ─────────────────────────────────────
 
   /// Pushes the inactivity timeout forward (called on pointer events and
