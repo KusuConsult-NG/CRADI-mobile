@@ -29,7 +29,7 @@ android {
         applicationId = "com.westgatestratagem.climate_app.climate_app"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = flutter.minSdkVersion  // Android 6.0 - broad compatibility
+        minSdk = flutter.minSdkVersion  // currently 24 (Android 7.0)
         targetSdk = 36  // Latest Android SDK
         versionCode = flutter.versionCode
         versionName = flutter.versionName

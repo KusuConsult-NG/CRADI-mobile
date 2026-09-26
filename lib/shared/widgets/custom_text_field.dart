@@ -4,6 +4,7 @@ import 'package:climate_app/core/theme/app_colors.dart';
 class CustomTextField extends StatelessWidget {
   final String label;
   final String? hint;
+  final String? errorText;
   final TextEditingController? controller;
   final String? Function(String?)? validator;
   final TextInputType keyboardType;
@@ -19,6 +20,7 @@ class CustomTextField extends StatelessWidget {
     super.key,
     required this.label,
     this.hint,
+    this.errorText,
     this.controller,
     this.validator,
     this.keyboardType = TextInputType.text,
@@ -57,6 +59,7 @@ class CustomTextField extends StatelessWidget {
           style: const TextStyle(fontSize: 18), // Increased from default
           decoration: InputDecoration(
             hintText: hint,
+            errorText: errorText,
             hintStyle: const TextStyle(
               color: AppColors.textSecondary,
               fontSize: 16, // Increased from default

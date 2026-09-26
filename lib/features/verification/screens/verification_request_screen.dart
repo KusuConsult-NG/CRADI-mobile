@@ -12,7 +12,7 @@ import 'package:climate_app/core/l10n/l10n.dart';
 import 'package:climate_app/core/l10n/severity_label.dart';
 
 /// Verification request screen - submit verification request
-/// This is a simplified stub implementation using Appwrite
+/// Submits a verification request backed by Supabase.
 class VerificationRequestScreen extends StatefulWidget {
   const VerificationRequestScreen({super.key});
 

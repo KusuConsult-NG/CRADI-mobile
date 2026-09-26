@@ -250,8 +250,10 @@ class OfflineStorageService {
     final draft = _draftsBox!.get(draftId);
 
     // Delete associated persistent images
-    if (draft != null && draft['imagePaths'] != null) {
-      final paths = (draft['imagePaths'] as List).cast<String>();
+    final storedPaths = draft?['imagePaths'];
+    if (storedPaths is List) {
+      // Entries written by an older build may not all be strings.
+      final paths = storedPaths.whereType<String>();
       for (final imagePath in paths) {
         if (imagePath.contains('offline_images')) {
           try {
@@ -330,11 +332,20 @@ class OfflineStorageService {
     return owner == null || owner == userId;
   }
 
+  /// A queue item's retry count, whatever shape it was stored in (an older
+  /// build, or a JSON round-trip, can leave it as a double or a string).
+  /// Anything unreadable counts as no retries yet.
+  static int retryCountOf(Map item) {
+    final raw = item['retryCount'];
+    if (raw is int) return raw;
+    if (raw is num) return raw.toInt();
+    return int.tryParse('$raw') ?? 0;
+  }
+
   /// Whether a queue item will not be retried automatically any more.
   static bool isTerminalFailure(Map item) =>
       item['status'] == statusRejected ||
-      (item['status'] == 'failed' &&
-          ((item['retryCount'] as int?) ?? 0) >= maxSyncAttempts);
+      (item['status'] == 'failed' && retryCountOf(item) >= maxSyncAttempts);
 
   /// Unsynced queue items (pending, failed or rejected) belonging to
   /// [userId] (only ownerless items when null). Safe to call before
@@ -424,7 +435,7 @@ class OfflineStorageService {
     final item = _syncQueueBox!.get(queueId);
     if (item != null) {
       final retryCount = nextRetryCount(
-        (item['retryCount'] as int?) ?? 0,
+        retryCountOf(item),
         countsAsRetry: countsAsRetry,
       );
       final updated = Map<String, dynamic>.from(item)
@@ -519,7 +530,7 @@ class OfflineStorageService {
         .where(
           (item) =>
               (item['status'] == 'pending' || item['status'] == 'failed') &&
-              ((item['retryCount'] as int?) ?? 0) < maxSyncAttempts &&
+              retryCountOf(item) < maxSyncAttempts &&
               // Items queued by another account would be refused by RLS
               // (and must never be attributed to this user).
               belongsTo(item, currentUserId),
@@ -774,12 +785,12 @@ class OfflineStorageService {
   Map<String, dynamic>? getCachedUserProfile() {
     _ensureInitialized();
     final cached = _contentCacheBox!.get('user_profile');
-    if (cached != null) {
+    if (cached != null && cached['data'] is Map) {
       if (_isCacheStale(cached)) {
         _contentCacheBox!.delete('user_profile');
         return null;
       }
-      return Map<String, dynamic>.from(cached['data']);
+      return Map<String, dynamic>.from(cached['data'] as Map);
     }
     return null;
   }
@@ -878,10 +889,12 @@ class OfflineStorageService {
 
   /// Returns true when a cached entry is older than [maxAge] (default 24 hours).
   bool _isCacheStale(Map entry, {Duration maxAge = const Duration(hours: 24)}) {
-    final timestampStr = entry['timestamp'] as String?;
-    if (timestampStr == null) return true;
-    final cached = DateTime.tryParse(timestampStr);
+    final raw = entry['timestamp'];
+    if (raw == null) return true;
+    final cached = raw is DateTime ? raw : DateTime.tryParse('$raw');
     if (cached == null) return true;
+    // A device clock that has moved backwards makes the difference
+    // negative; that is never "stale", so cached content keeps serving.
     return DateTime.now().difference(cached) > maxAge;
   }
 

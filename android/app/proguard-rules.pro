@@ -10,16 +10,6 @@
 -dontwarn com.onesignal.**
 
 # ============================================
-# Hive Database
-# ============================================
--keep class hive.** { *; }
--keep class hive_flutter.** { *; }
--dontwarn hive.**
-
-# Keep Hive TypeAdapters
--keep class * extends hive.TypeAdapter { *; }
-
-# ============================================
 # Flutter & Dart
 # ============================================
 -keep class io.flutter.** { *; }
@@ -69,7 +59,7 @@
 # ============================================
 -keepattributes *Annotation*,Signature,Exception
 
-# OkHttp (used by Appwrite)
+# OkHttp — pulled in transitively (Sentry/OneSignal); Appwrite is long gone.
 -dontwarn okhttp3.**
 -dontwarn okio.**
 -keep class okhttp3.** { *; }

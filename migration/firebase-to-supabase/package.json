@@ -13,7 +13,7 @@
     "apply": "node src/migrate.js --apply"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.49.0",
+    "@supabase/supabase-js": "^2.117.2",
     "firebase-admin": "^13.0.0"
   }
 }

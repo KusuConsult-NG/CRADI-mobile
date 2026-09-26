@@ -66,3 +66,10 @@ test_sms.dart
 # Build artifacts — never commit APKs/AABs to git
 *.apk
 *.aab
+
+# Signing material — never commit keystores or their passwords
+*.jks
+*.keystore
+*.p12
+*.pem
+key.properties

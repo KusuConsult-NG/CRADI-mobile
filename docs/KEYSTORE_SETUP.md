@@ -100,3 +100,33 @@ Once signing is configured:
 1. Build release APK: `flutter build apk --release`
 2. Test on physical device
 3. Proceed to Play Store Console setup
+
+---
+
+## Step 5: GitHub Actions release signing
+
+The `build-android-release` job in `.github/workflows/ci.yml` runs only for
+tags matching `v*`. It refuses to start unless all four signing secrets are
+set (otherwise Gradle would silently fall back to debug signing), so add them
+under **Settings → Secrets and variables → Actions → New repository secret**:
+
+| Secret | Value |
+| --- | --- |
+| `RELEASE_KEYSTORE_BASE64` | the keystore file, base64-encoded: `base64 -w0 ~/cradi-release-key.jks` (macOS: `base64 -i ~/cradi-release-key.jks`) |
+| `KEY_STORE_PASSWORD` | keystore password from Step 1 |
+| `KEY_PASSWORD` | key password from Step 1 |
+| `KEY_ALIAS` | key alias from Step 1 (`cradi` if you used the command above) |
+
+The job decodes the keystore into `android/app/` and writes
+`android/key.properties` itself — neither file is ever committed, and both
+live only in the runner's workspace for the length of the build. It then
+re-reads the signed APK with `apksigner` and fails the build if the
+certificate is the Android debug one.
+
+The build also needs the runtime configuration secrets `SUPABASE_URL`,
+`SUPABASE_ANON_KEY`, `ONESIGNAL_APP_ID`, `BACKEND_URL` and `SENTRY_DSN`
+(see `docs/DEPLOYMENT.md` § 6), which the job writes into `env.json`.
+
+> Never add the Supabase **service role key** or the OneSignal **REST API
+> key** here. They are backend-only and anything in `env.json` ends up
+> readable inside the APK.

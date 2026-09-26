@@ -58,7 +58,9 @@ void main() {
     });
 
     test('no stock image is substituted for a guide without one', () async {
-      final p = provider(({String? category}) async => [row('1', 'flood', imageUrl: '')]);
+      final p = provider(
+        ({String? category}) async => [row('1', 'flood', imageUrl: '')],
+      );
       await p.fetchGuides();
       final guide = p.guides.single;
       expect(guide['imageUrl'], isNull);
@@ -86,32 +88,35 @@ void main() {
       expect(cacheWrites, 0);
     });
 
-    test('a category tab is filtered on the server by every spelling', () async {
-      final asked = <String?>[];
-      final p = provider(({String? category}) async {
-        asked.add(category);
-        return [row('1', 'flood')];
-      });
+    test(
+      'a category tab is filtered on the server by every spelling',
+      () async {
+        final asked = <String?>[];
+        final p = provider(({String? category}) async {
+          asked.add(category);
+          return [row('1', 'flood')];
+        });
 
-      await p.fetchGuides();
-      await p.fetchGuides(category: 'flood');
-      await p.fetchGuides(category: 'Flood');
-      // The normalised category label reaches the fetcher, so the query is
-      // the same however the tab names the category.
-      expect(asked, [allKnowledgeCategories, 'Flood', 'Flood']);
+        await p.fetchGuides();
+        await p.fetchGuides(category: 'flood');
+        await p.fetchGuides(category: 'Flood');
+        // The normalised category label reaches the fetcher, so the query is
+        // the same however the tab names the category.
+        expect(asked, [allKnowledgeCategories, 'Flood', 'Flood']);
 
-      final values = knowledgeCategoryQueryValues('Flood');
-      expect(values, containsAll(['flood', 'Flood', 'flooding', 'Flooding']));
-      expect(values, isNot(contains('fire')));
-      // Every stored spelling the offline filter accepts is queried for.
-      for (final v in values) {
-        expect(
-          guideMatchesCategory({'hazardType': v}, 'Flood'),
-          isTrue,
-          reason: v,
-        );
-      }
-    });
+        final values = knowledgeCategoryQueryValues('Flood');
+        expect(values, containsAll(['flood', 'Flood', 'flooding', 'Flooding']));
+        expect(values, isNot(contains('fire')));
+        // Every stored spelling the offline filter accepts is queried for.
+        for (final v in values) {
+          expect(
+            guideMatchesCategory({'hazardType': v}, 'Flood'),
+            isTrue,
+            reason: v,
+          );
+        }
+      },
+    );
 
     test('knowledgeCategoryQueryValues: no server filter for All or an '
         'unknown category', () {
@@ -141,7 +146,9 @@ void main() {
 
       // Same result as the offline (cached) filter.
       await p.fetchGuides();
-      final offline = provider(({String? category}) async => throw Exception('offline'));
+      final offline = provider(
+        ({String? category}) async => throw Exception('offline'),
+      );
       await offline.fetchGuides(category: 'Flood');
       expect(
         offline.guidesFor('Flood').map((g) => g['id']),
@@ -200,7 +207,9 @@ void main() {
         {...row('1', 'flood'), 'id': '1', 'isOffline': false},
         {...row('2', 'fire'), 'id': '2', 'isOffline': false},
       ];
-      final p = provider(({String? category}) async => throw Exception('offline'));
+      final p = provider(
+        ({String? category}) async => throw Exception('offline'),
+      );
       await p.fetchGuides();
       expect(p.error, isNull);
       expect(p.guides.map((g) => g['id']), ['1', '2']);
@@ -213,14 +222,18 @@ void main() {
 
     test('fetch error with an empty cache: empty list, no error', () async {
       cache = [];
-      final p = provider(({String? category}) async => throw Exception('offline'));
+      final p = provider(
+        ({String? category}) async => throw Exception('offline'),
+      );
       await p.fetchGuides();
       expect(p.error, isNull);
       expect(p.guides, isEmpty);
     });
 
     test('fetch error and no cache: load error, nothing bundled', () async {
-      final p = provider(({String? category}) async => throw Exception('offline'));
+      final p = provider(
+        ({String? category}) async => throw Exception('offline'),
+      );
       await p.fetchGuides();
       expect(p.guides, isEmpty);
       expect(p.error, isNotNull);

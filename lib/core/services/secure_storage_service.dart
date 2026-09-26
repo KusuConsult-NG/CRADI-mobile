@@ -94,9 +94,23 @@ class SecureStorageService {
   }
 
   Future<DateTime?> getSessionExpiry() async {
-    final expiryStr = await _storage.read(key: _keySessionExpiry);
-    if (expiryStr == null) return null;
-    return DateTime.parse(expiryStr);
+    return _readTimestamp(_keySessionExpiry);
+  }
+
+  /// A stored ISO-8601 timestamp, or null when the key is absent or holds a
+  /// value this build cannot parse (data written by an older build, or a
+  /// corrupted keystore entry). Never throws: these are read on the startup
+  /// path and from a periodic timer, where a FormatException would surface
+  /// as an unhandled async error.
+  Future<DateTime?> _readTimestamp(String key) async {
+    final raw = await _storage.read(key: key);
+    if (raw == null) return null;
+    final parsed = DateTime.tryParse(raw);
+    if (parsed == null) {
+      await _storage.delete(key: key);
+      return null;
+    }
+    return parsed;
   }
 
   Future<bool> isSessionValid() async {
@@ -137,10 +151,9 @@ class SecureStorageService {
   }
 
   Future<bool> isAccountLocked() async {
-    final lockedUntilStr = await _storage.read(key: _keyAccountLockedUntil);
-    if (lockedUntilStr == null) return false;
+    final lockedUntil = await _readTimestamp(_keyAccountLockedUntil);
+    if (lockedUntil == null) return false;
 
-    final lockedUntil = DateTime.parse(lockedUntilStr);
     if (DateTime.now().isAfter(lockedUntil)) {
       // Lock expired, clear it
       await _storage.delete(key: _keyAccountLockedUntil);
@@ -151,9 +164,7 @@ class SecureStorageService {
   }
 
   Future<DateTime?> getAccountLockedUntil() async {
-    final lockedUntilStr = await _storage.read(key: _keyAccountLockedUntil);
-    if (lockedUntilStr == null) return null;
-    return DateTime.parse(lockedUntilStr);
+    return _readTimestamp(_keyAccountLockedUntil);
   }
 
   // Biometric settings
@@ -210,10 +221,21 @@ class SecureStorageService {
     await _storage.write(key: key, value: json.encode(value));
   }
 
+  /// A stored JSON object, or null when the key is absent or holds a value
+  /// that is not a JSON object (corrupted entry, or a shape written by an
+  /// older build). The unreadable entry is dropped so the caller starts a
+  /// fresh one instead of failing on every read.
   Future<Map<String, dynamic>?> readJson(String key) async {
     final jsonStr = await _storage.read(key: key);
     if (jsonStr == null) return null;
-    return json.decode(jsonStr) as Map<String, dynamic>;
+    try {
+      final decoded = json.decode(jsonStr);
+      if (decoded is Map<String, dynamic>) return decoded;
+    } on FormatException {
+      // Fall through: treat an unparsable entry as absent.
+    }
+    await _storage.delete(key: key);
+    return null;
   }
 
   /// Keys holding the signed-in user's session / identity data.

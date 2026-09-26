@@ -37,7 +37,6 @@ dependencies:
   provider: ^6.1.5+1
   go_router: ^17.0.1 # UI/UX
   google_fonts: ^8.0.0
-  flutter_svg: ^2.2.3
   image_picker: ^1.2.1
   geolocator: ^14.0.2
   hive: ^2.2.3
@@ -55,13 +54,8 @@ dependencies:
   crypto: ^3.0.6
   http: ^1.2.2
   pointycastle: ^4.0.0
-  # Device fingerprinting and security (compatible with Appwrite)
+  # Device fingerprinting and security
   device_info_plus: ^12.0.0
-  # 2FA/TOTP
-  otp: ^3.1.4
-  qr_flutter: ^4.1.0
-  # Network info for security
-  network_info_plus: ^7.0.0
   
   # Speech recognition - Used for voice input in reports
   speech_to_text: ^7.0.0
@@ -80,8 +74,7 @@ dependencies:
   flutter_map: ^8.2.2
   latlong2: ^0.9.1
   # Chat
-  flutter_chat_ui: ^2.11.1  # Locked to v1 due to breaking changes in v2
-  flutter_chat_types: ^3.6.2
+  flutter_chat_ui: ^2.11.1
   flutter_chat_core: ^2.9.0  # Explicit dep — transitively used by flutter_chat_ui
   # Backend – Supabase (auth, Postgres, storage, realtime)
   supabase_flutter: ^2.10.0
@@ -97,7 +90,6 @@ dependencies:
   flutter_image_compress: ^2.3.0
   # FLAG_SECURE is implemented via native MethodChannel in MainActivity.java.
   # flutter_windowmanager_plus removed — incompatible with AGP 8.0+ (missing namespace).
-  http_certificate_pinning: ^3.0.1
   share_plus: ^12.0.1
 
 

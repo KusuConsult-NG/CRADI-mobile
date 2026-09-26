@@ -445,6 +445,59 @@ Signing: see `docs/KEYSTORE_SETUP.md`.
 > **The OneSignal REST API key must never be passed to the app** — not in
 > `env.json`, not as a `--dart-define`, not in `AppConfig`, not obfuscated.
 
+### Releasing an update — version numbers and the force-update gate
+
+One line in `pubspec.yaml` drives every version number:
+
+```yaml
+version: 1.0.14+22      # <versionName>+<versionCode>
+```
+
+`android/app/build.gradle.kts` sets `versionName = flutter.versionName` and
+`versionCode = flutter.versionCode`, so the Android values are derived from it
+and cannot drift. There is nothing to edit under `android/`.
+
+**Every** upload to Play needs a `versionCode` (`+22`) higher than the last one
+accepted — Play rejects a re-used one. Bump the `versionName` too whenever
+users would see a difference.
+
+#### Forcing users onto the new build
+
+`lib/core/services/remote_config_service.dart` compares this build's version
+(from `package_info_plus`) against the `app_min_version` row of the
+`app_settings` table. When the build is older, `ForceUpdateGate`
+(`lib/core/widgets/force_update_gate.dart`) blocks the whole app behind an
+"update required" screen whose button opens `AppConfig.playStoreUrl`.
+
+`app_min_version` is **server-side data, not part of the build.** Shipping a
+new APK does not change it; nothing in the release pipeline touches it. Raise
+it deliberately, and only for a release people must take (a security fix, a
+breaking schema change):
+
+1. Ship the new version to Play **first** and wait until the rollout is live.
+   Raising `app_min_version` to a build that is not downloadable yet locks
+   every user out of the app with no way forward.
+2. Admin panel → **Settings** → set `app_min_version` to the new
+   `versionName` (`1.0.15`, never the `+build` suffix) and, optionally,
+   `app_min_version_message`.
+3. Leave it alone for an ordinary release. The gate is a lockout, not a nudge.
+
+iOS has no App Store id yet, so the gate hides its "Update" button there
+(`AppConfig`); an iOS user sees the blocking screen with no way to act. Do not
+raise `app_min_version` once an iOS build is in users' hands until
+`AppConfig` carries an App Store link.
+
+#### Release checklist
+
+- [ ] `version:` bumped in `pubspec.yaml` (build number always increases)
+- [ ] `CHANGELOG.md` updated
+- [ ] Tag pushed as `v<version>` — the `build-android-release` CI job only
+      runs for `refs/tags/v*` and needs the signing secrets from
+      `docs/KEYSTORE_SETUP.md`
+- [ ] APK/AAB uploaded and rollout live on Play
+- [ ] `app_min_version` raised **only if** this release is mandatory
+
+
 ### Before you trust a build — never-tested areas
 
 The app has been compiled but **never assembled into an APK in CI or run on a
@@ -476,11 +529,10 @@ fails only at runtime:
    published with the **release** signing certificate's SHA-256. Without it,
    links open a chooser dialog instead of the app.
 
-Known-harmless cruft, listed so nobody reads it as protection: the ProGuard
-rules for `hive.**`, `com.google.gson.**` and `okhttp3.**` match no Java class
-in this app (Hive is pure Dart and lives inside `libapp.so`; the OkHttp comment
-still says "used by Appwrite"), and `android.enableJetifier=true` is deprecated
-under AGP 8 and only slows builds.
+One ProGuard leftover, listed so nobody reads it as protection: the
+`com.google.gson.**` keep rule matches no Java class in this app. The
+`okhttp3.**` rules do apply — OkHttp arrives transitively with Sentry and
+OneSignal.
 
 > Anything compiled into an APK can be extracted from it. The app never sends a
 > push itself; it asks the backend to. The REST key lives only in the Railway

@@ -24,8 +24,10 @@ Future<void> openOSMCopyright() async {
       );
     }
   } on Exception catch (e) {
-    developer.log('Error launching $osmCopyrightUri: $e',
-        name: 'OSMLocationPicker');
+    developer.log(
+      'Error launching $osmCopyrightUri: $e',
+      name: 'OSMLocationPicker',
+    );
   }
 }
 

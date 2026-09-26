@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main, develop, supabase-migration]
   pull_request:
-    branches: [main, develop]
+    branches: [main, develop, supabase-migration]
 
 # Cancel in-progress runs on the same branch to save quota
 concurrency:
@@ -24,10 +24,10 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Flutter 3.38.4
+      - name: Set up Flutter 3.47.5
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.38.4'  # Pinned; update .fvmrc and here in sync
+          flutter-version: '3.47.5'  # Pinned; update .fvmrc and here in sync
           channel: stable
           cache: true
 
@@ -66,10 +66,10 @@ jobs:
           distribution: temurin
           java-version: '21'
 
-      - name: Set up Flutter 3.38.4
+      - name: Set up Flutter 3.47.5
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.38.4'
+          flutter-version: '3.47.5'
           channel: stable
           cache: true
 
@@ -108,10 +108,10 @@ jobs:
           distribution: temurin
           java-version: '21'
 
-      - name: Set up Flutter 3.38.4
+      - name: Set up Flutter 3.47.5
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.38.4'
+          flutter-version: '3.47.5'
           channel: stable
           cache: true
 
@@ -177,3 +177,68 @@ jobs:
           name: release-apk-${{ github.ref_name }}
           path: build/app/outputs/flutter-apk/app-release.apk
           retention-days: 30
+
+  # ── Node packages — run their test suites on every push/PR ────────────────
+  backend-test:
+    name: Backend (Node) Test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'          # Matches backend/package.json engines
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      # `npm ci` also fails when package-lock.json has drifted from
+      # package.json, which is the check we want on every push.
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+  migration-test:
+    name: Migration Tool (Node) Test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: migration/firebase-to-supabase
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: migration/firebase-to-supabase/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+  # ── Docker image builds (backend deploys from this Dockerfile) ────────────
+  backend-docker-build:
+    name: Backend Docker Build
+    runs-on: ubuntu-latest
+    needs: backend-test
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Build only — nothing is pushed, so no registry credentials are needed.
+      - name: Build backend image
+        run: docker build -t cradi-backend:${{ github.sha }} backend

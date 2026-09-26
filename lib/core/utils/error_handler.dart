@@ -8,15 +8,20 @@ class ErrorHandler {
   /// Get a user-friendly error message in the language of [l10n].
   static String getUserMessage(dynamic error, AppLocalizations l10n) {
     if (kReleaseMode) {
-      return _getGenericMessage(error, l10n);
+      return genericMessage(error, l10n);
     }
     return _getDetailedMessage(error, l10n);
   }
 
   /// Get generic user-friendly message (release builds).
+  ///
+  /// Exposed for tests: the release path is unreachable from a test binary
+  /// (`kReleaseMode` is false there), so the scrubbing below would
+  /// otherwise never be exercised.
   /// IMPORTANT: SDK-internal messages must NEVER be surfaced raw to the user —
   /// they leak implementation detail and confuse end users.
-  static String _getGenericMessage(dynamic error, AppLocalizations l10n) {
+  @visibleForTesting
+  static String genericMessage(dynamic error, AppLocalizations l10n) {
     // Only the app's own exceptions carry a curated, user-facing message.
     // (A runtimeType name check would also match Supabase's AuthException,
     // whose raw server message must not be shown.)
@@ -73,7 +78,7 @@ class ErrorHandler {
         name: 'ErrorHandler',
       );
       developer.log(
-        'Error: ${_sanitizeForLog(error.toString())}',
+        'Error: ${sanitizeForLog(error.toString())}',
         name: 'ErrorHandler',
       );
       if (stackTrace != null) {
@@ -92,8 +97,12 @@ class ErrorHandler {
     }
   }
 
-  /// Sanitize log output to remove sensitive data
-  static String _sanitizeForLog(String log) {
+  /// Sanitize log output to remove sensitive data.
+  ///
+  /// Exposed for tests: it only runs inside debug logging and the
+  /// release-only crash reporter, neither of which a test can observe.
+  @visibleForTesting
+  static String sanitizeForLog(String log) {
     String sanitized = log;
 
     // Remove potential tokens
@@ -128,7 +137,7 @@ class ErrorHandler {
 
   /// Sanitize stack trace
   static String _sanitizeStackTrace(StackTrace stackTrace) {
-    return _sanitizeForLog(stackTrace.toString());
+    return sanitizeForLog(stackTrace.toString());
   }
 
   /// Send to analytics/crash reporting service
@@ -140,7 +149,7 @@ class ErrorHandler {
     // SECURE: Always sanitize data before sending to external services.
     // No-op unless Sentry was initialised (SENTRY_DSN provided).
     if (!Sentry.isEnabled) return;
-    final sanitizedError = _sanitizeForLog(error.toString());
+    final sanitizedError = sanitizeForLog(error.toString());
     Sentry.captureMessage(
       context != null ? '[$context] $sanitizedError' : sanitizedError,
       level: SentryLevel.error,
@@ -189,11 +198,6 @@ class EmailNotConfirmedException extends AuthException {
   EmailNotConfirmedException(this.email)
     : super((l) => l.authEmailNotConfirmed(email));
   final String email;
-}
-
-/// Network exception
-class NetworkException extends SecureException {
-  NetworkException(super.userMessage, {super.technicalDetails});
 }
 
 /// Validation exception

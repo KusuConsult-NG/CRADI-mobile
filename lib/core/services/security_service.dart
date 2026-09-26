@@ -23,7 +23,7 @@ class SecurityService {
 
   /// Initialize SSL pinning. Should be called early in main().
   Future<void> initializePinning() async {
-    // Only enforce on mobile platforms where http_certificate_pinning is supported
+    // Only enforce on mobile platforms.
     if (kIsWeb) return;
     if (!Platform.isAndroid && !Platform.isIOS) return;
 

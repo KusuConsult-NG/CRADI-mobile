@@ -13,8 +13,6 @@ import 'package:supabase_flutter/supabase_flutter.dart' show PostgrestException;
 import 'package:uuid/uuid.dart';
 import 'package:climate_app/core/l10n/l10n.dart';
 
-enum HazardType { flood, drought, temp, wind, erosion, fire, pest }
-
 enum SeverityLevel { low, medium, high, critical }
 
 /// Normalizes any stored/legacy severity value (e.g. 'High Severity', 'HIGH',
