@@ -444,6 +444,44 @@ Signing: see `docs/KEYSTORE_SETUP.md`.
 
 > **The OneSignal REST API key must never be passed to the app** — not in
 > `env.json`, not as a `--dart-define`, not in `AppConfig`, not obfuscated.
+
+### Before you trust a build — never-tested areas
+
+The app has been compiled but **never assembled into an APK in CI or run on a
+device**. The Dart half is verified: a full product-mode AOT compile of
+`lib/main.dart` with every package succeeds, and Android arm64 codegen produces
+a normal 12 MB `libapp.so` — the exact artifact a release APK embeds. The
+Android/Gradle half could not be built here (the environment blocks
+`dl.google.com`, so no SDK, NDK or Android Gradle Plugin). A static audit found
+the Gradle/AGP/Kotlin/JDK versions coherent and no `minSdk` conflict across the
+25 Android plugins (all need ≤ 24; the app sets 24).
+
+Check these first on a real device, in this order — each compiles fine and
+fails only at runtime:
+
+1. **Biometric login.** `LaunchTheme`/`NormalTheme` inherit from
+   `@android:style/Theme.Light.NoTitleBar`, a plain framework theme rather than
+   an AppCompat/Material one. With `FlutterFragmentActivity` and `local_auth`'s
+   `BiometricPrompt` this is a known source of `InflateException` at the moment
+   the fingerprint sheet appears. If it throws, give the themes a
+   `Theme.AppCompat`/`Theme.Material3` parent.
+2. **A release build at all.** `isMinifyEnabled` and `isShrinkResources` are on,
+   and `verifyReleaseSigning` blocks release builds without
+   `android/key.properties` (see `docs/KEYSTORE_SETUP.md`). R8 has therefore
+   never run. Do a signed release build well before you need one.
+3. **The NDK.** `jni` is among the plugins, so `ndkVersion` 28.2.13676358 is
+   genuinely required — a ~2 GB download on the first Android build.
+4. **Deep links.** The manifest sets `android:autoVerify="true"` for
+   `https://cradi.ng`, which needs `https://cradi.ng/.well-known/assetlinks.json`
+   published with the **release** signing certificate's SHA-256. Without it,
+   links open a chooser dialog instead of the app.
+
+Known-harmless cruft, listed so nobody reads it as protection: the ProGuard
+rules for `hive.**`, `com.google.gson.**` and `okhttp3.**` match no Java class
+in this app (Hive is pure Dart and lives inside `libapp.so`; the OkHttp comment
+still says "used by Appwrite"), and `android.enableJetifier=true` is deprecated
+under AGP 8 and only slows builds.
+
 > Anything compiled into an APK can be extracted from it. The app never sends a
 > push itself; it asks the backend to. The REST key lives only in the Railway
 > backend environment. The same rule applies to the Supabase **service role
