@@ -5,6 +5,7 @@ import 'package:climate_app/features/verification/providers/reports_status_provi
 import 'package:climate_app/features/verification/widgets/report_verifications_section.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter/material.dart';
+import 'package:climate_app/shared/widgets/dispose_controllers_on_unmount.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:climate_app/core/theme/app_colors.dart';
 import 'dart:developer' as developer;
@@ -132,38 +133,42 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
     final controller = TextEditingController();
     final reason = await showDialog<String>(
       context: context,
-      builder: (c) => AlertDialog(
-        title: Text(
-          context.l10n.staffRejectTitle,
-          style: GoogleFonts.lexend(fontWeight: FontWeight.bold),
-        ),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          maxLines: 3,
-          maxLength: 500,
-          decoration: InputDecoration(
-            labelText: context.l10n.adminReportsRejectReasonLabel,
-            hintText: context.l10n.adminReportsRejectReasonHint,
-            border: const OutlineInputBorder(),
+      // The controller is disposed once the dialog has left the tree (after
+      // its exit animation), not as soon as showDialog returns.
+      builder: (c) => DisposeControllersOnUnmount(
+        controllers: [controller],
+        child: AlertDialog(
+          title: Text(
+            context.l10n.staffRejectTitle,
+            style: GoogleFonts.lexend(fontWeight: FontWeight.bold),
           ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(c),
-            child: Text(context.l10n.cancel),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(c, controller.text.trim()),
-            child: Text(
-              context.l10n.reject,
-              style: const TextStyle(color: Colors.red),
+          content: TextField(
+            controller: controller,
+            autofocus: true,
+            maxLines: 3,
+            maxLength: 500,
+            decoration: InputDecoration(
+              labelText: context.l10n.adminReportsRejectReasonLabel,
+              hintText: context.l10n.adminReportsRejectReasonHint,
+              border: const OutlineInputBorder(),
             ),
           ),
-        ],
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(c),
+              child: Text(context.l10n.cancel),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(c, controller.text.trim()),
+              child: Text(
+                context.l10n.reject,
+                style: const TextStyle(color: Colors.red),
+              ),
+            ),
+          ],
+        ),
       ),
     );
-    controller.dispose();
     return reason;
   }
 

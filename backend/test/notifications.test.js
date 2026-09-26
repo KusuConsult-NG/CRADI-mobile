@@ -120,5 +120,24 @@ test('alertTarget: All -> everyone, otherwise sanitised lga tag', () => {
   assert.deepEqual(alertTarget({ target_lga: 'All' }), { all: true });
   assert.deepEqual(alertTarget({ target_lga: 'all' }), { all: true });
   assert.deepEqual(alertTarget({ target_lga: '' }), { all: true });
-  assert.deepEqual(alertTarget({ target_lga: 'Port Harcourt' }), { all: false, tagKey: 'lga', tagValue: 'port_harcourt' });
+  assert.deepEqual(alertTarget({ target_lga: 'Port Harcourt' }), { all: false, tags: { lga: 'port_harcourt' } });
+  assert.deepEqual(alertTarget({ target_lga: 'Port Harcourt', target_state: null }), { all: false, tags: { lga: 'port_harcourt' } });
+  assert.deepEqual(alertTarget({ target_lga: 'All', target_state: '  ' }), { all: true });
+});
+
+test('alertTarget: target_state requires both the lga and the state tag', () => {
+  assert.deepEqual(alertTarget({ target_lga: 'Obi', target_state: 'Benue' }), {
+    all: false,
+    tags: { lga: 'obi', state: 'benue' },
+  });
+  assert.deepEqual(alertTarget({ target_lga: 'Obi', target_state: 'Nasarawa' }), {
+    all: false,
+    tags: { lga: 'obi', state: 'nasarawa' },
+  });
+  // State-wide alert: every LGA in the state.
+  assert.deepEqual(alertTarget({ target_lga: 'All', target_state: 'Plateau' }), { all: false, tags: { state: 'plateau' } });
+  assert.deepEqual(alertTarget({ target_lga: 'Jos North', target_state: 'Cross River' }), {
+    all: false,
+    tags: { lga: 'jos_north', state: 'cross_river' },
+  });
 });

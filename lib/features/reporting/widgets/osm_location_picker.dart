@@ -44,7 +44,7 @@ class OSMLocationPicker extends StatelessWidget {
       children: [
         TileLayer(
           urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-          userAgentPackageName: 'com.kusuconsult.cradimobile',
+          userAgentPackageName: 'com.westgatestratagem.climate_app.climate_app',
         ),
         RichAttributionWidget(
           attributions: [

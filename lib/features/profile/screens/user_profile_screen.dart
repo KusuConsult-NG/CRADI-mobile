@@ -14,6 +14,7 @@ import 'package:climate_app/core/widgets/location_selector_widget.dart';
 import 'package:climate_app/core/widgets/language_selector_sheet.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:climate_app/shared/widgets/dispose_controllers_on_unmount.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
@@ -202,7 +203,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
 
     final result = await showDialog<Map<String, String?>>(
       context: context,
-      builder: (context) => _DisposeControllersOnUnmount(
+      builder: (context) => DisposeControllersOnUnmount(
         controllers: [nameController, emailController],
         child: StatefulBuilder(
           builder: (context, setState) {
@@ -325,148 +326,6 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
         );
       }
     }
-  }
-
-  Future<void> _showVerificationDialog() async {
-    final codeController = TextEditingController();
-    bool isVerifying = false;
-
-    await showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => _DisposeControllersOnUnmount(
-        controllers: [codeController],
-        child: StatefulBuilder(
-          builder: (context, setState) {
-            return AlertDialog(
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
-              title: Text(
-                context.l10n.profileVerifyAccount,
-                style: GoogleFonts.lexend(fontWeight: FontWeight.bold),
-              ),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    context.l10n.profileVerifyAccountBody,
-                    style: GoogleFonts.lexend(
-                      fontSize: 14,
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  CustomTextField(
-                    controller: codeController,
-                    label: context.l10n.profileAccessCode,
-                    hint: context.l10n.profileAccessCodeHint,
-                    enabled: !isVerifying,
-                  ),
-                ],
-              ),
-              actions: [
-                TextButton(
-                  onPressed: isVerifying ? null : () => Navigator.pop(context),
-                  child: Text(context.l10n.cancel),
-                ),
-                ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primaryRed,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                  ),
-                  onPressed: isVerifying
-                      ? null
-                      : () async {
-                          final code = codeController.text.trim();
-                          if (code.isEmpty) return;
-
-                          setState(() => isVerifying = true);
-
-                          // Simulate verification logic
-                          // In a real app, you'd call a provider method here
-                          // For MVP Generator Flow:
-                          try {
-                            final authProvider = context
-                                .read<app_auth.AuthProvider>();
-                            if (authProvider.currentUser == null) {
-                              throw AuthException(
-                                (l) => l.authErrorNotLoggedIn,
-                              );
-                            }
-
-                            await authProvider.verifyOtpAndLogin(code);
-
-                            if (context.mounted) {
-                              Navigator.pop(context);
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text(
-                                    context.l10n.accessCodeVerified,
-                                  ),
-                                  backgroundColor: Colors.green,
-                                ),
-                              );
-                              // Trigger refresh
-                              context
-                                  .read<app_auth.AuthProvider>()
-                                  .validateSession();
-                            }
-                          } on Exception catch (e) {
-                            if (context.mounted) {
-                              setState(() => isVerifying = false);
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text(
-                                    ErrorHandler.handleError(
-                                      e,
-                                      context.l10n,
-                                      context: 'Account Verification',
-                                    ),
-                                  ),
-                                  backgroundColor: Colors.red,
-                                ),
-                              );
-                            }
-                          }
-                        },
-                  child: isVerifying
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                      : Text(context.l10n.verify),
-                ),
-              ],
-              // Added UI Hint / Fallback for Flawless SMS / Email Delivery Assumption
-              contentPadding: const EdgeInsets.only(
-                left: 24,
-                right: 24,
-                top: 20,
-                bottom: 0,
-              ),
-              actionsPadding: const EdgeInsets.only(
-                left: 24,
-                right: 24,
-                top: 16,
-                bottom: 16,
-              ),
-              insetPadding: const EdgeInsets.symmetric(
-                horizontal: 24,
-                vertical: 24,
-              ),
-            );
-          },
-        ),
-      ),
-    );
   }
 
   @override
@@ -659,32 +518,6 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                               ],
                             ),
                           ),
-                          if (!isVerified) ...[
-                            const SizedBox(height: 12),
-                            SizedBox(
-                              width: 140,
-                              height: 36,
-                              child: ElevatedButton(
-                                onPressed: _showVerificationDialog,
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: AppColors.primaryRed,
-                                  foregroundColor: Colors.white,
-                                  elevation: 0,
-                                  padding: EdgeInsets.zero,
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(18),
-                                  ),
-                                ),
-                                child: Text(
-                                  context.l10n.profileVerifyNow,
-                                  style: GoogleFonts.lexend(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
                         ],
                       );
                     },
@@ -1174,34 +1007,4 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
       ],
     );
   }
-}
-
-/// Disposes [controllers] when the wrapped dialog route is removed from the
-/// tree (i.e. after its exit animation), so they are never used after disposal.
-class _DisposeControllersOnUnmount extends StatefulWidget {
-  const _DisposeControllersOnUnmount({
-    required this.controllers,
-    required this.child,
-  });
-
-  final List<TextEditingController> controllers;
-  final Widget child;
-
-  @override
-  State<_DisposeControllersOnUnmount> createState() =>
-      _DisposeControllersOnUnmountState();
-}
-
-class _DisposeControllersOnUnmountState
-    extends State<_DisposeControllersOnUnmount> {
-  @override
-  void dispose() {
-    for (final c in widget.controllers) {
-      c.dispose();
-    }
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) => widget.child;
 }

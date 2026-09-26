@@ -43,7 +43,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     }
     if (!mounted) return;
     final route = notificationRouteFor(notif);
-    if (route != null) context.go(route);
+    if (route != null) context.push(route);
   }
 
   Future<void> _markAllAsRead() async {

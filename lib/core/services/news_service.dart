@@ -57,7 +57,9 @@ class NewsService {
           return items;
         }
         developer.log('${entry.key}: no items', name: 'NewsService');
-      } on Exception catch (e) {
+      } on Object catch (e) {
+        // Any failure (including a malformed payload's TypeError) moves on
+        // to the next source instead of escaping to the caller.
         developer.log('${entry.key} failed: $e', name: 'NewsService');
       }
     }
@@ -99,8 +101,18 @@ class NewsService {
         uri,
       );
     }
-    final data = json.decode(response.body);
-    final List<dynamic> items = (data is Map ? data['data'] : null) ?? [];
+    return parseReliefWebBody(response.body);
+  }
+
+  /// Parses a ReliefWeb response body. A missing `data` list is "no items";
+  /// any other shape throws a [FormatException] (never a TypeError).
+  static List<Map<String, dynamic>> parseReliefWebBody(String body) {
+    final data = json.decode(body);
+    final raw = data is Map ? data['data'] : null;
+    if (raw != null && raw is! List) {
+      throw const FormatException('ReliefWeb: unexpected "data" payload');
+    }
+    final items = raw as List<dynamic>? ?? const <dynamic>[];
     return items
         .whereType<Map<dynamic, dynamic>>()
         .map(mapReliefWebItem)

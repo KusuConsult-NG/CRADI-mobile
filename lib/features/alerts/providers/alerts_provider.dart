@@ -32,10 +32,22 @@ class AlertsProvider extends ChangeNotifier {
     fetchAlerts();
   }
 
-  List<QueryFilter> get _activeAlertsQuery => [
-    FQuery.equal('isActive', true),
+  /// Most active alerts the list keeps.
+  static const int maxAlerts = 50;
+
+  /// Realtime query: the newest rows by created_at with a server-side limit.
+  ///
+  /// `is_active` is mutable, so it must not be a stream filter: a filtered
+  /// stream never learns that a row stopped matching, and any client-side
+  /// filter disables the server-side limit (see
+  /// [QueryPlan.streamServerLimit]), which would download every historical
+  /// alert on each subscribe. Inactive rows are dropped on the client
+  /// ([_isActive]); the window is wider than [maxAlerts] so a few dismissed
+  /// alerts do not push active ones out of it.
+  @visibleForTesting
+  static final List<QueryFilter> realtimeQuery = [
     FQuery.orderDesc('createdAt'),
-    FQuery.limit(50),
+    FQuery.limit(maxAlerts * 2),
   ];
 
   /// (Re)starts the realtime feed for the signed-in user; stops it when
@@ -52,13 +64,13 @@ class AlertsProvider extends ChangeNotifier {
     _realtimeSub = _db
         .subscribeToCollection(
           collectionId: AppConfig.alertsCollection,
-          queries: _activeAlertsQuery,
+          queries: realtimeQuery,
         )
         .listen(
           (rows) {
             // Another account signed in meanwhile: its own feed takes over.
             if (_db.currentUserId != uid) return;
-            _alerts = rows.where(_isActive).toList();
+            _alerts = activeAlerts(rows);
             _error = null;
             notifyListeners();
             unawaited(_cache(_alerts));
@@ -106,21 +118,56 @@ class AlertsProvider extends ChangeNotifier {
     return v != false;
   }
 
-  /// Whether [alert] targets [lga] (alerts for 'All' reach everyone).
+  /// The active alerts among realtime [rows] (newest first), capped at
+  /// [maxAlerts].
+  @visibleForTesting
+  static List<Map<String, dynamic>> activeAlerts(
+    List<Map<String, dynamic>> rows,
+  ) => rows.where(_isActive).take(maxAlerts).toList();
+
+  /// Whether [alert] targets a user in [lga] of [state] (alerts for 'All'
+  /// with no target state reach everyone).
   ///
-  /// Alerts carry only `target_lga` (an LGA name; the table has no state
-  /// column), so matching is by exact (case-insensitive) name.
-  static bool targetsLga(Map<String, dynamic> alert, String? lga) {
+  /// LGA names repeat across states (Obi is in Benue and in Nasarawa), so
+  /// alerts carry `target_state` too:
+  ///  * no target state (legacy alerts): `target_lga` is matched by exact
+  ///    (case-insensitive) name in any state;
+  ///  * a target state: the user's [state] must match as well, and a
+  ///    `target_lga` of 'All' means every LGA of that state.
+  /// A user whose state is unknown never matches a state-targeted alert.
+  static bool targetsLga(
+    Map<String, dynamic> alert,
+    String? lga, {
+    String? state,
+  }) {
     String norm(Object? v) => (v ?? '').toString().trim().toLowerCase();
     final target = norm(alert['targetLga'] ?? alert['target_lga'] ?? 'All');
+    final targetState = norm(alert['targetState'] ?? alert['target_state']);
+    if (targetState.isNotEmpty && norm(state) != targetState) return false;
     if (target.isEmpty || target == 'all') return true;
     final mine = norm(lga);
     return mine.isNotEmpty && mine == target;
   }
 
-  /// Active alerts addressed to [lga] or to everyone.
-  List<Map<String, dynamic>> alertsForLga(String? lga) =>
-      _alerts.where((a) => targetsLga(a, lga)).toList();
+  /// Where [alert] is addressed, for display: "Obi, Benue", "Benue" (every
+  /// LGA of the state), "Obi" (legacy, no state), or null for everyone.
+  static String? targetLabel(Map<String, dynamic> alert) {
+    String? str(Object? v) {
+      final s = v?.toString().trim();
+      return s == null || s.isEmpty ? null : s;
+    }
+
+    final lga = str(alert['targetLga'] ?? alert['target_lga']);
+    final state = str(alert['targetState'] ?? alert['target_state']);
+    final allLgas = lga == null || lga.toLowerCase() == 'all';
+    if (state == null) return allLgas ? null : lga;
+    return allLgas ? state : '$lga, $state';
+  }
+
+  /// Active alerts addressed to [lga] in [state], to all of [state], or to
+  /// everyone.
+  List<Map<String, dynamic>> alertsForLga(String? lga, {String? state}) =>
+      _alerts.where((a) => targetsLga(a, lga, state: state)).toList();
 
   Future<void> fetchAlerts() async {
     // Alerts are only readable when signed in: a fetch before sign-in would
@@ -142,7 +189,7 @@ class AlertsProvider extends ChangeNotifier {
           FQuery.equal('isActive', true),
           FQuery.orderDesc('createdAt'),
         ],
-        limitCount: 50,
+        limitCount: maxAlerts,
       );
 
       _alerts = documents.where(_isActive).toList();

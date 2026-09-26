@@ -280,9 +280,76 @@ void main() {
   });
 
   group('AlertsProvider.targetsLga', () {
-    test('matches by LGA name only (alerts have no state column)', () {
+    test('legacy alerts (no target_state) match by LGA name only', () {
       expect(AlertsProvider.targetsLga({'target_lga': 'Obi'}, 'obi'), true);
       expect(AlertsProvider.targetsLga({'target_lga': 'Obi'}, 'Bassa'), false);
+      expect(
+        AlertsProvider.targetsLga(
+          {'target_lga': 'Obi', 'target_state': null},
+          'Obi',
+          state: 'Nasarawa',
+        ),
+        true,
+      );
+    });
+
+    test('target_state also requires the user\'s state to match', () {
+      final benueObi = {'target_lga': 'Obi', 'target_state': 'Benue'};
+      expect(AlertsProvider.targetsLga(benueObi, 'Obi', state: 'Benue'), true);
+      expect(AlertsProvider.targetsLga(benueObi, 'obi', state: 'benue'), true);
+      expect(
+        AlertsProvider.targetsLga(benueObi, 'Obi', state: 'Nasarawa'),
+        false,
+      );
+      // Unknown state never matches a state-targeted alert.
+      expect(AlertsProvider.targetsLga(benueObi, 'Obi'), false);
+      expect(
+        AlertsProvider.targetsLga(benueObi, 'Makurdi', state: 'Benue'),
+        false,
+      );
+      // camelCase keys (mapped rows) work the same.
+      expect(
+        AlertsProvider.targetsLga(
+          {'targetLga': 'Obi', 'targetState': 'Nasarawa'},
+          'Obi',
+          state: 'Nasarawa',
+        ),
+        true,
+      );
+    });
+
+    test('targetLabel names the state for state-targeted alerts', () {
+      expect(
+        AlertsProvider.targetLabel({
+          'targetLga': 'Obi',
+          'targetState': 'Benue',
+        }),
+        'Obi, Benue',
+      );
+      expect(
+        AlertsProvider.targetLabel({
+          'target_lga': 'All',
+          'target_state': 'Plateau',
+        }),
+        'Plateau',
+      );
+      expect(AlertsProvider.targetLabel({'targetLga': 'Obi'}), 'Obi');
+      expect(AlertsProvider.targetLabel({'targetLga': 'All'}), isNull);
+      expect(AlertsProvider.targetLabel(const {}), isNull);
+    });
+
+    test("'All' with a target_state reaches every LGA of that state only", () {
+      final plateau = {'targetLga': 'All', 'targetState': 'Plateau'};
+      expect(
+        AlertsProvider.targetsLga(plateau, 'Jos North', state: 'Plateau'),
+        true,
+      );
+      expect(AlertsProvider.targetsLga(plateau, null, state: 'Plateau'), true);
+      expect(
+        AlertsProvider.targetsLga(plateau, 'Makurdi', state: 'Benue'),
+        false,
+      );
+      expect(AlertsProvider.targetsLga(plateau, 'Jos North'), false);
     });
   });
 

@@ -15,6 +15,20 @@ import 'package:climate_app/features/verification/providers/reports_status_provi
 import 'package:climate_app/features/auth/providers/auth_provider.dart';
 import 'package:climate_app/core/l10n/l10n.dart';
 
+/// Query flag marking a wizard step opened from the review screen's "Edit"
+/// link. Such a step pops back to the review on Continue, so editing never
+/// stacks a second copy of the remaining wizard pages.
+const String kReviewEditQuery = 'edit';
+const String _kReviewEditValue = 'review';
+
+/// Location of wizard [step] (e.g. 'severity') opened for editing from review.
+String reviewEditLocation(String step) =>
+    '/report/$step?$kReviewEditQuery=$_kReviewEditValue';
+
+/// Whether [uri] is a wizard step opened from the review screen.
+bool isReviewEdit(Uri uri) =>
+    uri.queryParameters[kReviewEditQuery] == _kReviewEditValue;
+
 class ReportReviewScreen extends StatefulWidget {
   const ReportReviewScreen({super.key});
 
@@ -74,111 +88,126 @@ class _ReportReviewScreenState extends State<ReportReviewScreen> {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        child: Padding(
-          padding: const EdgeInsets.all(24.0),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 80,
-                height: 80,
-                decoration: BoxDecoration(
-                  color: (isQueued ? Colors.orange : AppColors.primaryRed)
-                      .withValues(alpha: 0.1),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  isQueued ? Icons.cloud_off : Icons.check_circle,
-                  color: isQueued ? Colors.orange : AppColors.primaryRed,
-                  size: 40,
-                ),
-              ),
-              const SizedBox(height: 24),
-              Text(
-                isQueued
-                    ? context.l10n.savedForLater
-                    : context.l10n.reportSubmittedTitle,
-                style: GoogleFonts.lexend(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.textPrimary,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                isQueued
-                    ? context.l10n.offlineReportMessage
-                    : context.l10n.onlineReportMessage,
-                textAlign: TextAlign.center,
-                style: GoogleFonts.lexend(
-                  fontSize: 14,
-                  color: AppColors.textSecondary,
-                ),
-              ),
-              const SizedBox(height: 24),
-              Container(
-                padding: const EdgeInsets.all(12),
-                width: double.infinity,
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade50,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.grey.shade200),
-                ),
-                child: Column(
-                  children: [
-                    Text(
-                      isQueued
-                          ? context.l10n.statusLabel
-                          : context.l10n.reportIdLabel,
-                      style: GoogleFonts.lexend(
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.grey,
-                      ),
+      builder: (context) {
+        void returnToDashboard() {
+          // Provider is already reset in submitReport
+          final router = GoRouter.of(context);
+          final reportsProvider = context.read<ReportsStatusProvider>();
+          final auth = context.read<AuthProvider>();
+          final isUser = auth.userRole == UserRole.user;
+          Navigator.of(context).pop(); // Close dialog first!
+          reportsProvider.refreshReports(
+            userId: isUser ? auth.currentUser?.id : null,
+          );
+          router.go('/dashboard');
+        }
+
+        // The report is already submitted/queued: Android Back must not
+        // drop the user back onto the (reset) review page.
+        return PopScope(
+          canPop: false,
+          onPopInvokedWithResult: (didPop, _) {
+            if (!didPop) returnToDashboard();
+          },
+          child: Dialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(24.0),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 80,
+                    height: 80,
+                    decoration: BoxDecoration(
+                      color: (isQueued ? Colors.orange : AppColors.primaryRed)
+                          .withValues(alpha: 0.1),
+                      shape: BoxShape.circle,
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      isQueued
-                          ? context.l10n.queuedStatus
-                          : (reportId != null
-                                ? '#${reportId.substring(0, 8)}...'
-                                : context.l10n.sentStatus),
-                      style: GoogleFonts.robotoMono(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: isQueued ? Colors.orange : AppColors.primaryRed,
-                      ),
+                    child: Icon(
+                      isQueued ? Icons.cloud_off : Icons.check_circle,
+                      color: isQueued ? Colors.orange : AppColors.primaryRed,
+                      size: 40,
                     ),
-                  ],
-                ),
+                  ),
+                  const SizedBox(height: 24),
+                  Text(
+                    isQueued
+                        ? context.l10n.savedForLater
+                        : context.l10n.reportSubmittedTitle,
+                    style: GoogleFonts.lexend(
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    isQueued
+                        ? context.l10n.offlineReportMessage
+                        : context.l10n.onlineReportMessage,
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.lexend(
+                      fontSize: 14,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    width: double.infinity,
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade50,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.grey.shade200),
+                    ),
+                    child: Column(
+                      children: [
+                        Text(
+                          isQueued
+                              ? context.l10n.statusLabel
+                              : context.l10n.reportIdLabel,
+                          style: GoogleFonts.lexend(
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.grey,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          isQueued
+                              ? context.l10n.queuedStatus
+                              : (reportId != null
+                                    ? '#${reportId.substring(0, 8)}...'
+                                    : context.l10n.sentStatus),
+                          style: GoogleFonts.robotoMono(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: isQueued
+                                ? Colors.orange
+                                : AppColors.primaryRed,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  SizedBox(
+                    width: double.infinity,
+                    child: CustomButton(
+                      onPressed: returnToDashboard,
+                      text: context.l10n.returnToDashboard,
+                      type: ButtonType.secondary,
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 24),
-              SizedBox(
-                width: double.infinity,
-                child: CustomButton(
-                  onPressed: () {
-                    // Provider is already reset in submitReport
-                    final router = GoRouter.of(context);
-                    final reportsProvider = context
-                        .read<ReportsStatusProvider>();
-                    final auth = context.read<AuthProvider>();
-                    final isUser = auth.userRole == UserRole.user;
-                    Navigator.of(context).pop(); // Close dialog first!
-                    reportsProvider.refreshReports(
-                      userId: isUser ? auth.currentUser?.id : null,
-                    );
-                    router.go('/dashboard');
-                  },
-                  text: context.l10n.returnToDashboard,
-                  type: ButtonType.secondary,
-                ),
-              ),
-            ],
+            ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 
@@ -242,7 +271,7 @@ class _ReportReviewScreenState extends State<ReportReviewScreen> {
                   // Hazard Details
                   _buildSectionHeader(
                     context.l10n.hazardDetails,
-                    onEdit: () => context.push('/report/severity'),
+                    onEdit: () => context.push(reviewEditLocation('severity')),
                     context: context,
                   ),
                   Consumer<ReportingProvider>(
@@ -335,7 +364,7 @@ class _ReportReviewScreenState extends State<ReportReviewScreen> {
                   // Location
                   _buildSectionHeader(
                     context.l10n.locationLabel,
-                    onEdit: () => context.push('/report/location'),
+                    onEdit: () => context.push(reviewEditLocation('location')),
                     context: context,
                   ),
                   Consumer<ReportingProvider>(

@@ -214,8 +214,10 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                   isLoading: _isLoading,
                 ),
                 const SizedBox(height: 24),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
+                // Wraps instead of overflowing on narrow screens.
+                Wrap(
+                  alignment: WrapAlignment.center,
+                  crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
                     Text(
                       context.l10n.otpNoCode,

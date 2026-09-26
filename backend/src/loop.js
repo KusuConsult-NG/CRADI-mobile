@@ -21,6 +21,8 @@ export function loopHealth(state, now = Date.now()) {
 /**
  * Runs `task` repeatedly, never overlapping. `task` may return true to run
  * again immediately (e.g. a full outbox batch), otherwise waits `intervalMs`.
+ * `task` receives { isStopped }: a long task should check it between units of
+ * work so stop() resolves quickly on shutdown.
  */
 export function startLoop(name, task, intervalMs, { logger = defaultLog } = {}) {
   const state = {
@@ -35,13 +37,14 @@ export function startLoop(name, task, intervalMs, { logger = defaultLog } = {}) 
   let timer = null;
   let stopped = false;
   let current = Promise.resolve();
+  const ctx = { isStopped: () => stopped };
 
   async function tick() {
     if (stopped) return;
     state.running = true;
     let again = false;
     try {
-      again = (await task()) === true;
+      again = (await task(ctx)) === true;
       state.lastSuccessAt = new Date().toISOString();
       state.lastError = null;
     } catch (err) {

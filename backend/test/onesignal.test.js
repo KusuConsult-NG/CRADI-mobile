@@ -58,6 +58,42 @@ test('sendToTag uses a tag filter; sendToAll uses Total Subscriptions', async ()
   assert.deepEqual(fetchImpl.calls[1].body.included_segments, ['Total Subscriptions']);
 });
 
+test('sendToTags ANDs one tag filter per tag (no OR operator)', async () => {
+  const fetchImpl = fakeFetch();
+  const os = createOneSignal({ appId: 'app', apiKey: 'rest', fetchImpl, logger });
+  assert.deepEqual(await os.sendToTags({ lga: 'obi', state: 'benue' }, n, { key: 'k' }), { sent: 1, skipped: false });
+  const { filters } = fetchImpl.calls[0].body;
+  assert.deepEqual(filters, [
+    { field: 'tag', key: 'lga', relation: '=', value: 'obi' },
+    { field: 'tag', key: 'state', relation: '=', value: 'benue' },
+  ]);
+  assert.ok(!filters.some((f) => f.operator), 'no OR operator between the tag filters');
+  assert.equal(fetchImpl.calls[0].body.included_segments, undefined);
+  assert.equal(fetchImpl.calls[0].body.idempotency_key, idempotencyUuid('k'));
+});
+
+test('sendToTag with andTags filters on the tag AND the extra tags', async () => {
+  const fetchImpl = fakeFetch();
+  const os = createOneSignal({ appId: 'app', apiKey: 'rest', fetchImpl, logger });
+  await os.sendToTag('lga', 'obi', n, { key: 'b', andTags: { state: 'benue' } });
+  assert.deepEqual(fetchImpl.calls[0].body.filters, [
+    { field: 'tag', key: 'lga', relation: '=', value: 'obi' },
+    { field: 'tag', key: 'state', relation: '=', value: 'benue' },
+  ]);
+});
+
+test('sendToTags with no tags or an empty value sends nothing', async () => {
+  const fetchImpl = fakeFetch();
+  const os = createOneSignal({ appId: 'app', apiKey: 'rest', fetchImpl, logger });
+  assert.deepEqual(await os.sendToTags({}, n), { sent: 0, skipped: false });
+  assert.deepEqual(await os.sendToTags({ lga: 'obi', state: '' }, n), { sent: 0, skipped: false });
+  assert.deepEqual(await os.sendToTag('lga', '', n), { sent: 0, skipped: false });
+  assert.equal(fetchImpl.calls.length, 0);
+  const unconfigured = createOneSignal({ fetchImpl, logger });
+  assert.deepEqual(await unconfigured.sendToTags({ lga: 'obi', state: 'benue' }, n), { sent: 0, skipped: true });
+  assert.equal(fetchImpl.calls.length, 0);
+});
+
 test('HTTP errors throw; 200 with errors does not', async () => {
   const fetchImpl = fakeFetch([{ status: 400, json: { errors: ['bad app_id'] } }, { status: 200, json: { id: '', errors: ['All included players are not subscribed'] } }]);
   const os = createOneSignal({ appId: 'app', apiKey: 'rest', fetchImpl, logger });

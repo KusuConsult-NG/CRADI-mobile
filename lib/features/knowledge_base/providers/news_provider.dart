@@ -20,21 +20,21 @@ class NewsProvider extends ChangeNotifier {
   LocalizedText? get error => _error;
 
   Future<void> fetchNews() async {
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
     try {
-      _isLoading = true;
-      _error = null;
-      notifyListeners();
-
       _newsItems = await _newsService.fetchLatestNews();
-      _isLoading = false;
-      notifyListeners();
-    } on Exception catch (e) {
-      // Live feed, curated links and the device cache all failed.
+    } on Object catch (e) {
+      // Live feed, curated links and the device cache all failed (or a
+      // source failed in an unexpected way): show the error state rather
+      // than a spinner that never ends.
       _newsItems = [];
       _error = (l) => l.knowledgeNewsLoadError;
+      developer.log('NewsProvider Error: $e', name: 'NewsProvider');
+    } finally {
       _isLoading = false;
       notifyListeners();
-      developer.log('NewsProvider Error: $e', name: 'NewsProvider');
     }
   }
 

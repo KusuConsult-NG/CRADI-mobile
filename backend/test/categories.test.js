@@ -36,6 +36,7 @@ for (const [i, hazard] of CATEGORIES.entries()) {
     assert.deepEqual(push.calls[1].ids, ['reporter']);
     assert.equal(push.calls[2].kind, 'tag');
     assert.equal(push.calls[2].tagValue, 'makurdi');
+    assert.deepEqual(push.calls[2].andTags, { state: 'benue' });
     assert.equal(sms.sent.length, 1);
     assert.match(sms.sent[0].text, new RegExp(`HIGH ${hazard} reported in W1, Makurdi`));
   });

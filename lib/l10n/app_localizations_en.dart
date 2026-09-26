@@ -2306,19 +2306,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get profileAskAdminArea => 'Ask an admin to change your area';
 
   @override
-  String get profileVerifyAccount => 'Verify Account';
-
-  @override
-  String get profileVerifyAccountBody =>
-      'Enter the Access Code sent to your email to verify your account.';
-
-  @override
-  String get profileAccessCode => 'Access Code';
-
-  @override
-  String get profileAccessCodeHint => 'e.g., ABC-123';
-
-  @override
   String get commonNotAvailable => 'N/A';
 
   @override
@@ -2331,9 +2318,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get profileUnverified => 'Unverified';
-
-  @override
-  String get profileVerifyNow => 'Verify Now';
 
   @override
   String get profileStatReports => 'Reports';

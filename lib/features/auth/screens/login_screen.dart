@@ -455,11 +455,15 @@ class _LoginScreenState extends State<LoginScreen> {
                           const SizedBox(height: 16),
 
                           // Remember me and Forgot Password
+                          // Wraps onto two lines on narrow screens / large
+                          // text instead of overflowing.
                           if (!_usePhone)
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            Wrap(
+                              alignment: WrapAlignment.spaceBetween,
+                              crossAxisAlignment: WrapCrossAlignment.center,
                               children: [
                                 Row(
+                                  mainAxisSize: MainAxisSize.min,
                                   children: [
                                     Checkbox(
                                       value: _rememberMe,
@@ -472,12 +476,15 @@ class _LoginScreenState extends State<LoginScreen> {
                                               });
                                             },
                                     ),
-                                    Text(
-                                      context.l10n.loginRememberMe,
-                                      style: const TextStyle(
-                                        fontSize:
-                                            15, // Matched somewhat with other texts
-                                        fontWeight: FontWeight.w500,
+                                    Flexible(
+                                      child: Text(
+                                        context.l10n.loginRememberMe,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(
+                                          fontSize:
+                                              15, // Matched somewhat with other texts
+                                          fontWeight: FontWeight.w500,
+                                        ),
                                       ),
                                     ),
                                   ],
@@ -508,9 +515,10 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                           const SizedBox(height: 16),
 
-                          // Sign Up Link
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
+                          // Sign Up Link (wraps instead of overflowing)
+                          Wrap(
+                            alignment: WrapAlignment.center,
+                            crossAxisAlignment: WrapCrossAlignment.center,
                             children: [
                               Text(
                                 context.l10n.loginNoAccount,

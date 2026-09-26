@@ -272,7 +272,7 @@ class _AlertsListScreenState extends State<AlertsListScreen>
     return Consumer2<AlertsProvider, ProfileProvider>(
       builder: (context, alertsProvider, profile, _) {
         final alerts = alertsProvider
-            .alertsForLga(profile.lga)
+            .alertsForLga(profile.lga, state: profile.state)
             .where(
               (a) => _matchesQuery([a['title'], a['message'], a['targetLga']]),
             )
@@ -338,7 +338,7 @@ class _AlertsListScreenState extends State<AlertsListScreen>
     final title =
         alert['title']?.toString() ?? context.l10n.alertDetailDefaultTitle;
     final message = alert['message']?.toString() ?? '';
-    final target = alert['targetLga']?.toString() ?? 'All';
+    final target = AlertsProvider.targetLabel(alert);
 
     return InkWell(
       borderRadius: BorderRadius.circular(12),
@@ -435,9 +435,7 @@ class _AlertsListScreenState extends State<AlertsListScreen>
                                   color,
                                 ),
                                 _buildTag(
-                                  target.toLowerCase() == 'all'
-                                      ? context.l10n.alertsAllLgas
-                                      : target,
+                                  target ?? context.l10n.alertsAllLgas,
                                   Colors.blueGrey,
                                 ),
                               ],

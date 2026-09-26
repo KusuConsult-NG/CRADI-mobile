@@ -4,7 +4,7 @@
 
 const REPORT_COLUMNS =
   'id, user_id, hazard_type, severity, ward, lga, state, description, status, rejection_reason, escalated, escalation_reason';
-const ALERT_COLUMNS = 'id, title, message, severity, target_lga, is_active';
+const ALERT_COLUMNS = 'id, title, message, severity, target_lga, target_state, is_active';
 
 /** Double-quotes a value for a PostgREST `or=(...)` filter (commas, dots, parens are reserved). */
 function postgrestQuote(value) {
@@ -152,7 +152,8 @@ export function createRepo(supabase) {
      * NULL (legacy rows that predate coverage_state match by LGA name only).
      * LGA names repeat across states (Obi: Benue and Nasarawa), so a report
      * with a state never reaches another state's same-named LGA. An empty
-     * `state` matches by LGA only.
+     * `state` matches only rows with no coverage_state (it can't tell which
+     * state's same-named LGA is meant).
      */
     async findAuthorities(lga, state, limit) {
       let q = supabase
@@ -161,9 +162,67 @@ export function createRepo(supabase) {
         .eq('coverage_lga', lga);
       const st = typeof state === 'string' ? state.trim() : '';
       if (st) q = q.or(`coverage_state.eq.${postgrestQuote(st)},coverage_state.is.null`);
+      else q = q.is('coverage_state', null);
       return (
         check(await q.order('created_at', { ascending: true }).limit(limit), 'find authorities') ?? []
       );
+    },
+
+    /**
+     * Claims (report, phone) in sms_deliveries before texting it. Returns
+     * false when a row already exists (sent, rejected or in flight).
+     */
+    async claimSmsDelivery({ reportId, phone, lga, state }) {
+      const rows = check(
+        await supabase
+          .from('sms_deliveries')
+          .upsert(
+            { report_id: reportId, phone, lga: lga ?? '', state: state ?? '', status: 'claimed' },
+            { onConflict: 'report_id,phone', ignoreDuplicates: true },
+          )
+          .select('id'),
+        'claim sms delivery',
+      );
+      return (rows ?? []).length > 0;
+    },
+
+    async setSmsDeliveryStatus(reportId, phone, status) {
+      check(
+        await supabase.from('sms_deliveries').update({ status }).eq('report_id', reportId).eq('phone', phone),
+        'update sms delivery',
+      );
+    },
+
+    /** Drops a claim after a retryable failure so a retry sends again. */
+    async releaseSmsDelivery(reportId, phone) {
+      check(
+        await supabase.from('sms_deliveries').delete().eq('report_id', reportId).eq('phone', phone),
+        'release sms delivery',
+      );
+    },
+
+    /** Texts (claimed or sent) for (lga, state) created at or after `since` (ISO). */
+    async countSmsDeliveries({ lga, state, since }) {
+      const { count, error } = await supabase
+        .from('sms_deliveries')
+        .select('id', { count: 'exact', head: true })
+        .eq('lga', lga ?? '')
+        .eq('state', state ?? '')
+        .neq('status', 'rejected')
+        .gte('created_at', since);
+      if (error) throw new Error(`count sms deliveries: ${error.message ?? error}`);
+      return count ?? 0;
+    },
+
+    /** Texts (claimed or sent) for one report. */
+    async countReportSmsDeliveries(reportId) {
+      const { count, error } = await supabase
+        .from('sms_deliveries')
+        .select('id', { count: 'exact', head: true })
+        .eq('report_id', reportId)
+        .neq('status', 'rejected');
+      if (error) throw new Error(`count report sms deliveries: ${error.message ?? error}`);
+      return count ?? 0;
     },
 
     /** Finishes the report's pending scheduled escalation (if any). Returns true if a row was updated. */

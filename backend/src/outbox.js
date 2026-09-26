@@ -60,10 +60,28 @@ export function createHandlers({ repo, push, authoritySms = null, logger = defau
       // decision that has since been changed, e.g. approved then rejected.
       if (report.status !== newStatus) return `stale: report now ${report.status}`;
 
+      // Each delivery is attempted even when an earlier one fails (a push
+      // outage must not hold back the authority SMS); any failure is rethrown
+      // at the end so the event retries. Pushes are idempotent via their keys
+      // and the SMS module dedupes per (report, phone), so a retry only
+      // repeats what failed.
+      const errors = [];
+      const attempt = async (what, fn) => {
+        try {
+          await fn();
+          return true;
+        } catch (err) {
+          errors.push(`${what}: ${errMessage(err)}`);
+          return false;
+        }
+      };
+
       if (report.user_id) {
-        await push.sendToUsers([report.user_id], reporterStatusNotification(report, newStatus), {
-          key: `outbox:${event.id}:reporter`,
-        });
+        await attempt('reporter push', () =>
+          push.sendToUsers([report.user_id], reporterStatusNotification(report, newStatus), {
+            key: `outbox:${event.id}:reporter`,
+          }),
+        );
       }
 
       let broadcast = false;
@@ -71,13 +89,24 @@ export function createHandlers({ repo, push, authoritySms = null, logger = defau
       if (shouldBroadcastApproval(oldStatus, newStatus)) {
         const lgaTag = sanitizeTag(report.lga);
         if (lgaTag) {
-          await push.sendToTag('lga', lgaTag, validatedAlertNotification(report), {
-            key: `outbox:${event.id}:broadcast`,
-          });
-          broadcast = true;
+          // LGA names repeat across states (Obi: Benue and Nasarawa), so a
+          // report with a state also requires the device's state tag.
+          const stateTag = sanitizeTag(String(report.state ?? '').trim());
+          broadcast = await attempt('broadcast push', () =>
+            push.sendToTag('lga', lgaTag, validatedAlertNotification(report), {
+              key: `outbox:${event.id}:broadcast`,
+              andTags: stateTag ? { state: stateTag } : undefined,
+            }),
+          );
         }
-        // Pushes above are idempotent on retry; the SMS module dedupes per report itself.
-        if (authoritySms) sms = await authoritySms.notifyApproved(report);
+        if (authoritySms) {
+          await attempt('authority sms', async () => {
+            sms = await authoritySms.notifyApproved(report);
+          });
+        }
+      }
+      if (errors.length) {
+        throw new Error(`report_status_changed ${reportId}: ${errors.join('; ')}`);
       }
       logger.info('outbox.report_status_changed', {
         event_id: event.id,
@@ -152,7 +181,7 @@ export function createHandlers({ repo, push, authoritySms = null, logger = defau
       const notification = adminAlertNotification(alert);
       const key = `outbox:${event.id}:alert`;
       if (target.all) await push.sendToAll(notification, { key });
-      else await push.sendToTag(target.tagKey, target.tagValue, notification, { key });
+      else await push.sendToTags(target.tags, notification, { key });
       logger.info('outbox.alert_created', { event_id: event.id, alert_id: alertId, target });
       return null;
     },
@@ -197,9 +226,15 @@ async function safe(fn, logger, eventId) {
 }
 
 /** Claims and processes one batch. Returns the number of events claimed. */
-export async function runOutboxBatch({ repo, handlers, logger = defaultLog, limit = BATCH_SIZE }) {
+export async function runOutboxBatch({ repo, handlers, logger = defaultLog, limit = BATCH_SIZE, shouldStop = () => false }) {
   const events = await repo.claimOutboxEvents(limit);
-  for (const event of events) {
+  for (const [i, event] of events.entries()) {
+    // Shutting down: leave the rest of the batch. Claimed rows are simply
+    // picked up again once their claim backoff (available_at) expires.
+    if (shouldStop()) {
+      logger.info('outbox.batch_interrupted', { processed: i, left: events.length - i });
+      break;
+    }
     await processEvent(event, { repo, handlers, logger });
   }
   return events.length;

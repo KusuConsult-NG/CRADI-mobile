@@ -130,7 +130,7 @@ class ClimateApp extends StatefulWidget {
   State<ClimateApp> createState() => _ClimateAppState();
 }
 
-class _ClimateAppState extends State<ClimateApp> {
+class _ClimateAppState extends State<ClimateApp> with WidgetsBindingObserver {
   GoRouter? _router;
   AuthProvider? _auth;
   VoidCallback? _onSignedIn;
@@ -139,6 +139,9 @@ class _ClimateAppState extends State<ClimateApp> {
   @override
   void initState() {
     super.initState();
+    // Server-side settings (app_min_version, feature flags) are refreshed
+    // when the app returns to the foreground, not only at startup.
+    WidgetsBinding.instance.addObserver(this);
     // Initialize push notifications after app starts
     _initializeNotifications();
     // Wire auto-sync: when connectivity is restored, flush the offline queue
@@ -148,12 +151,20 @@ class _ClimateAppState extends State<ClimateApp> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _router?.routerDelegate.removeListener(_recordActivity);
     final onSignedIn = _onSignedIn;
     if (onSignedIn != null) _auth?.removeSignInListener(onSignedIn);
     final onSignedOut = _onSignedOut;
     if (onSignedOut != null) _auth?.removeSignOutListener(onSignedOut);
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(RemoteConfigService().refreshOnResume());
+    }
   }
 
   /// Any interaction or navigation pushes the inactivity timeout forward.
@@ -187,6 +198,7 @@ class _ClimateAppState extends State<ClimateApp> {
     _onSignedIn = () {
       final uid = _auth?.currentUser?.id;
       reports.clearUserData();
+      unawaited(RemoteConfigService().refreshOnSignIn());
       unawaited(alerts.fetchAlerts());
       if (uid != null) unawaited(reloadFor(uid));
     };
@@ -220,6 +232,7 @@ class _ClimateAppState extends State<ClimateApp> {
         final reporting = context.read<ReportingProvider>();
         context.read<ConnectivityProvider>().onReconnect = () async {
           debugPrint('🔄 Auto-sync triggered by connectivity restore');
+          unawaited(RemoteConfigService().refreshOnReconnect());
           if (!mounted) return;
           try {
             await reporting.syncPendingReports(context);

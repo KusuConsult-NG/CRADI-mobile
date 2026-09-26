@@ -14,7 +14,8 @@ import { createAuthoritySms } from './sms/authorities.js';
 import { createSmsProvider } from './sms/providers.js';
 import { createHttpServer } from './server.js';
 
-const { config, missing, status } = loadConfig();
+const { config, missing, status, warnings } = loadConfig();
+for (const w of warnings) log.warn(w.event, { hint: w.hint });
 
 if (missing.length) {
   log.error('config.missing_required', {
@@ -50,7 +51,12 @@ if (repo) {
   const authoritySms = createAuthoritySms({ repo, sms: createSmsProvider(config) });
   const handlers = createHandlers({ repo, push, authoritySms });
   loops.push(
-    startLoop('outbox', async () => (await runOutboxBatch({ repo, handlers, limit: BATCH_SIZE })) >= BATCH_SIZE, config.workerPollMs),
+    startLoop(
+      'outbox',
+      async ({ isStopped }) =>
+        (await runOutboxBatch({ repo, handlers, limit: BATCH_SIZE, shouldStop: isStopped })) >= BATCH_SIZE,
+      config.workerPollMs,
+    ),
     startLoop('escalations', async () => void (await runEscalations({ repo, push })), config.escalationPollMs),
   );
 }

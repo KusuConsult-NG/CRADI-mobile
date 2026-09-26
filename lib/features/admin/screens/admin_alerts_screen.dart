@@ -44,6 +44,13 @@ class _AdminAlertsScreenState extends State<AdminAlertsScreen> {
   final Set<String> _dismissedIds = {};
 
   String _severity = 'warning';
+
+  /// Target state (null = every state). LGA names repeat across states
+  /// (Obi is in Benue and in Nasarawa), so the LGA is picked within a state.
+  String? _targetState;
+
+  /// 'All' (every LGA of [_targetState], or everyone without a state) or an
+  /// LGA of [_targetState].
   String _targetLga = 'All';
   bool _sending = false;
 
@@ -59,12 +66,26 @@ class _AdminAlertsScreenState extends State<AdminAlertsScreen> {
     'critical': Icons.crisis_alert,
   };
 
-  /// 'All' plus every LGA in the location data (names must match the
-  /// profile LGA values alerts are matched against).
-  static final List<String> _lgas = [
+  static final List<String> _states = MVPLocationsData.getAllStates();
+
+  /// 'All' plus the LGAs of [state] (names must match the profile LGA values
+  /// alerts are matched against).
+  static List<String> _lgasFor(String state) => [
     'All',
-    ...MVPLocationsData.getAllLGAs().toSet().toList()..sort(),
+    ...MVPLocationsData.getLGAsForState(state).toSet().toList()..sort(),
   ];
+
+  InputDecoration _dropdownDecoration() => InputDecoration(
+    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+    border: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(8),
+      borderSide: BorderSide(color: Colors.grey.shade300),
+    ),
+    enabledBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(8),
+      borderSide: BorderSide(color: Colors.grey.shade300),
+    ),
+  );
 
   @override
   void dispose() {
@@ -87,12 +108,14 @@ class _AdminAlertsScreenState extends State<AdminAlertsScreen> {
           'message': _messageCtrl.text.trim(),
           'severity': _severity,
           'targetLga': _targetLga,
+          if (_targetState != null) 'targetState': _targetState,
           'isActive': true,
         },
       );
 
       developer.log(
-        'Alert broadcast: ${_titleCtrl.text} → $_targetLga',
+        'Alert broadcast: ${_titleCtrl.text} → $_targetLga'
+        '${_targetState == null ? '' : ', $_targetState'}',
         name: 'AdminAlertsScreen',
       );
 
@@ -102,6 +125,7 @@ class _AdminAlertsScreenState extends State<AdminAlertsScreen> {
         _messageCtrl.clear();
         setState(() {
           _severity = 'warning';
+          _targetState = null;
           _targetLga = 'All';
         });
         ScaffoldMessenger.of(context).showSnackBar(
@@ -268,39 +292,60 @@ class _AdminAlertsScreenState extends State<AdminAlertsScreen> {
                     ),
                   ),
                   const SizedBox(height: 8),
-                  DropdownButtonFormField<String>(
-                    initialValue: _targetLga,
-                    decoration: InputDecoration(
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 10,
-                      ),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: BorderSide(color: Colors.grey.shade300),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: BorderSide(color: Colors.grey.shade300),
-                      ),
-                    ),
+                  DropdownButtonFormField<String?>(
+                    key: const ValueKey('alert-target-state'),
+                    initialValue: _targetState,
+                    decoration: _dropdownDecoration(),
                     style: GoogleFonts.lexend(
                       fontSize: 14,
                       color: AppColors.textPrimary,
                     ),
-                    items: _lgas
-                        .map(
-                          (l) => DropdownMenuItem(
-                            value: l,
-                            child: Text(
-                              l == 'All' ? context.l10n.adminAlertAllAreas : l,
-                              style: GoogleFonts.lexend(fontSize: 14),
-                            ),
+                    items: [
+                      DropdownMenuItem<String?>(
+                        child: Text(
+                          context.l10n.adminAlertAllAreas,
+                          style: GoogleFonts.lexend(fontSize: 14),
+                        ),
+                      ),
+                      for (final st in _states)
+                        DropdownMenuItem<String?>(
+                          value: st,
+                          child: Text(
+                            st,
+                            style: GoogleFonts.lexend(fontSize: 14),
                           ),
-                        )
-                        .toList(),
-                    onChanged: (v) => setState(() => _targetLga = v!),
+                        ),
+                    ],
+                    onChanged: (v) => setState(() {
+                      _targetState = v;
+                      _targetLga = 'All';
+                    }),
                   ),
+                  if (_targetState != null) ...[
+                    const SizedBox(height: 8),
+                    DropdownButtonFormField<String>(
+                      // A new key per state resets the selection to 'All'.
+                      key: ValueKey('alert-target-lga-$_targetState'),
+                      initialValue: _targetLga,
+                      decoration: _dropdownDecoration(),
+                      style: GoogleFonts.lexend(
+                        fontSize: 14,
+                        color: AppColors.textPrimary,
+                      ),
+                      items: _lgasFor(_targetState!)
+                          .map(
+                            (l) => DropdownMenuItem(
+                              value: l,
+                              child: Text(
+                                l == 'All' ? context.l10n.alertsAllLgas : l,
+                                style: GoogleFonts.lexend(fontSize: 14),
+                              ),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (v) => setState(() => _targetLga = v!),
+                    ),
+                  ],
 
                   const SizedBox(height: 16),
 
@@ -484,9 +529,8 @@ class _AdminAlertsScreenState extends State<AdminAlertsScreen> {
                           Row(
                             children: [
                               _alertChip(
-                                (d['targetLga'] as String? ?? 'All') == 'All'
-                                    ? context.l10n.alertsAllLgas
-                                    : d['targetLga'] as String,
+                                AlertsProvider.targetLabel(d) ??
+                                    context.l10n.alertsAllLgas,
                                 Colors.teal,
                               ),
                               const SizedBox(width: 6),

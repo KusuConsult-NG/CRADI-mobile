@@ -8,7 +8,7 @@ RLS/trigger behaviour can be checked against any Postgres 15+:
 createdb cradi_test
 psql -d cradi_test -f supabase/tests/local_stubs.sql
 for f in supabase/migrations/*.sql; do psql -d cradi_test -f "$f"; done
-psql -d cradi_test -f supabase/tests/rls_smoke.sql   # each "expect ERROR" line should error
+psql -d cradi_test -f supabase/tests/rls_smoke.sql   # each "expect ERROR" line should error (35 in total)
 ```
 
 `categories_e2e.sql` pushes one report per hazard category through the whole

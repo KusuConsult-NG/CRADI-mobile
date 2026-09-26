@@ -223,3 +223,73 @@ insert into news_links(title,url) values ('x','javascript:alert(1)');
 \echo '--- admin sees the inactive link too (expect 4)'
 select count(*) as admin_news_links from news_links;
 reset role;
+
+\echo '=== round 10: alerts carry a target state ==='
+set role authenticated;
+select as_user('00000000-0000-0000-0000-00000000000d');
+\echo '--- staff publishes an alert for Obi, Nasarawa (expect INSERT; one alert_created event)'
+insert into alerts(title, target_lga, target_state, created_by) values ('Obi flood','Obi','Nasarawa',auth.uid());
+select target_lga, target_state from alerts where title='Obi flood';
+\echo '--- blank target_state (expect ERROR check)'
+insert into alerts(title, target_lga, target_state, created_by) values ('x','Obi',' ',auth.uid());
+\echo '--- plain user cannot publish a state-targeted alert (expect ERROR rls)'
+select as_user('00000000-0000-0000-0000-00000000000a');
+insert into alerts(title, target_lga, target_state, created_by) values ('y','Obi','Benue',auth.uid());
+reset role;
+select count(*) as obi_alert_events from notification_outbox n join alerts a on a.id = (n.payload->>'alert_id')::uuid
+ where n.event_type='alert_created' and a.title='Obi flood';
+
+
+\echo '=== round 11: integrity hardening ==='
+reset role;
+select set_config('request.jwt.claim.sub','',false);
+insert into auth.users values
+ ('00000000-0000-0000-0000-000000000014','ewv2@x.com',null,'{"name":"V2","role":"ewv","ward":"W1","lga":"L1"}',now(),null),
+ ('00000000-0000-0000-0000-000000000015','blank@x.com',null,'{"name":"Blank","role":"ewm"}',now(),null);
+update profiles set is_approved=true where email in ('ewv2@x.com','blank@x.com');
+set role authenticated;
+\echo '--- staff reporter edits own report after approval (expect ERROR only while pending)'
+select as_user('00000000-0000-0000-0000-000000000014');
+insert into reports(id,user_id,hazard_type,lga,ward) values ('10000000-0000-0000-0000-00000000000a',auth.uid(),'Flood','L1','W1');
+select as_user('00000000-0000-0000-0000-00000000000d');
+update reports set status='approved' where id='10000000-0000-0000-0000-00000000000a';
+select as_user('00000000-0000-0000-0000-000000000014');
+update reports set description='rewritten after approval' where id='10000000-0000-0000-0000-00000000000a';
+\echo '--- owner edits severity / images after a peer voted (expect ERROR x2 after peers have voted)'
+select as_user('00000000-0000-0000-0000-00000000000a');
+insert into reports(id,user_id,hazard_type,lga,ward,severity) values ('10000000-0000-0000-0000-00000000000b',auth.uid(),'Flood','L1','W1','low');
+select as_user('00000000-0000-0000-0000-00000000000c');
+insert into verifications(report_id,is_confirmed) values ('10000000-0000-0000-0000-00000000000b',true);
+select as_user('00000000-0000-0000-0000-00000000000a');
+update reports set severity='critical' where id='10000000-0000-0000-0000-00000000000b';
+update reports set image_urls=array['https://example.org/other.jpg'] where id='10000000-0000-0000-0000-00000000000b';
+\echo '--- chat: forged created_at is replaced (expect t, t)'
+select as_user('00000000-0000-0000-0000-00000000000b');
+insert into messages(message, created_at, sent_at) values ('backdated', '2000-01-01', '2000-01-01');
+select created_at > now() - interval '1 minute' as created_now, sent_at > now() - interval '1 minute' as sent_now from messages where message='backdated';
+\echo '--- chat: 31 backdated messages at once (expect ERROR too quickly)'
+insert into messages(message, created_at, sent_at) select 'spam '||g, now()-interval '1 day', now()-interval '1 day' from generate_series(1,31) g;
+\echo '--- ewm in another LGA sees no votes on L1 reports (expect 0)'
+select as_user('00000000-0000-0000-0000-000000000011');
+select count(*) as other_lga_ewm_votes from verifications;
+\echo '--- ewm with an empty area sees nothing and cannot vote (expect 0, ERROR rls)'
+reset role;
+insert into reports(id,user_id,hazard_type,lga,ward) values ('10000000-0000-0000-0000-00000000000c','00000000-0000-0000-0000-00000000000a','Flood','','');
+set role authenticated; select as_user('00000000-0000-0000-0000-000000000015');
+select count(*) as blank_ewm_sees from reports;
+insert into verifications(report_id,is_confirmed) values ('10000000-0000-0000-0000-00000000000c',true);
+\echo '--- minimum_peer_confirmations=0: a dispute does not verify (expect pending)'
+reset role;
+update app_settings set value='0' where key='minimum_peer_confirmations';
+insert into reports(id,user_id,hazard_type,lga,ward) values ('10000000-0000-0000-0000-00000000000d','00000000-0000-0000-0000-00000000000a','Flood','L1','W1');
+set role authenticated; select as_user('00000000-0000-0000-0000-00000000000b');
+insert into verifications(report_id,is_confirmed,comment) values ('10000000-0000-0000-0000-00000000000d',false,'no');
+reset role;
+select status as disputed_status from reports where id='10000000-0000-0000-0000-00000000000d';
+update app_settings set value='2' where key='minimum_peer_confirmations';
+\echo '--- report rate limit takes a per-user lock (expect t)'
+select prosrc like '%pg_advisory_xact_lock%' as insert_locks from pg_proc where proname='reports_before_insert';
+\echo '--- sms_deliveries: clients cannot read it (expect ERROR permission denied)'
+set role authenticated; select as_user('00000000-0000-0000-0000-00000000000d');
+select count(*) from sms_deliveries;
+reset role;

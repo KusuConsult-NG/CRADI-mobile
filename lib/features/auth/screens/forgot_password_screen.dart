@@ -21,6 +21,12 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   bool _isLoading = false;
   bool _isSuccess = false;
 
+  @override
+  void dispose() {
+    _emailController.dispose();
+    super.dispose();
+  }
+
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
 

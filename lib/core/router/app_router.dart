@@ -90,13 +90,7 @@ GoRouter createRouter(BuildContext context) {
       GoRoute(path: '/', redirect: (context, state) => '/splash'),
       GoRoute(
         path: '/register',
-        builder: (context, state) {
-          final extra = state.extra as Map<String, dynamic>?;
-          return RegistrationScreen(
-            prefilledEmail: extra?['email'],
-            isVerified: extra?['isVerified'] ?? false,
-          );
-        },
+        builder: (context, state) => const RegistrationScreen(),
       ),
 
       GoRoute(
@@ -203,11 +197,15 @@ GoRouter createRouter(BuildContext context) {
             routes: [
               GoRoute(
                 path: 'severity',
-                builder: (context, state) => const SeveritySelectionScreen(),
+                builder: (context, state) => SeveritySelectionScreen(
+                  returnToReview: isReviewEdit(state.uri),
+                ),
               ),
               GoRoute(
                 path: 'location',
-                builder: (context, state) => const LocationPickerScreen(),
+                builder: (context, state) => LocationPickerScreen(
+                  returnToReview: isReviewEdit(state.uri),
+                ),
               ),
               GoRoute(
                 path: 'details',

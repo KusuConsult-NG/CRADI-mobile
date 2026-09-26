@@ -4046,30 +4046,6 @@ abstract class AppLocalizations {
   /// **'Ask an admin to change your area'**
   String get profileAskAdminArea;
 
-  /// Title of the account verification dialog.
-  ///
-  /// In en, this message translates to:
-  /// **'Verify Account'**
-  String get profileVerifyAccount;
-
-  /// Body of the account verification dialog.
-  ///
-  /// In en, this message translates to:
-  /// **'Enter the Access Code sent to your email to verify your account.'**
-  String get profileVerifyAccountBody;
-
-  /// Label of the access code field.
-  ///
-  /// In en, this message translates to:
-  /// **'Access Code'**
-  String get profileAccessCode;
-
-  /// Hint of the access code field.
-  ///
-  /// In en, this message translates to:
-  /// **'e.g., ABC-123'**
-  String get profileAccessCodeHint;
-
   /// Shown when a value is not available.
   ///
   /// In en, this message translates to:
@@ -4093,12 +4069,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Unverified'**
   String get profileUnverified;
-
-  /// Button next to the unverified badge.
-  ///
-  /// In en, this message translates to:
-  /// **'Verify Now'**
-  String get profileVerifyNow;
 
   /// Profile statistic label: number of reports (max ~12 chars).
   ///

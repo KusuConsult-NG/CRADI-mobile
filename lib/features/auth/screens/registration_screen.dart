@@ -17,14 +17,7 @@ import 'dart:developer' as developer;
 import 'package:climate_app/core/l10n/l10n.dart';
 
 class RegistrationScreen extends StatefulWidget {
-  final String? prefilledEmail;
-  final bool isVerified;
-
-  const RegistrationScreen({
-    super.key,
-    this.prefilledEmail,
-    this.isVerified = false,
-  });
+  const RegistrationScreen({super.key});
 
   @override
   State<RegistrationScreen> createState() => _RegistrationScreenState();
@@ -58,14 +51,6 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
   /// Phone Auth stays hidden until an SMS provider is configured for phone
   /// OTP in the Supabase dashboard (shared with the login screen).
   static const bool _phoneAuthEnabled = AuthProvider.phoneAuthEnabled;
-
-  @override
-  void initState() {
-    super.initState();
-    if (widget.prefilledEmail != null) {
-      _emailController.text = widget.prefilledEmail!;
-    }
-  }
 
   @override
   void dispose() {
@@ -532,9 +517,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                                   v?.trim(),
                                   context.l10n,
                                 ),
-                                enabled:
-                                    !_isLoading &&
-                                    widget.prefilledEmail == null,
+                                enabled: !_isLoading,
                               ),
                               const SizedBox(height: 16),
                             ],
@@ -693,9 +676,10 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
 
                       const SizedBox(height: 24),
 
-                      // Login Link
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
+                      // Login Link (wraps instead of overflowing)
+                      Wrap(
+                        alignment: WrapAlignment.center,
+                        crossAxisAlignment: WrapCrossAlignment.center,
                         children: [
                           Text(
                             context.l10n.registrationHaveAccount,

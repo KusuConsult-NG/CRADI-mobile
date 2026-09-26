@@ -7,6 +7,8 @@ function intOr(value, fallback) {
   return Number.isFinite(n) && n > 0 ? n : fallback;
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 function str(value) {
   const s = typeof value === 'string' ? value.trim() : '';
   return s.length ? s : undefined;
@@ -44,6 +46,17 @@ export function loadConfig(env = process.env) {
       .filter(Boolean),
   };
 
+  const warnings = [];
+  // OneSignal rejects every push that names an unknown channel id, so a typo
+  // here would silently break all Android pushes. Ignore it instead.
+  if (config.oneSignalAndroidChannelId && !UUID_RE.test(config.oneSignalAndroidChannelId)) {
+    warnings.push({
+      event: 'config.onesignal_channel_invalid',
+      hint: 'ONESIGNAL_ANDROID_CHANNEL_ID is not a UUID; it is ignored and pushes use the default channel.',
+    });
+    config.oneSignalAndroidChannelId = undefined;
+  }
+
   const missing = REQUIRED.filter((k) => !str(env[k]));
   const status = {
     supabase: Boolean(config.supabaseUrl && config.supabaseServiceRoleKey),
@@ -51,5 +64,5 @@ export function loadConfig(env = process.env) {
     resend: Boolean(config.resendApiKey),
     sms: smsConfigured(config),
   };
-  return { config, missing, status };
+  return { config, missing, status, warnings };
 }

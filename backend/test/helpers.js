@@ -17,7 +17,12 @@ export function fakePush({ failOn } = {}) {
     },
     async sendToTag(tagKey, tagValue, n, opts = {}) {
       maybeFail('tag');
-      calls.push({ kind: 'tag', tagKey, tagValue, n, key: opts.key });
+      calls.push({ kind: 'tag', tagKey, tagValue, andTags: opts.andTags, n, key: opts.key });
+      return { sent: 1 };
+    },
+    async sendToTags(tags, n, opts = {}) {
+      maybeFail('tags');
+      calls.push({ kind: 'tags', tags, n, key: opts.key });
       return { sent: 1 };
     },
     async sendToAll(n, opts = {}) {
@@ -37,8 +42,10 @@ export function fakeRepo({
   escalations = [],
   authorities = [],
   settings = {},
+  smsDeliveries = [],
+  now = Date.now,
 } = {}) {
-  const state = { reports, alerts, profiles, events, escalations, authorities, settings, profileQueries: [], authorityQueries: [] };
+  const state = { reports, alerts, profiles, events, escalations, authorities, settings, smsDeliveries, profileQueries: [], authorityQueries: [] };
   return {
     state,
     async claimOutboxEvents(limit) {
@@ -109,8 +116,30 @@ export function fakeRepo({
       state.authorityQueries.push({ lga, state: reportState, limit });
       const st = typeof reportState === 'string' ? reportState.trim() : '';
       return state.authorities
-        .filter((a) => a.coverage_lga === lga && (!st || a.coverage_state == null || a.coverage_state === st))
+        .filter((a) => a.coverage_lga === lga && (a.coverage_state == null || (st && a.coverage_state === st)))
         .slice(0, limit);
+    },
+    // sms_deliveries: unique (report_id, phone); created_at from `now`.
+    async claimSmsDelivery({ reportId, phone, lga, state: st }) {
+      if (state.smsFailClaim) throw new Error('claim failed');
+      if (state.smsDeliveries.some((d) => d.report_id === reportId && d.phone === phone)) return false;
+      state.smsDeliveries.push({ report_id: reportId, phone, lga: lga ?? '', state: st ?? '', status: 'claimed', created_at: new Date(now()).toISOString() });
+      return true;
+    },
+    async setSmsDeliveryStatus(reportId, phone, status) {
+      const d = state.smsDeliveries.find((x) => x.report_id === reportId && x.phone === phone);
+      if (d) d.status = status;
+    },
+    async releaseSmsDelivery(reportId, phone) {
+      state.smsDeliveries = state.smsDeliveries.filter((x) => !(x.report_id === reportId && x.phone === phone));
+    },
+    async countSmsDeliveries({ lga, state: st, since }) {
+      return state.smsDeliveries.filter(
+        (d) => d.lga === (lga ?? '') && d.state === (st ?? '') && d.status !== 'rejected' && d.created_at >= since,
+      ).length;
+    },
+    async countReportSmsDeliveries(reportId) {
+      return state.smsDeliveries.filter((d) => d.report_id === reportId && d.status !== 'rejected').length;
     },
     async finishPendingEscalationForReport(reportId, status, reason = null) {
       const rows = state.escalations.filter((e) => e.report_id === reportId && e.status === 'pending');

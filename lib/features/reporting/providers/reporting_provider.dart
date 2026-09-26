@@ -43,7 +43,44 @@ bool isAlertSeverity(Object? raw) {
 }
 
 class ReportingProvider extends ChangeNotifier {
-  ReportingProvider();
+  ReportingProvider({
+    SupabaseService? db,
+    OfflineStorageService? offlineStorage,
+  }) : _db = db ?? SupabaseService(),
+       _offline = offlineStorage ?? OfflineStorageService();
+
+  /// Upper bound for one photo upload; a stalled upload is treated like a
+  /// lost connection (the report is kept for offline sync).
+  static const Duration photoUploadTimeout = Duration(seconds: 60);
+
+  /// Storage object path of photo [index] of report [reportId]. Deterministic
+  /// so a retried upload (online retry or offline sync) reuses an object an
+  /// earlier attempt already stored instead of orphaning it.
+  static String reportPhotoStoragePath(
+    String uid,
+    String reportId,
+    int index,
+    String fileName,
+  ) => '$uid/${reportId}_${index}_$fileName';
+
+  /// Storage path for photo [index] of [draft] when synced as [uid]: the
+  /// path recorded by an interrupted online submission (so already uploaded
+  /// photos are reused), else the default for [reportId].
+  static String draftPhotoStoragePath(
+    Map<String, dynamic> draft, {
+    required String uid,
+    required String reportId,
+    required int index,
+    required String fileName,
+  }) {
+    final recorded = draft['imageStoragePaths'];
+    if (recorded is List && index < recorded.length) {
+      final path = recorded[index];
+      // Storage RLS only allows the uploader's own folder.
+      if (path is String && path.startsWith('$uid/')) return path;
+    }
+    return reportPhotoStoragePath(uid, reportId, index, fileName);
+  }
 
   /// Maximum length of the free-text description.
   static const int maxDescriptionLength = 500;
@@ -52,7 +89,8 @@ class ReportingProvider extends ChangeNotifier {
   /// address fields at 500 characters).
   static const int maxLocationDetailsLength = 500;
 
-  final SupabaseService _db = SupabaseService();
+  final SupabaseService _db;
+  final OfflineStorageService _offline;
   final ImagePicker _picker = ImagePicker();
 
   String? _hazardType;
@@ -243,7 +281,7 @@ class ReportingProvider extends ChangeNotifier {
       final hasInternet = context.read<ConnectivityProvider>().isOnline;
 
       if (!hasInternet) {
-        final draftId = await OfflineStorageService().saveDraft(
+        final draftId = await _offline.saveDraft(
           userId: uid,
           hazardType: _hazardType!,
           severity: _severity!,
@@ -273,16 +311,53 @@ class ReportingProvider extends ChangeNotifier {
       // Upload images to the report-images bucket (path must start with the
       // user id — storage RLS).
       final List<String> imageUrls = [];
-      for (int i = 0; i < _photos.length; i++) {
-        final photo = _photos[i];
-        final file = File(photo.path);
-        final fileName = photo.name;
-        final url = await _db.uploadFileFromPath(
-          bucketId: AppConfig.reportImagesBucket,
-          storagePath: '$uid/${docId}_${i}_$fileName',
-          file: file,
+      final storagePaths = [
+        for (int i = 0; i < _photos.length; i++)
+          reportPhotoStoragePath(uid, docId, i, _photos[i].name),
+      ];
+      try {
+        for (int i = 0; i < _photos.length; i++) {
+          final url = await _db
+              .uploadFileFromPath(
+                bucketId: AppConfig.reportImagesBucket,
+                storagePath: storagePaths[i],
+                file: File(_photos[i].path),
+              )
+              .timeout(photoUploadTimeout);
+          imageUrls.add(url);
+        }
+      } on Exception catch (e) {
+        // The connection dropped while uploading photos: keep the report
+        // with its local photos for offline sync (like an offline
+        // submission). The draft keeps this report's id and storage paths,
+        // so the sync reuses photos uploaded before the failure (no orphans)
+        // and a retried sync never creates a second report.
+        if (!isTransientNetworkError(e)) rethrow;
+        developer.log('Photo upload failed, saved for sync: $e');
+        await _offline.saveDraft(
+          userId: uid,
+          reportId: docId,
+          hazardType: _hazardType!,
+          severity: _severity!,
+          locationDetails: _locationDetails!,
+          latitude: _latitude,
+          longitude: _longitude,
+          description: _description,
+          reportDateTime: _reportDateTime,
+          imagePaths: _photos.map((p) => p.path).toList(),
+          imageStoragePaths: storagePaths,
+          ward: _ward,
+          lga: _lga,
+          state: state,
         );
-        imageUrls.add(url);
+        reset();
+        _isLoading = false;
+        notifyListeners();
+        return {
+          'success': false,
+          'message': (AppLocalizations l) => l.reportQueuedServerUnreachable,
+          'queued': true,
+        };
       }
 
       final reportData = {
@@ -331,10 +406,7 @@ class ReportingProvider extends ChangeNotifier {
         // (RLS, constraint violation, bad value) would fail again on every
         // retry, so it is reported to the user instead.
         if (!isTransientNetworkError(e)) rethrow;
-        await OfflineStorageService().addToSyncQueue({
-          ...reportData,
-          'docId': docId,
-        });
+        await _offline.addToSyncQueue({...reportData, 'docId': docId});
         reset();
         _isLoading = false;
         notifyListeners();
@@ -384,7 +456,7 @@ class ReportingProvider extends ChangeNotifier {
     int successCount = 0, failCount = 0;
 
     try {
-      final offlineService = OfflineStorageService();
+      final offlineService = _offline;
       final uid = _db.currentUserId;
       if (uid == null) throw AuthException((l) => l.authErrorNotLoggedIn);
 
@@ -406,12 +478,14 @@ class ReportingProvider extends ChangeNotifier {
       for (final draft in drafts) {
         try {
           final draftId = draft['id'] as String;
-          // Drafts have millisecond ids; derive a stable UUID so a retried
-          // sync of the same draft never creates a duplicate report.
-          final reportId = const Uuid().v5(
-            Namespace.url.value,
-            'draft:$uid:$draftId',
-          );
+          // A draft saved by an interrupted online submission keeps that
+          // report's id. Other drafts have millisecond ids; derive a stable
+          // UUID so a retried sync of the same draft never creates a
+          // duplicate report.
+          final savedReportId = draft['reportId'];
+          final reportId = savedReportId is String && savedReportId.isNotEmpty
+              ? savedReportId
+              : const Uuid().v5(Namespace.url.value, 'draft:$uid:$draftId');
           final List<String> imageUrls = [];
           if (draft['imagePaths'] != null) {
             final paths = (draft['imagePaths'] as List).cast<String>();
@@ -421,7 +495,13 @@ class ReportingProvider extends ChangeNotifier {
                 final fileName = path.split('/').last;
                 final url = await _db.uploadFileFromPath(
                   bucketId: AppConfig.reportImagesBucket,
-                  storagePath: '$uid/${reportId}_${i}_$fileName',
+                  storagePath: draftPhotoStoragePath(
+                    draft,
+                    uid: uid,
+                    reportId: reportId,
+                    index: i,
+                    fileName: fileName,
+                  ),
                   file: File(path),
                 );
                 imageUrls.add(url);

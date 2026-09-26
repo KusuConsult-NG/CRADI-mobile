@@ -2300,19 +2300,6 @@ class AppLocalizationsPcm extends AppLocalizations {
   String get profileAskAdminArea => 'Tell admin make dem change your area';
 
   @override
-  String get profileVerifyAccount => 'Confam Account';
-
-  @override
-  String get profileVerifyAccountBody =>
-      'Put di Access Code wey we send to your email to confam your account.';
-
-  @override
-  String get profileAccessCode => 'Access Code';
-
-  @override
-  String get profileAccessCodeHint => 'e.g., ABC-123';
-
-  @override
   String get commonNotAvailable => 'N/A';
 
   @override
@@ -2325,9 +2312,6 @@ class AppLocalizationsPcm extends AppLocalizations {
 
   @override
   String get profileUnverified => 'Never Confam';
-
-  @override
-  String get profileVerifyNow => 'Confam Now';
 
   @override
   String get profileStatReports => 'Reports';

@@ -2288,19 +2288,6 @@ class AppLocalizationsIg extends AppLocalizations {
   String get profileAskAdminArea => 'Rịọ onye nchịkwa ka ọ gbanwee mpaghara gị';
 
   @override
-  String get profileVerifyAccount => 'Nyochaa Akaụntụ';
-
-  @override
-  String get profileVerifyAccountBody =>
-      'Tinye Koodu Nbanye e zigara na imel gị iji nyochaa akaụntụ gị.';
-
-  @override
-  String get profileAccessCode => 'Koodu Nbanye';
-
-  @override
-  String get profileAccessCodeHint => 'dịka, ABC-123';
-
-  @override
   String get commonNotAvailable => 'Ọ dịghị';
 
   @override
@@ -2313,9 +2300,6 @@ class AppLocalizationsIg extends AppLocalizations {
 
   @override
   String get profileUnverified => 'Enyochabeghị';
-
-  @override
-  String get profileVerifyNow => 'Nyochaa Ugbu a';
 
   @override
   String get profileStatReports => 'Akụkọ';

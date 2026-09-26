@@ -109,8 +109,19 @@ curl localhost:8080/health
   `"Port Harcourt" → "port_harcourt"`, `"Obio/Akpor" → "obio_akpor"`.
   Dart equivalent: `value.toLowerCase().replaceAll(RegExp(r'[^a-z0-9_]'), '_')`.
 - Approved-report broadcasts and LGA-targeted admin alerts use the filter
-  `tag lga = sanitize(report.lga / alert.target_lga)`. Alerts with
-  `target_lga = 'All'` go to the `Total Subscriptions` segment.
+  `tag lga = sanitize(report.lga / alert.target_lga)`; a report with a `state`
+  additionally requires `tag state = sanitize(report.state)`. Alerts with
+  `target_lga = 'All'` (and no `target_state`) go to the `Total Subscriptions` segment.
+- Admin alerts with `target_state` set (LGA names repeat across states: Obi is
+  in Benue and in Nasarawa) are sent with two tag filters that OneSignal ANDs:
+  `tag lga = sanitize(target_lga)` **and** `tag state = sanitize(target_state)`;
+  with `target_lga = 'All'` only the `state` filter is used (every LGA of that
+  state). `target_state` NULL is a legacy alert and matches by LGA name only.
+  **Known limitation:** a device that has no `state` tag (an app build from
+  before the tag was set, or a profile without a state) does not match a
+  state-scoped alert and will not get its push. (The in-app Alerts list is
+  filtered from the profile, not the tags: current builds match LGA and state,
+  older builds match the LGA name only.)
 - Push `data` payloads (use `type` to route taps in the app):
 
   | type | fields |
@@ -183,7 +194,8 @@ Handlers:
 - **report_status_changed**: the reporter gets a status update (verified /
   approved / rejected / pending; the rejection reason is *not* pushed — "open
   the app for details"). On a transition **into** `approved`, users tagged with
-  the report's LGA get a generic "🚨 Verified Hazard Alert".
+  the report's LGA (and, when the report has a `state`, also tagged with that
+  state, since LGA names repeat across states) get a generic "🚨 Verified Hazard Alert".
   On that same transition, local authorities are texted (see *Authority SMS*).
 - **report_disputed**: if the report is still `pending` and not yet escalated,
   it is escalated (`escalated = true, escalated_at, escalation_reason =
@@ -197,8 +209,9 @@ Handlers:
   second dispute event never re-notifies an escalation made by the first. The escalation cron skips reports already escalated for
   another reason.
 - **user_access_changed**: applies (`ban_duration: 876000h`) or lifts (`none`) the Supabase Auth ban to match the profile's current `is_disabled`, so blocking from the mobile admin screen also stops sign-in.
-- **alert_created**: title/message of the alert to everyone (`All`) or to the
-  LGA tag.
+- **alert_created**: title/message of the alert to everyone (`All`), to the
+  LGA tag, or (when `target_state` is set) to devices tagged with both that LGA
+  and that state.
 
 Blocked / deleted users: recipient lookups only select approved profiles with
 `is_disabled = false`, and a deleted user's profile (and reports) are gone, so
@@ -234,12 +247,23 @@ truncated to 320 characters (the description is shortened with `...`).
   Nasarawa), so an authority with `coverage_state` set is texted only for
   reports in that state. Rows with `coverage_state` NULL (legacy, created before
   the column existed) still match every same-named LGA until an admin edits
-  them and picks the state. A report with no `state` matches by LGA name only.
-- Daily cap: `app_settings.max_sms_per_lga_per_day` (default 50) successful SMS
-  per (state, LGA) per day (Africa/Lagos day), counted in memory per instance.
-- Dedupe: once a report's SMS round completes it is never texted again by this
-  instance; if every send fails the event is retried (outbox backoff) and
-  numbers that already received the SMS are not texted again.
+  them and picks the state. A report with no `state` only matches rows with
+  `coverage_state` NULL (logged as `sms.report_without_state`).
+- Persisted in `public.sms_deliveries` (service role only), so restarts and
+  replicas agree: a `claimed` row per (report, phone) is inserted before each
+  send; a conflict means already texted and the number is skipped. Success sets
+  `sent`; a number the provider refuses (Twilio 400 with a recipient error code
+  such as 21211/21408/21610/21612/21614, or Termii's invalid-number / DND
+  replies) is kept as `rejected` and not retried; any other failure deletes the
+  claim and the event is retried (outbox backoff), texting only the missing
+  numbers. 401/402/403 (credentials, balance, suspended account) are retried
+  and logged as `sms.provider_account_error`.
+- Daily cap: `app_settings.max_sms_per_lga_per_day` (default 50) SMS per
+  (state, LGA) per Africa/Lagos day, counted from `sms_deliveries` rows.
+- Per-event cap: `app_settings.max_sms_per_alert_event` (default 20) SMS per
+  report, counted across retries.
+- On an approval the reporter push, the LGA broadcast and the authority SMS are
+  each attempted even if another fails; any failure retries the event.
 - Providers (isolated in `src/sms/providers.js`, 15 s timeout):
   - `termii`: `POST https://api.ng.termii.com/api/sms/send`, JSON
     `{api_key, to: "234…", from: SMS_SENDER_ID, sms, type: "plain", channel: "generic"}`;
@@ -247,9 +271,8 @@ truncated to 320 characters (the description is shortened with `...`).
     form `To, From, Body`, basic auth `SID:token`.
   - unset: logged (`sms.skipped_not_configured`) and skipped; nothing fails.
 
-The counters and dedupe set are in memory: a restart resets the daily cap and
-forgets completed reports (the outbox has already marked those events processed,
-so they are not replayed).
+A crash between claiming and sending leaves the `claimed` row, so that number
+is skipped rather than risk a double text.
 
 ## Escalation cron
 

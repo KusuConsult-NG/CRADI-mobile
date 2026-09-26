@@ -551,10 +551,10 @@ class AppLocalizationsHa extends AppLocalizations {
   String get locationDetailsTitle => 'Bayanan Wuri';
 
   @override
-  String get latitudeLabel => 'Latitude';
+  String get latitudeLabel => 'Layin Faɗi';
 
   @override
-  String get longitudeLabel => 'Longitude';
+  String get longitudeLabel => 'Layin Tsawo';
 
   @override
   String get accuracyLabel => 'Daidaito';
@@ -1068,7 +1068,7 @@ class AppLocalizationsHa extends AppLocalizations {
   String get biometricTypeIris => 'Ƙwayar Ido';
 
   @override
-  String get biometricTypeGeneric => 'Biometric';
+  String get biometricTypeGeneric => 'Tantance Jiki';
 
   @override
   String get authErrorEmailRegistered =>
@@ -2318,19 +2318,6 @@ class AppLocalizationsHa extends AppLocalizations {
   String get profileAskAdminArea => 'Nemi mai gudanarwa ya canza yankinka';
 
   @override
-  String get profileVerifyAccount => 'Tabbatar da Asusu';
-
-  @override
-  String get profileVerifyAccountBody =>
-      'Shigar da Lambar Shiga da aka aika zuwa imel ɗinka don tabbatar da asusunka.';
-
-  @override
-  String get profileAccessCode => 'Lambar Shiga';
-
-  @override
-  String get profileAccessCodeHint => 'misali, ABC-123';
-
-  @override
   String get commonNotAvailable => 'Babu';
 
   @override
@@ -2343,9 +2330,6 @@ class AppLocalizationsHa extends AppLocalizations {
 
   @override
   String get profileUnverified => 'Ba a Tabbatar ba';
-
-  @override
-  String get profileVerifyNow => 'Tabbatar Yanzu';
 
   @override
   String get profileStatReports => 'Rahotanni';

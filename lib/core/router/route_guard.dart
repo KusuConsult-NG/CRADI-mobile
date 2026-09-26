@@ -122,11 +122,24 @@ String? _redirectOnce(RouteGuardState s, Uri uri) {
 
   final isPublic = kPublicRoutes.contains(path);
 
-  // 1. Offline.
+  // 1. Biometric lock — before the offline step, so a locked user never
+  //    reaches the offline screen (drafts / queued reports) or any other
+  //    protected route. Everything but the non-entry public routes goes to
+  //    the lock screen (/login renders it while locked). Splash is handled
+  //    below (it forwards to the lock screen, keeping `from`).
+  if (s.isAuthenticated && s.isLocked && path != '/' && path != '/splash') {
+    if (path == '/login') return null;
+    if (path == '/offline' || kAuthEntryRoutes.contains(path)) return '/login';
+    if (isPublic) return null;
+    final from = sanitizeRedirectTarget(location);
+    return from == null ? '/login' : _withFrom('/login', from);
+  }
+
+  // 2. Offline.
   if (s.isOffline && !isOfflineAllowed(path)) return '/offline';
   if (!s.isOffline && path == '/offline') return '/dashboard';
 
-  // 2. Leave the splash once initialized.
+  // 3. Leave the splash once initialized.
   if (path == '/' || path == '/splash') {
     final from = sanitizeRedirectTarget(uri.queryParameters['from']);
     if (s.isAuthenticated) {
@@ -138,18 +151,8 @@ String? _redirectOnce(RouteGuardState s, Uri uri) {
     return s.hasCompletedOnboarding ? '/landing' : '/onboarding';
   }
 
-  // 3. Protected routes need a session.
+  // 4. Protected routes need a session.
   if (!s.isAuthenticated) {
-    if (isPublic) return null;
-    final from = sanitizeRedirectTarget(location);
-    return from == null ? '/login' : _withFrom('/login', from);
-  }
-
-  // 4. Biometric lock: everything but the non-entry public routes goes to
-  //    the lock screen (/login renders it while locked).
-  if (s.isLocked) {
-    if (path == '/login') return null;
-    if (kAuthEntryRoutes.contains(path)) return '/login';
     if (isPublic) return null;
     final from = sanitizeRedirectTarget(location);
     return from == null ? '/login' : _withFrom('/login', from);

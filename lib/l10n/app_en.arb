@@ -2936,22 +2936,6 @@
   "@profileAskAdminArea": {
     "description": "Note under the locked location fields for staff accounts."
   },
-  "profileVerifyAccount": "Verify Account",
-  "@profileVerifyAccount": {
-    "description": "Title of the account verification dialog."
-  },
-  "profileVerifyAccountBody": "Enter the Access Code sent to your email to verify your account.",
-  "@profileVerifyAccountBody": {
-    "description": "Body of the account verification dialog."
-  },
-  "profileAccessCode": "Access Code",
-  "@profileAccessCode": {
-    "description": "Label of the access code field."
-  },
-  "profileAccessCodeHint": "e.g., ABC-123",
-  "@profileAccessCodeHint": {
-    "description": "Hint of the access code field."
-  },
   "commonNotAvailable": "N/A",
   "@commonNotAvailable": {
     "description": "Shown when a value is not available."
@@ -2972,10 +2956,6 @@
   "profileUnverified": "Unverified",
   "@profileUnverified": {
     "description": "Account verification badge (max ~12 chars)."
-  },
-  "profileVerifyNow": "Verify Now",
-  "@profileVerifyNow": {
-    "description": "Button next to the unverified badge."
   },
   "profileStatReports": "Reports",
   "@profileStatReports": {

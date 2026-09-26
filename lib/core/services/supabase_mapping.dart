@@ -85,8 +85,8 @@ class SupabaseSchema {
       'id', 'report_id', 'validator_id', 'action', 'reason', 'created_at', //
     },
     'alerts': {
-      'id', 'title', 'message', 'severity', 'target_lga', 'report_id', //
-      'created_by', 'is_active', 'created_at', 'updated_at',
+      'id', 'title', 'message', 'severity', 'target_lga', 'target_state', //
+      'report_id', 'created_by', 'is_active', 'created_at', 'updated_at',
     },
     'messages': {
       'id', 'chat_id', 'sender_id', 'sender_name', 'message', 'type', //

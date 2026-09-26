@@ -27,7 +27,9 @@ export function idempotencyUuid(name) {
  *   { title, body, data }
  * Targets:
  *   sendToUsers(userIds, n, { key })          include_aliases.external_id = Supabase user uuid
- *   sendToTag(tagKey, tagValue, n, { key })    filters on an (already sanitised) tag
+ *   sendToTag(tagKey, tagValue, n, { key, andTags })  filters on an (already sanitised) tag,
+ *                                              plus optional further tags that must all match
+ *   sendToTags({ lga, state }, n, { key })     AND of several tag filters (all must match)
  *   sendToAll(n, { key })                      included_segments ['Total Subscriptions']
  * `key` is an optional string turned into an idempotency_key per request.
  */
@@ -83,6 +85,21 @@ export function createOneSignal({
     return { sent: 0, skipped: true };
   }
 
+  // OneSignal ANDs consecutive filter entries (OR needs an explicit
+  // { operator: 'OR' } between them), so one entry per tag requires every
+  // tag to match. An empty value would match nothing useful: refuse to send.
+  async function sendToTags(tags, notification, { key } = {}) {
+    const entries = Object.entries(tags ?? {});
+    if (entries.length === 0 || entries.some(([k, v]) => !k || !v)) return { sent: 0, skipped: false };
+    if (!configured) return skip(`tags:${entries.map(([k, v]) => `${k}=${v}`).join('&')}`);
+    await post(
+      { filters: entries.map(([k, v]) => ({ field: 'tag', key: k, relation: '=', value: v })) },
+      notification,
+      key,
+    );
+    return { sent: 1, skipped: false };
+  }
+
   return {
     configured,
 
@@ -101,16 +118,13 @@ export function createOneSignal({
       return { sent: chunks.length, skipped: false };
     },
 
-    async sendToTag(tagKey, tagValue, notification, { key } = {}) {
+    // `andTags` ({ state: 'benue' }) adds further tags that must also match.
+    async sendToTag(tagKey, tagValue, notification, { key, andTags } = {}) {
       if (!tagValue) return { sent: 0, skipped: false };
-      if (!configured) return skip(`tag:${tagKey}=${tagValue}`);
-      await post(
-        { filters: [{ field: 'tag', key: tagKey, relation: '=', value: tagValue }] },
-        notification,
-        key,
-      );
-      return { sent: 1, skipped: false };
+      return sendToTags({ [tagKey]: tagValue, ...andTags }, notification, { key });
     },
+
+    sendToTags,
 
     async sendToAll(notification, { key } = {}) {
       if (!configured) return skip('all');

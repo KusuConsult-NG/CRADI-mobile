@@ -10,6 +10,7 @@ import 'package:climate_app/features/verification/models/verification_report_mod
 import 'package:climate_app/features/verification/widgets/dispute_comment_dialog.dart';
 import 'package:climate_app/features/verification/widgets/verification_request_badge.dart';
 
+import 'package:climate_app/features/alerts/providers/alerts_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:go_router/go_router.dart';
@@ -73,7 +74,9 @@ class _AlertDetailScreenState extends State<AlertDetailScreen> {
   String? get _severity => _str(['severity']);
 
   String get _location =>
-      _str(['location', 'targetLga', 'target_lga']) ??
+      _str(['location']) ??
+      AlertsProvider.targetLabel(widget.alert) ??
+      _str(['targetLga', 'target_lga']) ??
       context.l10n.alertDetailNotSpecified;
 
   String get _time {

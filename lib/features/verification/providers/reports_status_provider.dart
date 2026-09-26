@@ -263,7 +263,8 @@ class ReportsStatusProvider extends ChangeNotifier {
     _isSubmitting = true;
     notifyListeners();
 
-    final defaultLocation = locationDetails ?? 'User Requested Verification';
+    final defaultLocation =
+        locationDetails ?? VerificationReport.verificationRequestLocation;
     final data = {
       'userId': userId,
       'description': description,

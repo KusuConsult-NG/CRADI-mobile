@@ -2304,19 +2304,6 @@ class AppLocalizationsYo extends AppLocalizations {
   String get profileAskAdminArea => 'Ní kí alábòójútó yí agbègbè rẹ padà';
 
   @override
-  String get profileVerifyAccount => 'Jẹ́rìísí Àkáǹtì';
-
-  @override
-  String get profileVerifyAccountBody =>
-      'Tẹ Kóòdù Ìwọlé tí a fi ránṣẹ́ sí ímeèlì rẹ láti jẹ́rìísí àkáǹtì rẹ.';
-
-  @override
-  String get profileAccessCode => 'Kóòdù Ìwọlé';
-
-  @override
-  String get profileAccessCodeHint => 'bí àpẹẹrẹ, ABC-123';
-
-  @override
   String get commonNotAvailable => 'Kò sí';
 
   @override
@@ -2329,9 +2316,6 @@ class AppLocalizationsYo extends AppLocalizations {
 
   @override
   String get profileUnverified => 'Kò Tíì Jẹ́rìísí';
-
-  @override
-  String get profileVerifyNow => 'Jẹ́rìísí Báyìí';
 
   @override
   String get profileStatReports => 'Ìròyìn';

@@ -128,11 +128,26 @@ export function validatedAlertNotification(report) {
   };
 }
 
-/** Where an admin alert goes: { all: true } or { tagKey: 'lga', tagValue }. */
+/**
+ * Where an admin alert goes: { all: true } or { all: false, tags } where `tags`
+ * is an object of (already sanitised) OneSignal tag values that must ALL match.
+ *
+ *   target_state NULL, target_lga 'All'  -> everyone
+ *   target_state NULL, target_lga X      -> { lga: X }            (legacy: X in any state)
+ *   target_state S,    target_lga 'All'  -> { state: S }          (every LGA of S)
+ *   target_state S,    target_lga X      -> { lga: X, state: S }  (X in S only; Obi exists in two states)
+ *
+ * Devices without a `state` tag (app versions that predate it, or profiles
+ * without a state) never match a state-scoped alert.
+ */
 export function alertTarget(alert) {
   const lga = String(alert?.target_lga ?? '').trim();
-  if (!lga || lga.toLowerCase() === 'all') return { all: true };
-  return { all: false, tagKey: 'lga', tagValue: sanitizeTag(lga) };
+  const state = String(alert?.target_state ?? '').trim();
+  const allLgas = !lga || lga.toLowerCase() === 'all';
+  if (!state) return allLgas ? { all: true } : { all: false, tags: { lga: sanitizeTag(lga) } };
+  const tags = allLgas ? {} : { lga: sanitizeTag(lga) };
+  tags.state = sanitizeTag(state);
+  return { all: false, tags };
 }
 
 // Admin alerts are intentionally public broadcasts, so their text is sent,

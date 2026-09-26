@@ -124,8 +124,15 @@ class OfflineStorageService {
 
   /// Save a draft report. [userId] (the signed-in author) is stored so the
   /// draft is only ever uploaded as that user.
+  ///
+  /// An online submission interrupted while uploading photos passes its
+  /// [reportId] and the [imageStoragePaths] (aligned with [imagePaths]) it
+  /// was uploading to, so the sync reuses both: no duplicate report and no
+  /// orphaned photos.
   Future<String> saveDraft({
     String? userId,
+    String? reportId,
+    List<String>? imageStoragePaths,
     required String hazardType,
     required String severity,
     required String locationDetails,
@@ -146,6 +153,7 @@ class OfflineStorageService {
     }
 
     final draftId = DateTime.now().millisecondsSinceEpoch.toString();
+    final persistedImages = await _persistImages(imagePaths);
     final draft = {
       'id': draftId,
       'userId': userId,
@@ -162,7 +170,13 @@ class OfflineStorageService {
       'reportDateTime': (reportDateTime ?? DateTime.now())
           .toUtc()
           .toIso8601String(),
-      'imagePaths': await _persistImages(imagePaths),
+      'imagePaths': persistedImages,
+      'reportId': ?reportId,
+      // Only while still aligned with the stored images (a photo that
+      // vanished meanwhile is dropped by _persistImages).
+      if (imageStoragePaths != null &&
+          imageStoragePaths.length == persistedImages.length)
+        'imageStoragePaths': imageStoragePaths,
       'createdAt': DateTime.now().toIso8601String(),
       'status': 'draft',
     };

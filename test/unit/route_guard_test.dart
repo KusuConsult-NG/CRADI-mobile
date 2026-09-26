@@ -140,6 +140,42 @@ void main() {
     });
   });
 
+  group('locked while offline', () {
+    final s = guard(locked: true, offline: true);
+
+    test('the offline screen is never shown to a locked user', () {
+      expect(go(s, '/offline'), '/login');
+      expect(go(guard(locked: true), '/offline'), '/login');
+    });
+
+    test('protected routes go to the lock screen, not /offline', () {
+      expect(go(s, '/dashboard'), '/login?from=%2Fdashboard');
+      expect(go(s, '/reports-status'), '/login?from=%2Freports-status');
+    });
+
+    test('offline-allowed sections are locked too', () {
+      expect(go(s, '/report'), '/login?from=%2Freport');
+      expect(go(s, '/settings'), '/login?from=%2Fsettings');
+      expect(
+        go(s, '/knowledge-base/guides'),
+        '/login?from=${Uri.encodeComponent('/knowledge-base/guides')}',
+      );
+    });
+
+    test('splash resolves to the lock screen', () {
+      expect(go(s, '/splash'), '/login');
+      expect(
+        go(s, '/splash?from=%2Freport%2Fr1'),
+        '/login?from=%2Freport%2Fr1',
+      );
+    });
+
+    test('the lock screen itself stays put', () {
+      expect(go(s, '/login'), isNull);
+      expect(go(s, '/register'), '/login');
+    });
+  });
+
   group('signed out', () {
     final s = guard(authenticated: false);
 

@@ -74,7 +74,16 @@ class _VerificationRequestScreenState extends State<VerificationRequestScreen> {
       if (!mounted) return;
       final messenger = ScaffoldMessenger.of(context);
       final l10n = context.l10n;
-      final navigator = Navigator.of(context);
+      final router = GoRouter.of(context);
+      // Deep-linked (nothing below): go to the verification list instead.
+      void leave() {
+        if (router.canPop()) {
+          router.pop();
+        } else {
+          router.go('/verification');
+        }
+      }
+
       try {
         await context.read<ReportsStatusProvider>().submitVerificationRequest(
           userId: user.id,
@@ -90,11 +99,11 @@ class _VerificationRequestScreenState extends State<VerificationRequestScreen> {
         messenger.showSnackBar(
           SnackBar(content: Text(l10n.verificationRequestSubmitted)),
         );
-        if (mounted) navigator.pop();
+        if (mounted) leave();
       } on OfflineQueuedException catch (e) {
         // Saved to the sync queue: it will be uploaded automatically.
         messenger.showSnackBar(SnackBar(content: Text(e.message(l10n))));
-        if (mounted) navigator.pop();
+        if (mounted) leave();
       }
     } on Exception catch (e) {
       if (mounted) {

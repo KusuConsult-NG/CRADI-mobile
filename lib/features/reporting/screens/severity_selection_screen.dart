@@ -7,7 +7,11 @@ import 'package:climate_app/shared/widgets/custom_button.dart';
 import 'package:climate_app/core/l10n/l10n.dart';
 
 class SeveritySelectionScreen extends StatefulWidget {
-  const SeveritySelectionScreen({super.key});
+  const SeveritySelectionScreen({super.key, this.returnToReview = false});
+
+  /// Opened from the review screen's "Edit" link: Continue pops back to the
+  /// review instead of pushing the rest of the wizard again.
+  final bool returnToReview;
 
   @override
   State<SeveritySelectionScreen> createState() =>
@@ -16,6 +20,16 @@ class SeveritySelectionScreen extends StatefulWidget {
 
 class _SeveritySelectionScreenState extends State<SeveritySelectionScreen> {
   SeverityLevel _currentLevel = SeverityLevel.low;
+
+  @override
+  void initState() {
+    super.initState();
+    // Start from the severity already chosen (e.g. when editing from review).
+    final saved = context.read<ReportingProvider>().severity;
+    for (final level in SeverityLevel.values) {
+      if (level.name == saved) _currentLevel = level;
+    }
+  }
 
   Color _getColor(SeverityLevel level) {
     switch (level) {
@@ -109,7 +123,11 @@ class _SeveritySelectionScreenState extends State<SeveritySelectionScreen> {
                   context.read<ReportingProvider>().setSeverity(
                     _currentLevel.name,
                   );
-                  context.push('/report/location');
+                  if (widget.returnToReview) {
+                    context.pop();
+                  } else {
+                    context.push('/report/location');
+                  }
                 },
                 text: l10n.nextLocation,
               ),

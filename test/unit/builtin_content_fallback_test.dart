@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:climate_app/core/l10n/l10n.dart';
@@ -43,7 +44,7 @@ void main() {
 
     test('online: rows are shown and the unfiltered list is cached', () async {
       final p = provider(
-        (_) async => [
+        () async => [
           row('1', 'flood', imageUrl: 'https://cdn.example.org/a.jpg'),
           row('2', 'fire'),
         ],
@@ -57,7 +58,7 @@ void main() {
     });
 
     test('no stock image is substituted for a guide without one', () async {
-      final p = provider((_) async => [row('1', 'flood', imageUrl: '')]);
+      final p = provider(() async => [row('1', 'flood', imageUrl: '')]);
       await p.fetchGuides();
       final guide = p.guides.single;
       expect(guide['imageUrl'], isNull);
@@ -70,7 +71,7 @@ void main() {
 
     test('an empty table is an empty list, and is cached', () async {
       cache = [row('old', 'flood')];
-      final p = provider((_) async => []);
+      final p = provider(() async => []);
       await p.fetchGuides();
       expect(p.error, isNull);
       expect(p.guides, isEmpty);
@@ -79,23 +80,89 @@ void main() {
     });
 
     test('category lists are not cached', () async {
-      String? requested;
-      final p = provider((hazard) async {
-        requested = hazard;
-        return [row('1', 'flood')];
-      });
+      final p = provider(() async => [row('1', 'flood')]);
       await p.fetchGuides(category: 'Flood');
-      expect(requested, 'flood');
       expect(p.guidesFor('Flood'), hasLength(1));
       expect(cacheWrites, 0);
     });
+
+    test('online category tabs match hazard type, label and aliases like '
+        'the offline filter', () async {
+      final rows = [
+        row('1', 'flood'),
+        {...row('2', 'Flooding'), 'category': null},
+        {...row('3', ''), 'hazardType': null, 'category': 'Flood'},
+        row('4', 'fire'),
+        {...row('5', 'FLOODS'), 'category': 'floods'},
+      ];
+      final p = provider(() async => rows);
+      await p.fetchGuides(category: 'Flood');
+      expect(p.guidesFor('Flood').map((g) => g['id']), ['1', '2', '3', '5']);
+      await p.fetchGuides(category: 'fire');
+      expect(p.guidesFor('Fire').map((g) => g['id']), ['4']);
+
+      // Same result as the offline (cached) filter.
+      await p.fetchGuides();
+      final offline = provider(() async => throw Exception('offline'));
+      await offline.fetchGuides(category: 'Flood');
+      expect(
+        offline.guidesFor('Flood').map((g) => g['id']),
+        p.guidesFor('Flood').map((g) => g['id']),
+      );
+    });
+
+    test('overlapping fetches: a superseded result is dropped and loading '
+        'ends only with the latest request', () async {
+      final first = Completer<List<Map<String, dynamic>>>();
+      final second = Completer<List<Map<String, dynamic>>>();
+      final pending = [first, second];
+      final p = provider(() => pending.removeAt(0).future);
+
+      final a = p.fetchGuides(category: 'Flood');
+      final b = p.fetchGuides(category: 'Flood');
+      expect(p.isLoadingCategory('Flood'), isTrue);
+
+      // The newer request answers first.
+      second.complete([row('new', 'flood')]);
+      await b;
+      expect(p.isLoadingCategory('Flood'), isFalse);
+      expect(p.guidesFor('Flood').map((g) => g['id']), ['new']);
+
+      // The stale answer arrives later and is ignored.
+      first.complete([row('stale', 'flood')]);
+      await a;
+      expect(p.guidesFor('Flood').map((g) => g['id']), ['new']);
+      expect(p.isLoadingCategory('Flood'), isFalse);
+    });
+
+    test(
+      'a superseded request does not end the latest one\'s loading',
+      () async {
+        final first = Completer<List<Map<String, dynamic>>>();
+        final second = Completer<List<Map<String, dynamic>>>();
+        final pending = [first, second];
+        final p = provider(() => pending.removeAt(0).future);
+
+        final a = p.fetchGuides();
+        final b = p.fetchGuides();
+        first.completeError(Exception('timeout'));
+        await a;
+        expect(p.isLoading, isTrue);
+        expect(p.error, isNull);
+
+        second.complete([row('1', 'flood')]);
+        await b;
+        expect(p.isLoading, isFalse);
+        expect(p.guides.map((g) => g['id']), ['1']);
+      },
+    );
 
     test('fetch error: the cache is served, marked offline', () async {
       cache = [
         {...row('1', 'flood'), 'id': '1', 'isOffline': false},
         {...row('2', 'fire'), 'id': '2', 'isOffline': false},
       ];
-      final p = provider((_) async => throw Exception('offline'));
+      final p = provider(() async => throw Exception('offline'));
       await p.fetchGuides();
       expect(p.error, isNull);
       expect(p.guides.map((g) => g['id']), ['1', '2']);
@@ -108,14 +175,14 @@ void main() {
 
     test('fetch error with an empty cache: empty list, no error', () async {
       cache = [];
-      final p = provider((_) async => throw Exception('offline'));
+      final p = provider(() async => throw Exception('offline'));
       await p.fetchGuides();
       expect(p.error, isNull);
       expect(p.guides, isEmpty);
     });
 
     test('fetch error and no cache: load error, nothing bundled', () async {
-      final p = provider((_) async => throw Exception('offline'));
+      final p = provider(() async => throw Exception('offline'));
       await p.fetchGuides();
       expect(p.guides, isEmpty);
       expect(p.error, isNotNull);
@@ -124,7 +191,7 @@ void main() {
 
     test('an unreadable cache counts as no cache', () async {
       final p = KnowledgeProvider(
-        fetchRows: (_) async => throw Exception('offline'),
+        fetchRows: () async => throw Exception('offline'),
         writeCache: (_) async {},
         readCache: () => throw Exception('Hive not initialized'),
       );
@@ -258,6 +325,57 @@ void main() {
       expect(p.error, isNull);
       expect(p.newsItems, curated);
     });
+
+    test('ReliefWeb payload with a non-list "data" is a FormatException, '
+        'not a TypeError', () {
+      expect(
+        () => NewsService.parseReliefWebBody('{"data": {"oops": 1}}'),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => NewsService.parseReliefWebBody('{"data": "x"}'),
+        throwsA(isA<FormatException>()),
+      );
+      expect(NewsService.parseReliefWebBody('{"totalCount": 0}'), isEmpty);
+      expect(NewsService.parseReliefWebBody('[]'), isEmpty);
+      final items = NewsService.parseReliefWebBody(
+        '{"data": [{"id": 7, "fields": {"title": "T", "url": "https://r/7"}},'
+        ' "junk"]}',
+      );
+      expect(items.single['id'], 7);
+      expect(items.single['url'], 'https://r/7');
+    });
+
+    test('a source throwing an Error falls through to the next one', () async {
+      final s = NewsService(
+        fetchLiveFeed: (_) async => throw TypeError(),
+        fetchCuratedLinks: (_) async => curated,
+      );
+      expect(await s.fetchLatestNews(), curated);
+    });
+
+    test('NewsProvider always ends loading, even on an Error', () async {
+      final p = NewsProvider(
+        newsService: NewsService(
+          fetchLiveFeed: (_) async => throw TypeError(),
+          fetchCuratedLinks: (_) async => throw StateError('bad row'),
+        ),
+      );
+      await p.fetchNews();
+      expect(p.isLoading, isFalse);
+      expect(p.newsItems, isEmpty);
+      expect(p.error, isNotNull);
+    });
+
+    test(
+      'NewsProvider ends loading when the service itself throws an Error',
+      () async {
+        final p = NewsProvider(newsService: _ThrowingNewsService());
+        await p.fetchNews();
+        expect(p.isLoading, isFalse);
+        expect(p.error, isNotNull);
+      },
+    );
   });
 
   test('reading time is estimated from the text', () {
@@ -265,4 +383,10 @@ void main() {
     expect(readingMinutes('a few words'), 1);
     expect(readingMinutes(List.filled(450, 'word').join(' ')), 3);
   });
+}
+
+class _ThrowingNewsService extends NewsService {
+  @override
+  Future<List<Map<String, dynamic>>> fetchLatestNews({int limit = 10}) async =>
+      throw TypeError();
 }

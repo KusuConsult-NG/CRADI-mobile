@@ -27,6 +27,10 @@ class RemoteConfigService {
   static const String _cacheKey = 'app_settings_cache';
   static const Duration _refreshInterval = Duration(hours: 1);
 
+  /// Minimum age of the cached values before a reconnect refetches them
+  /// (connectivity can flap; a successful fetch this recent is kept).
+  static const Duration _reconnectRefreshInterval = Duration(minutes: 5);
+
   // ── In-app defaults ───────────────────────────────────────────────────────
   static const Map<String, Object> _defaults = {
     'minimum_peer_confirmations': 2,
@@ -118,18 +122,49 @@ class RemoteConfigService {
     _checkMinVersion();
   }
 
-  /// Fetch all settings from `app_settings` (at most once per hour unless
-  /// [force] is set). Never throws.
-  Future<void> refresh({bool force = false}) {
+  /// Whether values last fetched at [lastFetch] should be refetched at
+  /// [now]: always when [force] is set or nothing was fetched yet (a failed
+  /// fetch does not count), otherwise once they are [maxAge] old.
+  @visibleForTesting
+  static bool isRefreshDue({
+    required DateTime? lastFetch,
+    required DateTime now,
+    bool force = false,
+    Duration maxAge = _refreshInterval,
+  }) {
+    if (force || lastFetch == null) return true;
+    return now.difference(lastFetch) >= maxAge;
+  }
+
+  /// Fetch all settings from `app_settings` (at most once per [maxAge],
+  /// hourly by default, unless [force] is set). Concurrent calls share one
+  /// request. Never throws.
+  Future<void> refresh({
+    bool force = false,
+    Duration maxAge = _refreshInterval,
+  }) {
     if (!SupabaseService.isReady) return Future<void>.value();
-    final last = _lastFetch;
-    if (!force &&
-        last != null &&
-        DateTime.now().difference(last) < _refreshInterval) {
+    if (!isRefreshDue(
+      lastFetch: _lastFetch,
+      now: DateTime.now(),
+      force: force,
+      maxAge: maxAge,
+    )) {
       return Future<void>.value();
     }
     return _inFlight ??= _fetch().whenComplete(() => _inFlight = null);
   }
+
+  /// The app came back to the foreground: hourly refresh.
+  Future<void> refreshOnResume() => refresh();
+
+  /// Connectivity was restored: refetch unless the values are only a few
+  /// minutes old (the previous attempt probably failed while offline).
+  Future<void> refreshOnReconnect() =>
+      refresh(maxAge: _reconnectRefreshInterval);
+
+  /// A user signed in: settings are refetched for the new session.
+  Future<void> refreshOnSignIn() => refresh(force: true);
 
   Future<void> _fetch() async {
     try {

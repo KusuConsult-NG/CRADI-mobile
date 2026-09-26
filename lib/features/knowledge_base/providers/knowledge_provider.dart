@@ -6,10 +6,8 @@ import 'package:flutter/material.dart';
 import 'dart:developer' as developer;
 import 'package:climate_app/core/l10n/l10n.dart';
 
-/// Loads knowledge_base rows (app-shaped maps) for a hazard type, or all rows
-/// when [hazardType] is null.
-typedef GuideRowsFetcher =
-    Future<List<Map<String, dynamic>>> Function(String? hazardType);
+/// Loads the knowledge_base rows (app-shaped maps, newest first).
+typedef GuideRowsFetcher = Future<List<Map<String, dynamic>>> Function();
 
 /// Guides are admin-managed in the `knowledge_base` table. The last
 /// successful unfiltered list is cached on the device (Hive) and served,
@@ -27,15 +25,10 @@ class KnowledgeProvider extends ChangeNotifier {
   final Future<void> Function(List<Map<String, dynamic>> guides) _writeCache;
   final List<Map<String, dynamic>>? Function() _readCache;
 
-  static Future<List<Map<String, dynamic>>> _fetchFromSupabase(
-    String? hazardType,
-  ) {
+  static Future<List<Map<String, dynamic>>> _fetchFromSupabase() {
     return SupabaseService().listDocuments(
       collectionId: AppConfig.knowledgeBaseCollection,
-      queries: <QueryFilter>[
-        if (hazardType != null) FQuery.equal('hazardType', hazardType),
-        FQuery.orderDesc('updatedAt'),
-      ],
+      queries: <QueryFilter>[FQuery.orderDesc('updatedAt')],
       limitCount: 100,
     );
   }
@@ -73,21 +66,29 @@ class KnowledgeProvider extends ChangeNotifier {
 
   LocalizedText? errorFor(String? category) => _errors[_key(category)];
 
+  /// Latest request per category key; results of superseded (overlapping)
+  /// requests are dropped.
+  final Map<String, int> _requestIds = {};
+
+  /// Loads the guides of [category] (default: all).
+  ///
+  /// Category tabs are filtered on the device with [guideMatchesCategory]
+  /// (hazard type, label and aliases, any case), exactly like the offline
+  /// fallback: rows stored with a variant spelling (e.g. 'Flooding') would
+  /// be missed by an exact `hazard_type` filter on the server.
   Future<void> fetchGuides({String? category}) async {
     final key = _key(category);
-    final cat = key == allKnowledgeCategories
-        ? null
-        : knowledgeCategoryFor(key);
+    final requestId = (_requestIds[key] ?? 0) + 1;
+    _requestIds[key] = requestId;
+    bool isLatest() => _requestIds[key] == requestId;
+
     _loading.add(key);
     _errors[key] = null;
     notifyListeners();
 
     try {
-      final docs = await _fetchRows(
-        key == allKnowledgeCategories
-            ? null
-            : (cat?.hazardType ?? key.toLowerCase()),
-      );
+      final docs = await _fetchRows();
+      if (!isLatest()) return;
       final result = docs.map(_fromRow).toList();
       // Only the unfiltered list is cached (so the offline fallback can
       // serve every category from it). An empty result is cached too, so
@@ -98,13 +99,17 @@ class KnowledgeProvider extends ChangeNotifier {
         } on Object catch (e) {
           developer.log('Guide cache failed: $e', name: 'KnowledgeProvider');
         }
+        if (!isLatest()) return;
       }
       developer.log(
         'Fetched ${result.length} guides ($key) from Supabase',
         name: 'KnowledgeProvider',
       );
-      _guidesByCategory[key] = result;
+      _guidesByCategory[key] = result
+          .where((g) => guideMatchesCategory(g, key))
+          .toList();
     } on Exception catch (e) {
+      if (!isLatest()) return;
       developer.log(
         'Guide fetch failed, trying the offline cache: $e',
         name: 'KnowledgeProvider',
@@ -124,8 +129,11 @@ class KnowledgeProvider extends ChangeNotifier {
         _errors[key] = (l) => l.knowledgeLoadError;
       }
     } finally {
-      _loading.remove(key);
-      notifyListeners();
+      // Only the latest request ends the loading state.
+      if (isLatest()) {
+        _loading.remove(key);
+        notifyListeners();
+      }
     }
   }
 

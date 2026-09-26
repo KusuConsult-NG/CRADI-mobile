@@ -2,6 +2,7 @@ import 'package:climate_app/core/theme/app_colors.dart';
 import 'package:climate_app/features/reporting/widgets/osm_location_picker.dart';
 import 'package:climate_app/core/data/mvp_locations_data.dart';
 import 'package:flutter/material.dart';
+import 'package:climate_app/shared/widgets/dispose_controllers_on_unmount.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:latlong2/latlong.dart';
@@ -22,7 +23,11 @@ import 'package:climate_app/core/l10n/l10n.dart';
 enum _PositionSource { gps, lastKnown, manual, geocoded }
 
 class LocationPickerScreen extends StatefulWidget {
-  const LocationPickerScreen({super.key});
+  const LocationPickerScreen({super.key, this.returnToReview = false});
+
+  /// Opened from the review screen's "Edit" link: Continue pops back to the
+  /// review instead of pushing the rest of the wizard again.
+  final bool returnToReview;
 
   @override
   State<LocationPickerScreen> createState() => _LocationPickerScreenState();
@@ -98,6 +103,12 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
   String _areaText(String? value, String unknown) {
     if (value == null) return context.l10n.commonLoading;
     return value.isEmpty ? unknown : value;
+  }
+
+  @override
+  void dispose() {
+    _mapController.dispose();
+    super.dispose();
   }
 
   @override
@@ -1356,59 +1367,67 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                   Center(
                     child: GestureDetector(
                       onTap: () {
+                        // Created once (the builder can run again on
+                        // rebuilds) and disposed after the dialog's exit
+                        // animation.
+                        final controller = TextEditingController(
+                          text: _currentPosition != null
+                              ? '${_currentPosition!.latitude}, ${_currentPosition!.longitude}' // Auto-fill with GPS
+                              : '',
+                        );
                         showDialog(
                           context: context,
                           builder: (context) {
-                            final controller = TextEditingController(
-                              text: _currentPosition != null
-                                  ? '${_currentPosition!.latitude}, ${_currentPosition!.longitude}' // Auto-fill with GPS
-                                  : '',
-                            );
-                            return AlertDialog(
-                              title: Text(context.l10n.enterLocationManually),
-                              content: TextField(
-                                controller: controller,
-                                maxLength:
-                                    ReportingProvider.maxLocationDetailsLength,
-                                decoration: InputDecoration(
-                                  hintText: context.l10n.addressOrCoordinates,
+                            return DisposeControllersOnUnmount(
+                              controllers: [controller],
+                              child: AlertDialog(
+                                title: Text(context.l10n.enterLocationManually),
+                                content: TextField(
+                                  controller: controller,
+                                  maxLength: ReportingProvider
+                                      .maxLocationDetailsLength,
+                                  decoration: InputDecoration(
+                                    hintText: context.l10n.addressOrCoordinates,
+                                  ),
                                 ),
-                              ),
-                              actions: [
-                                TextButton(
-                                  onPressed: () => Navigator.pop(context),
-                                  child: Text(context.l10n.cancelBtn),
-                                ),
-                                TextButton(
-                                  onPressed: () {
-                                    if (controller.text.isNotEmpty) {
-                                      context
-                                          .read<ReportingProvider>()
-                                          .setLocationDetails(controller.text);
-                                      // Also make sure severity is set
-                                      context
-                                          .read<ReportingProvider>()
-                                          .setSeverity(
-                                            _severityLevels[_severityValue
-                                                    .toInt()]!['value']
-                                                as String,
-                                          );
+                                actions: [
+                                  TextButton(
+                                    onPressed: () => Navigator.pop(context),
+                                    child: Text(context.l10n.cancelBtn),
+                                  ),
+                                  TextButton(
+                                    onPressed: () {
+                                      if (controller.text.isNotEmpty) {
+                                        context
+                                            .read<ReportingProvider>()
+                                            .setLocationDetails(
+                                              controller.text,
+                                            );
+                                        // Also make sure severity is set
+                                        context
+                                            .read<ReportingProvider>()
+                                            .setSeverity(
+                                              _severityLevels[_severityValue
+                                                      .toInt()]!['value']
+                                                  as String,
+                                            );
 
-                                      ScaffoldMessenger.of(
-                                        context,
-                                      ).showSnackBar(
-                                        SnackBar(
-                                          content: Text(
-                                            context.l10n.manualLocationSet,
+                                        ScaffoldMessenger.of(
+                                          context,
+                                        ).showSnackBar(
+                                          SnackBar(
+                                            content: Text(
+                                              context.l10n.manualLocationSet,
+                                            ),
                                           ),
-                                        ),
-                                      );
-                                    }
-                                    Navigator.pop(context);
-                                  },
-                                  child: Text(context.l10n.setLocationBtn),
-                                ),
-                              ],
+                                        );
+                                      }
+                                      Navigator.pop(context);
+                                    },
+                                    child: Text(context.l10n.setLocationBtn),
+                                  ),
+                                ],
+                              ),
                             );
                           },
                         );
@@ -1491,7 +1510,11 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                     );
                   }
 
-                  context.push('/report/details');
+                  if (widget.returnToReview) {
+                    context.pop();
+                  } else {
+                    context.push('/report/details');
+                  }
                 },
                 text: context.l10n.confirmAndContinue,
                 icon: Icons.arrow_forward,
