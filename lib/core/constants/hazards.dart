@@ -1,5 +1,6 @@
 import 'package:climate_app/core/theme/app_colors.dart';
 import 'package:flutter/material.dart';
+import 'package:climate_app/l10n/app_localizations.dart';
 
 /// The hazard types a report can have.
 ///
@@ -10,8 +11,6 @@ import 'package:flutter/material.dart';
 enum Hazard {
   flooding(
     storedName: 'Flooding',
-    label: 'Flooding',
-    title: 'Flood Alert',
     icon: Icons.flood,
     iconKey: 'flood',
     color: AppColors.hazardFlood,
@@ -19,8 +18,6 @@ enum Hazard {
   ),
   extremeTemperatures(
     storedName: 'Extreme Temperatures',
-    label: 'Extreme Temperatures',
-    title: 'Temperature Extreme',
     icon: Icons.thermostat,
     iconKey: 'thermostat',
     color: AppColors.hazardTemp,
@@ -34,8 +31,6 @@ enum Hazard {
   ),
   drought(
     storedName: 'Drought',
-    label: 'Drought',
-    title: 'Drought Warning',
     icon: Icons.wb_sunny_rounded,
     iconKey: 'sunny',
     color: AppColors.hazardDrought,
@@ -43,8 +38,6 @@ enum Hazard {
   ),
   windstorms(
     storedName: 'Windstorms',
-    label: 'Windstorms',
-    title: 'High Wind Alert',
     icon: Icons.air,
     iconKey: 'air',
     color: AppColors.hazardWind,
@@ -52,8 +45,6 @@ enum Hazard {
   ),
   wildfires(
     storedName: 'Wildfires',
-    label: 'Wildfires',
-    title: 'Wildfire Report',
     icon: Icons.local_fire_department,
     iconKey: 'fire',
     color: AppColors.hazardFire,
@@ -61,8 +52,6 @@ enum Hazard {
   ),
   erosion(
     storedName: 'Erosion',
-    label: 'Erosion',
-    title: 'Erosion Report',
     icon: Icons.landslide,
     iconKey: 'landslide',
     color: AppColors.hazardErosion,
@@ -70,8 +59,6 @@ enum Hazard {
   ),
   pestOutbreak(
     storedName: 'Pest Outbreak',
-    label: 'Pest Outbreak',
-    title: 'Pest Outbreak',
     icon: Icons.pest_control,
     iconKey: 'pest',
     color: AppColors.hazardPest,
@@ -79,8 +66,6 @@ enum Hazard {
   ),
   cropDisease(
     storedName: 'Crop Disease',
-    label: 'Crop Disease',
-    title: 'Crop Disease',
     icon: Icons.coronavirus_rounded,
     iconKey: 'disease',
     color: Colors.green,
@@ -88,8 +73,6 @@ enum Hazard {
   ),
   conflict(
     storedName: 'Conflict',
-    label: 'Conflict',
-    title: 'Conflict Report',
     icon: Icons.warning_amber_rounded,
     iconKey: 'conflict',
     color: AppColors.primaryRed,
@@ -98,8 +81,6 @@ enum Hazard {
 
   const Hazard({
     required this.storedName,
-    required this.label,
-    required this.title,
     required this.icon,
     required this.iconKey,
     required this.color,
@@ -108,12 +89,6 @@ enum Hazard {
 
   /// Value stored in `reports.hazard_type`.
   final String storedName;
-
-  /// Short display name.
-  final String label;
-
-  /// Headline used on report cards.
-  final String title;
 
   final IconData icon;
 
@@ -144,11 +119,62 @@ enum Hazard {
   static String canonicalName(Object? raw) =>
       tryParse(raw)?.storedName ?? (raw?.toString() ?? '');
 
-  static String labelFor(Object? raw) =>
-      tryParse(raw)?.label ?? _fallbackText(raw, 'Unknown Hazard');
+  /// Short display name in the language of [l10n].
+  String label(AppLocalizations l10n) {
+    switch (this) {
+      case Hazard.flooding:
+        return l10n.hazardFlooding;
+      case Hazard.extremeTemperatures:
+        return l10n.hazardExtremeTemperatures;
+      case Hazard.drought:
+        return l10n.hazardDrought;
+      case Hazard.windstorms:
+        return l10n.hazardWindstorms;
+      case Hazard.wildfires:
+        return l10n.hazardWildfires;
+      case Hazard.erosion:
+        return l10n.hazardErosion;
+      case Hazard.pestOutbreak:
+        return l10n.hazardPestOutbreak;
+      case Hazard.cropDisease:
+        return l10n.hazardCropDisease;
+      case Hazard.conflict:
+        return l10n.hazardConflict;
+    }
+  }
 
-  static String titleFor(Object? raw) =>
-      tryParse(raw)?.title ?? _fallbackText(raw, 'Unknown Hazard');
+  /// Headline used on report cards, in the language of [l10n].
+  String title(AppLocalizations l10n) {
+    switch (this) {
+      case Hazard.flooding:
+        return l10n.hazardTitleFlooding;
+      case Hazard.extremeTemperatures:
+        return l10n.hazardTitleExtremeTemperatures;
+      case Hazard.drought:
+        return l10n.hazardTitleDrought;
+      case Hazard.windstorms:
+        return l10n.hazardTitleWindstorms;
+      case Hazard.wildfires:
+        return l10n.hazardTitleWildfires;
+      case Hazard.erosion:
+        return l10n.hazardTitleErosion;
+      case Hazard.pestOutbreak:
+        return l10n.hazardTitlePestOutbreak;
+      case Hazard.cropDisease:
+        return l10n.hazardTitleCropDisease;
+      case Hazard.conflict:
+        return l10n.hazardTitleConflict;
+    }
+  }
+
+  /// Display name for a stored / legacy hazard name. Unknown names are shown
+  /// as stored (they are free text from older rows).
+  static String labelFor(Object? raw, AppLocalizations l10n) =>
+      tryParse(raw)?.label(l10n) ?? _fallbackText(raw, l10n.hazardUnknown);
+
+  /// Card headline for a stored / legacy hazard name.
+  static String titleFor(Object? raw, AppLocalizations l10n) =>
+      tryParse(raw)?.title(l10n) ?? _fallbackText(raw, l10n.hazardUnknown);
 
   static IconData iconFor(Object? raw) =>
       tryParse(raw)?.icon ?? Icons.warning_amber_rounded;

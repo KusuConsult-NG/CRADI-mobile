@@ -3,7 +3,6 @@ import 'package:climate_app/core/constants/hazards.dart';
 import 'package:climate_app/core/theme/app_colors.dart';
 import 'package:climate_app/core/design/animated_card.dart';
 import 'package:climate_app/core/design/typography.dart';
-import 'package:climate_app/core/providers/language_provider.dart';
 import 'package:flutter/material.dart';
 import 'dart:io';
 import 'package:go_router/go_router.dart';
@@ -20,9 +19,10 @@ import 'package:climate_app/features/auth/providers/auth_provider.dart'; // ADDE
 import 'package:climate_app/core/providers/connectivity_provider.dart';
 import 'package:climate_app/core/services/notification_service.dart';
 import 'package:climate_app/features/reporting/providers/reporting_provider.dart';
-import 'package:climate_app/l10n/app_localizations.dart';
 import 'package:climate_app/shared/widgets/shimmer_loading.dart';
 import 'package:climate_app/shared/widgets/animated_list_item.dart';
+import 'package:climate_app/core/l10n/l10n.dart';
+import 'package:climate_app/core/l10n/zone_label.dart';
 
 /// Home feed tab actually shown for [selected] (0 To Verify, 1 Alerts,
 /// 2 My Reports, 3 Nearby): "To Verify" only exists for peer verifiers and
@@ -123,14 +123,15 @@ class _HomeScreenState extends State<HomeScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       // Greeting
-                      Consumer2<LanguageProvider, ProfileProvider>(
-                        builder: (context, language, profile, child) => Column(
+                      Consumer<ProfileProvider>(
+                        builder: (context, profile, child) => Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              language.greeting.replaceAll(
-                                '{name}',
-                                profile.name,
+                              context.l10n.homeGreeting(
+                                profile.name.isNotEmpty
+                                    ? profile.name
+                                    : context.l10n.profileDefaultName,
                               ),
                               style: PremiumTypography.heading1(context),
                             ),
@@ -154,7 +155,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                     MainAxisAlignment.spaceBetween,
                                 children: [
                                   Text(
-                                    AppLocalizations.of(context)!.syncStatus,
+                                    context.l10n.syncStatus,
                                     style: GoogleFonts.lexend(
                                       fontSize: 10,
                                       fontWeight: FontWeight.bold,
@@ -190,16 +191,12 @@ class _HomeScreenState extends State<HomeScreen> {
                                         const SizedBox(width: 8),
                                         Text(
                                           isOffline
-                                              ? AppLocalizations.of(
-                                                  context,
-                                                )!.offline
+                                              ? context.l10n.offline
                                               : (isSyncing
-                                                    ? AppLocalizations.of(
-                                                        context,
-                                                      )!.syncing
-                                                    : AppLocalizations.of(
-                                                        context,
-                                                      )!.onlineJustNow),
+                                                    ? context.l10n.syncing
+                                                    : context
+                                                          .l10n
+                                                          .onlineJustNow),
                                           style: GoogleFonts.lexend(
                                             fontSize: 10,
                                             fontWeight: FontWeight.bold,
@@ -261,7 +258,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                   ),
                                   child: _buildStatCard(
                                     count: '$activeCount',
-                                    label: AppLocalizations.of(context)!.active,
+                                    label: context.l10n.active,
                                     icon: Icons.warning_amber,
                                     color: AppColors.warningYellow,
                                     bgColor: AppColors.warningYellow.withValues(
@@ -278,9 +275,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                   ),
                                   child: _buildStatCard(
                                     count: '$pendingCount',
-                                    label: AppLocalizations.of(
-                                      context,
-                                    )!.pending,
+                                    label: context.l10n.pending,
                                     icon: Icons.schedule,
                                     color: Colors.orange,
                                     bgColor: Colors.orange.withValues(
@@ -297,9 +292,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                   ),
                                   child: _buildStatCard(
                                     count: '$approvedCount',
-                                    label: AppLocalizations.of(
-                                      context,
-                                    )!.approved,
+                                    label: context.l10n.approved,
                                     icon: Icons.check_circle,
                                     color: AppColors.successGreen,
                                     bgColor: AppColors.successGreen.withValues(
@@ -318,7 +311,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       // queue for peer verifiers.
                       _buildQuickLink(
                         icon: Icons.assignment_outlined,
-                        label: 'My Reports',
+                        label: context.l10n.myReports,
                         onTap: () => context.push('/my-reports'),
                       ),
                       if (AuthProvider.verifierRoles.contains(
@@ -327,7 +320,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         const SizedBox(height: 8),
                         _buildQuickLink(
                           icon: Icons.fact_check_outlined,
-                          label: 'Verify Reports',
+                          label: context.l10n.homeVerifyReportsLink,
                           onTap: () => context.push('/verification'),
                         ),
                       ],
@@ -335,7 +328,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
                       // Browse Categories
                       _buildSectionHeader(
-                        AppLocalizations.of(context)!.browseCategories,
+                        context.l10n.browseCategories,
                         () => context.push('/alerts'),
                       ),
                       const SizedBox(height: 12),
@@ -344,31 +337,31 @@ class _HomeScreenState extends State<HomeScreen> {
                         child: Row(
                           children: [
                             _buildCategoryCard(
-                              AppLocalizations.of(context)!.floodsCategory,
+                              context.l10n.floodsCategory,
                               Icons.flood,
                               Colors.blue,
                               () => _onCategoryTap('Flooding'),
                             ),
                             _buildCategoryCard(
-                              AppLocalizations.of(context)!.droughtsCategory,
+                              context.l10n.droughtsCategory,
                               Icons.wb_sunny,
                               Colors.orange,
                               () => _onCategoryTap('Drought'),
                             ),
                             _buildCategoryCard(
-                              AppLocalizations.of(context)!.pestsCategory,
+                              context.l10n.pestsCategory,
                               Icons.pest_control,
                               Colors.green,
                               () => _onCategoryTap('Pest/Disease'),
                             ),
                             _buildCategoryCard(
-                              AppLocalizations.of(context)!.conflictsCategory,
+                              context.l10n.conflictsCategory,
                               Icons.shield,
                               Colors.red,
                               () => _onCategoryTap('Conflict'),
                             ),
                             _buildCategoryCard(
-                              AppLocalizations.of(context)!.erosion,
+                              context.l10n.erosion,
                               Icons.landscape,
                               Colors.brown,
                               () => _onCategoryTap('Erosion'),
@@ -396,24 +389,15 @@ class _HomeScreenState extends State<HomeScreen> {
                             if (AuthProvider.verifierRoles.contains(
                               context.watch<AuthProvider>().userRole,
                             ))
-                              _buildFilterTab(
-                                0,
-                                AppLocalizations.of(context)!.toVerify,
-                              ),
-                            _buildFilterTab(
-                              1,
-                              AppLocalizations.of(context)!.alerts,
-                            ),
-                            _buildFilterTab(
-                              2,
-                              AppLocalizations.of(context)!.myReports,
-                            ),
+                              _buildFilterTab(0, context.l10n.toVerify),
+                            _buildFilterTab(1, context.l10n.alerts),
+                            _buildFilterTab(2, context.l10n.myReports),
                             // Plain users can only read their own reports
                             // (RLS), so a "nearby" feed would always be
                             // empty for them.
                             if (context.watch<AuthProvider>().userRole !=
                                 UserRole.user)
-                              _buildFilterTab(3, 'Nearby'),
+                              _buildFilterTab(3, context.l10n.homeTabNearby),
                           ],
                         ),
                       ),
@@ -492,7 +476,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          AppLocalizations.of(context)!.monitoringZone,
+                          context.l10n.monitoringZone,
                           style: GoogleFonts.lexend(
                             fontSize: 10,
                             fontWeight: FontWeight.w600,
@@ -506,7 +490,17 @@ class _HomeScreenState extends State<HomeScreen> {
                             children: [
                               Flexible(
                                 child: Text(
-                                  '${profile.monitoringZone ?? AppLocalizations.of(context)!.selectZone} • ${profile.monitoringZone != null ? AppLocalizations.of(context)!.activeZone : AppLocalizations.of(context)!.notSetZone}',
+                                  context.l10n.homeZoneStatus(
+                                    profile.monitoringZone != null
+                                        ? monitoringZoneLabel(
+                                            context.l10n,
+                                            profile.monitoringZone!,
+                                          )
+                                        : context.l10n.selectZone,
+                                    profile.monitoringZone != null
+                                        ? context.l10n.activeZone
+                                        : context.l10n.notSetZone,
+                                  ),
                                   style: GoogleFonts.lexend(
                                     fontSize: 14,
                                     fontWeight: FontWeight.bold,
@@ -779,7 +773,7 @@ class _HomeScreenState extends State<HomeScreen> {
       return _buildListFeed(
         toVerify,
         statusProvider.isLoading(ReportStatus.pending, excludeUserId: uid),
-        'No reports to verify',
+        context.l10n.noReportsToVerify,
         error: statusProvider.errorFor(
           ReportStatus.pending,
           excludeUserId: uid,
@@ -792,7 +786,7 @@ class _HomeScreenState extends State<HomeScreen> {
       return _buildListFeed(
         statusProvider.getReports(null, userId: userId),
         statusProvider.isLoading(null, userId: userId),
-        'You haven\'t submitted any reports yet',
+        context.l10n.homeEmptyMyReports,
         error: statusProvider.errorFor(null, userId: userId),
         onRetry: () => statusProvider.fetchReports(userId: userId),
       );
@@ -814,7 +808,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   const SizedBox(width: 6),
                   Text(
-                    'Open Nearby Reports',
+                    context.l10n.homeOpenNearbyReports,
                     style: GoogleFonts.lexend(
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
@@ -834,7 +828,7 @@ class _HomeScreenState extends State<HomeScreen> {
           _buildListFeed(
             statusProvider.getReports(null),
             statusProvider.isLoading(null),
-            'No nearby reports',
+            context.l10n.homeEmptyNearby,
             error: statusProvider.errorFor(null),
             onRetry: () => statusProvider.fetchReports(),
           ),
@@ -845,7 +839,7 @@ class _HomeScreenState extends State<HomeScreen> {
       return _buildListFeed(
         statusProvider.getReports(null),
         statusProvider.isLoading(null),
-        'No recent alerts',
+        context.l10n.noRecentAlerts,
         error: statusProvider.errorFor(null),
         onRetry: () => statusProvider.fetchReports(),
       );
@@ -856,7 +850,7 @@ class _HomeScreenState extends State<HomeScreen> {
     List<VerificationReport> reports,
     bool isLoading,
     String emptyMessage, {
-    String? error,
+    LocalizedText? error,
     VoidCallback? onRetry,
   }) {
     if (isLoading && reports.isEmpty) {
@@ -882,7 +876,7 @@ class _HomeScreenState extends State<HomeScreen> {
               Icon(Icons.cloud_off, size: 48, color: Colors.red.shade200),
               const SizedBox(height: 12),
               Text(
-                error,
+                error(context.l10n),
                 style: GoogleFonts.lexend(
                   fontSize: 14,
                   color: AppColors.textSecondary,
@@ -894,7 +888,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 TextButton.icon(
                   onPressed: onRetry,
                   icon: const Icon(Icons.refresh),
-                  label: const Text('Retry'),
+                  label: Text(context.l10n.retry),
                 ),
               ],
             ],
@@ -981,7 +975,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     children: [
                       Expanded(
                         child: Text(
-                          report.title,
+                          report.displayTitle(context.l10n),
                           style: GoogleFonts.lexend(
                             fontSize: 14,
                             fontWeight: FontWeight.bold,
@@ -1010,7 +1004,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                         ),
                         child: Text(
-                          report.status.displayName,
+                          report.status.label(context.l10n),
                           style: GoogleFonts.lexend(
                             fontSize: 10,
                             fontWeight: FontWeight.w600,
@@ -1022,7 +1016,10 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    '${report.location} • ${report.time}',
+                    context.l10n.reportLocationAndTime(
+                      report.displayLocation(context.l10n),
+                      report.displayTime(context.l10n),
+                    ),
                     style: GoogleFonts.lexend(
                       fontSize: 12,
                       color: AppColors.textSecondary,
@@ -1082,7 +1079,7 @@ class _HomeScreenState extends State<HomeScreen> {
         GestureDetector(
           onTap: onViewAll,
           child: Text(
-            'See All',
+            context.l10n.seeAll,
             style: GoogleFonts.lexend(
               fontSize: 12,
               fontWeight: FontWeight.w600,
@@ -1137,7 +1134,7 @@ class _HomeScreenState extends State<HomeScreen> {
     // Build zone list: state-level entries + individual LGAs
     final zones = <String>[];
     for (final state in MVPLocationsData.getAllStates()) {
-      zones.add('$state State'); // state-level
+      zones.add('$state$stateZoneSuffix'); // state-level (stored form)
       for (final lga in MVPLocationsData.getLGAsForState(state)) {
         zones.add('$lga, $state'); // LGA-level
       }
@@ -1160,7 +1157,7 @@ class _HomeScreenState extends State<HomeScreen> {
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: Text(
-                  'Select Monitoring Zone',
+                  context.l10n.homeZoneSheetTitle,
                   style: GoogleFonts.lexend(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
@@ -1180,7 +1177,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           color: AppColors.primaryRed,
                         ),
                         title: Text(
-                          'All Zones (No Filter)',
+                          context.l10n.homeZoneAll,
                           style: GoogleFonts.lexend(
                             fontSize: 15,
                             fontWeight: FontWeight.w600,
@@ -1200,14 +1197,14 @@ class _HomeScreenState extends State<HomeScreen> {
                           final provider = context.read<ProfileProvider>();
                           final error = await provider.updateMonitoringZone('');
                           if (context.mounted) {
+                            final l10n = context.l10n;
                             Navigator.pop(context);
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
                                 content: Text(
                                   error == null
-                                      ? 'Showing all zones'
-                                      : 'Showing all zones on this device. '
-                                            '$error',
+                                      ? l10n.homeZoneAllSelected
+                                      : l10n.homeZoneAllLocalOnly(error(l10n)),
                                 ),
                                 backgroundColor: error == null
                                     ? AppColors.successGreen
@@ -1219,7 +1216,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                       const Divider(),
                       ...zones.map((zone) {
-                        final isState = zone.contains('State');
+                        final isState = zone.endsWith(stateZoneSuffix);
                         return ListTile(
                           contentPadding: EdgeInsets.only(
                             left: isState ? 16 : 40,
@@ -1233,7 +1230,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                 )
                               : null,
                           title: Text(
-                            zone,
+                            monitoringZoneLabel(context.l10n, zone),
                             style: GoogleFonts.lexend(
                               fontSize: isState ? 16 : 14,
                               fontWeight: isState
@@ -1261,14 +1258,18 @@ class _HomeScreenState extends State<HomeScreen> {
                               zone,
                             );
                             if (context.mounted) {
+                              final l10n = context.l10n;
+                              final zoneLabel = monitoringZoneLabel(l10n, zone);
                               Navigator.pop(context);
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
                                   content: Text(
                                     error == null
-                                        ? 'Monitoring zone changed to $zone'
-                                        : 'Showing $zone on this device. '
-                                              '$error',
+                                        ? l10n.homeZoneChanged(zoneLabel)
+                                        : l10n.homeZoneLocalOnly(
+                                            zoneLabel,
+                                            error(l10n),
+                                          ),
                                   ),
                                   backgroundColor: error == null
                                       ? AppColors.successGreen

@@ -1,159 +1,75 @@
 {
   "@@locale": "en",
-  
   "appTitle": "EWER Early Warning",
   "@appTitle": {
-    "description": "The application title"
+    "description": "The application title. Used in: main."
   },
-
-  "monitoringZone": "MONITORING ZONE",
+  "monitoringZone": "Monitoring Zone",
   "@monitoringZone": {
-    "description": "Label for monitoring zone header"
+    "description": "Label for monitoring zone header. Used in: home screen."
   },
-
   "toVerify": "To Verify",
   "@toVerify": {
-    "description": "Tab label for reports pending verification"
+    "description": "Tab label for reports pending verification. Used in: home screen."
   },
-
   "alerts": "Alerts",
   "@alerts": {
-    "description": "Tab label for alerts"
+    "description": "Tab label for alerts. Used in: alerts list screen, home screen."
   },
-
   "myReports": "My Reports",
   "@myReports": {
-    "description": "Tab label for user's own reports"
+    "description": "Tab label for user's own reports. Used in: home screen, my reports screen, user profile screen."
   },
-
   "browseCategories": "Browse Categories",
   "@browseCategories": {
-    "description": "Section header for hazard categories"
+    "description": "Section header for hazard categories. Used in: home screen, knowledge base screen."
   },
-
-  "recentlyUpdated": "Recently Updated",
-  "@recentlyUpdated": {
-    "description": "Section header for recent updates"
-  },
-
-  "noReportsYet": "No reports yet",
-  "@noReportsYet": {
-    "description": "Empty state message when no reports exist"
-  },
-
   "noReportsToVerify": "No reports to verify",
   "@noReportsToVerify": {
-    "description": "Empty state for verification tab"
+    "description": "Empty state for verification tab. Used in: home screen."
   },
-
   "noActiveAlerts": "No active alerts",
   "@noActiveAlerts": {
-    "description": "Empty state for alerts tab"
+    "description": "Empty state for alerts tab. Used in: admin alerts screen, alerts list screen."
   },
-
-  "reportHazard": "REPORT HAZARD",
-  "@reportHazard": {
-    "description": "Button label for reporting a hazard"
-  },
-
   "seeAll": "See All",
   "@seeAll": {
-    "description": "Link to view all items in a section"
+    "description": "Link to view all items in a section. Used in: home screen, knowledge base screen."
   },
-
-  "pleaseLoginToViewReports": "Please log in to view reports",
-  "@pleaseLoginToViewReports": {
-    "description": "Message shown when user is not logged in"
-  },
-
-  "settings": "Settings",
   "notifications": "NOTIFICATIONS",
   "pushNotifications": "Push Notifications",
-  "criticalAlerts": "Critical Alerts",
-  "dnd": "Do Not Disturb",
-  "dataStorage": "DATA & STORAGE",
-  "wifiOnly": "WiFi Only Sync",
-  "lowData": "Low Data Mode",
   "general": "GENERAL",
   "language": "Language",
   "helpFaq": "Help & FAQ",
   "aboutApp": "About App",
   "logout": "Log Out",
   "back": "Back",
-  "ok": "OK",
   "cancel": "Cancel",
   "save": "Save",
   "delete": "Delete",
   "edit": "Edit",
   "continueButton": "Continue",
-  "submit": "Submit",
   "retry": "Retry",
   "close": "Close",
-
-  "selectedLanguage": "English",
-  "@selectedLanguage": {
-    "description": "Currently selected language name"
-  },
-
   "settingsTitle": "Settings",
   "@settingsTitle": {
-    "description": "Settings screen title"
+    "description": "Settings screen title. Used in: settings screen."
   },
-
   "verifyPhoneNumber": "Verify Phone Number",
-  "enterOtpCode": "Enter the 4-digit code sent to your phone",
   "resendCode": "Resend Code",
   "verify": "Verify",
-  "codeExpiresIn": "Code expires in",
-  "neverShareCode": "Never share your verification code with anyone",
-  
   "selectHazard": "Select Hazard",
   "whatIncident": "What type of incident are you reporting?",
-  "flooding": "Flooding",
-  "extremeHeat": "Extreme Heat",
-  "drought": "Drought",
-  "windstorms": "Windstorms",
-  "wildfires": "Wildfires",
   "erosion": "Erosion",
-  "pestOutbreak": "Pest Outbreak",
-  "cropDisease": "Crop Disease",
-  "conflict": "Conflict",
-
-  "selectSeverity": "Select Severity",
-  "howSevere": "How severe is the hazard?",
   "howSevereSituation": "How severe is the situation?",
   "setSeverity": "Set Severity",
   "nextLocation": "Next: Location",
-  "low": "Low",
-  "moderate": "Moderate",
-  "high": "High",
-  "critical": "Critical",
   "lowMinorImpact": "Low - Minor impact",
   "mediumNoticeableImpact": "Medium - Noticeable impact",
   "highSignificantDamage": "High - Significant damage",
   "criticalLifeThreatening": "Critical - Life threatening",
-
-  "reportDetails": "Report Details",
-  "description": "Description",
-  "describeHazard": "Describe the hazard here (e.g. flood levels rising, bridge collapsed)...",
-  "whenDidOccur": "When Did This Occur?",
-  "optional": "Optional",
-  "today": "Today",
-  "evidence": "Evidence",
-  "maxPhotos": "Max 3 photos",
   "camera": "Camera",
-  "gallery": "Gallery",
-  "reviewReport": "Review Report",
-  "listening": "Listening... Speak now",
-  "beSpecific": "Be specific about location and severity.",
-
-  "locationPicker": "Location Picker",
-  "selectLocation": "Select your current location or search for a place",
-  "useCurrentLocation": "Use Current Location",
   "useMyLocationInfo": "Use My Location Info",
-  "searchPlaces": "Search for places...",
-  "confirmLocation": "Confirm Location",
-
   "myProfile": "My Profile",
   "editProfileDetails": "Edit Profile Details",
   "fullName": "Full Name",
@@ -165,55 +81,37 @@
   "offlineDataSync": "Offline Data Sync",
   "upToDate": "Up to date",
   "helpSupport": "Help & Support",
-  "contactSupervisor": "Contact Supervisor / SOS",
-  
-  "errorOccurred": "An error occurred",
-  "tryAgain": "Please try again",
-  "networkError": "Network error. Please check your connection",
-  "invalidOtp": "Invalid OTP code. Please try again.",
-  "otpExpired": "OTP has expired. Please request a new code.",
   "biometricsNotAvailable": "Biometrics not available on this device",
   "biometricsEnabled": "Biometric login enabled",
   "biometricsDisabled": "Biometric login disabled",
   "profileUpdated": "Profile updated successfully!",
-  "reportSubmitted": "Report submitted successfully!",
-  "reportQueued": "Report queued for submission when online",
   "syncing": "Syncing...",
-  "syncComplete": "Sync complete",
   "offline": "Offline",
-  "online": "Online",
-  
-  "offlineModeReady": "Offline Mode Ready:",
-  "offlineModeDescription": "Your photos will be compressed automatically. Reports are saved locally until you have internet.",
-  
+  "offlineModeReady": "Offline Mode Ready: ",
   "validation_required": "This field is required",
   "validation_invalidEmail": "Please enter a valid email address",
-  "validation_invalidPhone": "Please enter a valid phone number",
   "validation_minLength": "Must be at least {length} characters",
   "@validation_minLength": {
-    "description": "Validation message for minimum length",
+    "description": "Validation message for minimum length. Used in: validators.",
     "placeholders": {
       "length": {
         "type": "int"
       }
     }
   },
-
   "validation_maxLength": "Must be at most {length} characters",
   "@validation_maxLength": {
-    "description": "Validation message for maximum length",
+    "description": "Validation message for maximum length. Used in: validators.",
     "placeholders": {
       "length": {
         "type": "int"
       }
     }
   },
-
   "syncStatus": "SYNC STATUS",
   "onlineJustNow": "Online • Just now",
-  "active": "Active",
+  "active": "active",
   "pending": "Pending",
-  "resolved": "Resolved",
   "verified": "Verified",
   "approved": "Approved",
   "floodsCategory": "Floods",
@@ -221,17 +119,15 @@
   "pestsCategory": "Pests",
   "conflictsCategory": "Conflicts",
   "noRecentAlerts": "No recent alerts",
-  "monitoringZone": "Monitoring Zone",
   "selectZone": "Select Zone",
   "activeZone": "Active",
   "notSetZone": "Not Set",
-  "noNewNotifications": "No new notifications",
   "reportsStatus": "Reports Status",
-  "acknowledged": "Acknowledged",
   "rejected": "Rejected",
   "generateReport": "Generate Report",
   "noReportsStatus": "No {status} Reports",
   "@noReportsStatus": {
+    "description": "UI text on the reports status screen.",
     "placeholders": {
       "status": {
         "type": "String"
@@ -241,6 +137,7 @@
   "refresh": "Refresh",
   "reportedBy": "Reported by {name}",
   "@reportedBy": {
+    "description": "UI text on the reports status screen.",
     "placeholders": {
       "name": {
         "type": "String"
@@ -269,7 +166,6 @@
   "tapToSelectDateTime": "Tap to select date & time. Defaults to now if not changed.",
   "evidenceLabel": "Evidence",
   "max3Photos": "Max 3 photos",
-  "offlineModeReady": "Offline Mode Ready: ",
   "offlineModeMessage": "Your photos will be compressed automatically. Reports are saved locally until you have internet.",
   "reviewReportBtn": "Review Report",
   "cameraBtn": "Camera",
@@ -297,8 +193,6 @@
   "severityCritShort": "Crit",
   "dateTimeLabel": "Date & Time",
   "whenItOccurred": "When it occurred",
-  "todayAt": "Today at",
-  "atTime": "at",
   "locationLabel": "Location",
   "notProvided": "Not Provided",
   "monitorNotes": "Monitor Notes",
@@ -350,15 +244,8 @@
   "selectStatusExport": "Select status to export:",
   "allReports": "All Reports",
   "pendingOnly": "Pending Only",
-  "acknowledgedOnly": "Acknowledged Only",
-  "resolvedOnly": "Resolved Only",
   "verifiedOnly": "Verified Only",
   "approvedOnly": "Approved Only",
-  "csvExportWeb": "CSV export available on web version",
-  "errorGenericCheckConnection": "An error occurred. Please check your connection and try again.",
-  "@errorGenericCheckConnection": {
-    "description": "Generic error message suggesting the user check their connection"
-  },
   "adminPortal": "Admin Portal",
   "systemOverview": "System Overview",
   "quickActions": "Quick Actions",
@@ -369,7 +256,6 @@
   "systemHealth": "System Health",
   "pendingApprovals": "Pending Approvals",
   "pendingReports": "Pending Reports",
-  "escalatedReports": "Escalated Reports",
   "verifiedReports": "Verified Reports",
   "totalUsers": "Total Users",
   "activeAlertsAdmin": "Active Alerts",
@@ -380,6 +266,4034 @@
   "knowledgeManagementDesc": "Add, edit, or remove emergency knowledge guides",
   "connected": "Connected",
   "none": "None",
-  "active": "active",
-  "reports": "reports"
+  "errorNetwork": "Network error. Please check your connection.",
+  "@errorNetwork": {
+    "description": "Error shown when a request fails because of the network (snackbar/inline)."
+  },
+  "errorNoPermission": "You do not have permission to perform this action.",
+  "@errorNoPermission": {
+    "description": "Error shown when the server refuses an action for lack of permission."
+  },
+  "errorContactSupport": "An error occurred. Please try again or contact support.",
+  "@errorContactSupport": {
+    "description": "Generic error for internal server/SDK failures."
+  },
+  "errorUnexpected": "An unexpected error occurred. Please try again.",
+  "@errorUnexpected": {
+    "description": "Generic fallback error message."
+  },
+  "authEmailNotConfirmed": "Please verify your email first. We sent a new code to {email}.",
+  "@authEmailNotConfirmed": {
+    "description": "Login error when the email is not yet confirmed; {email} is the address the new code was sent to.",
+    "placeholders": {
+      "email": {
+        "type": "String"
+      }
+    }
+  },
+  "@notifications": {
+    "description": "Upper-case caption on the settings screen."
+  },
+  "@pushNotifications": {
+    "description": "UI text on the settings screen."
+  },
+  "@general": {
+    "description": "Upper-case caption on the settings screen."
+  },
+  "@language": {
+    "description": "UI text on the settings screen."
+  },
+  "@helpFaq": {
+    "description": "UI text on the settings screen."
+  },
+  "@aboutApp": {
+    "description": "UI text on the about app screen, settings screen."
+  },
+  "@logout": {
+    "description": "Button label (keep short, max ~20 chars) on the access code verification screen, main shell screen, pending approval screen."
+  },
+  "@back": {
+    "description": "Button label (keep short, max ~20 chars) on the settings screen."
+  },
+  "@cancel": {
+    "description": "Button label (keep short, max ~20 chars) on the admin knowledge screen, admin reports screen, admin users screen."
+  },
+  "@save": {
+    "description": "Button label (keep short, max ~20 chars) on the emergency contacts screen, user profile screen."
+  },
+  "@delete": {
+    "description": "Button label (keep short, max ~20 chars) on the admin knowledge screen, emergency contacts screen, notifications screen."
+  },
+  "@edit": {
+    "description": "Button label (keep short, max ~20 chars) on the emergency contacts screen."
+  },
+  "@continueButton": {
+    "description": "Button label (keep short, max ~20 chars) on the hazard selection screen, permission service."
+  },
+  "@retry": {
+    "description": "Button label (keep short, max ~20 chars) on the admin reports screen, admin screen, admin users screen."
+  },
+  "@close": {
+    "description": "Button label (keep short, max ~20 chars) on the about app screen, sos sheet."
+  },
+  "@verifyPhoneNumber": {
+    "description": "UI text on the otp verification screen."
+  },
+  "@resendCode": {
+    "description": "Button label (keep short, max ~20 chars) on the access code verification screen, otp verification screen."
+  },
+  "@verify": {
+    "description": "Button label (keep short, max ~20 chars) on the user profile screen."
+  },
+  "@selectHazard": {
+    "description": "UI text on the hazard selection screen."
+  },
+  "@whatIncident": {
+    "description": "UI text on the hazard selection screen."
+  },
+  "@erosion": {
+    "description": "UI text on the home screen."
+  },
+  "@howSevereSituation": {
+    "description": "UI text on the severity selection screen."
+  },
+  "@setSeverity": {
+    "description": "UI text on the severity selection screen."
+  },
+  "@nextLocation": {
+    "description": "UI text on the severity selection screen."
+  },
+  "@lowMinorImpact": {
+    "description": "UI text on the severity selection screen."
+  },
+  "@mediumNoticeableImpact": {
+    "description": "UI text on the severity selection screen."
+  },
+  "@highSignificantDamage": {
+    "description": "UI text on the severity selection screen."
+  },
+  "@criticalLifeThreatening": {
+    "description": "UI text on the severity selection screen."
+  },
+  "@camera": {
+    "description": "UI text on the user profile screen."
+  },
+  "@useMyLocationInfo": {
+    "description": "UI text on the location picker screen."
+  },
+  "@myProfile": {
+    "description": "UI text on the user profile screen."
+  },
+  "@editProfileDetails": {
+    "description": "UI text on the user profile screen."
+  },
+  "@fullName": {
+    "description": "UI text on the registration screen, user profile screen."
+  },
+  "@emailAddress": {
+    "description": "UI text on the forgot password screen, login screen, registration screen."
+  },
+  "@biometricLogin": {
+    "description": "UI text on the settings screen, user profile screen."
+  },
+  "@enabled": {
+    "description": "UI text on the user profile screen."
+  },
+  "@disabled": {
+    "description": "UI text on the user profile screen."
+  },
+  "@languagePreference": {
+    "description": "UI text on the user profile screen."
+  },
+  "@offlineDataSync": {
+    "description": "UI text on the user profile screen."
+  },
+  "@upToDate": {
+    "description": "UI text on the user profile screen."
+  },
+  "@helpSupport": {
+    "description": "UI text on the help support screen, user profile screen."
+  },
+  "@biometricsNotAvailable": {
+    "description": "UI text on the user profile screen."
+  },
+  "@biometricsEnabled": {
+    "description": "UI text on the settings screen."
+  },
+  "@biometricsDisabled": {
+    "description": "UI text on the settings screen."
+  },
+  "@profileUpdated": {
+    "description": "Message on the user profile screen."
+  },
+  "@syncing": {
+    "description": "Message on the home screen."
+  },
+  "@offline": {
+    "description": "UI text on the home screen."
+  },
+  "@offlineModeReady": {
+    "description": "UI text on the report details screen."
+  },
+  "@validation_required": {
+    "description": "UI text on the validators."
+  },
+  "@validation_invalidEmail": {
+    "description": "UI text on the auth provider, profile provider, validators."
+  },
+  "@syncStatus": {
+    "description": "Upper-case caption on the alerts list screen, home screen."
+  },
+  "@onlineJustNow": {
+    "description": "UI text on the alerts list screen, home screen."
+  },
+  "@active": {
+    "description": "UI text on the home screen."
+  },
+  "@pending": {
+    "description": "UI text on the home screen, reports status screen."
+  },
+  "@verified": {
+    "description": "UI text on the reports status screen."
+  },
+  "@approved": {
+    "description": "UI text on the home screen, reports status screen."
+  },
+  "@floodsCategory": {
+    "description": "UI text on the alerts list screen, home screen."
+  },
+  "@droughtsCategory": {
+    "description": "UI text on the home screen."
+  },
+  "@pestsCategory": {
+    "description": "UI text on the alerts list screen, home screen."
+  },
+  "@conflictsCategory": {
+    "description": "UI text on the home screen."
+  },
+  "@noRecentAlerts": {
+    "description": "UI text on the home screen."
+  },
+  "@selectZone": {
+    "description": "UI text on the home screen, settings screen."
+  },
+  "@activeZone": {
+    "description": "UI text on the home screen, settings screen."
+  },
+  "@notSetZone": {
+    "description": "UI text on the home screen, settings screen."
+  },
+  "@reportsStatus": {
+    "description": "UI text on the reports status screen."
+  },
+  "@rejected": {
+    "description": "UI text on the reports status screen."
+  },
+  "@generateReport": {
+    "description": "UI text on the reports status screen."
+  },
+  "@refresh": {
+    "description": "Button label (keep short, max ~20 chars) on the admin screen, location picker screen, nearby reports screen."
+  },
+  "@viewDetails": {
+    "description": "UI text on the reports status screen."
+  },
+  "@reportVerified": {
+    "description": "UI text on the reports status screen."
+  },
+  "@verifyReport": {
+    "description": "Button label (keep short, max ~20 chars) on the reports status screen."
+  },
+  "@reportRejectedItem": {
+    "description": "UI text on the peer verification service, report view screen, reports status screen."
+  },
+  "@reject": {
+    "description": "Button label (keep short, max ~20 chars) on the admin reports screen, report staff actions, reports status screen."
+  },
+  "@reportResolvedItem": {
+    "description": "UI text on the peer verification service, reports status screen."
+  },
+  "@markResolved": {
+    "description": "Button label (keep short, max ~20 chars) on the reports status screen."
+  },
+  "@reportMovedPending": {
+    "description": "UI text on the reports status screen."
+  },
+  "@reopen": {
+    "description": "Button label (keep short, max ~20 chars) on the report staff actions, reports status screen."
+  },
+  "@reportReopenedPending": {
+    "description": "UI text on the reports status screen."
+  },
+  "@reportDetailsTitle": {
+    "description": "Label/heading on the admin reports screen, location picker screen, report details screen."
+  },
+  "@descriptionLabel": {
+    "description": "Label/heading on the admin reports screen, alert detail screen, report details screen."
+  },
+  "@describeHazardHint": {
+    "description": "Message on the report details screen."
+  },
+  "@speechNotAvailable": {
+    "description": "UI text on the report details screen."
+  },
+  "@listeningSpeakNow": {
+    "description": "UI text on the report details screen."
+  },
+  "@beSpecificLocationSeverity": {
+    "description": "Message on the report details screen."
+  },
+  "@whenDidThisOccur": {
+    "description": "UI text on the report details screen."
+  },
+  "@optionalLabel": {
+    "description": "Label/heading on the report details screen."
+  },
+  "@todayLabel": {
+    "description": "Label/heading on the report details screen."
+  },
+  "@tapToSelectDateTime": {
+    "description": "Message on the report details screen."
+  },
+  "@evidenceLabel": {
+    "description": "Label/heading on the report details screen, report review screen."
+  },
+  "@max3Photos": {
+    "description": "UI text on the report details screen."
+  },
+  "@offlineModeMessage": {
+    "description": "Message on the report details screen."
+  },
+  "@reviewReportBtn": {
+    "description": "Button label (keep short, max ~20 chars) on the report details screen."
+  },
+  "@cameraBtn": {
+    "description": "Button label (keep short, max ~20 chars) on the report details screen."
+  },
+  "@galleryBtn": {
+    "description": "Button label (keep short, max ~20 chars) on the report details screen."
+  },
+  "@submissionFailed": {
+    "description": "UI text on the report review screen."
+  },
+  "@savedForLater": {
+    "description": "UI text on the report review screen."
+  },
+  "@reportSubmittedTitle": {
+    "description": "Label/heading on the report review screen."
+  },
+  "@offlineReportMessage": {
+    "description": "Message on the report review screen."
+  },
+  "@onlineReportMessage": {
+    "description": "Message on the report review screen."
+  },
+  "@statusLabel": {
+    "description": "Label/heading on the report review screen."
+  },
+  "@reportIdLabel": {
+    "description": "Label/heading on the report review screen."
+  },
+  "@queuedStatus": {
+    "description": "Upper-case caption on the report review screen."
+  },
+  "@sentStatus": {
+    "description": "Upper-case caption on the report review screen."
+  },
+  "@returnToDashboard": {
+    "description": "UI text on the report review screen."
+  },
+  "@reviewReportTitle": {
+    "description": "Label/heading on the report review screen."
+  },
+  "@reviewReportDesc": {
+    "description": "Message on the report review screen."
+  },
+  "@hazardDetails": {
+    "description": "UI text on the report review screen."
+  },
+  "@hazardType": {
+    "description": "UI text on the admin reports screen, report review screen, verification request screen."
+  },
+  "@notSelected": {
+    "description": "UI text on the report review screen."
+  },
+  "@severityLevelLabel": {
+    "description": "Label/heading on the location picker screen, report review screen."
+  },
+  "@severityDesc": {
+    "description": "Message on the location picker screen."
+  },
+  "@severityLowShort": {
+    "description": "UI text on the location picker screen."
+  },
+  "@severityMedShort": {
+    "description": "UI text on the location picker screen."
+  },
+  "@severityHighShort": {
+    "description": "UI text on the location picker screen."
+  },
+  "@severityCritShort": {
+    "description": "UI text on the location picker screen."
+  },
+  "@dateTimeLabel": {
+    "description": "Label/heading on the report review screen."
+  },
+  "@whenItOccurred": {
+    "description": "UI text on the report review screen."
+  },
+  "@locationLabel": {
+    "description": "Label/heading on the alert detail screen, registration screen, report review screen."
+  },
+  "@notProvided": {
+    "description": "UI text on the report review screen."
+  },
+  "@monitorNotes": {
+    "description": "UI text on the report review screen."
+  },
+  "@noDescriptionProvided": {
+    "description": "UI text on the admin reports screen, report review screen."
+  },
+  "@addPhotoBtn": {
+    "description": "Button label (keep short, max ~20 chars) on the report review screen."
+  },
+  "@submitReportBtn": {
+    "description": "Button label (keep short, max ~20 chars) on the report review screen."
+  },
+  "@editBtn": {
+    "description": "Button label (keep short, max ~20 chars) on the report review screen."
+  },
+  "@locationPermissionDenied": {
+    "description": "UI text on the location picker screen."
+  },
+  "@enableGpsMessage": {
+    "description": "Message on the location picker screen."
+  },
+  "@locationError": {
+    "description": "UI text on the location picker screen."
+  },
+  "@acquiringGps": {
+    "description": "Upper-case caption on the location picker screen."
+  },
+  "@noSignalGps": {
+    "description": "Upper-case caption on the location picker screen."
+  },
+  "@gpsStrong": {
+    "description": "Upper-case caption on the location picker screen."
+  },
+  "@gpsGood": {
+    "description": "Upper-case caption on the location picker screen."
+  },
+  "@gpsWeak": {
+    "description": "Upper-case caption on the location picker screen."
+  },
+  "@couldNotFindLocation": {
+    "description": "UI text on the location picker screen."
+  },
+  "@mapUpdateError": {
+    "description": "UI text on the location picker screen."
+  },
+  "@incidentLocation": {
+    "description": "UI text on the location picker screen."
+  },
+  "@gettingLocation": {
+    "description": "Message on the location picker screen."
+  },
+  "@noGpsData": {
+    "description": "UI text on the location picker screen."
+  },
+  "@locationUnavailable": {
+    "description": "UI text on the location picker screen."
+  },
+  "@coordinatesLabel": {
+    "description": "Label/heading on the location picker screen."
+  },
+  "@viewDetailsBtn": {
+    "description": "Button label (keep short, max ~20 chars) on the location picker screen."
+  },
+  "@wardAndLgaSelection": {
+    "description": "UI text on the location picker screen."
+  },
+  "@selectWardDropdown": {
+    "description": "UI text on the location picker screen."
+  },
+  "@selectLgaWardIncident": {
+    "description": "Message on the location picker screen."
+  },
+  "@stateLabel": {
+    "description": "Label/heading on the location picker screen, location selector widget."
+  },
+  "@selectState": {
+    "description": "UI text on the location picker screen, location selector widget."
+  },
+  "@selectStateFirst": {
+    "description": "UI text on the location picker screen, location selector widget."
+  },
+  "@lgaLabel": {
+    "description": "Label/heading on the location picker screen."
+  },
+  "@selectLga": {
+    "description": "UI text on the location picker screen, location selector widget."
+  },
+  "@selectLgaFirst": {
+    "description": "UI text on the location picker screen, location selector widget."
+  },
+  "@wardLabel": {
+    "description": "Label/heading on the admin reports screen, location picker screen, location selector widget."
+  },
+  "@selectWard": {
+    "description": "UI text on the location picker screen, location selector widget."
+  },
+  "@enterLocationManually": {
+    "description": "UI text on the location picker screen."
+  },
+  "@addressOrCoordinates": {
+    "description": "UI text on the location picker screen."
+  },
+  "@cancelBtn": {
+    "description": "Button label (keep short, max ~20 chars) on the location picker screen."
+  },
+  "@setLocationBtn": {
+    "description": "Button label (keep short, max ~20 chars) on the location picker screen."
+  },
+  "@manualLocationSet": {
+    "description": "UI text on the location picker screen."
+  },
+  "@locationIncorrectManual": {
+    "description": "UI text on the location picker screen."
+  },
+  "@pleaseSelectStateLgaWard": {
+    "description": "Message on the location picker screen, reporting provider, verification request screen."
+  },
+  "@confirmAndContinue": {
+    "description": "UI text on the location picker screen."
+  },
+  "@locationDetailsTitle": {
+    "description": "Label/heading on the location picker screen."
+  },
+  "@latitudeLabel": {
+    "description": "Label/heading on the location picker screen, report view screen."
+  },
+  "@longitudeLabel": {
+    "description": "Label/heading on the location picker screen, report view screen."
+  },
+  "@accuracyLabel": {
+    "description": "Label/heading on the location picker screen."
+  },
+  "@altitudeLabel": {
+    "description": "Label/heading on the location picker screen."
+  },
+  "@closeBtn": {
+    "description": "Button label (keep short, max ~20 chars) on the location picker screen."
+  },
+  "@selectStatusExport": {
+    "description": "UI text on the reports status screen."
+  },
+  "@allReports": {
+    "description": "Filter option on the reports status screen."
+  },
+  "@pendingOnly": {
+    "description": "Filter option on the reports status screen."
+  },
+  "@verifiedOnly": {
+    "description": "Filter option on the reports status screen."
+  },
+  "@approvedOnly": {
+    "description": "Filter option on the reports status screen."
+  },
+  "@adminPortal": {
+    "description": "UI text on the admin screen."
+  },
+  "@systemOverview": {
+    "description": "UI text on the admin screen."
+  },
+  "@quickActions": {
+    "description": "UI text on the admin screen."
+  },
+  "@userManagement": {
+    "description": "UI text on the admin screen, admin users screen."
+  },
+  "@reportsOverview": {
+    "description": "UI text on the admin reports screen, admin screen."
+  },
+  "@alertsBroadcast": {
+    "description": "UI text on the admin alerts screen, admin screen."
+  },
+  "@knowledgeManagement": {
+    "description": "UI text on the admin knowledge screen, admin screen."
+  },
+  "@systemHealth": {
+    "description": "UI text on the admin screen."
+  },
+  "@pendingApprovals": {
+    "description": "UI text on the admin screen."
+  },
+  "@pendingReports": {
+    "description": "UI text on the admin screen, offline home screen."
+  },
+  "@verifiedReports": {
+    "description": "UI text on the admin screen."
+  },
+  "@totalUsers": {
+    "description": "UI text on the admin screen."
+  },
+  "@activeAlertsAdmin": {
+    "description": "UI text on the admin alerts screen, admin screen."
+  },
+  "@totalReports": {
+    "description": "UI text on the admin screen."
+  },
+  "@userManagementDesc": {
+    "description": "Message on the admin screen."
+  },
+  "@reportsOverviewDesc": {
+    "description": "Message on the admin screen."
+  },
+  "@alertsBroadcastDesc": {
+    "description": "Message on the admin screen."
+  },
+  "@knowledgeManagementDesc": {
+    "description": "Message on the admin screen."
+  },
+  "@connected": {
+    "description": "UI text on the admin screen."
+  },
+  "@none": {
+    "description": "UI text on the admin screen."
+  },
+  "languageSelectTitle": "Select Language",
+  "@languageSelectTitle": {
+    "description": "Title of the bottom sheet for choosing the app language."
+  },
+  "shellAppBarTitle": "CRADI Early Warning",
+  "@shellAppBarTitle": {
+    "description": "App bar title on the main screens (CRADI is the organisation name; keep it)."
+  },
+  "shellNotificationsTooltip": "Notifications",
+  "@shellNotificationsTooltip": {
+    "description": "Tooltip/accessibility label for the notifications bell in the app bar."
+  },
+  "shellDrawerDefaultName": "Early Warning Monitor",
+  "@shellDrawerDefaultName": {
+    "description": "Name shown in the side drawer header when the user has no name set."
+  },
+  "shellDrawerProfile": "Profile",
+  "@shellDrawerProfile": {
+    "description": "Side drawer menu item that opens the user's profile."
+  },
+  "navHome": "Home",
+  "@navHome": {
+    "description": "Bottom navigation tab label (max ~10 chars)."
+  },
+  "navAlerts": "Alerts",
+  "@navAlerts": {
+    "description": "Bottom navigation tab label (max ~10 chars)."
+  },
+  "navGuides": "Guides",
+  "@navGuides": {
+    "description": "Navigation label for the hazard guides section (max ~10 chars)."
+  },
+  "navReport": "Report",
+  "@navReport": {
+    "description": "Bottom navigation tab label for creating a hazard report (max ~10 chars)."
+  },
+  "navSettings": "Settings",
+  "@navSettings": {
+    "description": "Bottom navigation tab / menu label for settings (max ~10 chars)."
+  },
+  "navAdmin": "Admin",
+  "@navAdmin": {
+    "description": "Bottom navigation tab label for the admin portal (max ~10 chars)."
+  },
+  "homeGreeting": "Hello, {name}",
+  "@homeGreeting": {
+    "description": "Greeting at the top of the home screen; {name} is the user's first name.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "hazardFlooding": "Flooding",
+  "@hazardFlooding": {
+    "description": "Hazard type name (chips, lists, report details). Keep short (max ~20 chars)."
+  },
+  "hazardExtremeTemperatures": "Extreme Temperatures",
+  "@hazardExtremeTemperatures": {
+    "description": "Hazard type name (heat waves / extreme heat or cold). Keep short (max ~22 chars)."
+  },
+  "hazardDrought": "Drought",
+  "@hazardDrought": {
+    "description": "Hazard type name. Keep short (max ~20 chars)."
+  },
+  "hazardWindstorms": "Windstorms",
+  "@hazardWindstorms": {
+    "description": "Hazard type name. Keep short (max ~20 chars)."
+  },
+  "hazardWildfires": "Wildfires",
+  "@hazardWildfires": {
+    "description": "Hazard type name (bush fires). Keep short (max ~20 chars)."
+  },
+  "hazardErosion": "Erosion",
+  "@hazardErosion": {
+    "description": "Hazard type name (gully erosion, landslides). Keep short (max ~20 chars)."
+  },
+  "hazardPestOutbreak": "Pest Outbreak",
+  "@hazardPestOutbreak": {
+    "description": "Hazard type name. Keep short (max ~20 chars)."
+  },
+  "hazardCropDisease": "Crop Disease",
+  "@hazardCropDisease": {
+    "description": "Hazard type name. Keep short (max ~20 chars)."
+  },
+  "hazardConflict": "Conflict",
+  "@hazardConflict": {
+    "description": "Hazard type name (e.g. farmer-herder clashes). Keep short (max ~20 chars)."
+  },
+  "hazardUnknown": "Unknown Hazard",
+  "@hazardUnknown": {
+    "description": "Shown when a report's hazard type is missing."
+  },
+  "hazardTitleFlooding": "Flood Alert",
+  "@hazardTitleFlooding": {
+    "description": "Headline on report cards for a flooding report."
+  },
+  "hazardTitleExtremeTemperatures": "Temperature Extreme",
+  "@hazardTitleExtremeTemperatures": {
+    "description": "Headline on report cards for an extreme-temperature report."
+  },
+  "hazardTitleDrought": "Drought Warning",
+  "@hazardTitleDrought": {
+    "description": "Headline on report cards for a drought report."
+  },
+  "hazardTitleWindstorms": "High Wind Alert",
+  "@hazardTitleWindstorms": {
+    "description": "Headline on report cards for a windstorm report."
+  },
+  "hazardTitleWildfires": "Wildfire Report",
+  "@hazardTitleWildfires": {
+    "description": "Headline on report cards for a wildfire report."
+  },
+  "hazardTitleErosion": "Erosion Report",
+  "@hazardTitleErosion": {
+    "description": "Headline on report cards for an erosion report."
+  },
+  "hazardTitlePestOutbreak": "Pest Outbreak",
+  "@hazardTitlePestOutbreak": {
+    "description": "Headline on report cards for a pest outbreak report."
+  },
+  "hazardTitleCropDisease": "Crop Disease",
+  "@hazardTitleCropDisease": {
+    "description": "Headline on report cards for a crop disease report."
+  },
+  "hazardTitleConflict": "Conflict Report",
+  "@hazardTitleConflict": {
+    "description": "Headline on report cards for a conflict report."
+  },
+  "timeJustNow": "Just now",
+  "@timeJustNow": {
+    "description": "Relative time for something that happened less than a minute ago."
+  },
+  "timeMinutesAgo": "{count, plural, other{{count}m ago}}",
+  "@timeMinutesAgo": {
+    "description": "Compact relative time in minutes (e.g. '5m ago') on report cards. Keep very short.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "timeHoursAgo": "{count, plural, other{{count}h ago}}",
+  "@timeHoursAgo": {
+    "description": "Compact relative time in hours (e.g. '3h ago') on report cards. Keep very short.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "timeDaysAgo": "{count, plural, other{{count}d ago}}",
+  "@timeDaysAgo": {
+    "description": "Compact relative time in days (e.g. '2d ago') on report cards. Keep very short.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "timeWeeksAgo": "{count, plural, other{{count}w ago}}",
+  "@timeWeeksAgo": {
+    "description": "Compact relative time in weeks (e.g. '1w ago') on report cards. Keep very short.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "commonUnknown": "Unknown",
+  "@commonUnknown": {
+    "description": "Placeholder shown when a value (time, name, etc.) is missing."
+  },
+  "commonUnknownLocation": "Unknown Location",
+  "@commonUnknownLocation": {
+    "description": "Placeholder shown when a report has no location text."
+  },
+  "commonAnonymous": "Anonymous",
+  "@commonAnonymous": {
+    "description": "Shown instead of a reporter's name when it is not available."
+  },
+  "commonCommunityReport": "Community Report",
+  "@commonCommunityReport": {
+    "description": "Shown as the reporter name when the reporter is not known (report came from the community)."
+  },
+  "reportStatusPending": "Pending",
+  "@reportStatusPending": {
+    "description": "Status badge for a report awaiting peer verification (max ~12 chars)."
+  },
+  "reportStatusVerified": "Verified",
+  "@reportStatusVerified": {
+    "description": "Status badge for a report verified by peers (max ~12 chars)."
+  },
+  "reportStatusApproved": "Approved",
+  "@reportStatusApproved": {
+    "description": "Status badge for a report approved by staff (max ~12 chars)."
+  },
+  "reportStatusRejected": "Rejected",
+  "@reportStatusRejected": {
+    "description": "Status badge for a rejected report (max ~12 chars)."
+  },
+  "verifyErrorOwnReport": "You cannot verify your own report.",
+  "@verifyErrorOwnReport": {
+    "description": "Error when a user tries to verify/dispute a report they submitted."
+  },
+  "verifyErrorTooFar": "You must be within 2 km of the report location to verify. Current distance: {distanceKm} km.",
+  "@verifyErrorTooFar": {
+    "description": "Error when the user is too far from the report to verify it; {distanceKm} is a number with one decimal, e.g. 3.4.",
+    "placeholders": {
+      "distanceKm": {
+        "type": "String"
+      }
+    }
+  },
+  "verifyConfirmedMessage": "Report confirmed successfully",
+  "@verifyConfirmedMessage": {
+    "description": "Snackbar after confirming (voting for) a report."
+  },
+  "verifyDisputedMessage": "Report disputed",
+  "@verifyDisputedMessage": {
+    "description": "Snackbar after disputing (voting against) a report."
+  },
+  "verifyErrorAlreadyVoted": "You have already voted on this report.",
+  "@verifyErrorAlreadyVoted": {
+    "description": "Error when the user already voted on the report."
+  },
+  "verifyErrorNotPermitted": "Your account is not permitted to verify reports. Verification requires an approved monitor role.",
+  "@verifyErrorNotPermitted": {
+    "description": "Error when the account role cannot verify reports."
+  },
+  "verifyErrorNoLongerPending": "This report is no longer pending.",
+  "@verifyErrorNoLongerPending": {
+    "description": "Error when voting on a report that was already verified/rejected."
+  },
+  "verifyErrorSignedOut": "You must be signed in to verify reports.",
+  "@verifyErrorSignedOut": {
+    "description": "Error when verifying while signed out."
+  },
+  "verifyErrorFailed": "Verification failed",
+  "@verifyErrorFailed": {
+    "description": "Generic error when a verification vote fails."
+  },
+  "verifyErrorDisputeReasonRequired": "Please explain why you dispute this report.",
+  "@verifyErrorDisputeReasonRequired": {
+    "description": "Error when disputing a report without giving a reason."
+  },
+  "verifyRequestQueuedOffline": "Offline: request saved and will sync when you are back online.",
+  "@verifyRequestQueuedOffline": {
+    "description": "Message when a verification request was saved offline for later upload."
+  },
+  "reportActionErrorNoPermissionOrGone": "You do not have permission to change this report, or it no longer exists.",
+  "@reportActionErrorNoPermissionOrGone": {
+    "description": "Error when a staff action on a report fails because of permissions or deletion."
+  },
+  "reportActionErrorAlreadyPending": "This report is already pending.",
+  "@reportActionErrorAlreadyPending": {
+    "description": "Error when reopening a report that is already pending."
+  },
+  "reportActionErrorGone": "This report no longer exists.",
+  "@reportActionErrorGone": {
+    "description": "Error when acting on a deleted report."
+  },
+  "reportActionErrorNoPermission": "You do not have permission to change this report.",
+  "@reportActionErrorNoPermission": {
+    "description": "Error when the server refuses a change to a report."
+  },
+  "reportsLoadErrorOffline": "Could not reach the server. Check your connection and retry.",
+  "@reportsLoadErrorOffline": {
+    "description": "Error shown in report lists when the server cannot be reached."
+  },
+  "offlineSavedWillSync": "Saved offline. It will sync when you are back online.",
+  "@offlineSavedWillSync": {
+    "description": "Message shown when data was saved to the offline queue."
+  },
+  "profileErrorOfflineNotSaved": "You're offline — changes not saved.",
+  "@profileErrorOfflineNotSaved": {
+    "description": "Error when a profile edit cannot be saved because the device is offline."
+  },
+  "profileErrorSignedOut": "You must be signed in to update your profile.",
+  "@profileErrorSignedOut": {
+    "description": "Error when editing the profile while signed out."
+  },
+  "profileErrorSaveFailed": "Could not save your changes. Please check your connection and try again.",
+  "@profileErrorSaveFailed": {
+    "description": "Error when a profile edit fails on the server."
+  },
+  "profileErrorNameRequired": "Please enter your name.",
+  "@profileErrorNameRequired": {
+    "description": "Validation error when the name field is empty."
+  },
+  "profileErrorEmailSignedOut": "You must be signed in to change your email.",
+  "@profileErrorEmailSignedOut": {
+    "description": "Error when changing the email while signed out."
+  },
+  "profileEmailConfirmationSent": "A confirmation link has been sent to {email}. Your email will change after you confirm it.",
+  "@profileEmailConfirmationSent": {
+    "description": "Message after requesting an email change; {email} is the new address.",
+    "placeholders": {
+      "email": {
+        "type": "String"
+      }
+    }
+  },
+  "profileErrorEmailReauth": "For security, please log out and sign in again before changing your email.",
+  "@profileErrorEmailReauth": {
+    "description": "Error when the server requires a fresh sign-in to change email."
+  },
+  "profileErrorEmailInUse": "That email is already in use by another account.",
+  "@profileErrorEmailInUse": {
+    "description": "Error when the new email belongs to another account."
+  },
+  "profileErrorEmailUpdateFailed": "Could not update email. Please try again.",
+  "@profileErrorEmailUpdateFailed": {
+    "description": "Generic error when changing email fails."
+  },
+  "profileErrorLocationIncomplete": "Please select your state, LGA and ward to update your location.",
+  "@profileErrorLocationIncomplete": {
+    "description": "Error when the location form is incomplete. LGA = Local Government Area."
+  },
+  "profileErrorLocationSignedOut": "You must be signed in to change your location.",
+  "@profileErrorLocationSignedOut": {
+    "description": "Error when changing location while signed out."
+  },
+  "profileErrorLocationManaged": "Your location is managed by an administrator. Please ask an admin to change the location of a staff account.",
+  "@profileErrorLocationManaged": {
+    "description": "Error when a staff account tries to change its own location."
+  },
+  "profileErrorLocationFailed": "Could not update your location. Please check your connection and try again.",
+  "@profileErrorLocationFailed": {
+    "description": "Error when saving the location fails."
+  },
+  "profileDefaultName": "User",
+  "@profileDefaultName": {
+    "description": "Name shown when the user's name is not known."
+  },
+  "homeVerifyReportsLink": "Verify Reports",
+  "@homeVerifyReportsLink": {
+    "description": "Home screen quick link that opens the peer verification queue."
+  },
+  "homeTabNearby": "Nearby",
+  "@homeTabNearby": {
+    "description": "Home feed filter tab showing reports near the user (max ~10 chars)."
+  },
+  "homeZoneStatus": "{zone} • {status}",
+  "@homeZoneStatus": {
+    "description": "Monitoring zone line in the home header; {zone} is the zone name or 'Select Zone', {status} is 'Active' or 'Not Set'.",
+    "placeholders": {
+      "zone": {
+        "type": "String"
+      },
+      "status": {
+        "type": "String"
+      }
+    }
+  },
+  "homeEmptyMyReports": "You haven't submitted any reports yet",
+  "@homeEmptyMyReports": {
+    "description": "Empty state of the home 'My Reports' feed."
+  },
+  "homeOpenNearbyReports": "Open Nearby Reports",
+  "@homeOpenNearbyReports": {
+    "description": "Link above the nearby feed that opens the full nearby reports screen."
+  },
+  "homeEmptyNearby": "No nearby reports",
+  "@homeEmptyNearby": {
+    "description": "Empty state of the home 'Nearby' feed."
+  },
+  "reportLocationAndTime": "{location} • {time}",
+  "@reportLocationAndTime": {
+    "description": "Subtitle on report cards; {location} is the place, {time} is a relative time like '5m ago'.",
+    "placeholders": {
+      "location": {
+        "type": "String"
+      },
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "homeZoneSheetTitle": "Select Monitoring Zone",
+  "@homeZoneSheetTitle": {
+    "description": "Title of the bottom sheet for choosing the monitoring zone."
+  },
+  "homeZoneAll": "All Zones (No Filter)",
+  "@homeZoneAll": {
+    "description": "Option in the monitoring zone sheet that removes the zone filter."
+  },
+  "homeZoneAllSelected": "Showing all zones",
+  "@homeZoneAllSelected": {
+    "description": "Snackbar after removing the monitoring zone filter."
+  },
+  "homeZoneAllLocalOnly": "Showing all zones on this device. {error}",
+  "@homeZoneAllLocalOnly": {
+    "description": "Snackbar when the 'all zones' choice was applied locally but not saved to the account; {error} is the reason.",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "homeZoneChanged": "Monitoring zone changed to {zone}",
+  "@homeZoneChanged": {
+    "description": "Snackbar after choosing a monitoring zone; {zone} is the zone name.",
+    "placeholders": {
+      "zone": {
+        "type": "String"
+      }
+    }
+  },
+  "homeZoneLocalOnly": "Showing {zone} on this device. {error}",
+  "@homeZoneLocalOnly": {
+    "description": "Snackbar when the zone was applied locally but not saved to the account; {zone} is the zone, {error} the reason.",
+    "placeholders": {
+      "zone": {
+        "type": "String"
+      },
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "zoneStateLabel": "{state} State",
+  "@zoneStateLabel": {
+    "description": "Name of a state-level monitoring zone; {state} is a Nigerian state name, e.g. 'Benue State'.",
+    "placeholders": {
+      "state": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsPushPermissionNeeded": "Allow notifications for EWER in your phone settings to receive alerts.",
+  "@settingsPushPermissionNeeded": {
+    "description": "Snackbar when push notifications are turned on but the phone's permission is denied. EWER is the app name."
+  },
+  "settingsPushUnavailable": "Push notifications are unavailable right now. Your choice is saved and will apply when they are.",
+  "@settingsPushUnavailable": {
+    "description": "Snackbar when the push service cannot be reached."
+  },
+  "settingsSectionSecurity": "SECURITY & PRIVACY",
+  "@settingsSectionSecurity": {
+    "description": "Section header in Settings (upper case)."
+  },
+  "settingsBiometricSubtitle": "Use fingerprint or Face ID to login",
+  "@settingsBiometricSubtitle": {
+    "description": "Subtitle of the biometric login switch in Settings."
+  },
+  "settingsBiometricUnavailable": "Not available on this device",
+  "@settingsBiometricUnavailable": {
+    "description": "Shown under 'Biometric Login' when the device has no biometrics."
+  },
+  "settingsOfflineMode": "Offline Mode",
+  "@settingsOfflineMode": {
+    "description": "Settings switch that forces the app offline."
+  },
+  "settingsOfflineModeEnabled": "Offline mode enabled",
+  "@settingsOfflineModeEnabled": {
+    "description": "Snackbar after turning Offline Mode on."
+  },
+  "settingsOfflineModeRestoring": "Restoring connection...",
+  "@settingsOfflineModeRestoring": {
+    "description": "Snackbar after turning Offline Mode off."
+  },
+  "settingsLogoutConfirm": "Are you sure you want to sign out?",
+  "@settingsLogoutConfirm": {
+    "description": "Body of the log-out confirmation dialog."
+  },
+  "settingsFooterSystemName": "Climate Early Warning System (CEWS)",
+  "@settingsFooterSystemName": {
+    "description": "Footer text at the bottom of Settings (system name; CEWS is the acronym)."
+  },
+  "biometricErrorNotEnrolled": "No biometrics enrolled. Please add a fingerprint or Face ID in your device Settings first.",
+  "@biometricErrorNotEnrolled": {
+    "description": "Error when the device has no fingerprint/face enrolled."
+  },
+  "biometricErrorUnavailable": "Biometrics are not available on this device.",
+  "@biometricErrorUnavailable": {
+    "description": "Error when the device lacks biometric hardware."
+  },
+  "biometricErrorLockedOut": "Too many attempts. Biometrics are locked; unlock your device and try again later.",
+  "@biometricErrorLockedOut": {
+    "description": "Error when biometrics are locked after too many failed attempts."
+  },
+  "biometricErrorFailed": "Biometric authentication failed. Please try again.",
+  "@biometricErrorFailed": {
+    "description": "Generic biometric failure."
+  },
+  "biometricPromptDefault": "Please authenticate to continue",
+  "@biometricPromptDefault": {
+    "description": "Text in the system fingerprint/face prompt (fallback)."
+  },
+  "biometricEnablePrompt": "Enable biometric login for EWER",
+  "@biometricEnablePrompt": {
+    "description": "Text in the system fingerprint/face prompt when turning on biometric login. EWER is the app name."
+  },
+  "biometricLoginPrompt": "Authenticate to login to EWER Mobile",
+  "@biometricLoginPrompt": {
+    "description": "Text in the system fingerprint/face prompt when unlocking the app. EWER is the app name."
+  },
+  "biometricTypeFace": "Face ID",
+  "@biometricTypeFace": {
+    "description": "Name of face-recognition biometrics."
+  },
+  "biometricTypeFingerprint": "Fingerprint",
+  "@biometricTypeFingerprint": {
+    "description": "Name of fingerprint biometrics."
+  },
+  "biometricTypeIris": "Iris",
+  "@biometricTypeIris": {
+    "description": "Name of iris-scan biometrics."
+  },
+  "biometricTypeGeneric": "Biometric",
+  "@biometricTypeGeneric": {
+    "description": "Generic name for biometrics."
+  },
+  "authErrorEmailRegistered": "Email is already registered. Please login.",
+  "@authErrorEmailRegistered": {
+    "description": "Registration error when the email already has an account."
+  },
+  "authErrorRegistrationFailed": "Registration failed. Please try again.",
+  "@authErrorRegistrationFailed": {
+    "description": "Generic registration error."
+  },
+  "authErrorNetworkRetry": "Network error. Please check your connection and try again.",
+  "@authErrorNetworkRetry": {
+    "description": "Network error during registration/login."
+  },
+  "authErrorWeakPassword": "Password is too weak. Use at least 8 characters with letters, numbers and symbols.",
+  "@authErrorWeakPassword": {
+    "description": "Registration error for a weak password."
+  },
+  "authErrorAccountRegistered": "This account is already registered. Please login.",
+  "@authErrorAccountRegistered": {
+    "description": "Registration error when the account already exists."
+  },
+  "authErrorRegistrationDisabled": "Registration is currently disabled. Please contact support.",
+  "@authErrorRegistrationDisabled": {
+    "description": "Registration error when sign-ups are turned off."
+  },
+  "authErrorTooManyAttempts": "Too many attempts. Please wait a few minutes before trying again.",
+  "@authErrorTooManyAttempts": {
+    "description": "Rate-limit error for registration/SMS/code requests."
+  },
+  "authErrorLoginFailed": "Login failed. Please try again.",
+  "@authErrorLoginFailed": {
+    "description": "Generic login error."
+  },
+  "authErrorAccountDisabled": "This account has been disabled. Please contact support.",
+  "@authErrorAccountDisabled": {
+    "description": "Login error for a deactivated account."
+  },
+  "authErrorLoginConnection": "Login failed. Please check your connection.",
+  "@authErrorLoginConnection": {
+    "description": "Login error when the server cannot be reached."
+  },
+  "authErrorInvalidCredentials": "Invalid email or password",
+  "@authErrorInvalidCredentials": {
+    "description": "Login error for wrong email/password."
+  },
+  "authErrorTooManyLogins": "Too many login attempts. Please wait a few minutes and try again.",
+  "@authErrorTooManyLogins": {
+    "description": "Rate-limit error for login."
+  },
+  "authErrorLoginUnexpected": "An unexpected error occurred during login. Please try again.",
+  "@authErrorLoginUnexpected": {
+    "description": "Unexpected login failure."
+  },
+  "authErrorInvalidPhone": "Invalid phone number.",
+  "@authErrorInvalidPhone": {
+    "description": "Error for an invalid phone number when requesting an SMS code."
+  },
+  "authErrorSmsUnavailable": "SMS service is not available. Please contact support.",
+  "@authErrorSmsUnavailable": {
+    "description": "Error when SMS sending is disabled."
+  },
+  "authErrorPhoneNotRegistered": "No account found for this number. Please register first.",
+  "@authErrorPhoneNotRegistered": {
+    "description": "Error when logging in with an unregistered phone number."
+  },
+  "authErrorSmsFailed": "Failed to send verification SMS.",
+  "@authErrorSmsFailed": {
+    "description": "Error when the verification SMS cannot be sent."
+  },
+  "authErrorCodeSendFailed": "Failed to send verification code.",
+  "@authErrorCodeSendFailed": {
+    "description": "Error when the verification code email cannot be sent."
+  },
+  "authErrorNoUserContext": "No user context for verification. Please login again.",
+  "@authErrorNoUserContext": {
+    "description": "Error when verifying a code without a pending sign-in."
+  },
+  "authErrorVerificationFailed": "Verification failed. Please try again.",
+  "@authErrorVerificationFailed": {
+    "description": "Generic code verification error."
+  },
+  "authErrorInvalidCode": "Invalid or expired verification code. Please request a new one.",
+  "@authErrorInvalidCode": {
+    "description": "Error for a wrong/expired verification code."
+  },
+  "authErrorTooManyAttemptsRetry": "Too many attempts. Please wait a few minutes and try again.",
+  "@authErrorTooManyAttemptsRetry": {
+    "description": "Rate-limit error when verifying a code."
+  },
+  "authErrorVerifyCodeFailed": "Failed to verify code.",
+  "@authErrorVerifyCodeFailed": {
+    "description": "Unexpected error when verifying a code."
+  },
+  "authErrorNotLoggedIn": "User not logged in",
+  "@authErrorNotLoggedIn": {
+    "description": "Error when an action needs a signed-in user."
+  },
+  "authErrorResendFailed": "Failed to resend verification code. Please try again.",
+  "@authErrorResendFailed": {
+    "description": "Error when resending the verification code fails."
+  },
+  "authErrorResetEmailFailed": "Failed to send reset email. Please try again.",
+  "@authErrorResetEmailFailed": {
+    "description": "Error when the password reset email cannot be sent."
+  },
+  "authErrorResetWeakPassword": "Password is too weak. The code has been used, so please request a new code and choose a stronger password.",
+  "@authErrorResetWeakPassword": {
+    "description": "Password reset error for a weak new password."
+  },
+  "authErrorResetCodeInvalid": "This reset code is invalid or has expired. Please request a new one.",
+  "@authErrorResetCodeInvalid": {
+    "description": "Password reset error for a wrong/expired code."
+  },
+  "authErrorResetSamePassword": "Your new password must be different from the old one. The code has been used, so please request a new code.",
+  "@authErrorResetSamePassword": {
+    "description": "Password reset error when the new password equals the old one."
+  },
+  "authErrorResetFailed": "Failed to reset password. Please try again.",
+  "@authErrorResetFailed": {
+    "description": "Generic password reset error."
+  },
+  "rateLimitAccountLocked": "Account is locked due to too many failed attempts",
+  "@rateLimitAccountLocked": {
+    "description": "Error when sign-in is locked after too many failures."
+  },
+  "rateLimitWaitSeconds": "{count, plural, =1{Please wait 1 second before trying again} other{Please wait {count} seconds before trying again}}",
+  "@rateLimitWaitSeconds": {
+    "description": "Error during a sign-in cooldown; {count} is seconds.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "rateLimitLockedMinutes": "{count, plural, =1{Too many failed attempts. Account locked for 1 minute.} other{Too many failed attempts. Account locked for {count} minutes.}}",
+  "@rateLimitLockedMinutes": {
+    "description": "Error when sign-in gets locked; {count} is minutes.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "rateLimitOtpMinutes": "{count, plural, =1{Too many OTP requests. Please try again in 1 minute.} other{Too many OTP requests. Please try again in {count} minutes.}}",
+  "@rateLimitOtpMinutes": {
+    "description": "Error when too many verification codes were requested; {count} is minutes. OTP = one-time password.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "rateLimitResendSeconds": "{count, plural, =1{Please wait 1 second before requesting another code} other{Please wait {count} seconds before requesting another code}}",
+  "@rateLimitResendSeconds": {
+    "description": "Error when resending a code too soon; {count} is seconds.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "rateLimitAttemptsRemaining": "{count, plural, =1{1 attempt remaining} other{{count} attempts remaining}}",
+  "@rateLimitAttemptsRemaining": {
+    "description": "Remaining sign-in attempts before lockout.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "rateLimitExceeded": "Rate limit exceeded",
+  "@rateLimitExceeded": {
+    "description": "Generic rate-limit error."
+  },
+  "reportErrorMaxPhotos": "{count, plural, =1{Maximum 1 image allowed} other{Maximum {count} images allowed}}",
+  "@reportErrorMaxPhotos": {
+    "description": "Error when adding more photos than allowed to a report.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "reportErrorMissingHazard": "Please select a hazard type.",
+  "@reportErrorMissingHazard": {
+    "description": "Error when submitting a report without a hazard type."
+  },
+  "reportErrorMissingSeverity": "Please select a severity level.",
+  "@reportErrorMissingSeverity": {
+    "description": "Error when submitting a report without a severity."
+  },
+  "reportErrorMissingLocation": "Please add the location details.",
+  "@reportErrorMissingLocation": {
+    "description": "Error when submitting a report without location details."
+  },
+  "reportErrorSignedOut": "You must be signed in to submit or save a report.",
+  "@reportErrorSignedOut": {
+    "description": "Error when submitting a report while signed out."
+  },
+  "reportSavedAsDraft": "Saved as draft. Will sync when online.",
+  "@reportSavedAsDraft": {
+    "description": "Message when a report is saved offline as a draft."
+  },
+  "reportSubmittedWithPeers": "Report submitted successfully! Verification requests sent to peers.",
+  "@reportSubmittedWithPeers": {
+    "description": "Message after a report is submitted online."
+  },
+  "reportQueuedServerUnreachable": "Could not reach the server. Saved and will sync later.",
+  "@reportQueuedServerUnreachable": {
+    "description": "Message when the server was unreachable and the report was queued."
+  },
+  "syncResultSummary": "Synced {count} items. {failed} failed.",
+  "@syncResultSummary": {
+    "description": "Summary after syncing offline reports; {count} uploaded, {failed} failed.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "failed": {
+        "type": "int"
+      }
+    }
+  },
+  "reportErrorPhotoProcessing": "A photo could not be processed. Please remove it or choose another photo.",
+  "@reportErrorPhotoProcessing": {
+    "description": "Error when a picked photo cannot be re-encoded for upload."
+  },
+  "severityLow": "Low",
+  "@severityLow": {
+    "description": "Severity level label (chips, badges). Max ~10 chars."
+  },
+  "severityMedium": "Medium",
+  "@severityMedium": {
+    "description": "Severity level label (chips, badges). Max ~10 chars."
+  },
+  "severityHigh": "High",
+  "@severityHigh": {
+    "description": "Severity level label (chips, badges). Max ~10 chars."
+  },
+  "severityCritical": "Critical",
+  "@severityCritical": {
+    "description": "Severity level label (chips, badges). Max ~10 chars."
+  },
+  "alertSeverityUnspecified": "Unspecified severity",
+  "@alertSeverityUnspecified": {
+    "description": "Shown when an alert has no severity."
+  },
+  "alertSeverityInfo": "Info",
+  "@alertSeverityInfo": {
+    "description": "Severity of an informational staff alert."
+  },
+  "alertSeverityWarning": "Warning",
+  "@alertSeverityWarning": {
+    "description": "Severity of a warning staff alert."
+  },
+  "reviewDateTodayAt": "Today at {time}",
+  "@reviewDateTodayAt": {
+    "description": "Report review: when the incident happened today; {time} is a formatted time like 3:05 PM.",
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "reviewDateOnAt": "{date} at {time}",
+  "@reviewDateOnAt": {
+    "description": "Report review: when the incident happened; {date} like 'Mar 05, 2026', {time} like '3:05 PM'.",
+    "placeholders": {
+      "date": {
+        "type": "String"
+      },
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "reviewLocationUnknown": "Exact location unknown - the selected area will be used",
+  "@reviewLocationUnknown": {
+    "description": "Report review note when there is no GPS fix and no map pin."
+  },
+  "reviewLocationApproximate": "Location approximate (area centre, no GPS fix)",
+  "@reviewLocationApproximate": {
+    "description": "Report review note when the location is the centre of the selected area."
+  },
+  "reportDetailsSpeechError": "Speech recognition error. Please try again.",
+  "@reportDetailsSpeechError": {
+    "description": "Snackbar when voice input fails on the report details screen."
+  },
+  "reportDetailsCameraUnavailable": "Camera is not available. Please try using the gallery.",
+  "@reportDetailsCameraUnavailable": {
+    "description": "Snackbar when the camera cannot be opened."
+  },
+  "reportDetailsGalleryError": "Could not access gallery. Please try again.",
+  "@reportDetailsGalleryError": {
+    "description": "Snackbar when the photo gallery cannot be opened."
+  },
+  "reportDetailsFutureTime": "The incident time cannot be in the future. It has been set to the current time.",
+  "@reportDetailsFutureTime": {
+    "description": "Snackbar when the chosen incident time is in the future."
+  },
+  "geoErrorServicesOff": "Location services are turned off. Please enable GPS.",
+  "@geoErrorServicesOff": {
+    "description": "Error when the phone's location services are off."
+  },
+  "geoErrorPermissionDenied": "Location permission was denied.",
+  "@geoErrorPermissionDenied": {
+    "description": "Error when the app has no location permission."
+  },
+  "geoErrorServicesUnavailable": "Could not access location services.",
+  "@geoErrorServicesUnavailable": {
+    "description": "Error when location services cannot be queried."
+  },
+  "geoNoticeLastKnown": "Could not get a fresh GPS fix; using your last known location.",
+  "@geoNoticeLastKnown": {
+    "description": "Notice when the app falls back to the last known position."
+  },
+  "geoErrorTimeout": "Timed out waiting for a GPS signal. Move to an open area and try again, or choose your location manually.",
+  "@geoErrorTimeout": {
+    "description": "Error when no GPS fix arrives in time."
+  },
+  "geoErrorUndetermined": "Could not determine your location. Please try again or choose your location manually.",
+  "@geoErrorUndetermined": {
+    "description": "Error when the location cannot be determined."
+  },
+  "commonLoading": "Loading...",
+  "@commonLoading": {
+    "description": "Placeholder while something loads."
+  },
+  "locationPickerSeverityLow": "Low Severity",
+  "@locationPickerSeverityLow": {
+    "description": "Location picker severity slider: level 1 title."
+  },
+  "locationPickerSeverityMedium": "Medium Severity",
+  "@locationPickerSeverityMedium": {
+    "description": "Location picker severity slider: level 2 title."
+  },
+  "locationPickerSeverityHigh": "High Severity",
+  "@locationPickerSeverityHigh": {
+    "description": "Location picker severity slider: level 3 title."
+  },
+  "locationPickerSeverityCritical": "Critical Severity",
+  "@locationPickerSeverityCritical": {
+    "description": "Location picker severity slider: level 4 title."
+  },
+  "locationPickerSeverityLowDesc": "Minor issue. No immediate threat.",
+  "@locationPickerSeverityLowDesc": {
+    "description": "Description of the low severity level."
+  },
+  "locationPickerSeverityMediumDesc": "Moderate issue. Monitor situation.",
+  "@locationPickerSeverityMediumDesc": {
+    "description": "Description of the medium severity level."
+  },
+  "locationPickerSeverityHighDesc": "Significant threat to property or health. Response required.",
+  "@locationPickerSeverityHighDesc": {
+    "description": "Description of the high severity level."
+  },
+  "locationPickerSeverityCriticalDesc": "Life-threatening situation. Immediate action required.",
+  "@locationPickerSeverityCriticalDesc": {
+    "description": "Description of the critical severity level."
+  },
+  "locationPickerSelectedLevel": "Selected Level",
+  "@locationPickerSelectedLevel": {
+    "description": "Small caption above the chosen severity level."
+  },
+  "locationPickerGpsApproximate": "Approximate",
+  "@locationPickerGpsApproximate": {
+    "description": "GPS status chip when the position is an area centre or a tapped point (max ~12 chars)."
+  },
+  "locationPickerLgaHeading": "LGA",
+  "@locationPickerLgaHeading": {
+    "description": "Small caption above the detected Local Government Area (upper case, keep short)."
+  },
+  "locationPickerWardHeading": "WARD",
+  "@locationPickerWardHeading": {
+    "description": "Small caption above the detected ward (upper case, keep short)."
+  },
+  "locationPickerUnknownLga": "Unknown LGA",
+  "@locationPickerUnknownLga": {
+    "description": "Shown when the LGA could not be detected from GPS."
+  },
+  "locationPickerUnknownWard": "Unknown Ward",
+  "@locationPickerUnknownWard": {
+    "description": "Shown when the ward could not be detected from GPS."
+  },
+  "locationPickerAutofilled": "Auto-filled from GPS",
+  "@locationPickerAutofilled": {
+    "description": "Snackbar after filling LGA/ward from the GPS position."
+  },
+  "locationPickerGpsLgaNotFound": "GPS Location ({lga}) not found in {state}",
+  "@locationPickerGpsLgaNotFound": {
+    "description": "Snackbar when the GPS LGA is not in the selected state; {lga} LGA name, {state} state name.",
+    "placeholders": {
+      "lga": {
+        "type": "String"
+      },
+      "state": {
+        "type": "String"
+      }
+    }
+  },
+  "locationPickerGpsUnavailable": "GPS Location unavailable or State not selected",
+  "@locationPickerGpsUnavailable": {
+    "description": "Snackbar when GPS auto-fill is not possible."
+  },
+  "locationPickerMeters": "{distance} meters",
+  "@locationPickerMeters": {
+    "description": "GPS accuracy in the location details sheet; {distance} is a number like 12.5.",
+    "placeholders": {
+      "distance": {
+        "type": "String"
+      }
+    }
+  },
+  "locationPickerMetersShort": "{distance} m",
+  "@locationPickerMetersShort": {
+    "description": "Altitude in the location details sheet; {distance} is a number like 350.0. 'm' = metres.",
+    "placeholders": {
+      "distance": {
+        "type": "String"
+      }
+    }
+  },
+  "reportViewSectionDetails": "Details",
+  "@reportViewSectionDetails": {
+    "description": "Section heading on the report details screen."
+  },
+  "reportViewReporter": "Reporter",
+  "@reportViewReporter": {
+    "description": "Label of the reporter's name on the report details screen."
+  },
+  "reportViewReported": "Reported",
+  "@reportViewReported": {
+    "description": "Label of the time the report was submitted."
+  },
+  "reportViewSeverity": "Severity",
+  "@reportViewSeverity": {
+    "description": "Label of the report severity."
+  },
+  "reportViewVerifications": "Verifications",
+  "@reportViewVerifications": {
+    "description": "Label of the number of peer verifications."
+  },
+  "reportViewEvidenceCount": "Evidence ({count})",
+  "@reportViewEvidenceCount": {
+    "description": "Section heading for report photos; {count} is the number of photos.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "reportViewCoordinates": "Coordinates",
+  "@reportViewCoordinates": {
+    "description": "Section heading for GPS coordinates."
+  },
+  "reportViewRejectedOn": "Report rejected on {date}",
+  "@reportViewRejectedOn": {
+    "description": "Heading of the rejection card; {date} like 'Mar 5, 2026'.",
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "reportViewNoReason": "No reason was given.",
+  "@reportViewNoReason": {
+    "description": "Shown when a rejected report has no rejection reason."
+  },
+  "myReportsTabActive": "Active",
+  "@myReportsTabActive": {
+    "description": "Tab on My Reports listing reports still being verified (max ~12 chars)."
+  },
+  "myReportsTabHistory": "History",
+  "@myReportsTabHistory": {
+    "description": "Tab on My Reports listing approved/rejected reports (max ~12 chars)."
+  },
+  "myReportsSignIn": "Please sign in to view your reports.",
+  "@myReportsSignIn": {
+    "description": "Shown on My Reports when signed out."
+  },
+  "myReportsEmptyActiveTitle": "No active reports",
+  "@myReportsEmptyActiveTitle": {
+    "description": "Empty state title of the Active tab."
+  },
+  "myReportsEmptyActiveBody": "Reports you submit will appear here while being verified.",
+  "@myReportsEmptyActiveBody": {
+    "description": "Empty state text of the Active tab."
+  },
+  "myReportsEmptyHistoryTitle": "No report history",
+  "@myReportsEmptyHistoryTitle": {
+    "description": "Empty state title of the History tab."
+  },
+  "myReportsEmptyHistoryBody": "Your approved and rejected reports will appear here.",
+  "@myReportsEmptyHistoryBody": {
+    "description": "Empty state text of the History tab."
+  },
+  "myReportsNewReport": "New Report",
+  "@myReportsNewReport": {
+    "description": "Floating button that starts a new hazard report (max ~14 chars)."
+  },
+  "myReportsRejectionReason": "Reason: {reason}",
+  "@myReportsRejectionReason": {
+    "description": "Rejection reason on a report card; {reason} is the staff's text.",
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "nearbyTitle": "Nearby Reports",
+  "@nearbyTitle": {
+    "description": "App bar title of the nearby reports screen."
+  },
+  "nearbyNotAvailableTitle": "Not available for your account",
+  "@nearbyNotAvailableTitle": {
+    "description": "Title shown to plain users on the nearby reports screen."
+  },
+  "nearbyNotAvailableBody": "Nearby reports are visible to approved monitors and staff. You can follow your own reports under My Reports.",
+  "@nearbyNotAvailableBody": {
+    "description": "Explanation shown to plain users on the nearby reports screen."
+  },
+  "nearbyLocationNotSetTitle": "Location Not Set",
+  "@nearbyLocationNotSetTitle": {
+    "description": "Title when the user has no LGA/zone set."
+  },
+  "nearbyLocationNotSetBody": "Set your LGA or monitoring zone in\nyour profile to see reports near you.",
+  "@nearbyLocationNotSetBody": {
+    "description": "Text when the user has no LGA/zone set (contains a line break)."
+  },
+  "nearbyLoadErrorTitle": "Could not load reports",
+  "@nearbyLoadErrorTitle": {
+    "description": "Title when nearby reports failed to load."
+  },
+  "nearbyEmptyTitle": "No Nearby Reports",
+  "@nearbyEmptyTitle": {
+    "description": "Empty state title of the nearby reports screen."
+  },
+  "nearbyEmptyBody": "There are no reports from your\narea at this time.",
+  "@nearbyEmptyBody": {
+    "description": "Empty state text of the nearby reports screen (contains a line break)."
+  },
+  "alertDetailDefaultTitle": "Alert",
+  "@alertDetailDefaultTitle": {
+    "description": "Title of an alert that has no title."
+  },
+  "alertDetailNotSpecified": "Not specified",
+  "@alertDetailNotSpecified": {
+    "description": "Shown when an alert has no location."
+  },
+  "alertStatusActive": "Active",
+  "@alertStatusActive": {
+    "description": "Status of a staff alert that is still active."
+  },
+  "alertStatusInactive": "Inactive",
+  "@alertStatusInactive": {
+    "description": "Status of a staff alert that is no longer active."
+  },
+  "alertDetailReportLoadError": "Report details could not be loaded.",
+  "@alertDetailReportLoadError": {
+    "description": "Snackbar when the report behind an alert cannot be loaded."
+  },
+  "alertDetailTitle": "Alert Details",
+  "@alertDetailTitle": {
+    "description": "App bar title of the alert detail screen."
+  },
+  "alertDetailReportedTime": "Reported Time",
+  "@alertDetailReportedTime": {
+    "description": "Label of the time the alert/report was created."
+  },
+  "alertDetailStatus": "Status",
+  "@alertDetailStatus": {
+    "description": "Label of the alert status."
+  },
+  "alertDetailNoDescription": "No additional description provided for this alert. Please take necessary precautions and follow local guidelines.",
+  "@alertDetailNoDescription": {
+    "description": "Shown when an alert has no description."
+  },
+  "alertDetailRecommendedActions": "Recommended Actions",
+  "@alertDetailRecommendedActions": {
+    "description": "Heading of the safety advice list on an alert."
+  },
+  "alertDetailAction1": "1. Stay informed via local news/radio.",
+  "@alertDetailAction1": {
+    "description": "Safety advice item 1 on an alert."
+  },
+  "alertDetailAction2": "2. Prepare emergency supplies.",
+  "@alertDetailAction2": {
+    "description": "Safety advice item 2 on an alert."
+  },
+  "alertDetailAction3": "3. Avoid travel to affected areas.",
+  "@alertDetailAction3": {
+    "description": "Safety advice item 3 on an alert."
+  },
+  "alertDetailAction4": "4. Follow evacuation orders if issued.",
+  "@alertDetailAction4": {
+    "description": "Safety advice item 4 on an alert."
+  },
+  "alertDetailPeerVerificationTitle": "Peer Verification Required",
+  "@alertDetailPeerVerificationTitle": {
+    "description": "Heading of the peer vote box on an alert."
+  },
+  "alertDetailPeerVerificationBody": "As an EWM in this ward, please verify if you can confirm this report based on what you've observed.",
+  "@alertDetailPeerVerificationBody": {
+    "description": "Text of the peer vote box. EWM = Early Warning Monitor (role name)."
+  },
+  "alertDetailCommentLabel": "Comment (required to dispute)",
+  "@alertDetailCommentLabel": {
+    "description": "Label of the comment field in the peer vote box."
+  },
+  "alertDetailCommentHint": "Additional information about this report...",
+  "@alertDetailCommentHint": {
+    "description": "Hint of the comment field in the peer vote box."
+  },
+  "commonSubmitting": "Submitting...",
+  "@commonSubmitting": {
+    "description": "Button text while a submission is in progress."
+  },
+  "voteConfirm": "Confirm",
+  "@voteConfirm": {
+    "description": "Button to confirm (vote for) a report (max ~12 chars)."
+  },
+  "voteDecline": "Decline",
+  "@voteDecline": {
+    "description": "Button to dispute (vote against) a report (max ~12 chars)."
+  },
+  "alertDetailVerificationSubmitted": "Verification Submitted",
+  "@alertDetailVerificationSubmitted": {
+    "description": "Heading after the user voted on a report."
+  },
+  "alertDetailThanks": "Thank you for your contribution!",
+  "@alertDetailThanks": {
+    "description": "Text after the user voted on a report."
+  },
+  "alertDetailGoBack": "Go Back",
+  "@alertDetailGoBack": {
+    "description": "Bottom button on the alert detail after voting."
+  },
+  "alertDetailDismiss": "Dismiss",
+  "@alertDetailDismiss": {
+    "description": "Bottom button on the alert detail."
+  },
+  "alertsFilterAll": "All Alerts",
+  "@alertsFilterAll": {
+    "description": "Hazard filter chip on the report history showing everything (max ~14 chars)."
+  },
+  "alertsFilterFire": "Fire",
+  "@alertsFilterFire": {
+    "description": "Hazard filter chip for fire reports (max ~14 chars)."
+  },
+  "alertsBroadcastTooltip": "Broadcast an alert",
+  "@alertsBroadcastTooltip": {
+    "description": "Tooltip of the button that opens the staff alert broadcast screen."
+  },
+  "alertsSeverityFilterTooltip": "Filter by severity",
+  "@alertsSeverityFilterTooltip": {
+    "description": "Tooltip of the severity filter menu."
+  },
+  "alertsAllSeverities": "All severities",
+  "@alertsAllSeverities": {
+    "description": "Severity filter option that shows every severity."
+  },
+  "alertsTabBroadcasts": "Broadcasts",
+  "@alertsTabBroadcasts": {
+    "description": "Tab on the Alerts screen listing official staff alerts (max ~16 chars)."
+  },
+  "alertsTabReportHistory": "Report History",
+  "@alertsTabReportHistory": {
+    "description": "Tab on the Alerts screen listing hazard reports (max ~16 chars)."
+  },
+  "alertsSearchReportsHint": "Search location, hazard, or ID...",
+  "@alertsSearchReportsHint": {
+    "description": "Search field hint on the report history tab."
+  },
+  "alertsSearchAlertsHint": "Search alerts...",
+  "@alertsSearchAlertsHint": {
+    "description": "Search field hint on the broadcasts tab."
+  },
+  "alertsClearSearch": "Clear search",
+  "@alertsClearSearch": {
+    "description": "Tooltip of the button that clears the search field."
+  },
+  "alertsLoadError": "Could not load alerts",
+  "@alertsLoadError": {
+    "description": "Title when alerts failed to load."
+  },
+  "alertsNoMatching": "No matching alerts",
+  "@alertsNoMatching": {
+    "description": "Title when no alert matches the search."
+  },
+  "alertsPullToRetry": "Pull down to try again.",
+  "@alertsPullToRetry": {
+    "description": "Hint below a loading error (pull-to-refresh)."
+  },
+  "alertsEmptyBody": "Official alerts for your area will appear here.",
+  "@alertsEmptyBody": {
+    "description": "Empty state text of the broadcasts tab."
+  },
+  "alertsAllLgas": "All LGAs",
+  "@alertsAllLgas": {
+    "description": "Tag on an alert sent to every Local Government Area."
+  },
+  "alertsSynchronizing": "Synchronizing...",
+  "@alertsSynchronizing": {
+    "description": "Sync status while reports are loading."
+  },
+  "alertsNoReportsYet": "No Reports Yet",
+  "@alertsNoReportsYet": {
+    "description": "Empty state title of the report history."
+  },
+  "alertsNoMatchingReports": "No matching reports",
+  "@alertsNoMatchingReports": {
+    "description": "Title when no report matches the search/filter."
+  },
+  "alertsNoReportsForFilter": "No {filter}",
+  "@alertsNoReportsForFilter": {
+    "description": "Title when no report matches the hazard filter; {filter} is the filter name, e.g. 'No Floods'.",
+    "placeholders": {
+      "filter": {
+        "type": "String"
+      }
+    }
+  },
+  "alertsNoReportsYetBody": "When hazards are reported in your area,\nthey'll appear here",
+  "@alertsNoReportsYetBody": {
+    "description": "Empty state text of the report history (contains a line break)."
+  },
+  "alertsNoMatchingReportsBody": "No matching reports found in this area",
+  "@alertsNoMatchingReportsBody": {
+    "description": "Text when no report matches the search/filter."
+  },
+  "alertsDisputeRecorded": "Dispute recorded",
+  "@alertsDisputeRecorded": {
+    "description": "Toast after disputing a report from the alerts list."
+  },
+  "alertsReportConfirmed": "Report confirmed",
+  "@alertsReportConfirmed": {
+    "description": "Toast after confirming a report from the alerts list."
+  },
+  "accessCodeVerified": "Account verified successfully!",
+  "@accessCodeVerified": {
+    "description": "Toast when the email verification is confirmed."
+  },
+  "accessCodeNotVerified": "Not verified yet. Please enter the code sent to your email.",
+  "@accessCodeNotVerified": {
+    "description": "Toast when the account is still unverified."
+  },
+  "accessCodeSent": "Verification code sent!",
+  "@accessCodeSent": {
+    "description": "Toast after resending the verification code."
+  },
+  "accessCodeNoEmail": "No email found for this account. Please log in again.",
+  "@accessCodeNoEmail": {
+    "description": "Toast when the signed-in account has no email."
+  },
+  "accessCodeTitle": "Verify Your Email",
+  "@accessCodeTitle": {
+    "description": "Title of the email verification screen."
+  },
+  "accessCodeEnterCode": "Enter Code",
+  "@accessCodeEnterCode": {
+    "description": "Button that opens the code entry screen (max ~16 chars)."
+  },
+  "accessCodeIHaveVerified": "I have verified my account",
+  "@accessCodeIHaveVerified": {
+    "description": "Button to re-check verification status."
+  },
+  "accessCodeBody": "We have sent a 6-digit verification code to {email}.\nEnter the code to activate your account.",
+  "@accessCodeBody": {
+    "description": "Body of the email verification screen; {email} is the address.",
+    "placeholders": {
+      "email": {
+        "type": "String"
+      }
+    }
+  },
+  "accessCodeBodyNoEmail": "We have sent a 6-digit verification code to your email.\nEnter the code to activate your account.",
+  "@accessCodeBodyNoEmail": {
+    "description": "Body of the email verification screen when the address is unknown."
+  },
+  "forgotTitle": "Forgot Password?",
+  "@forgotTitle": {
+    "description": "Title of the forgot password screen."
+  },
+  "forgotBody": "Enter your email address to receive a password reset code.",
+  "@forgotBody": {
+    "description": "Text on the forgot password screen."
+  },
+  "authEmailHint": "Enter your email",
+  "@authEmailHint": {
+    "description": "Hint of email fields on auth screens."
+  },
+  "authEmailRequired": "Please enter your email",
+  "@authEmailRequired": {
+    "description": "Validation error when the email field is empty."
+  },
+  "authEmailInvalid": "Please enter a valid email",
+  "@authEmailInvalid": {
+    "description": "Validation error when the email is malformed."
+  },
+  "forgotSendCode": "Send Reset Code",
+  "@forgotSendCode": {
+    "description": "Button that sends the password reset code (max ~20 chars)."
+  },
+  "forgotEmailSentTitle": "Email Sent!",
+  "@forgotEmailSentTitle": {
+    "description": "Title after the reset code was requested."
+  },
+  "forgotEmailSentBody": "If an account exists for {email}, we have sent a 6-digit reset code.\nEnter it on the next screen to choose a new password.",
+  "@forgotEmailSentBody": {
+    "description": "Text after the reset code was requested; {email} is the address entered.",
+    "placeholders": {
+      "email": {
+        "type": "String"
+      }
+    }
+  },
+  "forgotEnterCode": "Enter Reset Code",
+  "@forgotEnterCode": {
+    "description": "Button that opens the reset code screen (max ~20 chars)."
+  },
+  "landingWelcome": "Welcome to EWER",
+  "@landingWelcome": {
+    "description": "Landing screen heading. EWER is the app name (Early Warning and Early Response); keep it."
+  },
+  "landingSubtitle": "Early Warning and Early Response System",
+  "@landingSubtitle": {
+    "description": "Landing screen subtitle (expansion of EWER)."
+  },
+  "landingTagline": "Empowering communities with real-time hazard reporting and rapid response coordination.",
+  "@landingTagline": {
+    "description": "Landing screen tagline."
+  },
+  "landingGetStarted": "Get Started",
+  "@landingGetStarted": {
+    "description": "Landing screen caption above the sign-up/login buttons."
+  },
+  "authSignUp": "Sign Up",
+  "@authSignUp": {
+    "description": "Button/link to create an account (max ~12 chars)."
+  },
+  "authLogin": "Login",
+  "@authLogin": {
+    "description": "Button/link to sign in (max ~12 chars)."
+  },
+  "validatorPhoneRequired": "Phone number is required",
+  "@validatorPhoneRequired": {
+    "description": "Validation error when the phone field is empty."
+  },
+  "validatorPhoneInvalid": "Please enter a valid Nigerian phone number",
+  "@validatorPhoneInvalid": {
+    "description": "Validation error for a malformed Nigerian phone number."
+  },
+  "validatorAddressRequired": "Address is required",
+  "@validatorAddressRequired": {
+    "description": "Validation error when the address is empty."
+  },
+  "validatorAddressTooShort": "{count, plural, other{Address must be at least {count} characters}}",
+  "@validatorAddressTooShort": {
+    "description": "Validation error for a too-short address.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "validatorAddressTooLong": "{count, plural, other{Address is too long (max {count} characters)}}",
+  "@validatorAddressTooLong": {
+    "description": "Validation error for a too-long address.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "validatorFieldRequired": "{field} is required",
+  "@validatorFieldRequired": {
+    "description": "Validation error for an empty field; {field} is the field's label, e.g. 'Full Name'.",
+    "placeholders": {
+      "field": {
+        "type": "String"
+      }
+    }
+  },
+  "validatorFieldMinLength": "{field} must be at least {count} characters",
+  "@validatorFieldMinLength": {
+    "description": "Validation error; {field} is the field label, {count} the minimum length.",
+    "placeholders": {
+      "field": {
+        "type": "String"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "validatorFieldMaxLength": "{field} must not exceed {count} characters",
+  "@validatorFieldMaxLength": {
+    "description": "Validation error; {field} is the field label, {count} the maximum length.",
+    "placeholders": {
+      "field": {
+        "type": "String"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "validatorInvalidCharacters": "Invalid characters detected",
+  "@validatorInvalidCharacters": {
+    "description": "Validation error when text contains disallowed characters."
+  },
+  "validatorFieldInvalidCharacters": "{field} contains invalid characters",
+  "@validatorFieldInvalidCharacters": {
+    "description": "Validation error; {field} is the field label.",
+    "placeholders": {
+      "field": {
+        "type": "String"
+      }
+    }
+  },
+  "validatorDescriptionRequired": "Description is required",
+  "@validatorDescriptionRequired": {
+    "description": "Validation error when the description is empty."
+  },
+  "validatorDescriptionTooLong": "{count, plural, other{Description must not exceed {count} characters}}",
+  "@validatorDescriptionTooLong": {
+    "description": "Validation error for a too-long description.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "validatorEmailRequired": "Email is required",
+  "@validatorEmailRequired": {
+    "description": "Validation error when the email is empty."
+  },
+  "validatorPasswordRequired": "Password is required",
+  "@validatorPasswordRequired": {
+    "description": "Validation error when the password is empty."
+  },
+  "validatorPasswordMinLength": "{count, plural, other{Password must be at least {count} characters}}",
+  "@validatorPasswordMinLength": {
+    "description": "Validation error for a too-short password.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "validatorPasswordUppercase": "Must contain at least one uppercase letter",
+  "@validatorPasswordUppercase": {
+    "description": "Password rule error."
+  },
+  "validatorPasswordLowercase": "Must contain at least one lowercase letter",
+  "@validatorPasswordLowercase": {
+    "description": "Password rule error."
+  },
+  "validatorPasswordNumber": "Must contain at least one number",
+  "@validatorPasswordNumber": {
+    "description": "Password rule error."
+  },
+  "validatorPasswordSpecial": "Must contain at least one special character",
+  "@validatorPasswordSpecial": {
+    "description": "Password rule error."
+  },
+  "passwordStrengthWeak": "Weak",
+  "@passwordStrengthWeak": {
+    "description": "Password strength meter label."
+  },
+  "passwordStrengthFair": "Fair",
+  "@passwordStrengthFair": {
+    "description": "Password strength meter label."
+  },
+  "passwordStrengthGood": "Good",
+  "@passwordStrengthGood": {
+    "description": "Password strength meter label."
+  },
+  "passwordStrengthStrong": "Strong",
+  "@passwordStrengthStrong": {
+    "description": "Password strength meter label."
+  },
+  "passwordErrorTooLong": "{count, plural, other{Password is too long (max {count} characters)}}",
+  "@passwordErrorTooLong": {
+    "description": "Validation error for a too-long password.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "passwordErrorCommon": "This password is too common. Please choose a stronger password",
+  "@passwordErrorCommon": {
+    "description": "Validation error for a common password."
+  },
+  "passwordErrorSequential": "Password should not contain sequential characters (e.g., 123, abc)",
+  "@passwordErrorSequential": {
+    "description": "Validation error for sequential characters."
+  },
+  "passwordRequirementLength": "{count, plural, other{At least {count} characters}}",
+  "@passwordRequirementLength": {
+    "description": "Password requirement checklist item.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "passwordRequirementUppercase": "Uppercase letter",
+  "@passwordRequirementUppercase": {
+    "description": "Password requirement checklist item."
+  },
+  "passwordRequirementLowercase": "Lowercase letter",
+  "@passwordRequirementLowercase": {
+    "description": "Password requirement checklist item."
+  },
+  "passwordRequirementNumber": "Number",
+  "@passwordRequirementNumber": {
+    "description": "Password requirement checklist item (a digit)."
+  },
+  "passwordRequirementSpecial": "Special character",
+  "@passwordRequirementSpecial": {
+    "description": "Password requirement checklist item."
+  },
+  "passwordRequirementNotCommon": "Not a common password",
+  "@passwordRequirementNotCommon": {
+    "description": "Password requirement checklist item."
+  },
+  "authLoginCheckCredentials": "Login failed. Please check your credentials.",
+  "@authLoginCheckCredentials": {
+    "description": "Login error when the sign-in was refused."
+  },
+  "loginWelcomeBack": "Welcome Back",
+  "@loginWelcomeBack": {
+    "description": "Login screen heading."
+  },
+  "loginSubtitle": "Sign in to your account",
+  "@loginSubtitle": {
+    "description": "Login screen subheading."
+  },
+  "authPhoneNumber": "Phone Number",
+  "@authPhoneNumber": {
+    "description": "Label of phone number fields."
+  },
+  "authPassword": "Password",
+  "@authPassword": {
+    "description": "Label of password fields."
+  },
+  "loginRememberMe": "Remember Me",
+  "@loginRememberMe": {
+    "description": "Checkbox on the login screen."
+  },
+  "loginNoAccount": "Don't have an account? ",
+  "@loginNoAccount": {
+    "description": "Text before the 'Sign Up' link on the login screen (keep the trailing space)."
+  },
+  "loginDataSecure": "Your data is encrypted and secure",
+  "@loginDataSecure": {
+    "description": "Reassurance note at the bottom of the login screen."
+  },
+  "loginLockedTitle": "CRADI Mobile Locked",
+  "@loginLockedTitle": {
+    "description": "Title of the app lock screen. CRADI is the organisation name."
+  },
+  "loginUnlockBiometrics": "Unlock with Biometrics",
+  "@loginUnlockBiometrics": {
+    "description": "Button on the lock screen."
+  },
+  "loginLogoutDifferentAccount": "Log out and use different account",
+  "@loginLogoutDifferentAccount": {
+    "description": "Link on the lock screen."
+  },
+  "authMethodEmail": "Email",
+  "@authMethodEmail": {
+    "description": "Sign-in/registration method toggle option (max ~10 chars)."
+  },
+  "authMethodPhone": "Phone",
+  "@authMethodPhone": {
+    "description": "Sign-in method toggle option (max ~10 chars)."
+  },
+  "loginSendCode": "Send Code",
+  "@loginSendCode": {
+    "description": "Login button when signing in by phone (max ~14 chars)."
+  },
+  "otpSuccess": "Verification successful!",
+  "@otpSuccess": {
+    "description": "Toast after a code was verified."
+  },
+  "otpNewCodeSent": "A new code has been sent.",
+  "@otpNewCodeSent": {
+    "description": "Toast after resending a code."
+  },
+  "otpVerifyEmail": "Verify Email",
+  "@otpVerifyEmail": {
+    "description": "Title of the code entry screen for email codes."
+  },
+  "otpCodeSentTo": "Enter the 6-digit code sent to\n{destination}",
+  "@otpCodeSentTo": {
+    "description": "Code entry instructions; {destination} is the email address or phone number.",
+    "placeholders": {
+      "destination": {
+        "type": "String"
+      }
+    }
+  },
+  "otpSecureCode": "Secure Code",
+  "@otpSecureCode": {
+    "description": "Label of the verification code field."
+  },
+  "otpCodeHint": "Enter 6-digit code",
+  "@otpCodeHint": {
+    "description": "Hint of the verification code field."
+  },
+  "otpCodeRequired": "Please enter the code",
+  "@otpCodeRequired": {
+    "description": "Validation error when the code is empty."
+  },
+  "otpCodeInvalidFormat": "Invalid code format",
+  "@otpCodeInvalidFormat": {
+    "description": "Validation error when the code is too short."
+  },
+  "otpVerifyAndLogin": "Verify & Login",
+  "@otpVerifyAndLogin": {
+    "description": "Button that submits the verification code (max ~20 chars)."
+  },
+  "otpNoCode": "Didn't receive code? ",
+  "@otpNoCode": {
+    "description": "Text before the resend link (keep the trailing space)."
+  },
+  "otpResendIn": "{count, plural, other{Resend in {count}s}}",
+  "@otpResendIn": {
+    "description": "Disabled resend link with a countdown; {count} is seconds.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "pendingTitle": "Approval Pending",
+  "@pendingTitle": {
+    "description": "Title of the screen shown while an account awaits admin approval."
+  },
+  "pendingBody": "Your account has been created successfully but is waiting for admin approval.\n\nYou will be able to access the full application once an administrator reviews and approves your account.",
+  "@pendingBody": {
+    "description": "Body of the approval pending screen (contains blank line)."
+  },
+  "pendingStillWaiting": "Your account is still awaiting approval.",
+  "@pendingStillWaiting": {
+    "description": "Snackbar after checking approval status while still pending."
+  },
+  "pendingCheckStatus": "Check approval status",
+  "@pendingCheckStatus": {
+    "description": "Button on the approval pending screen."
+  },
+  "pendingContactSupport": "Contact Support",
+  "@pendingContactSupport": {
+    "description": "Link to help & support."
+  },
+  "registrationPrivacyTitle": "Data Privacy Notice",
+  "@registrationPrivacyTitle": {
+    "description": "Title of the privacy consent dialog at registration and in About."
+  },
+  "registrationDecline": "Decline",
+  "@registrationDecline": {
+    "description": "Button that refuses the privacy notice (max ~12 chars)."
+  },
+  "registrationAgree": "I Agree",
+  "@registrationAgree": {
+    "description": "Button that accepts the privacy notice (max ~12 chars). Referenced in the notice text."
+  },
+  "registrationMustAccept": "You must accept the Data Privacy Notice to register.",
+  "@registrationMustAccept": {
+    "description": "Toast when the privacy notice was declined."
+  },
+  "registrationSelectState": "Please select a state",
+  "@registrationSelectState": {
+    "description": "Toast when no state is chosen at registration."
+  },
+  "registrationSelectLga": "Please select an LGA",
+  "@registrationSelectLga": {
+    "description": "Toast when no LGA (Local Government Area) is chosen."
+  },
+  "registrationSelectWard": "Please select a ward",
+  "@registrationSelectWard": {
+    "description": "Toast when no ward is chosen."
+  },
+  "registrationVerifyPhoneTitle": "Verify Your Phone Number",
+  "@registrationVerifyPhoneTitle": {
+    "description": "Dialog title after registering with a phone number."
+  },
+  "registrationPhoneCodeSent": "A 6-digit verification code has been sent to {phone}.\n\nPlease enter the code to activate your account.",
+  "@registrationPhoneCodeSent": {
+    "description": "Dialog body after registering by phone; {phone} is the number.",
+    "placeholders": {
+      "phone": {
+        "type": "String"
+      }
+    }
+  },
+  "registrationAccountCreated": "Account created!",
+  "@registrationAccountCreated": {
+    "description": "Toast after a successful sign-up."
+  },
+  "registrationVerifyEmailTitle": "Verify Your Email Address",
+  "@registrationVerifyEmailTitle": {
+    "description": "Dialog title after registering with email."
+  },
+  "registrationEmailCodeSent": "Account created successfully!\n\nA 6-digit verification code has been sent to {email}.\n\nPlease enter the code to activate your account.",
+  "@registrationEmailCodeSent": {
+    "description": "Dialog body after registering by email; {email} is the address.",
+    "placeholders": {
+      "email": {
+        "type": "String"
+      }
+    }
+  },
+  "registrationCreateAccount": "Create Account",
+  "@registrationCreateAccount": {
+    "description": "Registration screen title and submit button (max ~20 chars)."
+  },
+  "registrationJoinNetwork": "Join the Network",
+  "@registrationJoinNetwork": {
+    "description": "Registration screen heading."
+  },
+  "registrationSelectLocation": "Select your location to get started.",
+  "@registrationSelectLocation": {
+    "description": "Registration screen subheading."
+  },
+  "registrationMethod": "Registration Method",
+  "@registrationMethod": {
+    "description": "Section label for choosing email or phone registration."
+  },
+  "registrationPersonalInfo": "Personal Information",
+  "@registrationPersonalInfo": {
+    "description": "Section label on the registration form."
+  },
+  "registrationNameHint": "John Doe",
+  "@registrationNameHint": {
+    "description": "Example name shown as hint in the full name field (use a typical local name)."
+  },
+  "registrationNameField": "Name",
+  "@registrationNameField": {
+    "description": "Field name used in the 'Name is required' validation message."
+  },
+  "registrationAddressLabel": "Address Description",
+  "@registrationAddressLabel": {
+    "description": "Label of the address field on the registration form."
+  },
+  "registrationAddressHint": "e.g., No 5, Main Street",
+  "@registrationAddressHint": {
+    "description": "Example address hint."
+  },
+  "registrationAddressField": "Address",
+  "@registrationAddressField": {
+    "description": "Field name used in the 'Address is required' validation message."
+  },
+  "registrationSecurity": "Security",
+  "@registrationSecurity": {
+    "description": "Section label for the password fields."
+  },
+  "registrationPasswordHint": "Create a password",
+  "@registrationPasswordHint": {
+    "description": "Hint of the password field at registration."
+  },
+  "registrationConfirmPassword": "Confirm Password",
+  "@registrationConfirmPassword": {
+    "description": "Label of the confirm password field."
+  },
+  "registrationConfirmPasswordHint": "Re-enter your password",
+  "@registrationConfirmPasswordHint": {
+    "description": "Hint of the confirm password field."
+  },
+  "registrationConfirmPasswordRequired": "Please confirm your password",
+  "@registrationConfirmPasswordRequired": {
+    "description": "Validation error when the confirm password field is empty."
+  },
+  "registrationPasswordsMismatch": "Passwords do not match",
+  "@registrationPasswordsMismatch": {
+    "description": "Validation error when the two passwords differ."
+  },
+  "registrationSendOtp": "Send OTP & Register",
+  "@registrationSendOtp": {
+    "description": "Submit button when registering by phone (max ~22 chars). OTP = one-time password."
+  },
+  "registrationHaveAccount": "Already have an account? ",
+  "@registrationHaveAccount": {
+    "description": "Text before the 'Login' link (keep the trailing space)."
+  },
+  "registrationCreating": "Creating account...",
+  "@registrationCreating": {
+    "description": "Loading overlay text while the account is created."
+  },
+  "privacyNoticeText": "Nigeria Data Protection Act (NDPA) — Data Processing Notice\n\nYour data is processed by EWER Mobile (a CRADI / KusuConsult-NG service) for climate hazard early warning purposes.\n\n• Data collected: name, phone, email, location (state/LGA/ward), hazard reports, and a push-notification device identifier.\n• Purpose: community hazard reporting, peer verification, and emergency alerts.\n• Storage: Supabase (PostgreSQL) cloud database; push notifications are delivered via OneSignal and crash diagnostics may be sent to Sentry.\n• International transfer: Pursuant to NDPA Article 24, we disclose that your data may be transferred to and stored on servers outside Nigeria. This transfer is necessary to provide the service. You have the right to withdraw consent at any time by deleting your account.\n• Retention: Data is retained for 5 years after your last activity, then anonymised.\n• Your rights: access, rectification, erasure, and data portability under the NDPA 2023.\n\nBy tapping \"I Agree\", you consent to these terms and the international transfer of your personal data.",
+  "@privacyNoticeText": {
+    "description": "Full NDPA (Nigeria Data Protection Act) data-processing notice shown at registration and in About. Legal text: translate faithfully; keep the names EWER, CRADI, KusuConsult-NG, Supabase, OneSignal, Sentry and the \"I Agree\" button name consistent with registrationAgree."
+  },
+  "aboutAppName": "EWER Mobile",
+  "@aboutAppName": {
+    "description": "App name on the About screen (brand; usually not translated)."
+  },
+  "aboutTagline": "Early Warning System",
+  "@aboutTagline": {
+    "description": "Subtitle under the app name on the About screen."
+  },
+  "aboutVersion": "Version {version} (Build {build})",
+  "@aboutVersion": {
+    "description": "App version line on the About screen; {version} like 2.4.1, {build} like 204.",
+    "placeholders": {
+      "version": {
+        "type": "String"
+      },
+      "build": {
+        "type": "String"
+      }
+    }
+  },
+  "aboutCopyright": "© {year} EWER. All rights reserved.",
+  "@aboutCopyright": {
+    "description": "Copyright line on the About screen; {year} is the year.",
+    "placeholders": {
+      "year": {
+        "type": "String"
+      }
+    }
+  },
+  "aboutPrivacyPolicy": "Privacy Policy",
+  "@aboutPrivacyPolicy": {
+    "description": "Button and dialog title for the privacy notice on the About screen."
+  },
+  "resetCodeResent": "If an account exists, a new code has been sent.",
+  "@resetCodeResent": {
+    "description": "Toast after requesting a new password reset code."
+  },
+  "resetTitle": "Create New Password",
+  "@resetTitle": {
+    "description": "Title of the reset password screen."
+  },
+  "resetBody": "Enter the 6-digit code from the reset email and choose a new secure password.",
+  "@resetBody": {
+    "description": "Instructions on the reset password screen."
+  },
+  "resetCodeLabel": "Reset Code",
+  "@resetCodeLabel": {
+    "description": "Label of the reset code field."
+  },
+  "resetSendingCode": "Sending…",
+  "@resetSendingCode": {
+    "description": "Button text while a reset code is being sent."
+  },
+  "resetSendCode": "Send code",
+  "@resetSendCode": {
+    "description": "Button that (re)sends the reset code (max ~12 chars)."
+  },
+  "resetCodeRequired": "Enter the code from the email",
+  "@resetCodeRequired": {
+    "description": "Validation error when the reset code is empty."
+  },
+  "resetNewPassword": "New Password",
+  "@resetNewPassword": {
+    "description": "Label of the new password field."
+  },
+  "resetSubmit": "Reset Password",
+  "@resetSubmit": {
+    "description": "Submit button of the reset password screen."
+  },
+  "resetSuccessTitle": "Password Reset!",
+  "@resetSuccessTitle": {
+    "description": "Title after a successful password reset."
+  },
+  "resetSuccessBody": "Your password has been reset successfully. You can now login with your new password.",
+  "@resetSuccessBody": {
+    "description": "Text after a successful password reset."
+  },
+  "resetContinueToLogin": "Continue to Login",
+  "@resetContinueToLogin": {
+    "description": "Button after a successful password reset."
+  },
+  "offlineSyncingPending": "Syncing pending data...",
+  "@offlineSyncingPending": {
+    "description": "Snackbar when syncing offline reports starts."
+  },
+  "offlineDiscardTitle": "Discard report?",
+  "@offlineDiscardTitle": {
+    "description": "Title of the dialog confirming deletion of an unsent report."
+  },
+  "offlineDiscardBody": "This report has not been sent and will be deleted from this device.",
+  "@offlineDiscardBody": {
+    "description": "Body of the discard confirmation dialog."
+  },
+  "offlineDiscard": "Discard",
+  "@offlineDiscard": {
+    "description": "Button/menu item that deletes an unsent report (max ~12 chars)."
+  },
+  "offlineActions": "Actions",
+  "@offlineActions": {
+    "description": "Tooltip of the actions menu on a pending report."
+  },
+  "offlineSubmitAsMe": "Submit as me",
+  "@offlineSubmitAsMe": {
+    "description": "Menu item that submits an ownerless draft as the signed-in user."
+  },
+  "offlineNoInternet": "No Internet Connection",
+  "@offlineNoInternet": {
+    "description": "Heading of the offline screen."
+  },
+  "offlineCanViewSaved": "You can still view your saved guides and draft reports.",
+  "@offlineCanViewSaved": {
+    "description": "Text on the offline screen when signed in."
+  },
+  "offlineReconnectToSignIn": "Reconnect to sign in.",
+  "@offlineReconnectToSignIn": {
+    "description": "Text on the offline screen when signed out."
+  },
+  "offlineTryReconnect": "Try Reconnecting & Sync",
+  "@offlineTryReconnect": {
+    "description": "Button on the offline screen."
+  },
+  "offlineModeEnabledInSettings": "Offline Mode is enabled in Settings.",
+  "@offlineModeEnabledInSettings": {
+    "description": "Snackbar when the user forced offline mode in Settings."
+  },
+  "offlineGoOnline": "Go online",
+  "@offlineGoOnline": {
+    "description": "Snackbar action that turns offline mode off."
+  },
+  "offlineStillNoInternet": "Still no internet connection",
+  "@offlineStillNoInternet": {
+    "description": "Snackbar when reconnecting failed."
+  },
+  "offlineOpenSettings": "Open Settings",
+  "@offlineOpenSettings": {
+    "description": "Button on the offline screen."
+  },
+  "offlineViewSavedGuides": "View Saved Guides",
+  "@offlineViewSavedGuides": {
+    "description": "Button on the offline screen."
+  },
+  "offlineNoPending": "No pending reports",
+  "@offlineNoPending": {
+    "description": "Empty state of the pending reports list."
+  },
+  "offlineStatusOwnerless": "Saved by an earlier version: submit or discard it",
+  "@offlineStatusOwnerless": {
+    "description": "Status of a draft saved by an older app version without an owner."
+  },
+  "offlineStatusFailed": "Failed, will not sync automatically",
+  "@offlineStatusFailed": {
+    "description": "Status of a report that permanently failed to upload."
+  },
+  "offlineStatusFailedWithError": "Failed, will not sync automatically: {error}",
+  "@offlineStatusFailedWithError": {
+    "description": "Status of a failed report with the (technical) error text; {error} may be English server text.",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "offlineStatusWaiting": "Waiting to sync",
+  "@offlineStatusWaiting": {
+    "description": "Status of a report waiting to upload."
+  },
+  "offlineItemSubtitle": "{location}\n{date} • {status}",
+  "@offlineItemSubtitle": {
+    "description": "Subtitle of a pending report: location, then date and status on the second line.",
+    "placeholders": {
+      "location": {
+        "type": "String"
+      },
+      "date": {
+        "type": "String"
+      },
+      "status": {
+        "type": "String"
+      }
+    }
+  },
+  "roleUser": "User",
+  "@roleUser": {
+    "description": "Role name: a registered user not yet approved as a monitor."
+  },
+  "roleEwm": "Early Warning Monitor",
+  "@roleEwm": {
+    "description": "Role name (EWM): community member who reports hazards."
+  },
+  "roleEwv": "Early Warning Validator",
+  "@roleEwv": {
+    "description": "Role name (EWV): validates reports."
+  },
+  "roleEwr": "Early Warning Responder",
+  "@roleEwr": {
+    "description": "Role name (EWR): responds to reports."
+  },
+  "roleLdpCoordinator": "LDP Coordinator",
+  "@roleLdpCoordinator": {
+    "description": "Role name: Local Development Plan coordinator."
+  },
+  "roleProjectStaff": "Project Staff",
+  "@roleProjectStaff": {
+    "description": "Role name: project staff member."
+  },
+  "roleAdmin": "Administrator",
+  "@roleAdmin": {
+    "description": "Role name: administrator."
+  },
+  "roleTechSupport": "Tech Support",
+  "@roleTechSupport": {
+    "description": "Role name: technical support."
+  },
+  "profilePhotoUpdated": "Profile photo updated!",
+  "@profilePhotoUpdated": {
+    "description": "Snackbar after uploading a new profile photo."
+  },
+  "profileCameraUnavailable": "Camera not available. Please use the gallery.",
+  "@profileCameraUnavailable": {
+    "description": "Snackbar when the camera cannot be opened for a profile photo."
+  },
+  "profilePickImageFailed": "Failed to pick image. Please try again.",
+  "@profilePickImageFailed": {
+    "description": "Snackbar when picking a profile photo fails."
+  },
+  "profileUpdatePhoto": "Update Profile Photo",
+  "@profileUpdatePhoto": {
+    "description": "Title of the profile photo picker sheet."
+  },
+  "profileChooseGallery": "Choose from Gallery",
+  "@profileChooseGallery": {
+    "description": "Option in the profile photo picker."
+  },
+  "profileChooseGallerySubtitle": "Select a photo from your device",
+  "@profileChooseGallerySubtitle": {
+    "description": "Subtitle of the gallery option."
+  },
+  "profileCameraWebUnavailable": "Camera not available on web",
+  "@profileCameraWebUnavailable": {
+    "description": "Shown on web instead of the camera option."
+  },
+  "profileUseGallery": "Please use the gallery option",
+  "@profileUseGallery": {
+    "description": "Subtitle on web instead of the camera option."
+  },
+  "profilePhotoLibrary": "Photo Library",
+  "@profilePhotoLibrary": {
+    "description": "Option in the profile photo picker."
+  },
+  "profileEdit": "Edit Profile",
+  "@profileEdit": {
+    "description": "Title of the edit profile sheet."
+  },
+  "profileAskAdminArea": "Ask an admin to change your area",
+  "@profileAskAdminArea": {
+    "description": "Note under the locked location fields for staff accounts."
+  },
+  "profileVerifyAccount": "Verify Account",
+  "@profileVerifyAccount": {
+    "description": "Title of the account verification dialog."
+  },
+  "profileVerifyAccountBody": "Enter the Access Code sent to your email to verify your account.",
+  "@profileVerifyAccountBody": {
+    "description": "Body of the account verification dialog."
+  },
+  "profileAccessCode": "Access Code",
+  "@profileAccessCode": {
+    "description": "Label of the access code field."
+  },
+  "profileAccessCodeHint": "e.g., ABC-123",
+  "@profileAccessCodeHint": {
+    "description": "Hint of the access code field."
+  },
+  "commonNotAvailable": "N/A",
+  "@commonNotAvailable": {
+    "description": "Shown when a value is not available."
+  },
+  "profileIdLabel": "ID: {code}",
+  "@profileIdLabel": {
+    "description": "The user's registration code on the profile; {code} is the code.",
+    "placeholders": {
+      "code": {
+        "type": "String"
+      }
+    }
+  },
+  "profileVerified": "Verified",
+  "@profileVerified": {
+    "description": "Account verification badge / statistic label (max ~12 chars)."
+  },
+  "profileUnverified": "Unverified",
+  "@profileUnverified": {
+    "description": "Account verification badge (max ~12 chars)."
+  },
+  "profileVerifyNow": "Verify Now",
+  "@profileVerifyNow": {
+    "description": "Button next to the unverified badge."
+  },
+  "profileStatReports": "Reports",
+  "@profileStatReports": {
+    "description": "Profile statistic label: number of reports (max ~12 chars)."
+  },
+  "profileAccountSettings": "Account Settings",
+  "@profileAccountSettings": {
+    "description": "Section header on the profile."
+  },
+  "profileBiometricsEnabled": "Biometrics enabled!",
+  "@profileBiometricsEnabled": {
+    "description": "Snackbar after enabling biometric login from the profile."
+  },
+  "profileBiometricChangeFailed": "Could not change biometric login",
+  "@profileBiometricChangeFailed": {
+    "description": "Snackbar when changing biometric login fails."
+  },
+  "profileSyncingOffline": "Syncing offline data...",
+  "@profileSyncingOffline": {
+    "description": "Snackbar when syncing offline data from the profile."
+  },
+  "profileSyncComplete": "Sync complete!",
+  "@profileSyncComplete": {
+    "description": "Snackbar after syncing offline data."
+  },
+  "profileSupportChat": "Support Chat",
+  "@profileSupportChat": {
+    "description": "Profile menu item that opens the chat."
+  },
+  "profileSosButton": "SOS / Emergency Call",
+  "@profileSosButton": {
+    "description": "Button that opens the SOS sheet."
+  },
+  "sosTitle": "SOS Emergency",
+  "@sosTitle": {
+    "description": "Title of the SOS bottom sheet."
+  },
+  "sosBody": "Call for help directly. This does not send an alert through the app.",
+  "@sosBody": {
+    "description": "Explanation at the top of the SOS sheet."
+  },
+  "sosCallEmergency": "Call Emergency ({phone})",
+  "@sosCallEmergency": {
+    "description": "SOS option that calls the national emergency number; {phone} is e.g. 112.",
+    "placeholders": {
+      "phone": {
+        "type": "String"
+      }
+    }
+  },
+  "sosNationalNumber": "National emergency number",
+  "@sosNationalNumber": {
+    "description": "Subtitle of the national emergency call option."
+  },
+  "sosContactsLoadError": "Couldn't load your contacts. Check your connection and try again.",
+  "@sosContactsLoadError": {
+    "description": "Shown in the SOS sheet when emergency contacts fail to load."
+  },
+  "sosNoContacts": "No personal emergency contacts saved yet. Add them under Emergency Contacts.",
+  "@sosNoContacts": {
+    "description": "Shown in the SOS sheet when the user has no contacts."
+  },
+  "sosCallContact": "Call {name}",
+  "@sosCallContact": {
+    "description": "SOS option that calls one of the user's contacts; {name} is the contact's name.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "sosContactSubtitle": "{role} · {phone}",
+  "@sosContactSubtitle": {
+    "description": "Subtitle of a contact in the SOS sheet; {role} e.g. 'Brother', {phone} the number.",
+    "placeholders": {
+      "role": {
+        "type": "String"
+      },
+      "phone": {
+        "type": "String"
+      }
+    }
+  },
+  "sosDialFailed": "Could not open the phone app. Dial {phone}.",
+  "@sosDialFailed": {
+    "description": "Snackbar when the dialer cannot be opened; {phone} is the number.",
+    "placeholders": {
+      "phone": {
+        "type": "String"
+      }
+    }
+  },
+  "chatLoginRequired": "Please login to chat",
+  "@chatLoginRequired": {
+    "description": "Shown on the chat screen when signed out."
+  },
+  "chatLoadError": "Could not load messages.",
+  "@chatLoadError": {
+    "description": "Shown when chat messages fail to load."
+  },
+  "chatMe": "Me",
+  "@chatMe": {
+    "description": "Name shown for the user's own chat messages."
+  },
+  "chatRateLimited": "{reason}. Please wait a moment.",
+  "@chatRateLimited": {
+    "description": "Snackbar when sending too many messages; {reason} is the server's (English) reason.",
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "chatSendFailed": "Message not sent. {error}",
+  "@chatSendFailed": {
+    "description": "Snackbar when a chat message fails to send; {error} is the error description.",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "contactsNameRequired": "Name is required",
+  "@contactsNameRequired": {
+    "description": "Validation error for an empty contact name."
+  },
+  "contactsNameTooLong": "Name is too long",
+  "@contactsNameTooLong": {
+    "description": "Validation error for a contact name over 100 characters."
+  },
+  "contactsPhoneDigitsOnly": "Use digits only (optionally starting with +)",
+  "@contactsPhoneDigitsOnly": {
+    "description": "Validation error for a phone number with letters."
+  },
+  "contactsPhoneInvalid": "Enter a valid phone number",
+  "@contactsPhoneInvalid": {
+    "description": "Validation error for a phone number with the wrong length."
+  },
+  "contactsLaunchPhoneFailed": "Could not launch phone app",
+  "@contactsLaunchPhoneFailed": {
+    "description": "Snackbar when the dialer cannot be opened."
+  },
+  "contactsLaunchSmsFailed": "Could not launch SMS app",
+  "@contactsLaunchSmsFailed": {
+    "description": "Snackbar when the SMS app cannot be opened."
+  },
+  "contactsAdded": "Contact added successfully",
+  "@contactsAdded": {
+    "description": "Snackbar after adding a contact."
+  },
+  "contactsUpdated": "Contact updated successfully",
+  "@contactsUpdated": {
+    "description": "Snackbar after editing a contact."
+  },
+  "contactsDeleteTitle": "Delete contact?",
+  "@contactsDeleteTitle": {
+    "description": "Title of the delete contact dialog."
+  },
+  "contactsDeleteBody": "Remove {name} from your emergency contacts?",
+  "@contactsDeleteBody": {
+    "description": "Body of the delete contact dialog; {name} is the contact name.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "contactsDeleted": "Contact deleted",
+  "@contactsDeleted": {
+    "description": "Snackbar after deleting a contact."
+  },
+  "contactsTitle": "Emergency Contacts",
+  "@contactsTitle": {
+    "description": "Title of the emergency contacts screen."
+  },
+  "contactsAddTooltip": "Add contact",
+  "@contactsAddTooltip": {
+    "description": "Tooltip of the add contact button."
+  },
+  "contactsSearchHint": "Search name, LGA, or role",
+  "@contactsSearchHint": {
+    "description": "Search hint on the contacts screen."
+  },
+  "contactsEmpty": "No contacts found",
+  "@contactsEmpty": {
+    "description": "Empty state of the contacts list."
+  },
+  "contactsEmergencyButton": "Emergency 112",
+  "@contactsEmergencyButton": {
+    "description": "Floating button that calls 112 (keep the number)."
+  },
+  "contactsMoreActions": "More actions",
+  "@contactsMoreActions": {
+    "description": "Tooltip of a contact's actions menu."
+  },
+  "contactsEditTitle": "Edit Emergency Contact",
+  "@contactsEditTitle": {
+    "description": "Title of the contact form when editing."
+  },
+  "contactsAddTitle": "Add Emergency Contact",
+  "@contactsAddTitle": {
+    "description": "Title of the contact form when adding."
+  },
+  "contactsNameLabel": "Name *",
+  "@contactsNameLabel": {
+    "description": "Label of the required name field (asterisk = required)."
+  },
+  "contactsRoleLabel": "Role",
+  "@contactsRoleLabel": {
+    "description": "Label of the contact's role field (e.g. 'Brother', 'Village head')."
+  },
+  "contactsPhoneLabel": "Phone *",
+  "@contactsPhoneLabel": {
+    "description": "Label of the required phone field (asterisk = required)."
+  },
+  "contactsOrganizationLabel": "Organization (Optional)",
+  "@contactsOrganizationLabel": {
+    "description": "Label of the organization field."
+  },
+  "contactsLgaLabel": "LGA (Optional)",
+  "@contactsLgaLabel": {
+    "description": "Label of the LGA field."
+  },
+  "contactsCategoryLabel": "Category",
+  "@contactsCategoryLabel": {
+    "description": "Label of the category dropdown."
+  },
+  "contactsAdd": "Add",
+  "@contactsAdd": {
+    "description": "Submit button of the add contact form (max ~10 chars)."
+  },
+  "contactsFilterAll": "All",
+  "@contactsFilterAll": {
+    "description": "Contacts category filter chip showing all contacts."
+  },
+  "contactsFilterCoordinators": "Coordinators",
+  "@contactsFilterCoordinators": {
+    "description": "Contacts category filter chip."
+  },
+  "contactsCategoryCoordinator": "Coordinator",
+  "@contactsCategoryCoordinator": {
+    "description": "Contact category name."
+  },
+  "contactsCategoryEmergency": "Emergency",
+  "@contactsCategoryEmergency": {
+    "description": "Contact category name."
+  },
+  "contactsCategoryAgriExtension": "Agri-Extension",
+  "@contactsCategoryAgriExtension": {
+    "description": "Contact category name (agricultural extension workers)."
+  },
+  "contactsCategoryOther": "Other",
+  "@contactsCategoryOther": {
+    "description": "Contact category name."
+  },
+  "contactsRoleAndLga": "{role} • {lga}",
+  "@contactsRoleAndLga": {
+    "description": "Subtitle of a contact: role and Local Government Area.",
+    "placeholders": {
+      "role": {
+        "type": "String"
+      },
+      "lga": {
+        "type": "String"
+      }
+    }
+  },
+  "knowledgeCategoryAll": "All",
+  "@knowledgeCategoryAll": {
+    "description": "Knowledge base category filter chip showing all guides (max ~14 chars)."
+  },
+  "knowledgeCategoryFlood": "Flood",
+  "@knowledgeCategoryFlood": {
+    "description": "Knowledge base guide category (max ~14 chars)."
+  },
+  "knowledgeCategoryFire": "Fire",
+  "@knowledgeCategoryFire": {
+    "description": "Knowledge base guide category (max ~14 chars)."
+  },
+  "knowledgeCategoryErosion": "Erosion",
+  "@knowledgeCategoryErosion": {
+    "description": "Knowledge base guide category (max ~14 chars)."
+  },
+  "knowledgeCategoryStorm": "Storm",
+  "@knowledgeCategoryStorm": {
+    "description": "Knowledge base guide category (max ~14 chars)."
+  },
+  "knowledgeCategoryExtremeHeat": "Extreme Heat",
+  "@knowledgeCategoryExtremeHeat": {
+    "description": "Knowledge base guide category (max ~14 chars)."
+  },
+  "knowledgeCategoryEarthquake": "Earthquake",
+  "@knowledgeCategoryEarthquake": {
+    "description": "Knowledge base guide category (max ~14 chars)."
+  },
+  "knowledgeCategoryDisease": "Disease",
+  "@knowledgeCategoryDisease": {
+    "description": "Knowledge base guide category (max ~14 chars)."
+  },
+  "knowledgeCategoryConflict": "Conflict",
+  "@knowledgeCategoryConflict": {
+    "description": "Knowledge base guide category (max ~14 chars)."
+  },
+  "knowledgeCategoryAccident": "Accident",
+  "@knowledgeCategoryAccident": {
+    "description": "Knowledge base guide category (max ~14 chars)."
+  },
+  "knowledgeCategorySafety": "Safety",
+  "@knowledgeCategorySafety": {
+    "description": "Knowledge base guide category (max ~14 chars)."
+  },
+  "knowledgeCategoryGeneral": "General",
+  "@knowledgeCategoryGeneral": {
+    "description": "Knowledge base guide category (max ~14 chars)."
+  },
+  "knowledgeTagGuide": "GUIDE",
+  "@knowledgeTagGuide": {
+    "description": "Generic tag chip on a guide card (upper case, max ~10 chars)."
+  },
+  "knowledgeLoadError": "Failed to fetch guides. Please try again.",
+  "@knowledgeLoadError": {
+    "description": "Error when knowledge base guides fail to load."
+  },
+  "knowledgeGuidesTitle": "Hazard Guides",
+  "@knowledgeGuidesTitle": {
+    "description": "Title of the hazard guides screen."
+  },
+  "knowledgeBaseCaption": "KNOWLEDGE BASE",
+  "@knowledgeBaseCaption": {
+    "description": "Small caption under the hazard guides title (upper case)."
+  },
+  "knowledgeGuidesSearchHint": "Search guides, signs, or hazards...",
+  "@knowledgeGuidesSearchHint": {
+    "description": "Search hint on the hazard guides screen."
+  },
+  "knowledgeNoGuidesCategory": "No guides found for this category",
+  "@knowledgeNoGuidesCategory": {
+    "description": "Empty state for a guide category."
+  },
+  "knowledgeNoGuidesMatch": "No guides match \"{query}\"",
+  "@knowledgeNoGuidesMatch": {
+    "description": "Empty state for a guide search; {query} is the search text.",
+    "placeholders": {
+      "query": {
+        "type": "String"
+      }
+    }
+  },
+  "knowledgeNoTitle": "No Title",
+  "@knowledgeNoTitle": {
+    "description": "Shown for a guide without a title."
+  },
+  "knowledgeSubtitleManual": "Manual",
+  "@knowledgeSubtitleManual": {
+    "description": "Subtitle of a guide without a category."
+  },
+  "knowledgeNewsLoadError": "Failed to load news. Please try again.",
+  "@knowledgeNewsLoadError": {
+    "description": "Error when the external news feed fails to load."
+  },
+  "knowledgeBaseTitle": "Knowledge Base",
+  "@knowledgeBaseTitle": {
+    "description": "Title of the knowledge base screen."
+  },
+  "knowledgeBaseSearchHint": "Search guides, hazards, or contacts...",
+  "@knowledgeBaseSearchHint": {
+    "description": "Search hint on the knowledge base screen."
+  },
+  "knowledgeOfflineActive": "Offline Mode Active",
+  "@knowledgeOfflineActive": {
+    "description": "Banner title on the knowledge base when offline."
+  },
+  "knowledgeOfflineAvailable": "Offline Mode Available",
+  "@knowledgeOfflineAvailable": {
+    "description": "Banner title on the knowledge base when online."
+  },
+  "knowledgeUsingCache": "Using cached data",
+  "@knowledgeUsingCache": {
+    "description": "Banner text when showing cached guides offline."
+  },
+  "knowledgeContentDownloaded": "Content downloaded successfully",
+  "@knowledgeContentDownloaded": {
+    "description": "Banner text when guides are available offline."
+  },
+  "knowledgeFeaturedGuides": "Featured Guides",
+  "@knowledgeFeaturedGuides": {
+    "description": "Section heading on the knowledge base."
+  },
+  "knowledgeNoGuides": "No guides available",
+  "@knowledgeNoGuides": {
+    "description": "Empty state of the featured guides."
+  },
+  "knowledgeHazardIdGuides": "Hazard ID Guides",
+  "@knowledgeHazardIdGuides": {
+    "description": "Knowledge base category tile title."
+  },
+  "knowledgeHazardIdGuidesDesc": "Identify local threats",
+  "@knowledgeHazardIdGuidesDesc": {
+    "description": "Knowledge base category tile subtitle."
+  },
+  "knowledgeFireResponse": "Fire Response",
+  "@knowledgeFireResponse": {
+    "description": "Knowledge base category tile title."
+  },
+  "knowledgeFireResponseDesc": "Wildfire protocols",
+  "@knowledgeFireResponseDesc": {
+    "description": "Knowledge base category tile subtitle."
+  },
+  "knowledgeFloodReadiness": "Flood Readiness",
+  "@knowledgeFloodReadiness": {
+    "description": "Knowledge base category tile title."
+  },
+  "knowledgeFloodReadinessDesc": "Water & Storms",
+  "@knowledgeFloodReadinessDesc": {
+    "description": "Knowledge base category tile subtitle."
+  },
+  "knowledgeContactsDirectory": "Contacts Directory",
+  "@knowledgeContactsDirectory": {
+    "description": "Knowledge base tile that opens emergency contacts."
+  },
+  "knowledgeContactsDirectoryDesc": "Emergency services",
+  "@knowledgeContactsDirectoryDesc": {
+    "description": "Subtitle of the contacts directory tile."
+  },
+  "knowledgeExternalNews": "External News & Updates",
+  "@knowledgeExternalNews": {
+    "description": "Section heading for the external news feed."
+  },
+  "knowledgeNoNews": "No recent news updates found.",
+  "@knowledgeNoNews": {
+    "description": "Empty state of the news feed."
+  },
+  "knowledgeDetailTitle": "Guide Detail",
+  "@knowledgeDetailTitle": {
+    "description": "App bar title of a guide."
+  },
+  "knowledgeBookmarked": "Guide bookmarked",
+  "@knowledgeBookmarked": {
+    "description": "Snackbar after bookmarking a guide."
+  },
+  "knowledgeBookmarkRemoved": "Bookmark removed",
+  "@knowledgeBookmarkRemoved": {
+    "description": "Snackbar after removing a bookmark."
+  },
+  "knowledgeNoTextToSpeak": "No text to speak",
+  "@knowledgeNoTextToSpeak": {
+    "description": "Snackbar when read-aloud has no text."
+  },
+  "knowledgeTtsUnavailable": "Text-to-speech is unavailable. Please try again.",
+  "@knowledgeTtsUnavailable": {
+    "description": "Snackbar when read-aloud fails."
+  },
+  "knowledgeUpdatedOn": "Updated {date}",
+  "@knowledgeUpdatedOn": {
+    "description": "When a guide was last updated; {date} like '3 Mar 2026' (or a free-text date).",
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "knowledgeUpdatedRecently": "Updated recently",
+  "@knowledgeUpdatedRecently": {
+    "description": "Shown when a guide has no update date."
+  },
+  "knowledgeReadTime": "{count, plural, =1{1 min read} other{{count} min read}}",
+  "@knowledgeReadTime": {
+    "description": "Estimated reading time of a guide.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "knowledgeContentComingSoon": "Detailed content coming soon.",
+  "@knowledgeContentComingSoon": {
+    "description": "Shown when a guide has no content."
+  },
+  "knowledgeRelatedTopics": "Related Topics",
+  "@knowledgeRelatedTopics": {
+    "description": "Section heading under a guide."
+  },
+  "knowledgeNoRelated": "No related topics found.",
+  "@knowledgeNoRelated": {
+    "description": "Empty state of related topics."
+  },
+  "knowledgeShareDefaultTitle": "CRADI Guide",
+  "@knowledgeShareDefaultTitle": {
+    "description": "Title used when sharing a guide without a title."
+  },
+  "knowledgeShareText": "{content}\n\nShared via CRADI Early Warning App",
+  "@knowledgeShareText": {
+    "description": "Text shared from a guide; {content} is the guide's title, description and content.",
+    "placeholders": {
+      "content": {
+        "type": "String"
+      }
+    }
+  },
+  "helpSupportEmailSubject": "CRADI App Support Request",
+  "@helpSupportEmailSubject": {
+    "description": "Subject of the support email opened from Help & Support."
+  },
+  "helpSupportEmailBody": "Please describe your issue:\n\n",
+  "@helpSupportEmailBody": {
+    "description": "Pre-filled body of the support email (ends with a blank line)."
+  },
+  "helpNoEmailApp": "No email app found. Contact {email}",
+  "@helpNoEmailApp": {
+    "description": "Snackbar when no email app is installed; {email} is the support address.",
+    "placeholders": {
+      "email": {
+        "type": "String"
+      }
+    }
+  },
+  "helpFaqTitle": "Frequently Asked Questions",
+  "@helpFaqTitle": {
+    "description": "Section heading on Help & Support."
+  },
+  "helpFaqReportQ": "How do I report a hazard?",
+  "@helpFaqReportQ": {
+    "description": "FAQ question."
+  },
+  "helpFaqReportA": "Navigate to the \"Report\" tab or tap the \"+\" button on the dashboard. Select the hazard type, add photos/videos, and submit your report.",
+  "@helpFaqReportA": {
+    "description": "FAQ answer; \"Report\" is the bottom tab name (navReport)."
+  },
+  "helpFaqColorsQ": "What do the alert colors mean?",
+  "@helpFaqColorsQ": {
+    "description": "FAQ question."
+  },
+  "helpFaqColorsA": "Red indicates high severity (immediate danger), Orange is medium, and Yellow is low. Blue typically indicates water-related hazards like floods.",
+  "@helpFaqColorsA": {
+    "description": "FAQ answer."
+  },
+  "helpFaqOfflineQ": "Can I report without internet?",
+  "@helpFaqOfflineQ": {
+    "description": "FAQ question."
+  },
+  "helpFaqOfflineA": "Yes! Use \"Offline Mode\" in Settings. Your reports will be saved locally and can be synced when you go online.",
+  "@helpFaqOfflineA": {
+    "description": "FAQ answer; \"Offline Mode\" is the Settings switch name (settingsOfflineMode)."
+  },
+  "helpFaqVerifyQ": "How do I verify other reports?",
+  "@helpFaqVerifyQ": {
+    "description": "FAQ question."
+  },
+  "helpFaqVerifyA": "Go to \"Alerts\" and look for pending reports nearby. You can confirm or reject them based on your observation.",
+  "@helpFaqVerifyA": {
+    "description": "FAQ answer; \"Alerts\" is the bottom tab name (navAlerts)."
+  },
+  "helpStillNeedHelp": "Still need help?",
+  "@helpStillNeedHelp": {
+    "description": "Heading above the contact support button."
+  },
+  "notificationsAllRead": "All notifications marked as read",
+  "@notificationsAllRead": {
+    "description": "Snackbar after marking all notifications read."
+  },
+  "notificationsClearAll": "Clear All",
+  "@notificationsClearAll": {
+    "description": "Title of the clear notifications dialog."
+  },
+  "notificationsClearConfirm": "Are you sure you want to delete all notifications?",
+  "@notificationsClearConfirm": {
+    "description": "Body of the clear notifications dialog."
+  },
+  "notificationsMarkAllRead": "Mark all as read",
+  "@notificationsMarkAllRead": {
+    "description": "Menu item on the notifications screen."
+  },
+  "notificationsClearAllMenu": "Clear all",
+  "@notificationsClearAllMenu": {
+    "description": "Menu item on the notifications screen."
+  },
+  "notificationsEmpty": "No notifications yet",
+  "@notificationsEmpty": {
+    "description": "Empty state of the notifications screen."
+  },
+  "notificationsDefaultTitle": "Notification",
+  "@notificationsDefaultTitle": {
+    "description": "Title of a notification without a title."
+  },
+  "voteDispute": "Dispute",
+  "@voteDispute": {
+    "description": "Button to dispute (vote against) a report (max ~12 chars)."
+  },
+  "voteDisputeRecorded": "Dispute recorded. Staff will review the report.",
+  "@voteDisputeRecorded": {
+    "description": "Snackbar after disputing a report."
+  },
+  "voteConfirmedThanks": "Report confirmed. Thank you!",
+  "@voteConfirmedThanks": {
+    "description": "Snackbar after confirming a report."
+  },
+  "exportRejectedOnly": "Rejected only",
+  "@exportRejectedOnly": {
+    "description": "CSV export option."
+  },
+  "exportPreparing": "Preparing export…",
+  "@exportPreparing": {
+    "description": "Snackbar while the CSV export is generated."
+  },
+  "exportCopied": "CSV copied to the clipboard.",
+  "@exportCopied": {
+    "description": "Snackbar on web after copying the CSV export."
+  },
+  "exportSavedTo": "Report saved to {path}",
+  "@exportSavedTo": {
+    "description": "Snackbar after saving the CSV export; {path} is the file path.",
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "exportShareSubject": "CRADI reports export",
+  "@exportShareSubject": {
+    "description": "Subject used when sharing the CSV export."
+  },
+  "exportShareFailed": "Could not open the share sheet. The report is saved to {path}",
+  "@exportShareFailed": {
+    "description": "Snackbar when sharing the export fails; {path} is the file path.",
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "statusBadgeVerified": "VERIFIED",
+  "@statusBadgeVerified": {
+    "description": "Status badge on the verify report screen (upper case)."
+  },
+  "statusBadgeApproved": "APPROVED",
+  "@statusBadgeApproved": {
+    "description": "Status badge on the verify report screen (upper case)."
+  },
+  "statusBadgeRejected": "REJECTED",
+  "@statusBadgeRejected": {
+    "description": "Status badge on the verify report screen (upper case)."
+  },
+  "statusBadgePending": "PENDING VERIFICATION",
+  "@statusBadgePending": {
+    "description": "Status badge on the verify report screen (upper case)."
+  },
+  "verificationDetailTitle": "Verify Report",
+  "@verificationDetailTitle": {
+    "description": "App bar title of the verify report screen."
+  },
+  "verificationDetailUnknownTime": "Unknown time",
+  "@verificationDetailUnknownTime": {
+    "description": "Shown when a report has no submission time."
+  },
+  "verificationDetailNoLocation": "No location details",
+  "@verificationDetailNoLocation": {
+    "description": "Shown when a report has no location text."
+  },
+  "verificationDetailNoMap": "No map location available",
+  "@verificationDetailNoMap": {
+    "description": "Shown instead of the map when a report has no coordinates."
+  },
+  "verificationDetailQuestion": "Can you confirm this report?",
+  "@verificationDetailQuestion": {
+    "description": "Heading of the vote section."
+  },
+  "verificationDetailInstructions": "Please verify if you have observed this hazard in the reported location.",
+  "@verificationDetailInstructions": {
+    "description": "Instructions of the vote section."
+  },
+  "verificationDetailCommentHint": "Add details about what you see...",
+  "@verificationDetailCommentHint": {
+    "description": "Hint of the vote comment field."
+  },
+  "verificationDetailConfirm": "I Can Confirm",
+  "@verificationDetailConfirm": {
+    "description": "Button confirming a report (max ~16 chars)."
+  },
+  "verificationListRequestTooltip": "Request verification",
+  "@verificationListRequestTooltip": {
+    "description": "Tooltip of the button that opens the verification request form."
+  },
+  "verificationListEmpty": "No reports pending verification",
+  "@verificationListEmpty": {
+    "description": "Empty state of the verification queue."
+  },
+  "verificationRequestSubmitted": "Verification request submitted successfully",
+  "@verificationRequestSubmitted": {
+    "description": "Snackbar after submitting a verification request."
+  },
+  "verificationRequestTitle": "Request Verification",
+  "@verificationRequestTitle": {
+    "description": "Title of the verification request form."
+  },
+  "verificationRequestDescriptionHint": "Describe what needs verification...",
+  "@verificationRequestDescriptionHint": {
+    "description": "Hint of the description field in the verification request form."
+  },
+  "verificationRequestSubmit": "Submit Request",
+  "@verificationRequestSubmit": {
+    "description": "Submit button of the verification request form."
+  },
+  "disputeDialogTitle": "Dispute report?",
+  "@disputeDialogTitle": {
+    "description": "Title of the dialog asking why a report is disputed."
+  },
+  "disputeDialogLabel": "What is wrong with this report? (required)",
+  "@disputeDialogLabel": {
+    "description": "Label of the dispute reason field."
+  },
+  "staffRejected": "Report rejected.",
+  "@staffRejected": {
+    "description": "Snackbar after staff rejected a report."
+  },
+  "staffActionsTitle": "Staff actions",
+  "@staffActionsTitle": {
+    "description": "Heading of the staff approve/reject/reopen box on a report."
+  },
+  "staffApproved": "Report approved.",
+  "@staffApproved": {
+    "description": "Snackbar after staff approved a report."
+  },
+  "staffApprove": "Approve",
+  "@staffApprove": {
+    "description": "Staff button approving a report (max ~12 chars)."
+  },
+  "staffReopened": "Report reopened for verification.",
+  "@staffReopened": {
+    "description": "Snackbar after staff reopened a report."
+  },
+  "staffRejectTitle": "Reject report?",
+  "@staffRejectTitle": {
+    "description": "Title of the reject reason dialog."
+  },
+  "staffRejectReasonLabel": "Reason (required)",
+  "@staffRejectReasonLabel": {
+    "description": "Label of the rejection reason field."
+  },
+  "staffRejectReasonHint": "Shown to the reporter",
+  "@staffRejectReasonHint": {
+    "description": "Hint of the rejection reason field."
+  },
+  "staffRejectReasonRequired": "Please give a reason.",
+  "@staffRejectReasonRequired": {
+    "description": "Error when the rejection reason is empty."
+  },
+  "verificationsLoadError": "Could not load peer verifications.",
+  "@verificationsLoadError": {
+    "description": "Error in the peer verifications box on a report."
+  },
+  "verificationsTitle": "Peer verifications",
+  "@verificationsTitle": {
+    "description": "Heading of the peer votes box on a report."
+  },
+  "verificationsNone": "No peer votes yet.",
+  "@verificationsNone": {
+    "description": "Empty state of the peer votes box."
+  },
+  "verificationsSummary": "{confirmed} confirmed · {disputed} disputed",
+  "@verificationsSummary": {
+    "description": "Vote summary; {confirmed} confirmations, {disputed} disputes.",
+    "placeholders": {
+      "confirmed": {
+        "type": "int"
+      },
+      "disputed": {
+        "type": "int"
+      }
+    }
+  },
+  "verificationsYou": "You",
+  "@verificationsYou": {
+    "description": "Shown instead of the voter's name for the user's own vote."
+  },
+  "verificationsPeerVerifier": "Peer verifier",
+  "@verificationsPeerVerifier": {
+    "description": "Shown when a voter's name is unknown."
+  },
+  "verificationsVoteBy": "{kind, select, confirmed{Confirmed by {who}} other{Disputed by {who}}}",
+  "@verificationsVoteBy": {
+    "description": "One peer vote; {kind} is confirmed/disputed (do not translate the select keys), {who} the voter.",
+    "placeholders": {
+      "kind": {
+        "type": "String"
+      },
+      "who": {
+        "type": "String"
+      }
+    }
+  },
+  "verificationsVoteByAt": "{kind, select, confirmed{Confirmed by {who} · {date}} other{Disputed by {who} · {date}}}",
+  "@verificationsVoteByAt": {
+    "description": "One peer vote with its time; {kind} confirmed/disputed (keep keys), {who} voter, {date} like 'Mar 5, 3:05 PM'.",
+    "placeholders": {
+      "kind": {
+        "type": "String"
+      },
+      "who": {
+        "type": "String"
+      },
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "voteQuestion": "Can you verify this report?",
+  "@voteQuestion": {
+    "description": "Heading of the peer vote box on a report."
+  },
+  "adminCountsError": "Could not load dashboard counts",
+  "@adminCountsError": {
+    "description": "Error on the admin dashboard."
+  },
+  "adminCountsErrorBody": "Check your connection and permissions, then retry.",
+  "@adminCountsErrorBody": {
+    "description": "Error details on the admin dashboard."
+  },
+  "adminHealthDatabase": "Database",
+  "@adminHealthDatabase": {
+    "description": "System health row label on the admin dashboard."
+  },
+  "adminHealthActiveCount": "{count, plural, other{{count} active}}",
+  "@adminHealthActiveCount": {
+    "description": "System health: number of active alerts.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "adminHealthReportCount": "{count, plural, =1{1 report} other{{count} reports}}",
+  "@adminHealthReportCount": {
+    "description": "System health: total number of reports.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "adminAlertBroadcastSuccess": "✅ Alert broadcast successfully",
+  "@adminAlertBroadcastSuccess": {
+    "description": "Snackbar after sending a staff alert."
+  },
+  "adminAlertSendFailed": "Failed to send alert: {error}",
+  "@adminAlertSendFailed": {
+    "description": "Snackbar when sending a staff alert fails; {error} is the reason.",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "adminAlertDismissFailed": "Could not dismiss alert.",
+  "@adminAlertDismissFailed": {
+    "description": "Snackbar when deactivating an alert fails."
+  },
+  "adminAlertCompose": "Compose Alert",
+  "@adminAlertCompose": {
+    "description": "Section heading of the alert broadcast form."
+  },
+  "adminAlertTargetArea": "Target Area",
+  "@adminAlertTargetArea": {
+    "description": "Label of the target LGA selector."
+  },
+  "adminAlertAllAreas": "🌍 All Areas",
+  "@adminAlertAllAreas": {
+    "description": "Target option sending an alert to every LGA."
+  },
+  "adminAlertTitleLabel": "Alert Title",
+  "@adminAlertTitleLabel": {
+    "description": "Label of the alert title field."
+  },
+  "adminAlertRequired": "Required",
+  "@adminAlertRequired": {
+    "description": "Validation error for a required alert field."
+  },
+  "adminAlertMessageLabel": "Message",
+  "@adminAlertMessageLabel": {
+    "description": "Label of the alert message field."
+  },
+  "adminAlertBroadcastButton": "Broadcast Alert",
+  "@adminAlertBroadcastButton": {
+    "description": "Button that sends a staff alert."
+  },
+  "adminAlertsLoadError": "Could not load alerts. You may not have permission to view them.",
+  "@adminAlertsLoadError": {
+    "description": "Error loading active alerts in the admin screen."
+  },
+  "adminAlertDismissTooltip": "Dismiss alert",
+  "@adminAlertDismissTooltip": {
+    "description": "Tooltip of the button that deactivates an alert."
+  },
+  "adminGuideDeleteTitle": "Delete Guide",
+  "@adminGuideDeleteTitle": {
+    "description": "Title of the delete guide dialog."
+  },
+  "adminGuideDeleteBody": "Are you sure you want to delete this guide? This cannot be undone.",
+  "@adminGuideDeleteBody": {
+    "description": "Body of the delete guide dialog."
+  },
+  "adminGuideDeleteDenied": "You do not have permission to delete this guide, or it was already removed.",
+  "@adminGuideDeleteDenied": {
+    "description": "Error when deleting a guide is refused."
+  },
+  "adminGuideDeleteFailed": "Could not delete guide. Check your connection and try again.",
+  "@adminGuideDeleteFailed": {
+    "description": "Error when deleting a guide fails."
+  },
+  "adminGuideDeleted": "Guide deleted",
+  "@adminGuideDeleted": {
+    "description": "Snackbar after deleting a guide."
+  },
+  "adminGuideAdd": "Add Guide",
+  "@adminGuideAdd": {
+    "description": "Floating button that adds a knowledge base guide."
+  },
+  "adminGuidesLoadError": "Error loading guides",
+  "@adminGuidesLoadError": {
+    "description": "Error on the knowledge management screen."
+  },
+  "adminGuidesEmpty": "No guides found",
+  "@adminGuidesEmpty": {
+    "description": "Empty state of the knowledge management screen."
+  },
+  "adminGuideAddFirst": "Add the first guide",
+  "@adminGuideAddFirst": {
+    "description": "Button in the empty state."
+  },
+  "adminGuideEditMenu": "✏️ Edit",
+  "@adminGuideEditMenu": {
+    "description": "Menu item editing a guide."
+  },
+  "adminGuideDeleteMenu": "🗑️ Delete",
+  "@adminGuideDeleteMenu": {
+    "description": "Menu item deleting a guide."
+  },
+  "adminGuideUpdated": "Guide updated",
+  "@adminGuideUpdated": {
+    "description": "Snackbar after editing a guide."
+  },
+  "adminGuideCreated": "Guide created",
+  "@adminGuideCreated": {
+    "description": "Snackbar after creating a guide."
+  },
+  "adminGuideEditTitle": "Edit Guide",
+  "@adminGuideEditTitle": {
+    "description": "Title of the guide editor when editing."
+  },
+  "adminGuideNewTitle": "New Guide",
+  "@adminGuideNewTitle": {
+    "description": "Title of the guide editor when creating."
+  },
+  "adminGuideCategoryLabel": "Category / Hazard Type",
+  "@adminGuideCategoryLabel": {
+    "description": "Label of the guide category dropdown."
+  },
+  "adminGuideTitleLabel": "Guide Title",
+  "@adminGuideTitleLabel": {
+    "description": "Label of the guide title field."
+  },
+  "adminGuideSourceLabel": "Source (e.g. NEMA, WHO)",
+  "@adminGuideSourceLabel": {
+    "description": "Label of the guide source field; NEMA and WHO are organisations."
+  },
+  "adminGuideContentLabel": "Content (Markdown supported)",
+  "@adminGuideContentLabel": {
+    "description": "Label of the guide content field."
+  },
+  "adminGuideUpdate": "Update Guide",
+  "@adminGuideUpdate": {
+    "description": "Submit button when editing a guide."
+  },
+  "adminGuideCreate": "Create Guide",
+  "@adminGuideCreate": {
+    "description": "Submit button when creating a guide."
+  },
+  "adminReportsLoadError": "Could not load reports. You may not have permission to view them.",
+  "@adminReportsLoadError": {
+    "description": "Error on the admin reports overview."
+  },
+  "adminReportsRejectReasonLabel": "Reason (recommended)",
+  "@adminReportsRejectReasonLabel": {
+    "description": "Label of the optional rejection reason in the admin reports screen."
+  },
+  "adminReportsRejectReasonHint": "Why is this report being rejected?",
+  "@adminReportsRejectReasonHint": {
+    "description": "Hint of the rejection reason field."
+  },
+  "adminReportsStatusUpdateFailed": "Could not update report status: {error}",
+  "@adminReportsStatusUpdateFailed": {
+    "description": "Snackbar when changing a report status fails; {error} is the reason.",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "adminReportsReopened": "Report reopened for verification",
+  "@adminReportsReopened": {
+    "description": "Snackbar after reopening a report."
+  },
+  "adminReportsMarkedAs": "Report marked as {status}",
+  "@adminReportsMarkedAs": {
+    "description": "Snackbar after changing a report status; {status} is the new status name.",
+    "placeholders": {
+      "status": {
+        "type": "String"
+      }
+    }
+  },
+  "adminReportsDateTime": "Date/Time",
+  "@adminReportsDateTime": {
+    "description": "Label in the admin report details."
+  },
+  "adminReportsLga": "LGA",
+  "@adminReportsLga": {
+    "description": "Label of the Local Government Area in the admin report details."
+  },
+  "adminReportsLocationDetails": "Location Details",
+  "@adminReportsLocationDetails": {
+    "description": "Label in the admin report details."
+  },
+  "adminReportsRejectionReason": "Rejection reason",
+  "@adminReportsRejectionReason": {
+    "description": "Label in the admin report details."
+  },
+  "adminReportsNoReason": "No reason given",
+  "@adminReportsNoReason": {
+    "description": "Shown when a rejected report has no reason."
+  },
+  "adminReportsImages": "Images",
+  "@adminReportsImages": {
+    "description": "Section label for report photos."
+  },
+  "adminReportsMarkVerified": "Mark Verified",
+  "@adminReportsMarkVerified": {
+    "description": "Admin action setting a report to verified."
+  },
+  "adminReportsReopen": "Reopen (pending)",
+  "@adminReportsReopen": {
+    "description": "Admin action resetting a report to pending."
+  },
+  "adminReportsReopenReset": "Reopen (reset to pending)",
+  "@adminReportsReopenReset": {
+    "description": "Admin menu action resetting a report to pending."
+  },
+  "adminReportsEmpty": "No reports found",
+  "@adminReportsEmpty": {
+    "description": "Empty state of the admin reports overview."
+  },
+  "adminReportsLoadMoreError": "Could not load more. Tap to retry.",
+  "@adminReportsLoadMoreError": {
+    "description": "Error at the end of the admin reports list."
+  },
+  "adminReportsLoadMore": "Load more",
+  "@adminReportsLoadMore": {
+    "description": "Button loading more reports."
+  },
+  "adminUsersLoadError": "Could not load users. You may not have permission to view them.",
+  "@adminUsersLoadError": {
+    "description": "Error on the user management screen."
+  },
+  "adminUsersEmpty": "No users found",
+  "@adminUsersEmpty": {
+    "description": "Empty state of the user management screen."
+  },
+  "adminUsersNoPermission": "You do not have permission to change this user.",
+  "@adminUsersNoPermission": {
+    "description": "Error when a user update is refused."
+  },
+  "adminUsersUpdateFailed": "Update failed. Please try again.",
+  "@adminUsersUpdateFailed": {
+    "description": "Error when a user update fails."
+  },
+  "adminUsersApproved": "User approved",
+  "@adminUsersApproved": {
+    "description": "Snackbar after approving a user."
+  },
+  "adminUsersRejected": "User rejected",
+  "@adminUsersRejected": {
+    "description": "Snackbar after revoking a user's approval."
+  },
+  "adminUsersChangeRole": "Change Role",
+  "@adminUsersChangeRole": {
+    "description": "Title of the change role dialog."
+  },
+  "adminUsersRoleUpdated": "Role updated. It takes effect once the user is approved.",
+  "@adminUsersRoleUpdated": {
+    "description": "Snackbar after changing a role."
+  },
+  "adminUsersApply": "Apply",
+  "@adminUsersApply": {
+    "description": "Dialog button applying a change (max ~10 chars)."
+  },
+  "adminUsersChangeLocationTitle": "Change location",
+  "@adminUsersChangeLocationTitle": {
+    "description": "Title of the change location dialog."
+  },
+  "adminUsersLocationUpdated": "Location updated to {ward}, {lga}, {state}",
+  "@adminUsersLocationUpdated": {
+    "description": "Snackbar after moving a user; {ward}, {lga} and {state} are place names.",
+    "placeholders": {
+      "ward": {
+        "type": "String"
+      },
+      "lga": {
+        "type": "String"
+      },
+      "state": {
+        "type": "String"
+      }
+    }
+  },
+  "adminUsersDisabled": "User disabled",
+  "@adminUsersDisabled": {
+    "description": "Snackbar after disabling a user."
+  },
+  "adminUsersReenabled": "User re-enabled",
+  "@adminUsersReenabled": {
+    "description": "Snackbar after re-enabling a user."
+  },
+  "adminUsersSearchHint": "Search by name or email…",
+  "@adminUsersSearchHint": {
+    "description": "Search hint on the user management screen."
+  },
+  "adminUsersAllRoles": "All Roles",
+  "@adminUsersAllRoles": {
+    "description": "Role filter chip showing every role."
+  },
+  "adminUsersShowingPending": "Showing Pending Approvals",
+  "@adminUsersShowingPending": {
+    "description": "Caption when the pending approvals filter is on."
+  },
+  "adminUsersShowingApproved": "Showing Approved Users",
+  "@adminUsersShowingApproved": {
+    "description": "Caption when the approved users filter is on."
+  },
+  "adminUsersPendingChip": "Pending",
+  "@adminUsersPendingChip": {
+    "description": "Chip on a user awaiting approval (max ~10 chars)."
+  },
+  "adminUsersApproveMenu": "✅ Approve",
+  "@adminUsersApproveMenu": {
+    "description": "Menu action approving a user."
+  },
+  "adminUsersRevokeMenu": "❌ Revoke access",
+  "@adminUsersRevokeMenu": {
+    "description": "Menu action revoking a user's approval."
+  },
+  "adminUsersChangeRoleMenu": "🔄 Change role",
+  "@adminUsersChangeRoleMenu": {
+    "description": "Menu action changing a user's role."
+  },
+  "adminUsersChangeLocationMenu": "📍 Change location",
+  "@adminUsersChangeLocationMenu": {
+    "description": "Menu action changing a user's location."
+  },
+  "adminUsersReenableMenu": "🔓 Re-enable user",
+  "@adminUsersReenableMenu": {
+    "description": "Menu action re-enabling a user."
+  },
+  "adminUsersDisableMenu": "🚫 Disable user",
+  "@adminUsersDisableMenu": {
+    "description": "Menu action disabling a user."
+  },
+  "onboardingWelcomeBody": "Early Warning and Emergency Response system for your community",
+  "@onboardingWelcomeBody": {
+    "description": "Onboarding page 1 text."
+  },
+  "onboardingMonitorTitle": "Monitor Hazards in Real-Time",
+  "@onboardingMonitorTitle": {
+    "description": "Onboarding page 2 title."
+  },
+  "onboardingMonitorBody": "Report emergencies, track hazards, and keep your community safe",
+  "@onboardingMonitorBody": {
+    "description": "Onboarding page 2 text."
+  },
+  "onboardingJoinBody": "Create an account and start protecting your community today",
+  "@onboardingJoinBody": {
+    "description": "Onboarding page 3 text."
+  },
+  "onboardingSkip": "Skip",
+  "@onboardingSkip": {
+    "description": "Onboarding button skipping the introduction (max ~10 chars)."
+  },
+  "onboardingNext": "Next",
+  "@onboardingNext": {
+    "description": "Onboarding button to the next page (max ~12 chars)."
+  },
+  "splashTagline": "Early Warning & Emergency Response",
+  "@splashTagline": {
+    "description": "Tagline on the splash screen under the EWER logo."
+  },
+  "connectivityOfflineBanner": "Offline - Some features may be unavailable",
+  "@connectivityOfflineBanner": {
+    "description": "Banner at the top of the app when offline."
+  },
+  "routeReportNotFound": "Report not found",
+  "@routeReportNotFound": {
+    "description": "Title when a linked report does not exist."
+  },
+  "routeViewReports": "View reports",
+  "@routeViewReports": {
+    "description": "Button on the report-not-found screen."
+  },
+  "routeAlertNotFound": "Alert not found",
+  "@routeAlertNotFound": {
+    "description": "Title when a linked alert does not exist."
+  },
+  "routeViewAlerts": "View alerts",
+  "@routeViewAlerts": {
+    "description": "Button on the alert-not-found screen."
+  },
+  "routeNotFoundTitle": "Page not found",
+  "@routeNotFoundTitle": {
+    "description": "Title of the unknown-page screen."
+  },
+  "routeNotFoundBody": "The page you were looking for does not exist.",
+  "@routeNotFoundBody": {
+    "description": "Body of the unknown-page screen."
+  },
+  "routeTryAgain": "Try again",
+  "@routeTryAgain": {
+    "description": "Retry button on the load-failed screen."
+  },
+  "routeGoHome": "Go home",
+  "@routeGoHome": {
+    "description": "Button going back to the dashboard."
+  },
+  "routeLoadFailedTitle": "Could not load",
+  "@routeLoadFailedTitle": {
+    "description": "Title when a linked item failed to load."
+  },
+  "routeLoadFailedBody": "Check your connection and try again.",
+  "@routeLoadFailedBody": {
+    "description": "Body when a linked item failed to load."
+  },
+  "routeMissingBody": "It may have been removed, or you may not have access to it.",
+  "@routeMissingBody": {
+    "description": "Body when a linked item is missing."
+  },
+  "forceUpdateStoreFailed": "Could not open the store. Please update the app from your app store.",
+  "@forceUpdateStoreFailed": {
+    "description": "Snackbar when the app store cannot be opened from the update screen."
+  },
+  "forceUpdateTitle": "Update required",
+  "@forceUpdateTitle": {
+    "description": "Title of the blocking update screen."
+  },
+  "forceUpdateDefaultMessage": "Please update the EWER app to continue.",
+  "@forceUpdateDefaultMessage": {
+    "description": "Default text of the blocking update screen. EWER is the app name."
+  },
+  "forceUpdateMinVersion": "Minimum version: {version}",
+  "@forceUpdateMinVersion": {
+    "description": "Minimum supported app version on the update screen; {version} like 1.2.0.",
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "forceUpdateButton": "Update",
+  "@forceUpdateButton": {
+    "description": "Button opening the app store (max ~12 chars)."
+  },
+  "forceUpdateCheckAgain": "Check again",
+  "@forceUpdateCheckAgain": {
+    "description": "Button re-checking whether an update is needed."
+  },
+  "formFieldRequiredLabel": "{label} *",
+  "@formFieldRequiredLabel": {
+    "description": "Label of a required form field; {label} is the field name, the asterisk marks it as required.",
+    "placeholders": {
+      "label": {
+        "type": "String"
+      }
+    }
+  },
+  "locationSelectorLgaLabel": "Local Government Area",
+  "@locationSelectorLgaLabel": {
+    "description": "Label of the LGA dropdown."
+  },
+  "permissionLocationTitle": "Location Access",
+  "@permissionLocationTitle": {
+    "description": "Title of the dialog explaining why location permission is needed."
+  },
+  "permissionLocationRationale": "EWER needs your location to accurately pinpoint hazards and alert nearby responders. Your location is only used when you submit a report or use the tactical map.",
+  "@permissionLocationRationale": {
+    "description": "Explanation before asking for location permission. EWER is the app name."
+  },
+  "permissionNotificationsTitle": "Enable Alerts",
+  "@permissionNotificationsTitle": {
+    "description": "Title of the dialog explaining why notification permission is needed."
+  },
+  "permissionNotificationsRationale": "Get real-time updates about hazards in your area. We only send critical safety alerts and status updates for your reports.",
+  "@permissionNotificationsRationale": {
+    "description": "Explanation before asking for notification permission."
+  },
+  "permissionPhotosTitle": "Photo Access",
+  "@permissionPhotosTitle": {
+    "description": "Title of the dialog explaining why photo access is needed."
+  },
+  "permissionPhotosRationale": "EWER needs access to your photos so you can upload evidence of hazards. We only upload photos you explicitly select.",
+  "@permissionPhotosRationale": {
+    "description": "Explanation before asking for photo access."
+  },
+  "permissionNotNow": "Not Now",
+  "@permissionNotNow": {
+    "description": "Button declining a permission request for now."
+  },
+  "permissionSettingsBody": "{reason}\n\nPlease enable this in your device settings.",
+  "@permissionSettingsBody": {
+    "description": "Dialog shown when a permission was permanently denied; {reason} is the explanation text.",
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "offlineDraftLimit": "{count, plural, other{You can keep at most {count} unsent reports on this device. Sync or discard some first.}}",
+  "@offlineDraftLimit": {
+    "description": "Error when the offline draft limit is reached; {count} is the limit.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  }
 }

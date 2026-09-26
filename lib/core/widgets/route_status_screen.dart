@@ -2,34 +2,38 @@ import 'package:climate_app/core/theme/app_colors.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:climate_app/core/l10n/l10n.dart';
 
 /// Full-screen message with a way out, used for unknown routes and for deep
 /// links whose target could not be loaded.
 class RouteStatusScreen extends StatelessWidget {
   const RouteStatusScreen({
     super.key,
-    required this.title,
-    required this.message,
+    required String this.title,
+    required String this.message,
     this.icon = Icons.explore_off_outlined,
     this.homeLocation = '/dashboard',
-    this.homeLabel = 'Go home',
+    this.homeLabel,
     this.onRetry,
   });
 
   /// Screen shown by the router's errorBuilder.
   const RouteStatusScreen.notFound({super.key})
-    : title = 'Page not found',
-      message = 'The page you were looking for does not exist.',
+    : title = null,
+      message = null,
       icon = Icons.explore_off_outlined,
       homeLocation = '/dashboard',
-      homeLabel = 'Go home',
+      homeLabel = null,
       onRetry = null;
 
-  final String title;
-  final String message;
+  /// Null only for [RouteStatusScreen.notFound] (localised defaults).
+  final String? title;
+  final String? message;
   final IconData icon;
   final String homeLocation;
-  final String homeLabel;
+
+  /// Label of the home button; defaults to "Go home".
+  final String? homeLabel;
   final VoidCallback? onRetry;
 
   @override
@@ -54,7 +58,7 @@ class RouteStatusScreen extends StatelessWidget {
               Icon(icon, size: 72, color: Colors.grey.shade400),
               const SizedBox(height: 24),
               Text(
-                title,
+                title ?? context.l10n.routeNotFoundTitle,
                 textAlign: TextAlign.center,
                 style: GoogleFonts.lexend(
                   fontSize: 20,
@@ -64,7 +68,7 @@ class RouteStatusScreen extends StatelessWidget {
               ),
               const SizedBox(height: 12),
               Text(
-                message,
+                message ?? context.l10n.routeNotFoundBody,
                 textAlign: TextAlign.center,
                 style: GoogleFonts.lexend(
                   fontSize: 14,
@@ -76,14 +80,14 @@ class RouteStatusScreen extends StatelessWidget {
                 OutlinedButton.icon(
                   onPressed: onRetry,
                   icon: const Icon(Icons.refresh),
-                  label: const Text('Try again'),
+                  label: Text(context.l10n.routeTryAgain),
                 ),
                 const SizedBox(height: 12),
               ],
               ElevatedButton.icon(
                 onPressed: () => context.go(homeLocation),
                 icon: const Icon(Icons.home_outlined),
-                label: Text(homeLabel),
+                label: Text(homeLabel ?? context.l10n.routeGoHome),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.primaryRed,
                   foregroundColor: Colors.white,
@@ -143,10 +147,12 @@ class _DeepLinkLoaderState<T> extends State<DeepLinkLoader<T>> {
         if (value != null) return widget.builder(context, value);
         final failed = snap.hasError;
         return RouteStatusScreen(
-          title: failed ? 'Could not load' : widget.notFoundTitle,
+          title: failed
+              ? context.l10n.routeLoadFailedTitle
+              : widget.notFoundTitle,
           message: failed
-              ? 'Check your connection and try again.'
-              : 'It may have been removed, or you may not have access to it.',
+              ? context.l10n.routeLoadFailedBody
+              : context.l10n.routeMissingBody,
           icon: failed ? Icons.cloud_off : Icons.search_off,
           homeLocation: widget.fallbackLocation,
           homeLabel: widget.fallbackLabel,

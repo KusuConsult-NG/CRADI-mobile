@@ -15,6 +15,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hive/hive.dart';
 import 'package:local_auth/local_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:climate_app/core/l10n/l10n.dart';
 
 /// LocalAuthentication stand-in whose calls throw [error] (or succeed).
 class _FakeLocalAuth implements LocalAuthentication {
@@ -92,7 +93,10 @@ void main() {
 
   group('Help & Support mailto', () {
     test('encodes spaces as %20, not +', () {
-      final uri = HelpSupportScreen.supportMailUri();
+      final uri = HelpSupportScreen.supportMailUri(
+        subject: englishL10n.helpSupportEmailSubject,
+        body: englishL10n.helpSupportEmailBody,
+      );
       final s = uri.toString();
       expect(s, startsWith('mailto:support@cradi.org?'));
       expect(s, isNot(contains('+')));
@@ -152,11 +156,15 @@ void main() {
         isNull,
       );
       expect(
-        BiometricService.messageFor(LocalAuthExceptionCode.noCredentialsSet),
+        BiometricService.messageFor(LocalAuthExceptionCode.noCredentialsSet)!(
+          englishL10n,
+        ),
         contains('No biometrics enrolled'),
       );
       expect(
-        BiometricService.messageFor(LocalAuthExceptionCode.biometricLockout),
+        BiometricService.messageFor(LocalAuthExceptionCode.biometricLockout)!(
+          englishL10n,
+        ),
         contains('locked'),
       );
     });

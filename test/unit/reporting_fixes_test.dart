@@ -8,6 +8,7 @@ import 'package:climate_app/features/verification/providers/reports_status_provi
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart' show PostgrestException;
+import 'package:climate_app/core/l10n/l10n.dart';
 
 void main() {
   group('Hazard metadata', () {
@@ -28,8 +29,8 @@ void main() {
 
     test('unknown hazards fall back gracefully', () {
       expect(Hazard.tryParse('Meteor'), isNull);
-      expect(Hazard.labelFor('Meteor'), 'Meteor');
-      expect(Hazard.labelFor(null), 'Unknown Hazard');
+      expect(Hazard.labelFor('Meteor', englishL10n), 'Meteor');
+      expect(Hazard.labelFor(null, englishL10n), 'Unknown Hazard');
     });
 
     test('high and medium severity colours differ', () {
@@ -159,8 +160,8 @@ void main() {
 
     test('OfflineQueuedException carries a user message', () {
       const e = OfflineQueuedException();
-      expect(e.message, isNotEmpty);
-      expect(e.toString(), e.message);
+      expect(e.message(englishL10n), isNotEmpty);
+      expect(e.toString(), e.message(englishL10n));
     });
   });
 }

@@ -5,13 +5,14 @@ import 'package:climate_app/core/services/supabase_service.dart';
 import 'package:climate_app/features/alerts/screens/alert_severity.dart';
 import 'package:climate_app/features/auth/providers/auth_provider.dart';
 import 'package:climate_app/features/verification/providers/reports_status_provider.dart';
+import 'package:climate_app/features/verification/models/verification_report_model.dart';
 import 'package:climate_app/features/verification/widgets/dispute_comment_dialog.dart';
 
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:go_router/go_router.dart';
-import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import 'package:climate_app/core/l10n/l10n.dart';
 
 /// Detail view for an alert.
 ///
@@ -65,12 +66,13 @@ class _AlertDetailScreenState extends State<AlertDetailScreen> {
 
   String? get _reportId => _str(['reportId', 'report_id']);
 
-  String get _title => _str(['title']) ?? 'Alert';
+  String get _title => _str(['title']) ?? context.l10n.alertDetailDefaultTitle;
 
   String? get _severity => _str(['severity']);
 
   String get _location =>
-      _str(['location', 'targetLga', 'target_lga']) ?? 'Not specified';
+      _str(['location', 'targetLga', 'target_lga']) ??
+      context.l10n.alertDetailNotSpecified;
 
   String get _time {
     final t = _str(['time']);
@@ -79,15 +81,35 @@ class _AlertDetailScreenState extends State<AlertDetailScreen> {
       widget.alert['createdAt'] ?? widget.alert['created_at'],
     );
     return created == null
-        ? 'Just now'
-        : DateFormat('MMM d, yyyy • h:mm a').format(created.toLocal());
+        ? context.l10n.timeJustNow
+        : localizedDateFormat(
+            context,
+            'MMM d, yyyy • h:mm a',
+          ).format(created.toLocal());
   }
 
+  /// Stored status ('pending', 'approved', …) or 'active' / 'inactive'
+  /// for staff alerts.
   String get _status {
     final s = _str(['status']);
     if (s != null) return s;
     final active = widget.alert['isActive'] ?? widget.alert['is_active'];
-    return active == false ? 'Inactive' : 'Active';
+    return active == false ? 'inactive' : 'active';
+  }
+
+  /// Display text for [_status].
+  String _statusLabel(String status) {
+    final l10n = context.l10n;
+    switch (status.toLowerCase()) {
+      case 'active':
+        return l10n.alertStatusActive;
+      case 'inactive':
+        return l10n.alertStatusInactive;
+    }
+    for (final s in ReportStatus.values) {
+      if (s.name == status.toLowerCase()) return s.label(l10n);
+    }
+    return status;
   }
 
   Color get _severityColor {
@@ -129,8 +151,8 @@ class _AlertDetailScreenState extends State<AlertDetailScreen> {
       if (reportId == null || reportId.isEmpty) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Report details could not be loaded.'),
+            SnackBar(
+              content: Text(context.l10n.alertDetailReportLoadError),
               backgroundColor: Colors.red,
             ),
           );
@@ -154,7 +176,9 @@ class _AlertDetailScreenState extends State<AlertDetailScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            isConfirmed ? 'Report confirmed successfully' : 'Report disputed',
+            isConfirmed
+                ? context.l10n.verifyConfirmedMessage
+                : context.l10n.verifyDisputedMessage,
           ),
           backgroundColor: isConfirmed ? Colors.green : Colors.orange,
           duration: const Duration(seconds: 3),
@@ -168,7 +192,10 @@ class _AlertDetailScreenState extends State<AlertDetailScreen> {
     } on VerificationRefusedException catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.message), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text(e.message(context.l10n)),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     } on Exception catch (e) {
@@ -176,7 +203,11 @@ class _AlertDetailScreenState extends State<AlertDetailScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              ErrorHandler.handleError(e, context: 'Alert Verification'),
+              ErrorHandler.handleError(
+                e,
+                context.l10n,
+                context: 'Alert Verification',
+              ),
             ),
             backgroundColor: Colors.red,
           ),
@@ -218,7 +249,7 @@ class _AlertDetailScreenState extends State<AlertDetailScreen> {
           onPressed: _close,
         ),
         title: Text(
-          'Alert Details',
+          context.l10n.alertDetailTitle,
           style: GoogleFonts.lexend(fontWeight: FontWeight.bold),
         ),
         centerTitle: true,
@@ -272,7 +303,7 @@ class _AlertDetailScreenState extends State<AlertDetailScreen> {
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              alertSeverityLabel(_severity),
+                              alertSeverityLabel(_severity, context.l10n),
                               style: GoogleFonts.lexend(
                                 fontSize: 14,
                                 color: severityColor,
@@ -285,11 +316,23 @@ class _AlertDetailScreenState extends State<AlertDetailScreen> {
                     ],
                   ),
                   const Divider(height: 32),
-                  _buildInfoRow(Icons.location_on, 'Location', _location),
+                  _buildInfoRow(
+                    Icons.location_on,
+                    context.l10n.locationLabel,
+                    _location,
+                  ),
                   const SizedBox(height: 16),
-                  _buildInfoRow(Icons.schedule, 'Reported Time', _time),
+                  _buildInfoRow(
+                    Icons.schedule,
+                    context.l10n.alertDetailReportedTime,
+                    _time,
+                  ),
                   const SizedBox(height: 16),
-                  _buildInfoRow(Icons.info_outline, 'Status', status),
+                  _buildInfoRow(
+                    Icons.info_outline,
+                    context.l10n.alertDetailStatus,
+                    _statusLabel(status),
+                  ),
                 ],
               ),
             ),
@@ -297,7 +340,7 @@ class _AlertDetailScreenState extends State<AlertDetailScreen> {
             const SizedBox(height: 24),
 
             Text(
-              'Description',
+              context.l10n.descriptionLabel,
               style: GoogleFonts.lexend(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
@@ -306,8 +349,7 @@ class _AlertDetailScreenState extends State<AlertDetailScreen> {
             ),
             const SizedBox(height: 12),
             Text(
-              description ??
-                  'No additional description provided for this alert. Please take necessary precautions and follow local guidelines.',
+              description ?? context.l10n.alertDetailNoDescription,
               style: GoogleFonts.lexend(
                 fontSize: 15,
                 color: AppColors.textSecondary,
@@ -318,7 +360,7 @@ class _AlertDetailScreenState extends State<AlertDetailScreen> {
             const SizedBox(height: 24),
 
             Text(
-              'Recommended Actions',
+              context.l10n.alertDetailRecommendedActions,
               style: GoogleFonts.lexend(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
@@ -326,10 +368,10 @@ class _AlertDetailScreenState extends State<AlertDetailScreen> {
               ),
             ),
             const SizedBox(height: 12),
-            _buildActionItem('1. Stay informed via local news/radio.'),
-            _buildActionItem('2. Prepare emergency supplies.'),
-            _buildActionItem('3. Avoid travel to affected areas.'),
-            _buildActionItem('4. Follow evacuation orders if issued.'),
+            _buildActionItem(context.l10n.alertDetailAction1),
+            _buildActionItem(context.l10n.alertDetailAction2),
+            _buildActionItem(context.l10n.alertDetailAction3),
+            _buildActionItem(context.l10n.alertDetailAction4),
 
             // Verification Section (only show if pending)
             if (isPendingVerification && !_hasVerified) ...[
@@ -354,7 +396,7 @@ class _AlertDetailScreenState extends State<AlertDetailScreen> {
                         const SizedBox(width: 12),
                         Expanded(
                           child: Text(
-                            'Peer Verification Required',
+                            context.l10n.alertDetailPeerVerificationTitle,
                             style: GoogleFonts.lexend(
                               fontSize: 16,
                               fontWeight: FontWeight.bold,
@@ -366,7 +408,7 @@ class _AlertDetailScreenState extends State<AlertDetailScreen> {
                     ),
                     const SizedBox(height: 12),
                     Text(
-                      'As an EWM in this ward, please verify if you can confirm this report based on what you\'ve observed.',
+                      context.l10n.alertDetailPeerVerificationBody,
                       style: GoogleFonts.lexend(
                         fontSize: 14,
                         color: Colors.blue.shade700,
@@ -379,8 +421,8 @@ class _AlertDetailScreenState extends State<AlertDetailScreen> {
                     TextField(
                       controller: _commentController,
                       decoration: InputDecoration(
-                        labelText: 'Comment (required to dispute)',
-                        hintText: 'Additional information about this report...',
+                        labelText: context.l10n.alertDetailCommentLabel,
+                        hintText: context.l10n.alertDetailCommentHint,
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
                           borderSide: BorderSide(color: Colors.grey.shade300),
@@ -421,7 +463,9 @@ class _AlertDetailScreenState extends State<AlertDetailScreen> {
                                   )
                                 : const Icon(Icons.check_circle, size: 20),
                             label: Text(
-                              _isSubmitting ? 'Submitting...' : 'Confirm',
+                              _isSubmitting
+                                  ? context.l10n.commonSubmitting
+                                  : context.l10n.voteConfirm,
                               style: GoogleFonts.lexend(
                                 fontSize: 14,
                                 fontWeight: FontWeight.bold,
@@ -457,7 +501,9 @@ class _AlertDetailScreenState extends State<AlertDetailScreen> {
                                   )
                                 : const Icon(Icons.cancel, size: 20),
                             label: Text(
-                              _isSubmitting ? 'Submitting...' : 'Decline',
+                              _isSubmitting
+                                  ? context.l10n.commonSubmitting
+                                  : context.l10n.voteDecline,
                               style: GoogleFonts.lexend(
                                 fontSize: 14,
                                 fontWeight: FontWeight.bold,
@@ -509,7 +555,7 @@ class _AlertDetailScreenState extends State<AlertDetailScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Verification Submitted',
+                            context.l10n.alertDetailVerificationSubmitted,
                             style: GoogleFonts.lexend(
                               fontSize: 16,
                               fontWeight: FontWeight.bold,
@@ -518,7 +564,7 @@ class _AlertDetailScreenState extends State<AlertDetailScreen> {
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            'Thank you for your contribution!',
+                            context.l10n.alertDetailThanks,
                             style: GoogleFonts.lexend(
                               fontSize: 14,
                               color: Colors.green.shade700,
@@ -565,7 +611,9 @@ class _AlertDetailScreenState extends State<AlertDetailScreen> {
                 elevation: 0,
               ),
               child: Text(
-                _hasVerified ? 'Go Back' : 'Dismiss',
+                _hasVerified
+                    ? context.l10n.alertDetailGoBack
+                    : context.l10n.alertDetailDismiss,
                 style: GoogleFonts.lexend(
                   fontSize: 16,
                   fontWeight: FontWeight.bold,

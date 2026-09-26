@@ -4,6 +4,7 @@ import 'package:climate_app/features/contacts/models/emergency_contact_model.dar
 import 'package:climate_app/features/knowledge_base/knowledge_categories.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:climate_app/core/l10n/l10n.dart';
 
 void main() {
   group('alert severity', () {
@@ -15,8 +16,8 @@ void main() {
     });
 
     test('labels come from the alert severity', () {
-      expect(alertSeverityLabel('warning'), 'Warning');
-      expect(alertSeverityLabel(null), 'Unspecified severity');
+      expect(alertSeverityLabel('warning', englishL10n), 'Warning');
+      expect(alertSeverityLabel(null, englishL10n), 'Unspecified severity');
     });
   });
 
@@ -63,19 +64,28 @@ void main() {
 
   group('EmergencyContact validation', () {
     test('name is required', () {
-      expect(EmergencyContact.validateName(''), isNotNull);
-      expect(EmergencyContact.validateName('  '), isNotNull);
-      expect(EmergencyContact.validateName('Ada'), isNull);
+      expect(EmergencyContact.validateName('', englishL10n), isNotNull);
+      expect(EmergencyContact.validateName('  ', englishL10n), isNotNull);
+      expect(EmergencyContact.validateName('Ada', englishL10n), isNull);
     });
 
     test('phone must be a plausible number', () {
-      expect(EmergencyContact.validatePhone(''), isNotNull);
-      expect(EmergencyContact.validatePhone('abc'), isNotNull);
-      expect(EmergencyContact.validatePhone('12'), isNotNull);
-      expect(EmergencyContact.validatePhone('112'), isNull);
-      expect(EmergencyContact.validatePhone('0803 123 4567'), isNull);
-      expect(EmergencyContact.validatePhone('+2348031234567'), isNull);
-      expect(EmergencyContact.validatePhone('+234803123456789012'), isNotNull);
+      expect(EmergencyContact.validatePhone('', englishL10n), isNotNull);
+      expect(EmergencyContact.validatePhone('abc', englishL10n), isNotNull);
+      expect(EmergencyContact.validatePhone('12', englishL10n), isNotNull);
+      expect(EmergencyContact.validatePhone('112', englishL10n), isNull);
+      expect(
+        EmergencyContact.validatePhone('0803 123 4567', englishL10n),
+        isNull,
+      );
+      expect(
+        EmergencyContact.validatePhone('+2348031234567', englishL10n),
+        isNull,
+      );
+      expect(
+        EmergencyContact.validatePhone('+234803123456789012', englishL10n),
+        isNotNull,
+      );
     });
   });
 }

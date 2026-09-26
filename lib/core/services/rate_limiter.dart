@@ -2,6 +2,7 @@ import 'secure_storage_service.dart';
 import 'device_fingerprint_service.dart';
 import 'dart:math' as math;
 import 'dart:developer' as developer;
+import 'package:climate_app/core/l10n/l10n.dart';
 
 /// Enhanced rate limiting service with adaptive throttling and attack detection
 /// Prevents brute force, distributed attacks, and bot attacks
@@ -36,7 +37,7 @@ class RateLimiter {
         remainingAttempts: 0,
         lockedUntil: lockedUntil,
         threatLevel: threatLevel,
-        reason: 'Account is locked due to too many failed attempts',
+        reason: (l) => l.rateLimitAccountLocked,
       );
     }
 
@@ -58,8 +59,7 @@ class RateLimiter {
             remainingAttempts: maxLoginAttempts - attempts,
             threatLevel: threatLevel,
             waitDuration: waitTime,
-            reason:
-                'Please wait ${waitTime.inSeconds} seconds before trying again',
+            reason: (l) => l.rateLimitWaitSeconds(waitTime.inSeconds),
           );
         }
       }
@@ -86,8 +86,7 @@ class RateLimiter {
         remainingAttempts: 0,
         lockedUntil: lockedUntil,
         threatLevel: threatLevel,
-        reason:
-            'Too many failed attempts. Account locked for ${lockoutDuration.inMinutes} minutes.',
+        reason: (l) => l.rateLimitLockedMinutes(lockoutDuration.inMinutes),
       );
     }
 
@@ -172,8 +171,7 @@ class RateLimiter {
         remainingAttempts: 0,
         threatLevel: ThreatLevel.high,
         waitDuration: waitTime,
-        reason:
-            'Too many OTP requests. Please try again in ${waitTime.inMinutes} minutes.',
+        reason: (l) => l.rateLimitOtpMinutes(waitTime.inMinutes),
       );
     }
 
@@ -198,8 +196,7 @@ class RateLimiter {
           remainingAttempts: 0,
           threatLevel: ThreatLevel.medium,
           waitDuration: waitTime,
-          reason:
-              'Please wait ${waitTime.inSeconds} seconds before requesting another code',
+          reason: (l) => l.rateLimitResendSeconds(waitTime.inSeconds),
         );
       }
     }
@@ -388,7 +385,9 @@ class RateLimitResult {
   final int remainingAttempts;
   final DateTime? lockedUntil;
   final Duration? waitDuration;
-  final String? reason;
+
+  /// Why the attempt was refused (resolved in the current language).
+  final LocalizedText? reason;
   final ThreatLevel threatLevel;
 
   RateLimitResult({
@@ -400,13 +399,15 @@ class RateLimitResult {
     this.threatLevel = ThreatLevel.low,
   });
 
-  String get userMessage {
+  /// User-facing text for this result (resolve with the current
+  /// [AppLocalizations]).
+  LocalizedText get userMessage {
     if (allowed) {
-      return remainingAttempts > 0
-          ? '$remainingAttempts attempts remaining'
+      return (l) => remainingAttempts > 0
+          ? l.rateLimitAttemptsRemaining(remainingAttempts)
           : '';
     }
-    return reason ?? 'Rate limit exceeded';
+    return reason ?? (l) => l.rateLimitExceeded;
   }
 
   /// Get color indicator for UI based on threat level

@@ -9,6 +9,7 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:climate_app/core/l10n/l10n.dart';
 
 class EmergencyContactsScreen extends StatefulWidget {
   const EmergencyContactsScreen({super.key});
@@ -20,13 +21,32 @@ class EmergencyContactsScreen extends StatefulWidget {
 
 class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
   final TextEditingController _searchController = TextEditingController();
-  final Map<String, String> _categoryMap = {
-    'All': 'all',
-    'Coordinators': 'coordinator',
-    'Emergency': 'emergency',
-    'Agri-Extension': 'agri-extension',
-    'Other': 'other',
-  };
+
+  /// Category filter values (stored contact categories, plus 'all').
+  static const List<String> _categoryFilters = [
+    'all',
+    'coordinator',
+    'emergency',
+    'agri-extension',
+    'other',
+  ];
+
+  String _categoryFilterLabel(String value) {
+    final l10n = context.l10n;
+    switch (value) {
+      case 'coordinator':
+        return l10n.contactsFilterCoordinators;
+      case 'emergency':
+        return l10n.contactsCategoryEmergency;
+      case 'agri-extension':
+        return l10n.contactsCategoryAgriExtension;
+      case 'other':
+        return l10n.contactsCategoryOther;
+      default:
+        return l10n.contactsFilterAll;
+    }
+  }
+
   String _selectedCategory = 'all';
   String _query = '';
 
@@ -107,7 +127,7 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
     } else {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not launch phone app')),
+          SnackBar(content: Text(context.l10n.contactsLaunchPhoneFailed)),
         );
       }
     }
@@ -120,7 +140,7 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
     } else {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not launch SMS app')),
+          SnackBar(content: Text(context.l10n.contactsLaunchSmsFailed)),
         );
       }
     }
@@ -136,8 +156,8 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
         SnackBar(
           content: Text(
             existing == null
-                ? 'Contact added successfully'
-                : 'Contact updated successfully',
+                ? context.l10n.contactsAdded
+                : context.l10n.contactsUpdated,
           ),
         ),
       );
@@ -148,12 +168,12 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (c) => AlertDialog(
-        title: const Text('Delete contact?'),
-        content: Text('Remove ${contact.name} from your emergency contacts?'),
+        title: Text(context.l10n.contactsDeleteTitle),
+        content: Text(context.l10n.contactsDeleteBody(contact.name)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(c, false),
-            child: const Text('Cancel'),
+            child: Text(context.l10n.cancel),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
@@ -161,7 +181,7 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
               foregroundColor: Colors.white,
             ),
             onPressed: () => Navigator.pop(c, true),
-            child: const Text('Delete'),
+            child: Text(context.l10n.delete),
           ),
         ],
       ),
@@ -172,14 +192,18 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(const SnackBar(content: Text('Contact deleted')));
+        ).showSnackBar(SnackBar(content: Text(context.l10n.contactsDeleted)));
       }
     } on Exception catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              ErrorHandler.handleError(e, context: 'Emergency Contact'),
+              ErrorHandler.handleError(
+                e,
+                context.l10n,
+                context: 'Emergency Contact',
+              ),
             ),
             backgroundColor: Colors.red,
           ),
@@ -191,7 +215,7 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
   List<EmergencyContact> _filter(List<EmergencyContact> all) {
     return all.where((c) {
       if (_selectedCategory != 'all') {
-        final known = _categoryMap.values.contains(c.category);
+        final known = _categoryFilters.contains(c.category);
         final category = known ? c.category : 'other';
         if (category != _selectedCategory) return false;
       }
@@ -238,7 +262,7 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
           },
         ),
         title: Text(
-          'Emergency Contacts',
+          context.l10n.contactsTitle,
           style: GoogleFonts.lexend(
             fontWeight: FontWeight.bold,
             color: AppColors.textPrimary,
@@ -247,7 +271,7 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
         centerTitle: true,
         actions: [
           IconButton(
-            tooltip: 'Add contact',
+            tooltip: context.l10n.contactsAddTooltip,
             icon: const Icon(Icons.add, color: AppColors.primaryRed),
             onPressed: () => _showContactDialog(),
           ),
@@ -267,7 +291,7 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
             child: TextField(
               controller: _searchController,
               decoration: InputDecoration(
-                hintText: 'Search name, LGA, or role',
+                hintText: context.l10n.contactsSearchHint,
                 hintStyle: GoogleFonts.lexend(color: Colors.grey.shade400),
                 prefixIcon: Icon(Icons.search, color: Colors.grey.shade400),
                 filled: true,
@@ -287,16 +311,15 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
             child: ListView.separated(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               scrollDirection: Axis.horizontal,
-              itemCount: _categoryMap.length,
+              itemCount: _categoryFilters.length,
               separatorBuilder: (c, i) => const SizedBox(width: 8),
               itemBuilder: (context, index) {
-                final entry = _categoryMap.entries.elementAt(index);
-                final isSelected = _selectedCategory == entry.value;
+                final value = _categoryFilters[index];
+                final isSelected = _selectedCategory == value;
                 return ChoiceChip(
-                  label: Text(entry.key),
+                  label: Text(_categoryFilterLabel(value)),
                   selected: isSelected,
-                  onSelected: (v) =>
-                      setState(() => _selectedCategory = entry.value),
+                  onSelected: (v) => setState(() => _selectedCategory = value),
                   labelStyle: GoogleFonts.lexend(
                     fontWeight: FontWeight.w600,
                     color: isSelected ? Colors.white : AppColors.textPrimary,
@@ -331,7 +354,7 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
                       Padding(
                         padding: const EdgeInsets.all(24),
                         child: Text(
-                          ErrorHandler.getUserMessage(error),
+                          ErrorHandler.getUserMessage(error, context.l10n),
                           textAlign: TextAlign.center,
                         ),
                       ),
@@ -357,7 +380,7 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
                           ),
                           const SizedBox(height: 16),
                           Text(
-                            'No contacts found',
+                            context.l10n.contactsEmpty,
                             style: GoogleFonts.lexend(
                               color: AppColors.textSecondary,
                             ),
@@ -392,7 +415,7 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
         backgroundColor: AppColors.errorRed,
         icon: const Icon(Icons.sos, color: Colors.white),
         label: Text(
-          'Emergency 112',
+          context.l10n.contactsEmergencyButton,
           style: GoogleFonts.lexend(
             color: Colors.white,
             fontWeight: FontWeight.bold,
@@ -445,7 +468,12 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
                   ),
                 ),
                 Text(
-                  '${contact.role}${contact.lga != null ? ' • ${contact.lga}' : ''}',
+                  contact.lga != null
+                      ? context.l10n.contactsRoleAndLga(
+                          contact.role,
+                          contact.lga!,
+                        )
+                      : contact.role,
                   style: GoogleFonts.lexend(
                     fontSize: 12,
                     color: Colors.grey.shade500,
@@ -470,26 +498,29 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
             () => _makePhoneCall(contact.phone),
           ),
           PopupMenuButton<String>(
-            tooltip: 'More actions',
+            tooltip: context.l10n.contactsMoreActions,
             icon: Icon(Icons.more_vert, color: Colors.grey.shade600),
             onSelected: (action) {
               if (action == 'edit') _showContactDialog(existing: contact);
               if (action == 'delete') _confirmDelete(contact);
             },
-            itemBuilder: (_) => const [
+            itemBuilder: (_) => [
               PopupMenuItem(
                 value: 'edit',
                 child: ListTile(
-                  leading: Icon(Icons.edit_outlined),
-                  title: Text('Edit'),
+                  leading: const Icon(Icons.edit_outlined),
+                  title: Text(context.l10n.edit),
                   contentPadding: EdgeInsets.zero,
                 ),
               ),
               PopupMenuItem(
                 value: 'delete',
                 child: ListTile(
-                  leading: Icon(Icons.delete_outline, color: Colors.red),
-                  title: Text('Delete', style: TextStyle(color: Colors.red)),
+                  leading: const Icon(Icons.delete_outline, color: Colors.red),
+                  title: Text(
+                    context.l10n.delete,
+                    style: const TextStyle(color: Colors.red),
+                  ),
                   contentPadding: EdgeInsets.zero,
                 ),
               ),
@@ -557,12 +588,26 @@ class ContactFormDialog extends StatefulWidget {
 }
 
 class _ContactFormDialogState extends State<ContactFormDialog> {
-  static const _categories = {
-    'coordinator': 'Coordinator',
-    'emergency': 'Emergency',
-    'agri-extension': 'Agri-Extension',
-    'other': 'Other',
-  };
+  /// Stored contact categories.
+  static const _categories = [
+    'coordinator',
+    'emergency',
+    'agri-extension',
+    'other',
+  ];
+
+  static String _categoryLabel(AppLocalizations l10n, String value) {
+    switch (value) {
+      case 'coordinator':
+        return l10n.contactsCategoryCoordinator;
+      case 'emergency':
+        return l10n.contactsCategoryEmergency;
+      case 'agri-extension':
+        return l10n.contactsCategoryAgriExtension;
+      default:
+        return l10n.contactsCategoryOther;
+    }
+  }
 
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _nameController;
@@ -582,7 +627,7 @@ class _ContactFormDialogState extends State<ContactFormDialog> {
     _phoneController = TextEditingController(text: e?.phone ?? '');
     _orgController = TextEditingController(text: e?.organization ?? '');
     _lgaController = TextEditingController(text: e?.lga ?? '');
-    _category = _categories.containsKey(e?.category)
+    _category = _categories.contains(e?.category)
         ? e!.category
         : (e == null ? 'coordinator' : 'other');
   }
@@ -630,7 +675,11 @@ class _ContactFormDialogState extends State<ContactFormDialog> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            ErrorHandler.handleError(e, context: 'Emergency Contact'),
+            ErrorHandler.handleError(
+              e,
+              context.l10n,
+              context: 'Emergency Contact',
+            ),
           ),
           backgroundColor: Colors.red,
         ),
@@ -643,7 +692,7 @@ class _ContactFormDialogState extends State<ContactFormDialog> {
     final isEdit = widget.existing != null;
     return AlertDialog(
       title: Text(
-        isEdit ? 'Edit Emergency Contact' : 'Add Emergency Contact',
+        isEdit ? context.l10n.contactsEditTitle : context.l10n.contactsAddTitle,
         style: GoogleFonts.lexend(fontWeight: FontWeight.bold),
       ),
       content: Form(
@@ -655,36 +704,51 @@ class _ContactFormDialogState extends State<ContactFormDialog> {
               TextFormField(
                 controller: _nameController,
                 textCapitalization: TextCapitalization.words,
-                decoration: const InputDecoration(labelText: 'Name *'),
-                validator: EmergencyContact.validateName,
+                decoration: InputDecoration(
+                  labelText: context.l10n.contactsNameLabel,
+                ),
+                validator: (v) =>
+                    EmergencyContact.validateName(v, context.l10n),
               ),
               TextFormField(
                 controller: _roleController,
-                decoration: const InputDecoration(labelText: 'Role'),
+                decoration: InputDecoration(
+                  labelText: context.l10n.contactsRoleLabel,
+                ),
               ),
               TextFormField(
                 controller: _phoneController,
                 keyboardType: TextInputType.phone,
-                decoration: const InputDecoration(labelText: 'Phone *'),
-                validator: EmergencyContact.validatePhone,
+                decoration: InputDecoration(
+                  labelText: context.l10n.contactsPhoneLabel,
+                ),
+                validator: (v) =>
+                    EmergencyContact.validatePhone(v, context.l10n),
               ),
               TextFormField(
                 controller: _orgController,
-                decoration: const InputDecoration(
-                  labelText: 'Organization (Optional)',
+                decoration: InputDecoration(
+                  labelText: context.l10n.contactsOrganizationLabel,
                 ),
               ),
               TextFormField(
                 controller: _lgaController,
-                decoration: const InputDecoration(labelText: 'LGA (Optional)'),
+                decoration: InputDecoration(
+                  labelText: context.l10n.contactsLgaLabel,
+                ),
               ),
               const SizedBox(height: 16),
               DropdownButtonFormField<String>(
                 initialValue: _category,
-                decoration: const InputDecoration(labelText: 'Category'),
+                decoration: InputDecoration(
+                  labelText: context.l10n.contactsCategoryLabel,
+                ),
                 items: [
-                  for (final e in _categories.entries)
-                    DropdownMenuItem(value: e.key, child: Text(e.value)),
+                  for (final c in _categories)
+                    DropdownMenuItem(
+                      value: c,
+                      child: Text(_categoryLabel(context.l10n, c)),
+                    ),
                 ],
                 onChanged: (v) => setState(() => _category = v ?? 'other'),
               ),
@@ -695,7 +759,7 @@ class _ContactFormDialogState extends State<ContactFormDialog> {
       actions: [
         TextButton(
           onPressed: _saving ? null : () => Navigator.pop(context, false),
-          child: const Text('Cancel'),
+          child: Text(context.l10n.cancel),
         ),
         ElevatedButton(
           onPressed: _saving ? null : _save,
@@ -705,7 +769,7 @@ class _ContactFormDialogState extends State<ContactFormDialog> {
                   height: 16,
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
-              : Text(isEdit ? 'Save' : 'Add'),
+              : Text(isEdit ? context.l10n.save : context.l10n.contactsAdd),
         ),
       ],
     );

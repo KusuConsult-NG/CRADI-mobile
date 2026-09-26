@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:climate_app/l10n/app_localizations.dart';
 
 void main() {
   setUp(() {
@@ -35,7 +36,11 @@ void main() {
           create: (_) => ReportsStatusProvider(),
         ),
       ],
-      child: MaterialApp.router(routerConfig: router),
+      child: MaterialApp.router(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        routerConfig: router,
+      ),
     );
   }
 

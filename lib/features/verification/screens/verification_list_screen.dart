@@ -12,6 +12,8 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import 'package:climate_app/core/l10n/l10n.dart';
+import 'package:climate_app/core/l10n/severity_label.dart';
 
 /// Verification list screen — shows reports pending community verification.
 class VerificationListScreen extends StatefulWidget {
@@ -91,7 +93,7 @@ class _VerificationListScreenState extends State<VerificationListScreen> {
     } on Exception catch (e) {
       if (mounted) {
         setState(() {
-          _errorMessage = ErrorHandler.getUserMessage(e);
+          _errorMessage = ErrorHandler.getUserMessage(e, context.l10n);
           _isLoading = false;
         });
       }
@@ -100,17 +102,18 @@ class _VerificationListScreenState extends State<VerificationListScreen> {
 
   String _severityLabel(String? severity) {
     // Tolerate legacy labels such as 'High Severity'.
+    final label = severityLabel(context.l10n, severity);
     switch (normalizeSeverity(severity)) {
       case 'critical':
-        return '🔴 Critical';
+        return '🔴 $label';
       case 'high':
-        return '🟠 High';
+        return '🟠 $label';
       case 'medium':
-        return '🟡 Medium';
+        return '🟡 $label';
       case 'low':
-        return '🟢 Low';
+        return '🟢 $label';
       default:
-        return severity ?? 'Unknown';
+        return label;
     }
   }
 
@@ -141,13 +144,13 @@ class _VerificationListScreenState extends State<VerificationListScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(
-          'Verify Reports',
+          context.l10n.homeVerifyReportsLink,
           style: GoogleFonts.lexend(fontWeight: FontWeight.bold),
         ),
         actions: [
           if (_canRequestVerification(context.watch<AuthProvider>().userRole))
             IconButton(
-              tooltip: 'Request verification',
+              tooltip: context.l10n.verificationListRequestTooltip,
               icon: const Icon(Icons.add_task),
               onPressed: () => context.push('/verification/request'),
             ),
@@ -171,7 +174,7 @@ class _VerificationListScreenState extends State<VerificationListScreen> {
                   ElevatedButton.icon(
                     onPressed: _loadReports,
                     icon: const Icon(Icons.refresh),
-                    label: const Text('Retry'),
+                    label: Text(context.l10n.retry),
                   ),
                 ],
               ),
@@ -188,14 +191,14 @@ class _VerificationListScreenState extends State<VerificationListScreen> {
                   ),
                   const SizedBox(height: 16),
                   Text(
-                    'No reports pending verification',
+                    context.l10n.verificationListEmpty,
                     style: GoogleFonts.lexend(fontSize: 16, color: Colors.grey),
                   ),
                   const SizedBox(height: 16),
                   TextButton.icon(
                     onPressed: _loadReports,
                     icon: const Icon(Icons.refresh),
-                    label: const Text('Refresh'),
+                    label: Text(context.l10n.refresh),
                   ),
                 ],
               ),
@@ -208,7 +211,10 @@ class _VerificationListScreenState extends State<VerificationListScreen> {
                 separatorBuilder: (_, _) => const SizedBox(height: 8),
                 itemBuilder: (context, index) {
                   final report = _reports[index];
-                  final hazard = Hazard.labelFor(report['hazardType']);
+                  final hazard = Hazard.labelFor(
+                    report['hazardType'],
+                    context.l10n,
+                  );
                   final severity = report['severity'] as String?;
                   final lga = report['lga'] ?? '';
                   final state = report['state'] ?? '';

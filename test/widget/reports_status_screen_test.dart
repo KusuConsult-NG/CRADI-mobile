@@ -21,7 +21,7 @@ void main() {
   final testReport = VerificationReport(
     id: 'report-001',
     title: 'Extreme Temperatures',
-    type: 'Drought',
+    type: 'Extreme Temperatures',
     reporter: 'Community Report',
     reporterId: 'user-123',
     location: 'Kuru B, Jos South LGA, Plateau',
@@ -166,7 +166,8 @@ void main() {
 
       await tester.pumpWidget(buildScreen());
       await tester.pumpAndSettle();
-      expect(find.text('Extreme Temperatures'), findsOneWidget);
+      // The card headline is the localised hazard title of the type.
+      expect(find.text('Temperature Extreme'), findsOneWidget);
       expect(find.text('Kuru B, Jos South LGA, Plateau'), findsOneWidget);
       expect(find.text('9m ago'), findsOneWidget);
     });
@@ -336,7 +337,7 @@ void main() {
     ) async {
       when(
         mockReportsProvider.errorFor(any, userId: anyNamed('userId')),
-      ).thenReturn('Could not reach the server.');
+      ).thenReturn((_) => 'Could not reach the server.');
 
       await tester.pumpWidget(buildScreen());
       await tester.pumpAndSettle();

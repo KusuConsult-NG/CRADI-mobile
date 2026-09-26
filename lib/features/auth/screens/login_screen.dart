@@ -12,6 +12,7 @@ import 'package:climate_app/core/design/glass_container.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+import 'package:climate_app/core/l10n/l10n.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -82,13 +83,13 @@ class _LoginScreenState extends State<LoginScreen> {
     } on AuthException catch (e) {
       if (!mounted) return;
       setState(() {
-        _errorMessage = e.userMessage;
+        _errorMessage = e.userMessage(context.l10n);
         _isLoading = false;
       });
     } on Exception catch (e) {
       if (!mounted) return;
       setState(() {
-        _errorMessage = ErrorHandler.getUserMessage(e);
+        _errorMessage = ErrorHandler.getUserMessage(e, context.l10n);
         _isLoading = false;
       });
       ErrorHandler.logError(e, context: 'LoginScreen._submitPhone');
@@ -133,7 +134,12 @@ class _LoginScreenState extends State<LoginScreen> {
         color: Colors.grey.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(12),
       ),
-      child: Row(children: [option('Email', false), option('Phone', true)]),
+      child: Row(
+        children: [
+          option(context.l10n.authMethodEmail, false),
+          option(context.l10n.authMethodPhone, true),
+        ],
+      ),
     );
   }
 
@@ -156,8 +162,9 @@ class _LoginScreenState extends State<LoginScreen> {
         final rateLimitResult = await _rateLimiter.checkLoginAttempt();
 
         if (!rateLimitResult.allowed) {
+          if (!mounted) return;
           setState(() {
-            _errorMessage = rateLimitResult.userMessage;
+            _errorMessage = rateLimitResult.userMessage(context.l10n);
             _isLoading = false;
           });
           return;
@@ -187,7 +194,7 @@ class _LoginScreenState extends State<LoginScreen> {
         } else {
           if (!mounted) return;
           setState(() {
-            _errorMessage = 'Login failed. Please check your credentials.';
+            _errorMessage = context.l10n.authLoginCheckCredentials;
           });
         }
       } on EmailNotConfirmedException catch (e) {
@@ -195,21 +202,21 @@ class _LoginScreenState extends State<LoginScreen> {
         // sent — take the user to the code entry screen.
         if (!mounted) return;
         setState(() {
-          _errorMessage = e.userMessage;
+          _errorMessage = e.userMessage(context.l10n);
           _isLoading = false;
         });
         context.push('/verify-otp?phone=${Uri.encodeComponent(e.email)}');
       } on AuthException catch (e) {
         if (!mounted) return;
         setState(() {
-          _errorMessage = e.userMessage;
+          _errorMessage = e.userMessage(context.l10n);
           _isLoading = false;
         });
         await _checkRateLimit();
       } on Exception catch (e) {
         if (!mounted) return;
         setState(() {
-          _errorMessage = ErrorHandler.getUserMessage(e);
+          _errorMessage = ErrorHandler.getUserMessage(e, context.l10n);
           _isLoading = false;
         });
         ErrorHandler.logError(e, context: 'LoginScreen._submit');
@@ -292,7 +299,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   const SizedBox(height: 32),
 
                   Text(
-                    'Welcome Back',
+                    context.l10n.loginWelcomeBack,
                     style: Theme.of(context).textTheme.displayMedium?.copyWith(
                       fontSize: 34, // Explicit larger size
                       fontWeight: FontWeight.bold,
@@ -301,7 +308,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Sign in to your account',
+                    context.l10n.loginSubtitle,
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                       fontSize: 18, // Increased from default
                     ),
@@ -386,19 +393,22 @@ class _LoginScreenState extends State<LoginScreen> {
                           if (_usePhone)
                             CustomTextField(
                               key: const ValueKey('login-phone'),
-                              label: 'Phone Number',
+                              label: context.l10n.authPhoneNumber,
                               controller: _identifierController,
                               keyboardType: TextInputType.phone,
                               prefixIcon: const Icon(Icons.phone_outlined),
                               hint: '+234 801 234 5678',
-                              validator: Validators.validatePhoneNumber,
+                              validator: (v) => Validators.validatePhoneNumber(
+                                v,
+                                context.l10n,
+                              ),
                               enabled: !_isLoading,
                             )
                           else
                             // Email field
                             CustomTextField(
                               key: const ValueKey('login-email'),
-                              label: 'Email Address',
+                              label: context.l10n.emailAddress,
                               controller: _identifierController,
                               keyboardType: TextInputType.emailAddress,
                               prefixIcon: const Icon(Icons.email_outlined),
@@ -406,15 +416,17 @@ class _LoginScreenState extends State<LoginScreen> {
                               // Validated as it is submitted: trimmed (a
                               // pasted / autofilled address often carries
                               // a trailing space).
-                              validator: (v) =>
-                                  Validators.validateEmail(v?.trim()),
+                              validator: (v) => Validators.validateEmail(
+                                v?.trim(),
+                                context.l10n,
+                              ),
                               enabled: !_isLoading,
                             ),
 
                           // Password field
                           if (!_usePhone)
                             CustomTextField(
-                              label: 'Password',
+                              label: context.l10n.authPassword,
                               controller: _passwordController,
                               obscureText: !_isPasswordVisible,
                               prefixIcon: const Icon(Icons.lock_outline),
@@ -432,7 +444,7 @@ class _LoginScreenState extends State<LoginScreen> {
                               ),
                               validator: (value) {
                                 if (value == null || value.isEmpty) {
-                                  return 'Password is required';
+                                  return context.l10n.validatorPasswordRequired;
                                 }
                                 return null;
                               },
@@ -458,9 +470,9 @@ class _LoginScreenState extends State<LoginScreen> {
                                               });
                                             },
                                     ),
-                                    const Text(
-                                      'Remember Me',
-                                      style: TextStyle(
+                                    Text(
+                                      context.l10n.loginRememberMe,
+                                      style: const TextStyle(
                                         fontSize:
                                             15, // Matched somewhat with other texts
                                         fontWeight: FontWeight.w500,
@@ -472,9 +484,9 @@ class _LoginScreenState extends State<LoginScreen> {
                                   onPressed: _isLoading
                                       ? null
                                       : () => context.push('/forgot-password'),
-                                  child: const Text(
-                                    'Forgot Password?',
-                                    style: TextStyle(
+                                  child: Text(
+                                    context.l10n.forgotTitle,
+                                    style: const TextStyle(
                                       fontSize: 15,
                                       fontWeight: FontWeight.w600,
                                     ),
@@ -486,7 +498,9 @@ class _LoginScreenState extends State<LoginScreen> {
 
                           // Login button
                           CustomButton(
-                            text: _usePhone ? 'Send Code' : 'Login',
+                            text: _usePhone
+                                ? context.l10n.loginSendCode
+                                : context.l10n.authLogin,
                             onPressed: _isLoading ? null : _submit,
                             isLoading: _isLoading,
                           ),
@@ -497,7 +511,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               Text(
-                                "Don't have an account? ",
+                                context.l10n.loginNoAccount,
                                 style: TextStyle(
                                   color: Colors.grey.shade600,
                                   fontSize: 16, // Increased
@@ -507,9 +521,9 @@ class _LoginScreenState extends State<LoginScreen> {
                                 onPressed: _isLoading
                                     ? null
                                     : () => context.push('/register'),
-                                child: const Text(
-                                  'Sign Up',
-                                  style: TextStyle(
+                                child: Text(
+                                  context.l10n.authSignUp,
+                                  style: const TextStyle(
                                     fontSize: 18, // Increased
                                     fontWeight: FontWeight.bold,
                                   ),
@@ -541,7 +555,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         const SizedBox(width: 12),
                         Expanded(
                           child: Text(
-                            'Your data is encrypted and secure',
+                            context.l10n.loginDataSecure,
                             style: TextStyle(
                               color: Colors.blue.shade700,
                               fontSize: 13,
@@ -576,21 +590,23 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
               const SizedBox(height: 24),
               Text(
-                'CRADI Mobile Locked',
+                context.l10n.loginLockedTitle,
                 style: Theme.of(context).textTheme.headlineMedium,
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 12),
-              const Text(
-                'Please authenticate to continue',
+              Text(
+                context.l10n.biometricPromptDefault,
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 48),
               CustomButton(
-                text: 'Unlock with Biometrics',
+                text: context.l10n.loginUnlockBiometrics,
                 onPressed: () async {
                   final destination = _destination();
-                  final success = await authProvider.unlockApp();
+                  final success = await authProvider.unlockApp(
+                    promptReason: context.l10n.biometricLoginPrompt,
+                  );
                   if (success && mounted) {
                     context.go(destination);
                   }
@@ -603,7 +619,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   context.read<ProfileProvider>().clearProfile();
                   authProvider.logout();
                 },
-                child: const Text('Log out and use different account'),
+                child: Text(context.l10n.loginLogoutDifferentAccount),
               ),
             ],
           ),

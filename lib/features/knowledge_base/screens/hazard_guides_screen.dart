@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import 'package:climate_app/core/l10n/l10n.dart';
 
 class HazardGuidesScreen extends StatefulWidget {
   final String? initialCategory;
@@ -83,7 +84,7 @@ class _HazardGuidesScreenState extends State<HazardGuidesScreen> {
         title: Column(
           children: [
             Text(
-              'Hazard Guides',
+              context.l10n.knowledgeGuidesTitle,
               style: GoogleFonts.lexend(
                 fontWeight: FontWeight.bold,
                 color: AppColors.textPrimary,
@@ -91,7 +92,7 @@ class _HazardGuidesScreenState extends State<HazardGuidesScreen> {
               ),
             ),
             Text(
-              'KNOWLEDGE BASE',
+              context.l10n.knowledgeBaseCaption,
               style: GoogleFonts.lexend(
                 fontWeight: FontWeight.w500,
                 color: Colors.grey.shade500,
@@ -144,11 +145,11 @@ class _HazardGuidesScreenState extends State<HazardGuidesScreen> {
                           suffixIcon: _query.isEmpty
                               ? null
                               : IconButton(
-                                  tooltip: 'Clear search',
+                                  tooltip: context.l10n.alertsClearSearch,
                                   icon: const Icon(Icons.clear),
                                   onPressed: _searchController.clear,
                                 ),
-                          hintText: 'Search guides, signs, or hazards...',
+                          hintText: context.l10n.knowledgeGuidesSearchHint,
                           hintStyle: GoogleFonts.lexend(
                             color: Colors.grey.shade500,
                           ),
@@ -177,7 +178,12 @@ class _HazardGuidesScreenState extends State<HazardGuidesScreen> {
                       itemBuilder: (context, index) {
                         final isSelected = _selectedFilterIndex == index;
                         return ChoiceChip(
-                          label: Text(_filters[index]),
+                          label: Text(
+                            knowledgeCategoryDisplay(
+                              context.l10n,
+                              _filters[index],
+                            ),
+                          ),
                           selected: isSelected,
                           onSelected: (v) => _onFilterSelected(index),
                           labelStyle: GoogleFonts.lexend(
@@ -229,7 +235,7 @@ class _HazardGuidesScreenState extends State<HazardGuidesScreen> {
                             ),
                             const SizedBox(height: 8),
                             Text(
-                              error,
+                              error(context.l10n),
                               textAlign: TextAlign.center,
                               style: GoogleFonts.lexend(color: Colors.red),
                             ),
@@ -237,7 +243,7 @@ class _HazardGuidesScreenState extends State<HazardGuidesScreen> {
                               onPressed: () => knowledgeProvider.fetchGuides(
                                 category: _filters[_selectedFilterIndex],
                               ),
-                              child: const Text('Retry'),
+                              child: Text(context.l10n.retry),
                             ),
                           ],
                         ),
@@ -257,8 +263,8 @@ class _HazardGuidesScreenState extends State<HazardGuidesScreen> {
                             const SizedBox(height: 16),
                             Text(
                               _query.isEmpty
-                                  ? 'No guides found for this category'
-                                  : 'No guides match "$_query"',
+                                  ? context.l10n.knowledgeNoGuidesCategory
+                                  : context.l10n.knowledgeNoGuidesMatch(_query),
                               textAlign: TextAlign.center,
                               style: GoogleFonts.lexend(
                                 color: Colors.grey.shade500,
@@ -286,9 +292,14 @@ class _HazardGuidesScreenState extends State<HazardGuidesScreen> {
                       itemBuilder: (context, index) {
                         final guide = guides[index];
                         return _buildGuideCard(
-                          guide['title'] ?? 'No Title',
-                          guide['subtitle'] ?? guide['category'] ?? 'Manual',
-                          guide['tag'] ?? 'GUIDE',
+                          guide['title'] ?? context.l10n.knowledgeNoTitle,
+                          (guide['subtitle'] ?? guide['category']) != null
+                              ? knowledgeCategoryDisplay(
+                                  context.l10n,
+                                  guide['subtitle'] ?? guide['category'],
+                                )
+                              : context.l10n.knowledgeSubtitleManual,
+                          knowledgeTagDisplay(context.l10n, guide['tag']),
                           _getTagColor(guide['tag']),
                           _resolveImage(guide),
                           isDownloaded: guide['isOffline'] ?? true,

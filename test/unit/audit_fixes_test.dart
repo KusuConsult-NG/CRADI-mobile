@@ -156,7 +156,8 @@ void main() {
       });
       await load;
 
-      expect(profile.name, 'User');
+      // Unknown name: empty (the UI shows a localised default).
+      expect(profile.name, isEmpty);
       expect(profile.monitoringZone, isNull);
       expect(profile.isLoading, isFalse);
       expect(await storage.read('profile_name'), isNull);

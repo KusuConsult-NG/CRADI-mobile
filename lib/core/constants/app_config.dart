@@ -94,7 +94,5 @@ class AppConfig {
   // ─────────────────────── Branding ────────────────────────────────────────
 
   static const String appName = 'EWER';
-  static const String appFullName = 'Early Warning and Emergency Response';
-  static const String appTagline = 'Early Warning & Emergency Response';
   static const String appVersion = '1.0.5+8';
 }

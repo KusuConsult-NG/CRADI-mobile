@@ -63,6 +63,8 @@ void main() {
       'unselected', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(
           body: SingleChildScrollView(
             child: LocationSelectorWidget(
@@ -78,7 +80,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
     expect(find.text('Select State'), findsOneWidget);
-    expect(find.text('Select state first'), findsOneWidget);
+    expect(find.text('Select State first'), findsOneWidget);
   });
 
   testWidgets('LocationSelectorWidget keeps a valid initial state', (
@@ -86,6 +88,8 @@ void main() {
   ) async {
     await tester.pumpWidget(
       MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(
           body: SingleChildScrollView(
             child: LocationSelectorWidget(

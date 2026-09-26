@@ -11,6 +11,7 @@ import 'dart:developer' as developer;
 import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' show PostgrestException;
 import 'package:uuid/uuid.dart';
+import 'package:climate_app/core/l10n/l10n.dart';
 
 enum HazardType { flood, drought, temp, wind, erosion, fire, pest }
 
@@ -166,7 +167,9 @@ class ReportingProvider extends ChangeNotifier {
         maxWidth: 1024,
       );
       if (image != null) {
-        if (_photos.length >= 3) throw Exception('Maximum 3 images allowed');
+        if (_photos.length >= 3) {
+          throw ValidationException((l) => l.reportErrorMaxPhotos(3));
+        }
         _photos.add(image);
         notifyListeners();
       }
@@ -199,23 +202,29 @@ class ReportingProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Submit a report (with offline support).
+  /// Submit a report (with offline support). The result's `'message'` is a
+  /// [LocalizedText].
   Future<Map<String, dynamic>> submitReport(BuildContext context) async {
     try {
       _isLoading = true;
       notifyListeners();
 
-      if (_hazardType == null) throw Exception('Hazard Type is missing');
+      if (_hazardType == null) {
+        throw ValidationException((l) => l.reportErrorMissingHazard);
+      }
       if (_severity == null || _severity == 'Unknown') {
-        throw Exception('Severity Level is missing');
+        throw ValidationException((l) => l.reportErrorMissingSeverity);
       }
       if (_locationDetails == null) {
-        throw Exception('Location Details are missing');
+        throw ValidationException((l) => l.reportErrorMissingLocation);
       }
-      if (_ward == null) throw Exception('Ward is missing');
-      if (_lga == null) throw Exception('LGA is missing');
+      if (_ward == null || _lga == null) {
+        throw ValidationException((l) => l.pleaseSelectStateLgaWard);
+      }
       final state = resolvedState;
-      if (state == null) throw Exception('State is missing');
+      if (state == null) {
+        throw ValidationException((l) => l.pleaseSelectStateLgaWard);
+      }
       // GPS coordinates are optional (reports.latitude/longitude are
       // nullable): without a fix the report is located by state/LGA/ward
       // only and the UI labels the location as approximate/unknown.
@@ -228,9 +237,7 @@ class ReportingProvider extends ChangeNotifier {
       // be synced (or would be attributed to whoever signs in next).
       final uid = _db.currentUserId;
       if (uid == null) {
-        throw AuthException(
-          'You must be signed in to submit or save a report.',
-        );
+        throw AuthException((l) => l.reportErrorSignedOut);
       }
 
       final hasInternet = context.read<ConnectivityProvider>().isOnline;
@@ -255,7 +262,7 @@ class ReportingProvider extends ChangeNotifier {
         notifyListeners();
         return {
           'success': true,
-          'message': '📴 Saved as draft. Will sync when online.',
+          'message': (AppLocalizations l) => l.reportSavedAsDraft,
           'draftId': draftId,
           'offline': true,
         };
@@ -316,8 +323,7 @@ class ReportingProvider extends ChangeNotifier {
         notifyListeners();
         return {
           'success': true,
-          'message':
-              'Report submitted successfully! Verification requests sent to peers.',
+          'message': (AppLocalizations l) => l.reportSubmittedWithPeers,
           'reportId': reportId,
         };
       } on Exception catch (e) {
@@ -335,7 +341,7 @@ class ReportingProvider extends ChangeNotifier {
         developer.log('Submission failed, queued for sync: $e');
         return {
           'success': false,
-          'message': 'Could not reach the server. Saved and will sync later.',
+          'message': (AppLocalizations l) => l.reportQueuedServerUnreachable,
           'queued': true,
         };
       }
@@ -345,9 +351,12 @@ class ReportingProvider extends ChangeNotifier {
       developer.log('Error submitting report: $e');
       return {
         'success': false,
-        'message': (e is PostgrestException && SupabaseService.isRateLimited(e))
+        // Rate-limit refusals carry a readable reason written by the
+        // database (not translated); everything else is localised.
+        'message': (AppLocalizations l) =>
+            (e is PostgrestException && SupabaseService.isRateLimited(e))
             ? e.message
-            : ErrorHandler.handleError(e, context: 'Report Submission'),
+            : ErrorHandler.handleError(e, l, context: 'Report Submission'),
       };
     }
   }
@@ -377,7 +386,7 @@ class ReportingProvider extends ChangeNotifier {
     try {
       final offlineService = OfflineStorageService();
       final uid = _db.currentUserId;
-      if (uid == null) throw Exception('User not logged in');
+      if (uid == null) throw AuthException((l) => l.authErrorNotLoggedIn);
 
       // Process sync queue (failed submissions) — single implementation
       // lives in OfflineStorageService (keeps status 'pending', retries
@@ -478,12 +487,17 @@ class ReportingProvider extends ChangeNotifier {
         'success': true,
         'synced': successCount,
         'failed': failCount,
-        'message': 'Synced $successCount items. $failCount failed.',
+        'message': (AppLocalizations l) =>
+            l.syncResultSummary(successCount, failCount),
       };
     } on Exception catch (e) {
       _isLoading = false;
       notifyListeners();
-      return {'success': false, 'message': 'Sync failed: $e'};
+      developer.log('Sync failed: $e');
+      return {
+        'success': false,
+        'message': (AppLocalizations l) => ErrorHandler.getUserMessage(e, l),
+      };
     }
   }
 }

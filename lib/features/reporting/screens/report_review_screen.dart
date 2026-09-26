@@ -8,11 +8,12 @@ import 'package:latlong2/latlong.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
-import 'package:intl/intl.dart';
+import 'package:climate_app/core/constants/hazards.dart';
+import 'package:climate_app/core/l10n/severity_label.dart';
 import 'package:climate_app/shared/widgets/custom_button.dart';
 import 'package:climate_app/features/verification/providers/reports_status_provider.dart';
 import 'package:climate_app/features/auth/providers/auth_provider.dart';
-import 'package:climate_app/l10n/app_localizations.dart';
+import 'package:climate_app/core/l10n/l10n.dart';
 
 class ReportReviewScreen extends StatefulWidget {
   const ReportReviewScreen({super.key});
@@ -46,8 +47,8 @@ class _ReportReviewScreenState extends State<ReportReviewScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              result['message'] ??
-                  AppLocalizations.of(context)!.submissionFailed,
+              (result['message'] as LocalizedText?)?.call(context.l10n) ??
+                  context.l10n.submissionFailed,
             ),
           ),
         );
@@ -58,7 +59,11 @@ class _ReportReviewScreenState extends State<ReportReviewScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            ErrorHandler.handleError(e, context: 'Report Submission'),
+            ErrorHandler.handleError(
+              e,
+              context.l10n,
+              context: 'Report Submission',
+            ),
           ),
         ),
       );
@@ -93,8 +98,8 @@ class _ReportReviewScreenState extends State<ReportReviewScreen> {
               const SizedBox(height: 24),
               Text(
                 isQueued
-                    ? AppLocalizations.of(context)!.savedForLater
-                    : AppLocalizations.of(context)!.reportSubmittedTitle,
+                    ? context.l10n.savedForLater
+                    : context.l10n.reportSubmittedTitle,
                 style: GoogleFonts.lexend(
                   fontSize: 24,
                   fontWeight: FontWeight.bold,
@@ -104,8 +109,8 @@ class _ReportReviewScreenState extends State<ReportReviewScreen> {
               const SizedBox(height: 8),
               Text(
                 isQueued
-                    ? AppLocalizations.of(context)!.offlineReportMessage
-                    : AppLocalizations.of(context)!.onlineReportMessage,
+                    ? context.l10n.offlineReportMessage
+                    : context.l10n.onlineReportMessage,
                 textAlign: TextAlign.center,
                 style: GoogleFonts.lexend(
                   fontSize: 14,
@@ -125,8 +130,8 @@ class _ReportReviewScreenState extends State<ReportReviewScreen> {
                   children: [
                     Text(
                       isQueued
-                          ? AppLocalizations.of(context)!.statusLabel
-                          : AppLocalizations.of(context)!.reportIdLabel,
+                          ? context.l10n.statusLabel
+                          : context.l10n.reportIdLabel,
                       style: GoogleFonts.lexend(
                         fontSize: 10,
                         fontWeight: FontWeight.bold,
@@ -136,10 +141,10 @@ class _ReportReviewScreenState extends State<ReportReviewScreen> {
                     const SizedBox(height: 4),
                     Text(
                       isQueued
-                          ? AppLocalizations.of(context)!.queuedStatus
+                          ? context.l10n.queuedStatus
                           : (reportId != null
                                 ? '#${reportId.substring(0, 8)}...'
-                                : AppLocalizations.of(context)!.sentStatus),
+                                : context.l10n.sentStatus),
                       style: GoogleFonts.robotoMono(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
@@ -166,7 +171,7 @@ class _ReportReviewScreenState extends State<ReportReviewScreen> {
                     );
                     router.go('/dashboard');
                   },
-                  text: AppLocalizations.of(context)!.returnToDashboard,
+                  text: context.l10n.returnToDashboard,
                   type: ButtonType.secondary,
                 ),
               ),
@@ -202,7 +207,7 @@ class _ReportReviewScreenState extends State<ReportReviewScreen> {
               context.canPop() ? context.pop() : context.go('/report'),
         ),
         title: Text(
-          AppLocalizations.of(context)!.reviewReportTitle,
+          context.l10n.reviewReportTitle,
           style: GoogleFonts.lexend(
             fontWeight: FontWeight.bold,
             color: AppColors.textPrimary,
@@ -225,7 +230,7 @@ class _ReportReviewScreenState extends State<ReportReviewScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    AppLocalizations.of(context)!.reviewReportDesc,
+                    context.l10n.reviewReportDesc,
                     style: GoogleFonts.lexend(
                       fontSize: 14,
                       color: Colors.grey.shade600,
@@ -236,7 +241,7 @@ class _ReportReviewScreenState extends State<ReportReviewScreen> {
 
                   // Hazard Details
                   _buildSectionHeader(
-                    AppLocalizations.of(context)!.hazardDetails,
+                    context.l10n.hazardDetails,
                     onEdit: () => context.push('/report/severity'),
                     context: context,
                   ),
@@ -250,10 +255,13 @@ class _ReportReviewScreenState extends State<ReportReviewScreen> {
                               icon: Icons.warning_amber_rounded,
                               iconColor: Colors.red,
                               iconBg: Colors.red.shade50,
-                              label: AppLocalizations.of(context)!.hazardType,
-                              value:
-                                  provider.hazardType ??
-                                  AppLocalizations.of(context)!.notSelected,
+                              label: context.l10n.hazardType,
+                              value: provider.hazardType != null
+                                  ? Hazard.labelFor(
+                                      provider.hazardType,
+                                      context.l10n,
+                                    )
+                                  : context.l10n.notSelected,
                             ),
                             Divider(
                               height: 1,
@@ -265,12 +273,13 @@ class _ReportReviewScreenState extends State<ReportReviewScreen> {
                               icon: Icons.warning,
                               iconColor: Colors.orange,
                               iconBg: Colors.orange.shade50,
-                              label: AppLocalizations.of(
-                                context,
-                              )!.severityLevelLabel,
-                              value:
-                                  provider.severity ??
-                                  AppLocalizations.of(context)!.notSelected,
+                              label: context.l10n.severityLevelLabel,
+                              value: provider.severity != null
+                                  ? severityLabel(
+                                      context.l10n,
+                                      provider.severity,
+                                    )
+                                  : context.l10n.notSelected,
                             ),
                           ],
                         ),
@@ -281,7 +290,7 @@ class _ReportReviewScreenState extends State<ReportReviewScreen> {
 
                   // Date & Time
                   _buildSectionHeader(
-                    AppLocalizations.of(context)!.dateTimeLabel,
+                    context.l10n.dateTimeLabel,
                     onEdit: _backToDetails,
                     context: context,
                   ),
@@ -299,10 +308,24 @@ class _ReportReviewScreenState extends State<ReportReviewScreen> {
                           icon: Icons.access_time,
                           iconColor: AppColors.primaryRed,
                           iconBg: AppColors.primaryRed.withValues(alpha: 0.1),
-                          label: AppLocalizations.of(context)!.whenItOccurred,
+                          label: context.l10n.whenItOccurred,
                           value: isToday
-                              ? '${AppLocalizations.of(context)!.todayAt} ${DateFormat('h:mm a').format(reportDate)}'
-                              : '${DateFormat('MMM dd, yyyy').format(reportDate)} ${AppLocalizations.of(context)!.atTime} ${DateFormat('h:mm a').format(reportDate)}',
+                              ? context.l10n.reviewDateTodayAt(
+                                  localizedDateFormat(
+                                    context,
+                                    'h:mm a',
+                                  ).format(reportDate),
+                                )
+                              : context.l10n.reviewDateOnAt(
+                                  localizedDateFormat(
+                                    context,
+                                    'MMM dd, yyyy',
+                                  ).format(reportDate),
+                                  localizedDateFormat(
+                                    context,
+                                    'h:mm a',
+                                  ).format(reportDate),
+                                ),
                         ),
                       );
                     },
@@ -311,7 +334,7 @@ class _ReportReviewScreenState extends State<ReportReviewScreen> {
 
                   // Location
                   _buildSectionHeader(
-                    AppLocalizations.of(context)!.locationLabel,
+                    context.l10n.locationLabel,
                     onEdit: () => context.push('/report/location'),
                     context: context,
                   ),
@@ -357,8 +380,7 @@ class _ReportReviewScreenState extends State<ReportReviewScreen> {
                                     ),
                                     const SizedBox(height: 6),
                                     Text(
-                                      'Exact location unknown - the selected '
-                                      'area will be used',
+                                      context.l10n.reviewLocationUnknown,
                                       textAlign: TextAlign.center,
                                       style: GoogleFonts.lexend(
                                         fontSize: 12,
@@ -373,8 +395,7 @@ class _ReportReviewScreenState extends State<ReportReviewScreen> {
                               Padding(
                                 padding: const EdgeInsets.only(top: 8),
                                 child: Text(
-                                  'Location approximate (area centre, no GPS '
-                                  'fix)',
+                                  context.l10n.reviewLocationApproximate,
                                   style: GoogleFonts.lexend(
                                     fontSize: 12,
                                     color: Colors.orange.shade800,
@@ -384,7 +405,7 @@ class _ReportReviewScreenState extends State<ReportReviewScreen> {
                             const SizedBox(height: 12),
                             Text(
                               provider.locationDetails ??
-                                  AppLocalizations.of(context)!.notProvided,
+                                  context.l10n.notProvided,
                               style: GoogleFonts.lexend(
                                 fontSize: 14,
                                 fontWeight: FontWeight.bold,
@@ -408,7 +429,7 @@ class _ReportReviewScreenState extends State<ReportReviewScreen> {
 
                   // Description
                   _buildSectionHeader(
-                    AppLocalizations.of(context)!.monitorNotes,
+                    context.l10n.monitorNotes,
                     onEdit: _backToDetails,
                     context: context,
                   ),
@@ -419,9 +440,7 @@ class _ReportReviewScreenState extends State<ReportReviewScreen> {
                         padding: const EdgeInsets.all(16),
                         child: Text(
                           provider.description ??
-                              AppLocalizations.of(
-                                context,
-                              )!.noDescriptionProvided,
+                              context.l10n.noDescriptionProvided,
                           style: GoogleFonts.lexend(
                             fontSize: 14,
                             color: AppColors.textPrimary,
@@ -435,7 +454,7 @@ class _ReportReviewScreenState extends State<ReportReviewScreen> {
 
                   // Evidence
                   _buildSectionHeader(
-                    AppLocalizations.of(context)!.evidenceLabel,
+                    context.l10n.evidenceLabel,
                     onEdit: _backToDetails,
                     context: context,
                   ),
@@ -484,7 +503,7 @@ class _ReportReviewScreenState extends State<ReportReviewScreen> {
                                     ),
                                     const SizedBox(height: 4),
                                     Text(
-                                      AppLocalizations.of(context)!.addPhotoBtn,
+                                      context.l10n.addPhotoBtn,
                                       style: const TextStyle(
                                         fontSize: 10,
                                         color: Colors.grey,
@@ -514,7 +533,7 @@ class _ReportReviewScreenState extends State<ReportReviewScreen> {
               child: CustomButton(
                 onPressed: _isSubmitting ? null : _submitReport,
                 isLoading: _isSubmitting,
-                text: AppLocalizations.of(context)!.submitReportBtn,
+                text: context.l10n.submitReportBtn,
                 icon: Icons.send,
               ),
             ),
@@ -562,7 +581,7 @@ class _ReportReviewScreenState extends State<ReportReviewScreen> {
             child: Padding(
               padding: const EdgeInsets.all(4.0),
               child: Text(
-                AppLocalizations.of(context)!.editBtn,
+                context.l10n.editBtn,
                 style: GoogleFonts.lexend(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,

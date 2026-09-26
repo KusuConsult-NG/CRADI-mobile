@@ -39,7 +39,8 @@ class RemoteConfigService {
     'feature_flag_peer_chat': true,
     'feature_flag_voice_reports': false,
     'app_min_version': '1.0.0',
-    'app_min_version_message': 'Please update the EWER app to continue.',
+    // Empty: the app shows its own (translated) default message.
+    'app_min_version_message': '',
   };
 
   final Map<String, Object?> _values = {};

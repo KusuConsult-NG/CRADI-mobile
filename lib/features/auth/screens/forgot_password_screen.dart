@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import 'package:climate_app/core/l10n/l10n.dart';
 
 class ForgotPasswordScreen extends StatefulWidget {
   const ForgotPasswordScreen({super.key});
@@ -46,7 +47,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
         });
         CustomToast.showError(
           context,
-          ErrorHandler.handleError(e, context: 'Password Reset'),
+          ErrorHandler.handleError(e, context.l10n, context: 'Password Reset'),
         );
       }
     }
@@ -96,7 +97,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
           ),
           const SizedBox(height: 32),
           Text(
-            'Forgot Password?',
+            context.l10n.forgotTitle,
             style: GoogleFonts.lexend(
               fontSize: 28,
               fontWeight: FontWeight.bold,
@@ -106,7 +107,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
           ),
           const SizedBox(height: 12),
           Text(
-            'Enter your email address to receive a password reset code.',
+            context.l10n.forgotBody,
             style: GoogleFonts.lexend(
               fontSize: 16,
               color: Colors.grey.shade600,
@@ -118,8 +119,8 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
             controller: _emailController,
             keyboardType: TextInputType.emailAddress,
             decoration: InputDecoration(
-              labelText: 'Email Address',
-              hintText: 'Enter your email',
+              labelText: context.l10n.emailAddress,
+              hintText: context.l10n.authEmailHint,
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
               ),
@@ -127,10 +128,10 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
             ),
             validator: (value) {
               if (value == null || value.isEmpty) {
-                return 'Please enter your email';
+                return context.l10n.authEmailRequired;
               }
               if (!value.contains('@')) {
-                return 'Please enter a valid email';
+                return context.l10n.authEmailInvalid;
               }
               return null;
             },
@@ -156,9 +157,12 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                       strokeWidth: 2,
                     ),
                   )
-                : const Text(
-                    'Send Reset Code',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                : Text(
+                    context.l10n.forgotSendCode,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
           ),
           const SizedBox(height: 20),
@@ -186,7 +190,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
         ),
         const SizedBox(height: 32),
         Text(
-          'Email Sent!',
+          context.l10n.forgotEmailSentTitle,
           style: GoogleFonts.lexend(
             fontSize: 24,
             fontWeight: FontWeight.bold,
@@ -195,7 +199,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
         ),
         const SizedBox(height: 16),
         Text(
-          'If an account exists for ${_emailController.text.trim()}, we have sent a 6-digit reset code.\nEnter it on the next screen to choose a new password.',
+          context.l10n.forgotEmailSentBody(_emailController.text.trim()),
           style: GoogleFonts.lexend(
             fontSize: 16,
             color: Colors.grey.shade600,
@@ -216,9 +220,9 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
               borderRadius: BorderRadius.circular(12),
             ),
           ),
-          child: const Text(
-            'Enter Reset Code',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+          child: Text(
+            context.l10n.forgotEnterCode,
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
           ),
         ),
       ],

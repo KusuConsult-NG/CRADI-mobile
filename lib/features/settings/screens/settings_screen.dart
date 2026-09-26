@@ -1,6 +1,7 @@
 import 'package:climate_app/core/theme/app_colors.dart';
 import 'package:climate_app/core/providers/language_provider.dart';
 import 'package:climate_app/core/widgets/language_selector_sheet.dart';
+import 'package:climate_app/core/l10n/zone_label.dart';
 import 'package:climate_app/features/auth/providers/auth_provider.dart';
 import 'package:climate_app/core/providers/connectivity_provider.dart';
 import 'package:climate_app/features/profile/providers/profile_provider.dart';
@@ -14,6 +15,7 @@ import 'package:flutter/material.dart';
 import 'dart:io';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:climate_app/core/l10n/l10n.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -79,12 +81,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         // optIn() would prompt a second time; the OS permission is needed first.
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                'Allow notifications for EWER in your phone settings to '
-                'receive alerts.',
-              ),
-            ),
+            SnackBar(content: Text(context.l10n.settingsPushPermissionNeeded)),
           );
         }
         return;
@@ -93,12 +90,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final ok = await service.setPushSubscribed(value);
     if (!ok && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Push notifications are unavailable right now. Your choice is '
-            'saved and will apply when they are.',
-          ),
-        ),
+        SnackBar(content: Text(context.l10n.settingsPushUnavailable)),
       );
     }
   }
@@ -117,7 +109,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              value ? 'Biometric login enabled' : 'Biometric login disabled',
+              value
+                  ? context.l10n.biometricsEnabled
+                  : context.l10n.biometricsDisabled,
             ),
             backgroundColor: Colors.green,
           ),
@@ -131,8 +125,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       final code = bio.lastErrorCode;
       final notEnrolled = bio.lastErrorIsNotEnrolled;
       final message = code != null
-          ? BiometricService.messageFor(code)
-          : e.toString();
+          ? BiometricService.messageFor(code)?.call(context.l10n)
+          : ErrorHandler.getUserMessage(e, context.l10n);
       if (message != null) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -148,7 +142,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(ErrorHandler.getUserMessage(e)),
+            content: Text(ErrorHandler.getUserMessage(e, context.l10n)),
             backgroundColor: Colors.red,
           ),
         );
@@ -181,7 +175,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
                 const SizedBox(width: 4),
                 Text(
-                  provider.back,
+                  context.l10n.back,
                   style: GoogleFonts.lexend(
                     fontSize: 16,
                     color: AppColors.primaryRed,
@@ -199,7 +193,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                provider.settingsTitle,
+                context.l10n.settingsTitle,
                 style: GoogleFonts.lexend(
                   fontSize: 32,
                   fontWeight: FontWeight.bold,
@@ -276,7 +270,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                profile.name,
+                                profile.name.isNotEmpty
+                                    ? profile.name
+                                    : context.l10n.profileDefaultName,
                                 style: GoogleFonts.lexend(
                                   fontSize: 18,
                                   fontWeight: FontWeight.bold,
@@ -284,7 +280,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 ),
                               ),
                               Text(
-                                '${profile.monitoringZone ?? "Not Set"} • ${profile.monitoringZone != null ? "Active" : "Select Zone"}',
+                                context.l10n.homeZoneStatus(
+                                  profile.monitoringZone != null
+                                      ? monitoringZoneLabel(
+                                          context.l10n,
+                                          profile.monitoringZone!,
+                                        )
+                                      : context.l10n.notSetZone,
+                                  profile.monitoringZone != null
+                                      ? context.l10n.activeZone
+                                      : context.l10n.selectZone,
+                                ),
                                 style: GoogleFonts.lexend(
                                   fontSize: 14,
                                   color: AppColors.primaryRed,
@@ -314,7 +320,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               const SizedBox(height: 24),
 
               // Notifications
-              _buildSectionHeader(provider.notifications),
+              _buildSectionHeader(context.l10n.notifications),
               Container(
                 decoration: _cardDecoration(),
                 child: Column(
@@ -325,7 +331,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           _buildSwitchTile(
                             icon: Icons.notifications,
                             color: Colors.red,
-                            title: provider.pushNotifications,
+                            title: context.l10n.pushNotifications,
                             value: settings.pushNotifications,
                             onChanged: (v) =>
                                 _setPushNotifications(settings, v),
@@ -343,7 +349,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               const SizedBox(height: 24),
 
               // Security
-              _buildSectionHeader('SECURITY \u0026 PRIVACY'),
+              _buildSectionHeader(context.l10n.settingsSectionSecurity),
               Container(
                 decoration: _cardDecoration(),
                 child: Column(
@@ -352,8 +358,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       _buildSwitchTile(
                         icon: Icons.fingerprint,
                         color: AppColors.primaryRed,
-                        title: 'Biometric Login',
-                        subtitle: 'Use fingerprint or Face ID to login',
+                        title: context.l10n.biometricLogin,
+                        subtitle: context.l10n.settingsBiometricSubtitle,
                         value: _biometricEnabled,
                         onChanged: _toggleBiometric,
                       ),
@@ -380,14 +386,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    'Biometric Login',
+                                    context.l10n.biometricLogin,
                                     style: GoogleFonts.lexend(
                                       fontSize: 16,
                                       color: Colors.grey.shade400,
                                     ),
                                   ),
                                   Text(
-                                    'Not available on this device',
+                                    context.l10n.settingsBiometricUnavailable,
                                     style: GoogleFonts.lexend(
                                       fontSize: 12,
                                       color: Colors.grey.shade400,
@@ -411,7 +417,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               const SizedBox(height: 24),
 
               // General
-              _buildSectionHeader(provider.general),
+              _buildSectionHeader(context.l10n.general),
               Container(
                 decoration: _cardDecoration(),
                 child: Column(
@@ -419,14 +425,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     _buildNavTile(
                       icon: Icons.menu_book,
                       color: AppColors.primaryRed,
-                      title: provider.navGuides,
+                      title: context.l10n.navGuides,
                       onTap: () => context.push('/knowledge-base'),
                     ),
                     Divider(height: 1, color: Colors.grey.shade100, indent: 60),
                     _buildNavTile(
                       icon: Icons.language,
                       color: Colors.grey,
-                      title: provider.language,
+                      title: context.l10n.language,
                       trailingText: provider.selectedLanguage,
                       onTap: () => showLanguageSelectorSheet(context, provider),
                     ),
@@ -447,7 +453,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         ),
                       ),
                       title: Text(
-                        'Offline Mode',
+                        context.l10n.settingsOfflineMode,
                         style: GoogleFonts.lexend(
                           fontSize: 16,
                           color: AppColors.textPrimary,
@@ -462,15 +468,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         );
                         if (value) {
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Offline mode enabled'),
+                            SnackBar(
+                              content: Text(
+                                context.l10n.settingsOfflineModeEnabled,
+                              ),
                               backgroundColor: Colors.orange,
                             ),
                           );
                         } else {
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Restoring connection...'),
+                            SnackBar(
+                              content: Text(
+                                context.l10n.settingsOfflineModeRestoring,
+                              ),
                               backgroundColor: Colors.green,
                             ),
                           );
@@ -482,14 +492,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     _buildNavTile(
                       icon: Icons.help,
                       color: Colors.grey,
-                      title: provider.helpFaq,
+                      title: context.l10n.helpFaq,
                       onTap: () => context.push('/help'),
                     ),
                     Divider(height: 1, color: Colors.grey.shade100, indent: 60),
                     _buildNavTile(
                       icon: Icons.info,
                       color: Colors.grey,
-                      title: provider.aboutApp,
+                      title: context.l10n.aboutApp,
                       onTap: () => context.push('/about'),
                     ),
                   ],
@@ -506,19 +516,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     final confirm = await showDialog<bool>(
                       context: context,
                       builder: (context) => AlertDialog(
-                        title: Text(provider.logout),
-                        content: const Text(
-                          'Are you sure you want to sign out?',
-                        ),
+                        title: Text(context.l10n.logout),
+                        content: Text(context.l10n.settingsLogoutConfirm),
                         actions: [
                           TextButton(
                             onPressed: () => Navigator.pop(context, false),
-                            child: Text(provider.cancel),
+                            child: Text(context.l10n.cancel),
                           ),
                           TextButton(
                             onPressed: () => Navigator.pop(context, true),
                             child: Text(
-                              provider.logout,
+                              context.l10n.logout,
                               style: const TextStyle(color: Colors.red),
                             ),
                           ),
@@ -539,7 +547,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
                               content: Text(
-                                ErrorHandler.handleError(e, context: 'Logout'),
+                                ErrorHandler.handleError(
+                                  e,
+                                  context.l10n,
+                                  context: 'Logout',
+                                ),
                               ),
                               backgroundColor: Colors.red,
                             ),
@@ -557,7 +569,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ),
                   ),
                   child: Text(
-                    provider.logout,
+                    context.l10n.logout,
                     style: GoogleFonts.lexend(
                       color: Colors.red,
                       fontWeight: FontWeight.bold,
@@ -568,7 +580,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               const SizedBox(height: 16),
               Center(
                 child: Text(
-                  'Climate Early Warning System (CEWS)',
+                  context.l10n.settingsFooterSystemName,
                   style: GoogleFonts.lexend(
                     fontSize: 12,
                     color: Colors.grey.shade400,

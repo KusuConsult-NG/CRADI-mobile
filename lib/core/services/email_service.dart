@@ -3,8 +3,6 @@ import 'dart:developer' as developer;
 import 'dart:convert';
 import 'package:climate_app/core/constants/app_config.dart';
 import 'package:climate_app/core/services/supabase_service.dart';
-import 'package:flutter/material.dart';
-import 'package:fluttertoast/fluttertoast.dart';
 import 'package:http/http.dart' as http;
 
 /// Service for sending transactional emails.
@@ -16,6 +14,9 @@ import 'package:http/http.dart' as http;
 ///
 /// Account verification and password-recovery codes are sent by Supabase Auth
 /// itself and do not go through this service.
+///
+/// Methods return whether the email was sent; callers report failures to
+/// the user (in their language), the service shows no UI.
 class EmailService {
   static final EmailService _instance = EmailService._internal();
   factory EmailService() => _instance;
@@ -111,7 +112,6 @@ class EmailService {
           '[EmailService] Not signed in; cannot send "$type" email',
           name: 'EmailService',
         );
-        _showErrorToast();
         return false;
       }
       final headers = <String, String>{
@@ -139,24 +139,12 @@ class EmailService {
           '[EmailService] Backend error body: ${response.body}',
           name: 'EmailService',
         );
-        _showErrorToast();
       }
       return success;
     } on Exception catch (e) {
       developer.log('[EmailService] Exception: $e', name: 'EmailService');
-      _showErrorToast();
       return false;
     }
-  }
-
-  void _showErrorToast() {
-    Fluttertoast.showToast(
-      msg: 'Email could not be sent. Please try again.',
-      toastLength: Toast.LENGTH_LONG,
-      gravity: ToastGravity.BOTTOM,
-      backgroundColor: Colors.red,
-      textColor: Colors.white,
-    );
   }
 
   bool _isValidEmail(String email) => RegExp(

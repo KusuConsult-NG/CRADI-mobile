@@ -5,6 +5,7 @@ import 'package:climate_app/core/constants/app_config.dart';
 import 'package:climate_app/features/knowledge_base/knowledge_categories.dart';
 import 'package:flutter/material.dart';
 import 'dart:developer' as developer;
+import 'package:climate_app/core/l10n/l10n.dart';
 
 class KnowledgeProvider extends ChangeNotifier {
   final SupabaseService _db = SupabaseService();
@@ -15,7 +16,10 @@ class KnowledgeProvider extends ChangeNotifier {
   /// a category tab never replaces the featured (unfiltered) list.
   final Map<String, List<Map<String, dynamic>>> _guidesByCategory = {};
   final Set<String> _loading = {};
-  final Map<String, String?> _errors = {};
+
+  /// Load failures per category key, resolved in the current language by
+  /// the UI.
+  final Map<String, LocalizedText?> _errors = {};
 
   static String _key(String? category) {
     if (category == null || category == allKnowledgeCategories) {
@@ -37,9 +41,9 @@ class KnowledgeProvider extends ChangeNotifier {
 
   bool isLoadingCategory(String? category) => _loading.contains(_key(category));
 
-  String? get error => _errors[allKnowledgeCategories];
+  LocalizedText? get error => _errors[allKnowledgeCategories];
 
-  String? errorFor(String? category) => _errors[_key(category)];
+  LocalizedText? errorFor(String? category) => _errors[_key(category)];
 
   Future<void> fetchGuides({String? category}) async {
     final key = _key(category);
@@ -104,7 +108,8 @@ class KnowledgeProvider extends ChangeNotifier {
       }
       _guidesByCategory[key] = result;
     } on Exception catch (e) {
-      _errors[key] = 'Failed to fetch guides: $e';
+      developer.log('Failed to fetch guides: $e', name: 'KnowledgeProvider');
+      _errors[key] = (l) => l.knowledgeLoadError;
     } finally {
       _loading.remove(key);
       notifyListeners();
@@ -120,7 +125,8 @@ class KnowledgeProvider extends ChangeNotifier {
     return <String, dynamic>{
       'id': data[r'$id'],
       'title': data['title'] ?? '',
-      'subtitle': data['category'] ?? 'Manual',
+      // Display text is derived in the UI (knowledgeCategoryDisplay).
+      'subtitle': data['category'],
       'content': data['content'] ?? '',
       'category': data['category'] ?? category?.label ?? 'General',
       'hazardType': data['hazardType'],

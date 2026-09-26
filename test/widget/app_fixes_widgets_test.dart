@@ -109,6 +109,8 @@ void main() {
         ChangeNotifierProvider<AuthProvider>.value(value: auth),
       ],
       child: MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(body: ReportVoteActions(report: r)),
       ),
     );
@@ -177,7 +179,7 @@ void main() {
           userId: anyNamed('userId'),
           comment: anyNamed('comment'),
         ),
-      ).thenThrow(const VerificationRefusedException('Already voted'));
+      ).thenThrow(VerificationRefusedException((_) => 'Already voted'));
       await tester.pumpWidget(build(report()));
       await tester.tap(find.text('Confirm'));
       await tester.pumpAndSettle();
@@ -199,8 +201,8 @@ void main() {
           comment: anyNamed('comment'),
         ),
       ).thenThrow(
-        const VerificationRefusedException(
-          'Already decided',
+        VerificationRefusedException(
+          (_) => 'Already decided',
           noLongerPending: true,
         ),
       );
@@ -222,7 +224,11 @@ void main() {
     testWidgets('blocks the app below app_min_version', (tester) async {
       final cfg = RemoteConfigService()..debugSetCurrentVersion('1.0.14');
       await tester.pumpWidget(
-        const MaterialApp(home: ForceUpdateGate(child: Text('app body'))),
+        const MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: ForceUpdateGate(child: Text('app body')),
+        ),
       );
       expect(find.text('app body'), findsOneWidget);
 
@@ -239,7 +245,11 @@ void main() {
       debugDefaultTargetPlatformOverride = TargetPlatform.android;
       try {
         await tester.pumpWidget(
-          const MaterialApp(home: ForceUpdateGate(child: Text('app body'))),
+          const MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: ForceUpdateGate(child: Text('app body')),
+          ),
         );
         expect(find.text('Update'), findsOneWidget);
         expect(
@@ -252,6 +262,8 @@ void main() {
         debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
         await tester.pumpWidget(
           const MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
             home: ForceUpdateGate(key: ValueKey('ios'), child: Text('x')),
           ),
         );

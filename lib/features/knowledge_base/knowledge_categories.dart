@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:climate_app/l10n/app_localizations.dart';
 import 'package:intl/intl.dart';
 
 /// A knowledge-base category. [hazardType] is the value stored in
-/// `knowledge_base.hazard_type`; [label] is shown to users and stored in
-/// `knowledge_base.category`.
+/// `knowledge_base.hazard_type`; [label] is the (English) value stored in
+/// `knowledge_base.category`. Users see [displayLabel] instead.
 class KnowledgeCategory {
   const KnowledgeCategory({
     required this.label,
@@ -20,6 +21,35 @@ class KnowledgeCategory {
 
   /// Other spellings found in older rows / the bundled fallback guides.
   final List<String> aliases;
+
+  /// Category name in the language of [l10n] (display only).
+  String displayLabel(AppLocalizations l10n) {
+    switch (hazardType) {
+      case 'flood':
+        return l10n.knowledgeCategoryFlood;
+      case 'fire':
+        return l10n.knowledgeCategoryFire;
+      case 'erosion':
+        return l10n.knowledgeCategoryErosion;
+      case 'storm':
+        return l10n.knowledgeCategoryStorm;
+      case 'extreme_heat':
+        return l10n.knowledgeCategoryExtremeHeat;
+      case 'earthquake':
+        return l10n.knowledgeCategoryEarthquake;
+      case 'disease':
+        return l10n.knowledgeCategoryDisease;
+      case 'conflict':
+        return l10n.knowledgeCategoryConflict;
+      case 'accident':
+        return l10n.knowledgeCategoryAccident;
+      case 'safety':
+        return l10n.knowledgeCategorySafety;
+      case 'general':
+        return l10n.knowledgeCategoryGeneral;
+    }
+    return label;
+  }
 
   bool matches(Object? value) {
     final v = value?.toString().trim().toLowerCase() ?? '';
@@ -113,6 +143,23 @@ List<String> get knowledgeCategoryFilters => [
   for (final c in knowledgeCategories) c.label,
 ];
 
+/// Display text for a category filter value / stored category ('All', a
+/// label or hazard type); unknown values are shown as stored.
+String knowledgeCategoryDisplay(AppLocalizations l10n, Object? value) {
+  if (value == allKnowledgeCategories) return l10n.knowledgeCategoryAll;
+  return knowledgeCategoryFor(value)?.displayLabel(l10n) ??
+      (value?.toString() ?? '');
+}
+
+/// Display text for a guide's tag chip (a category name in upper case, or
+/// the generic "GUIDE").
+String knowledgeTagDisplay(AppLocalizations l10n, Object? tag) {
+  final category = knowledgeCategoryFor(tag);
+  if (category != null) return category.displayLabel(l10n).toUpperCase();
+  final t = tag?.toString().trim() ?? '';
+  return (t.isEmpty || t.toUpperCase() == 'GUIDE') ? l10n.knowledgeTagGuide : t;
+}
+
 /// The category matching a label, hazard type or alias, or null.
 KnowledgeCategory? knowledgeCategoryFor(Object? value) {
   for (final c in knowledgeCategories) {
@@ -139,8 +186,9 @@ bool guideMatchesCategory(Map<String, dynamic> guide, String? category) {
 /// Formats a knowledge-base / news date for display in local time, e.g.
 /// '3 Mar 2026'. Accepts a [DateTime], an ISO-8601 string or epoch
 /// milliseconds; any other non-empty text (e.g. 'March 2026') is shown as is.
-/// Returns null when there is nothing to show.
-String? formatKnowledgeDate(Object? raw) {
+/// Returns null when there is nothing to show. [locale] is the intl locale
+/// to format with (see `BuildContext.intlLocale`; null = English).
+String? formatKnowledgeDate(Object? raw, [String? locale]) {
   DateTime? date;
   if (raw is DateTime) {
     date = raw;
@@ -153,5 +201,5 @@ String? formatKnowledgeDate(Object? raw) {
     if (date == null) return text;
   }
   if (date == null) return null;
-  return DateFormat('d MMM yyyy').format(date.toLocal());
+  return DateFormat('d MMM yyyy', locale).format(date.toLocal());
 }

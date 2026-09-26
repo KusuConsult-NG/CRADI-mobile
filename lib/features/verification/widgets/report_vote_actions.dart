@@ -9,6 +9,7 @@ import 'package:climate_app/features/verification/widgets/dispute_comment_dialog
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import 'package:climate_app/core/l10n/l10n.dart';
 
 /// Confirm / Dispute peer-vote buttons for a pending report, shown only
 /// when the signed-in user may vote on it (same rules as the database) and
@@ -57,6 +58,7 @@ class _ReportVoteActionsState extends State<ReportVoteActions> {
   Future<void> _vote({required bool confirm}) async {
     final reports = context.read<ReportsStatusProvider>();
     final messenger = ScaffoldMessenger.of(context);
+    final l10n = context.l10n;
     String? comment;
     if (!confirm) {
       comment = await showDisputeCommentDialog(context);
@@ -72,9 +74,7 @@ class _ReportVoteActionsState extends State<ReportVoteActions> {
       messenger.showSnackBar(
         SnackBar(
           content: Text(
-            confirm
-                ? 'Report confirmed. Thank you!'
-                : 'Dispute recorded. Staff will review the report.',
+            confirm ? l10n.voteConfirmedThanks : l10n.voteDisputeRecorded,
           ),
           backgroundColor: confirm ? AppColors.successGreen : Colors.orange,
         ),
@@ -85,12 +85,14 @@ class _ReportVoteActionsState extends State<ReportVoteActions> {
         setState(() => _noLongerPending = true);
       }
       messenger.showSnackBar(
-        SnackBar(content: Text(e.message), backgroundColor: Colors.red),
+        SnackBar(content: Text(e.message(l10n)), backgroundColor: Colors.red),
       );
     } on Exception catch (e) {
       messenger.showSnackBar(
         SnackBar(
-          content: Text(ErrorHandler.handleError(e, context: 'Verification')),
+          content: Text(
+            ErrorHandler.handleError(e, l10n, context: 'Verification'),
+          ),
           backgroundColor: Colors.red,
         ),
       );
@@ -118,7 +120,7 @@ class _ReportVoteActionsState extends State<ReportVoteActions> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Can you verify this report?',
+            context.l10n.voteQuestion,
             style: GoogleFonts.lexend(
               fontSize: 15,
               fontWeight: FontWeight.bold,
@@ -132,9 +134,9 @@ class _ReportVoteActionsState extends State<ReportVoteActions> {
                 child: OutlinedButton.icon(
                   onPressed: _submitting ? null : () => _vote(confirm: false),
                   icon: const Icon(Icons.close, color: Colors.red),
-                  label: const Text(
-                    'Dispute',
-                    style: TextStyle(color: Colors.red),
+                  label: Text(
+                    context.l10n.voteDispute,
+                    style: const TextStyle(color: Colors.red),
                   ),
                 ),
               ),
@@ -153,7 +155,7 @@ class _ReportVoteActionsState extends State<ReportVoteActions> {
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
                       : const Icon(Icons.check),
-                  label: const Text('Confirm'),
+                  label: Text(context.l10n.voteConfirm),
                 ),
               ),
             ],

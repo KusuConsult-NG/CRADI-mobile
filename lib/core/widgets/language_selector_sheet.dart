@@ -2,6 +2,7 @@ import 'package:climate_app/core/providers/language_provider.dart';
 import 'package:climate_app/core/theme/app_colors.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:climate_app/core/l10n/l10n.dart';
 
 /// Bottom sheet for choosing the app language (Settings and Profile).
 void showLanguageSelectorSheet(
@@ -21,7 +22,7 @@ void showLanguageSelectorSheet(
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
-              'Select Language',
+              context.l10n.languageSelectTitle,
               style: GoogleFonts.lexend(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,

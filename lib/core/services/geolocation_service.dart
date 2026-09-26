@@ -3,6 +3,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
 import 'dart:developer' as developer;
 import 'package:climate_app/core/data/mvp_locations_data.dart';
+import 'package:climate_app/core/l10n/l10n.dart';
 
 /// Service for handling geolocation operations
 class GeolocationService {
@@ -37,7 +38,8 @@ class GeolocationService {
 
   /// Human-readable reason of the last [getCurrentPosition] failure (or of a
   /// fallback to a stale position); null when the last call got a fresh fix.
-  String? lastErrorMessage;
+  /// Resolved in the current language by the UI.
+  LocalizedText? lastErrorMessage;
 
   /// A fix older than this is not "current" (e.g. a cached OS position).
   static const Duration maxFixAge = Duration(minutes: 2);
@@ -67,20 +69,19 @@ class GeolocationService {
       final serviceEnabled = await isLocationServiceEnabled();
       if (!serviceEnabled) {
         developer.log('Location services are disabled');
-        lastErrorMessage =
-            'Location services are turned off. Please enable GPS.';
+        lastErrorMessage = (l) => l.geoErrorServicesOff;
         return null;
       }
 
       // Check permissions
       final hasPermission = await checkAndRequestPermission();
       if (!hasPermission) {
-        lastErrorMessage = 'Location permission was denied.';
+        lastErrorMessage = (l) => l.geoErrorPermissionDenied;
         return null;
       }
     } on Exception catch (e) {
       developer.log('Error checking location availability: $e');
-      lastErrorMessage = 'Could not access location services.';
+      lastErrorMessage = (l) => l.geoErrorServicesUnavailable;
       return null;
     }
 
@@ -122,8 +123,7 @@ class GeolocationService {
     try {
       final last = await lastKnown();
       if (last != null) {
-        lastErrorMessage =
-            'Could not get a fresh GPS fix; using your last known location.';
+        lastErrorMessage = (l) => l.geoNoticeLastKnown;
         lastPositionApproximate = true;
         return last;
       }
@@ -132,10 +132,8 @@ class GeolocationService {
     }
 
     lastErrorMessage = failure is TimeoutException
-        ? 'Timed out waiting for a GPS signal. Move to an open area and '
-              'try again, or choose your location manually.'
-        : 'Could not determine your location. Please try again or choose '
-              'your location manually.';
+        ? (l) => l.geoErrorTimeout
+        : (l) => l.geoErrorUndetermined;
     return null;
   }
 
@@ -147,7 +145,8 @@ class GeolocationService {
     return '${latitude.abs().toStringAsFixed(4)}° $latDirection | ${longitude.abs().toStringAsFixed(4)}° $lonDirection';
   }
 
-  /// Get location details using reverse geocoding.
+  /// Get location details using reverse geocoding. `lga` / `ward` are
+  /// empty when unknown (the UI shows a localised placeholder).
   /// Validates LGA against MVP location data to avoid showing
   /// non-LGA locality names (e.g., village names like "Bar Jirgi Summa").
   Future<Map<String, String>> getLocationDetails(
@@ -175,7 +174,7 @@ class GeolocationService {
         ];
 
         // Try to match against known MVP LGAs for this state
-        String resolvedLga = 'Select LGA';
+        String resolvedLga = '';
         if (stateName.isNotEmpty) {
           final knownLGAs = MVPLocationsData.getLGAsForState(stateName);
           if (knownLGAs.isNotEmpty) {
@@ -206,12 +205,12 @@ class GeolocationService {
         }
 
         // If no MVP match, fall back to best available geocoded value
-        if (resolvedLga == 'Select LGA' && candidates.isNotEmpty) {
+        if (resolvedLga.isEmpty && candidates.isNotEmpty) {
           // Use subAdministrativeArea as it's more likely to be an LGA
-          resolvedLga = place.subAdministrativeArea ?? 'Select LGA';
+          resolvedLga = place.subAdministrativeArea ?? '';
         }
 
-        final ward = place.subLocality ?? place.thoroughfare ?? 'Select Ward';
+        final ward = place.subLocality ?? place.thoroughfare ?? '';
 
         developer.log(
           'Reverse geocode: state=$stateName, '
@@ -229,8 +228,8 @@ class GeolocationService {
       }
 
       return {
-        'lga': 'Select LGA',
-        'ward': 'Select Ward',
+        'lga': '',
+        'ward': '',
         'state': '',
         'address':
             'Lat: ${latitude.toStringAsFixed(4)}, Lon: ${longitude.toStringAsFixed(4)}',
@@ -238,8 +237,8 @@ class GeolocationService {
     } on Exception catch (e) {
       developer.log('Error in reverse geocoding: $e');
       return {
-        'lga': 'Select LGA',
-        'ward': 'Select Ward',
+        'lga': '',
+        'ward': '',
         'state': '',
         'address':
             'Lat: ${latitude.toStringAsFixed(4)}, Lon: ${longitude.toStringAsFixed(4)}',

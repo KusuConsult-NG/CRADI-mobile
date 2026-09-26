@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:climate_app/core/l10n/l10n.dart';
 
 /// Maximum length of a dispute comment.
 const int kDisputeCommentMaxLength = 500;
@@ -51,7 +52,7 @@ class _DisputeCommentDialogState extends State<DisputeCommentDialog> {
   Widget build(BuildContext context) {
     return AlertDialog(
       title: Text(
-        'Dispute report?',
+        context.l10n.disputeDialogTitle,
         style: GoogleFonts.lexend(fontWeight: FontWeight.bold),
       ),
       content: TextField(
@@ -63,21 +64,24 @@ class _DisputeCommentDialogState extends State<DisputeCommentDialog> {
           if (_showError) setState(() => _showError = false);
         },
         decoration: InputDecoration(
-          labelText: 'What is wrong with this report? (required)',
+          labelText: context.l10n.disputeDialogLabel,
           border: const OutlineInputBorder(),
           errorText: _showError
-              ? 'Please explain why you dispute this report.'
+              ? context.l10n.verifyErrorDisputeReasonRequired
               : null,
         ),
       ),
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
+          child: Text(context.l10n.cancel),
         ),
         TextButton(
           onPressed: _submit,
-          child: const Text('Dispute', style: TextStyle(color: Colors.red)),
+          child: Text(
+            context.l10n.voteDispute,
+            style: const TextStyle(color: Colors.red),
+          ),
         ),
       ],
     );

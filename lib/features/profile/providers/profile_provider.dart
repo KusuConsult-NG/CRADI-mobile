@@ -9,6 +9,8 @@ import 'package:image_picker/image_picker.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'dart:io';
 import 'dart:developer' as developer;
+import 'package:climate_app/core/l10n/l10n.dart';
+import 'package:climate_app/core/utils/error_handler.dart' show AuthException;
 
 /// Provider for managing user profile data (Supabase `profiles` row).
 class ProfileProvider extends ChangeNotifier {
@@ -26,7 +28,8 @@ class ProfileProvider extends ChangeNotifier {
   Map<String, dynamic>? _userProfile;
   final Connectivity _connectivity;
 
-  String _name = 'User';
+  /// Display name; empty when unknown (the UI shows a localised default).
+  String _name = '';
   String _email = '';
   String _phone = '';
   String? _profileImagePath;
@@ -238,7 +241,7 @@ class ProfileProvider extends ChangeNotifier {
   Future<void> clearProfile() async {
     _loadGen++;
     _isLoading = false;
-    _name = 'User';
+    _name = '';
     _email = '';
     _phone = '';
     _profileImagePath = null;
@@ -268,18 +271,18 @@ class ProfileProvider extends ChangeNotifier {
   }
 
   /// Message shown when a profile edit could not be saved while offline.
-  static const String offlineNotSavedMessage =
-      "You're offline — changes not saved.";
+  static String offlineNotSavedMessage(AppLocalizations l) =>
+      l.profileErrorOfflineNotSaved;
 
   /// Push profile changes to the `profiles` row.
   ///
   /// Returns null when the server accepted the change, otherwise a
   /// user-facing message (offline, signed out, server error). There is no
   /// retry queue for profile edits, so callers must report the failure.
-  Future<String?> _syncToServer(Map<String, dynamic> data) async {
+  Future<LocalizedText?> _syncToServer(Map<String, dynamic> data) async {
     try {
       final user = _db.getCurrentUser();
-      if (user == null) return 'You must be signed in to update your profile.';
+      if (user == null) return (AppLocalizations l) => l.profileErrorSignedOut;
 
       final connectivityResults = await _connectivity.checkConnectivity();
       final hasConnection = connectivityResults.any(
@@ -301,8 +304,7 @@ class ProfileProvider extends ChangeNotifier {
       return null;
     } on Exception catch (e) {
       developer.log('Error syncing profile: $e', name: 'ProfileProvider');
-      return 'Could not save your changes. Please check your connection '
-          'and try again.';
+      return (AppLocalizations l) => l.profileErrorSaveFailed;
     }
   }
 
@@ -323,9 +325,11 @@ class ProfileProvider extends ChangeNotifier {
 
   /// Updates the display name. Returns null when saved, otherwise a
   /// user-facing message (the local name is then left unchanged).
-  Future<String?> updateName(String name) async {
+  Future<LocalizedText?> updateName(String name) async {
     final cleaned = cleanName(name);
-    if (cleaned.isEmpty) return 'Please enter your name.';
+    if (cleaned.isEmpty) {
+      return (AppLocalizations l) => l.profileErrorNameRequired;
+    }
     if (cleaned == _name) return null;
     final error = await _syncToServer({'name': cleaned});
     if (error != null) return error;
@@ -345,7 +349,7 @@ class ProfileProvider extends ChangeNotifier {
   ///
   /// Returns a user-facing message describing the outcome, or `null` when
   /// [email] is unchanged. Never throws.
-  Future<String?> updateEmail(String email) async {
+  Future<LocalizedText?> updateEmail(String email) async {
     final newEmail = email.trim();
     final user = _db.getCurrentUser();
     if (newEmail.isEmpty ||
@@ -353,7 +357,7 @@ class ProfileProvider extends ChangeNotifier {
       return null;
     }
     if (user == null) {
-      return 'You must be signed in to change your email.';
+      return (AppLocalizations l) => l.profileErrorEmailSignedOut;
     }
 
     try {
@@ -362,8 +366,7 @@ class ProfileProvider extends ChangeNotifier {
         'Email change confirmation sent to $newEmail',
         name: 'ProfileProvider',
       );
-      return 'A confirmation link has been sent to $newEmail. Your email '
-          'will change after you confirm it.';
+      return (AppLocalizations l) => l.profileEmailConfirmationSent(newEmail);
     } on sb.AuthException catch (e) {
       developer.log(
         'updateEmail error: ${e.code} ${e.message}',
@@ -371,25 +374,24 @@ class ProfileProvider extends ChangeNotifier {
       );
       switch (e.code) {
         case 'reauthentication_needed':
-          return 'For security, please log out and sign in again before '
-              'changing your email.';
+          return (AppLocalizations l) => l.profileErrorEmailReauth;
         case 'validation_failed':
         case 'email_address_invalid':
-          return 'Please enter a valid email address.';
+          return (AppLocalizations l) => l.validation_invalidEmail;
         case 'email_exists':
-          return 'That email is already in use by another account.';
+          return (AppLocalizations l) => l.profileErrorEmailInUse;
         default:
-          return 'Could not update email. Please try again.';
+          return (AppLocalizations l) => l.profileErrorEmailUpdateFailed;
       }
     } on Exception catch (e) {
       developer.log('updateEmail error: $e', name: 'ProfileProvider');
-      return 'Could not update email. Please try again.';
+      return (AppLocalizations l) => l.profileErrorEmailUpdateFailed;
     }
   }
 
   /// Updates the phone number. Returns null when saved, otherwise a
   /// user-facing message (the local value is then left unchanged).
-  Future<String?> updatePhone(String phone) async {
+  Future<LocalizedText?> updatePhone(String phone) async {
     final error = await _syncToServer({'phone': phone});
     if (error != null) return error;
     _phone = phone;
@@ -401,7 +403,7 @@ class ProfileProvider extends ChangeNotifier {
 
   /// Updates the profile image URL. Returns null when saved, otherwise a
   /// user-facing message (the local value is then left unchanged).
-  Future<String?> updateProfileImage(String imagePath) async {
+  Future<LocalizedText?> updateProfileImage(String imagePath) async {
     final error = await _syncToServer({'profileImageUrl': imagePath});
     if (error != null) return error;
     _profileImagePath = imagePath;
@@ -422,7 +424,7 @@ class ProfileProvider extends ChangeNotifier {
 
       final user = _db.getCurrentUser();
       if (user == null) {
-        throw Exception('User must be logged in to upload profile image');
+        throw AuthException((l) => l.authErrorNotLoggedIn);
       }
 
       final connectivityResults = await _connectivity.checkConnectivity();
@@ -471,7 +473,7 @@ class ProfileProvider extends ChangeNotifier {
   /// The columns are NOT NULL, so all three parts must be present. The
   /// local state only changes once the server accepted the update (there is
   /// no retry queue for profile edits, so an offline change is not kept).
-  Future<String?> updateLocation(
+  Future<LocalizedText?> updateLocation(
     String? state,
     String? lga,
     String? ward,
@@ -483,11 +485,13 @@ class ProfileProvider extends ChangeNotifier {
       return null;
     }
     if (s.isEmpty || l.isEmpty || w.isEmpty) {
-      return 'Please select your state, LGA and ward to update your location.';
+      return (AppLocalizations l) => l.profileErrorLocationIncomplete;
     }
 
     final user = _db.getCurrentUser();
-    if (user == null) return 'You must be signed in to change your location.';
+    if (user == null) {
+      return (AppLocalizations l) => l.profileErrorLocationSignedOut;
+    }
     try {
       await _db.updateDocument(
         collectionId: AppConfig.usersCollection,
@@ -497,12 +501,10 @@ class ProfileProvider extends ChangeNotifier {
     } on Exception catch (e) {
       if (SupabaseService.isPermissionDenied(e) ||
           e is DocumentNotFoundException) {
-        return 'Your location is managed by an administrator. '
-            'Please ask an admin to change the location of a staff account.';
+        return (AppLocalizations l) => l.profileErrorLocationManaged;
       }
       developer.log('Location sync failed: $e', name: 'ProfileProvider');
-      return 'Could not update your location. Please check your connection '
-          'and try again.';
+      return (AppLocalizations l) => l.profileErrorLocationFailed;
     }
 
     _state = s;
@@ -525,7 +527,7 @@ class ProfileProvider extends ChangeNotifier {
   /// The zone is applied on this device right away (it filters local
   /// lists). Returns null when it was also saved to the account, otherwise
   /// a user-facing message.
-  Future<String?> updateMonitoringZone(String zone) async {
+  Future<LocalizedText?> updateMonitoringZone(String zone) async {
     final trimmed = zone.trim();
     final String? effectiveZone = trimmed.isEmpty ? null : trimmed;
     final changed = effectiveZone != _monitoringZone;
@@ -549,7 +551,7 @@ class ProfileProvider extends ChangeNotifier {
 
   static String _metadataName(sb.User user) {
     final n = user.userMetadata?['name'];
-    return (n is String && n.trim().isNotEmpty) ? n : 'User';
+    return (n is String && n.trim().isNotEmpty) ? n : '';
   }
 }
 
@@ -557,8 +559,8 @@ class ProfileProvider extends ChangeNotifier {
 /// user-facing.
 class ProfileSaveException implements Exception {
   const ProfileSaveException(this.message);
-  final String message;
+  final LocalizedText message;
 
   @override
-  String toString() => message;
+  String toString() => message(englishL10n);
 }

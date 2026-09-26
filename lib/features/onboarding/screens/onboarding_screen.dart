@@ -6,6 +6,7 @@ import '../../../core/services/onboarding_service.dart';
 import '../../../core/theme/app_colors.dart';
 import 'package:provider/provider.dart';
 import '../../auth/providers/auth_provider.dart';
+import 'package:climate_app/core/l10n/l10n.dart';
 
 class OnboardingScreen extends StatefulWidget {
   const OnboardingScreen({super.key});
@@ -19,7 +20,8 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   final PageController _pageController = PageController();
   final OnboardingService _onboardingService = OnboardingService();
   int _currentPage = 0;
-  final List<model.OnboardingPage> _pages = model.OnboardingPage.getPages();
+  List<model.OnboardingPage> get _pages =>
+      model.OnboardingPage.getPages(context.l10n);
 
   late AnimationController _iconController;
   late Animation<double> _iconScaleAnimation;
@@ -122,9 +124,9 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                     ),
                   ),
                 ),
-                child: const Text(
-                  'Skip',
-                  style: TextStyle(
+                child: Text(
+                  context.l10n.onboardingSkip,
+                  style: const TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.w600,
                     fontSize: 16,
@@ -172,8 +174,8 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                         ),
                         child: Text(
                           _currentPage == _pages.length - 1
-                              ? 'Get Started'
-                              : 'Next',
+                              ? context.l10n.landingGetStarted
+                              : context.l10n.onboardingNext,
                           style: const TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,

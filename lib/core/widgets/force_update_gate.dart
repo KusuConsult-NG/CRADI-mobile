@@ -4,6 +4,7 @@ import 'package:climate_app/core/theme/app_colors.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:climate_app/core/l10n/l10n.dart';
 
 /// Replaces the whole app with an "update required" screen while this
 /// build is older than the server's `app_min_version` (app_settings).
@@ -26,18 +27,14 @@ class ForceUpdateGate extends StatelessWidget {
 
   Future<void> _openStore(BuildContext context, Uri uri) async {
     final messenger = ScaffoldMessenger.maybeOf(context);
+    final l10n = context.l10n;
     var opened = false;
     try {
       opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
     } on Exception catch (_) {}
     if (!opened) {
       messenger?.showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Could not open the store. Please update the app '
-            'from your app store.',
-          ),
-        ),
+        SnackBar(content: Text(l10n.forceUpdateStoreFailed)),
       );
     }
   }
@@ -65,15 +62,22 @@ class ForceUpdateGate extends StatelessWidget {
                     ),
                     const SizedBox(height: 24),
                     Text(
-                      'Update required',
+                      context.l10n.forceUpdateTitle,
                       style: Theme.of(context).textTheme.headlineSmall,
                       textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 12),
-                    Text(cfg.appMinVersionMessage, textAlign: TextAlign.center),
+                    // A message set by staff in app_settings is shown as
+                    // written (server content); otherwise the app's own.
+                    Text(
+                      cfg.appMinVersionMessage.isNotEmpty
+                          ? cfg.appMinVersionMessage
+                          : context.l10n.forceUpdateDefaultMessage,
+                      textAlign: TextAlign.center,
+                    ),
                     const SizedBox(height: 8),
                     Text(
-                      'Minimum version: ${cfg.appMinVersion}',
+                      context.l10n.forceUpdateMinVersion(cfg.appMinVersion),
                       style: Theme.of(context).textTheme.bodySmall,
                       textAlign: TextAlign.center,
                     ),
@@ -85,13 +89,13 @@ class ForceUpdateGate extends StatelessWidget {
                           backgroundColor: AppColors.primaryRed,
                           foregroundColor: Colors.white,
                         ),
-                        child: const Text('Update'),
+                        child: Text(context.l10n.forceUpdateButton),
                       ),
                       const SizedBox(height: 12),
                     ],
                     OutlinedButton(
                       onPressed: () => cfg.refresh(force: true),
-                      child: const Text('Check again'),
+                      child: Text(context.l10n.forceUpdateCheckAgain),
                     ),
                   ],
                 ),

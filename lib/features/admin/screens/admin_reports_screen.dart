@@ -8,6 +8,10 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:climate_app/core/theme/app_colors.dart';
 import 'dart:developer' as developer;
+import 'package:climate_app/core/l10n/l10n.dart';
+import 'package:climate_app/core/l10n/severity_label.dart';
+import 'package:climate_app/core/constants/hazards.dart';
+import 'package:climate_app/features/verification/models/verification_report_model.dart';
 
 /// Admin Reports Overview screen.
 /// Lists all reports across all LGAs with status filters and manual actions.
@@ -40,7 +44,7 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
   final List<Map<String, dynamic>> _reports = [];
   bool _loading = false;
   bool _hasMore = true;
-  String? _error;
+  LocalizedText? _error;
 
   /// Bumped on every reload so responses for a stale filter are dropped.
   int _generation = 0;
@@ -90,10 +94,7 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
     } on Exception catch (e) {
       developer.log('Reports load failed: $e', name: 'AdminReportsScreen');
       if (mounted && generation == _generation) {
-        setState(
-          () => _error =
-              'Could not load reports. You may not have permission to view them.',
-        );
+        setState(() => _error = (l) => l.adminReportsLoadError);
       }
     } finally {
       if (mounted && generation == _generation) {
@@ -133,7 +134,7 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
       context: context,
       builder: (c) => AlertDialog(
         title: Text(
-          'Reject report?',
+          context.l10n.staffRejectTitle,
           style: GoogleFonts.lexend(fontWeight: FontWeight.bold),
         ),
         content: TextField(
@@ -141,20 +142,23 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
           autofocus: true,
           maxLines: 3,
           maxLength: 500,
-          decoration: const InputDecoration(
-            labelText: 'Reason (recommended)',
-            hintText: 'Why is this report being rejected?',
-            border: OutlineInputBorder(),
+          decoration: InputDecoration(
+            labelText: context.l10n.adminReportsRejectReasonLabel,
+            hintText: context.l10n.adminReportsRejectReasonHint,
+            border: const OutlineInputBorder(),
           ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(c),
-            child: const Text('Cancel'),
+            child: Text(context.l10n.cancel),
           ),
           TextButton(
             onPressed: () => Navigator.pop(c, controller.text.trim()),
-            child: const Text('Reject', style: TextStyle(color: Colors.red)),
+            child: Text(
+              context.l10n.reject,
+              style: const TextStyle(color: Colors.red),
+            ),
           ),
         ],
       ),
@@ -207,8 +211,13 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              'Could not update report status: '
-              '${reportActionErrorMessage(e, context: 'AdminReports')}',
+              context.l10n.adminReportsStatusUpdateFailed(
+                reportActionErrorMessage(
+                  e,
+                  context.l10n,
+                  context: 'AdminReports',
+                ),
+              ),
             ),
             backgroundColor: Colors.red,
           ),
@@ -232,8 +241,10 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
       SnackBar(
         content: Text(
           newStatus == 'pending'
-              ? 'Report reopened for verification'
-              : 'Report marked as $newStatus',
+              ? context.l10n.adminReportsReopened
+              : context.l10n.adminReportsMarkedAs(
+                  reportStatusLabelFor(context.l10n, newStatus),
+                ),
         ),
       ),
     );
@@ -250,7 +261,7 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
     final ward = data['ward'] as String? ?? '';
     final locationDetails = data['locationDetails'] as String? ?? '';
     final description =
-        data['description'] as String? ?? 'No description provided.';
+        data['description'] as String? ?? context.l10n.noDescriptionProvided;
     final imageUrls =
         (data['imageUrls'] as List<dynamic>?)?.cast<String>() ?? [];
     final status = data['status'] as String? ?? 'pending';
@@ -263,8 +274,7 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
     String timeStr = '';
     final dt = parseTimestamp(createdAt);
     if (dt != null) {
-      timeStr =
-          '${dt.day}/${dt.month}/${dt.year} ${dt.hour}:${dt.minute.toString().padLeft(2, '0')}';
+      timeStr = localizedDateFormat(context, 'd/M/y H:mm').format(dt);
     }
 
     showModalBottomSheet(
@@ -294,7 +304,7 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
                   child: Row(
                     children: [
                       Text(
-                        'Report Details',
+                        context.l10n.reportDetailsTitle,
                         style: GoogleFonts.lexend(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
@@ -314,27 +324,38 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
                     controller: scrollController,
                     padding: const EdgeInsets.all(16),
                     children: [
-                      _detailRow('Hazard Type', hazard),
-                      _detailRow('Severity', severity),
                       _detailRow(
-                        'Status',
-                        status.capitalize(),
+                        context.l10n.hazardType,
+                        Hazard.labelFor(hazard, context.l10n),
+                      ),
+                      _detailRow(
+                        context.l10n.reportViewSeverity,
+                        severity.isEmpty
+                            ? ''
+                            : severityLabel(context.l10n, severity),
+                      ),
+                      _detailRow(
+                        context.l10n.alertDetailStatus,
+                        reportStatusLabelFor(context.l10n, status),
                         _statusColors[status],
                       ),
-                      _detailRow('Date/Time', timeStr),
-                      _detailRow('LGA', lga),
-                      _detailRow('Ward', ward),
-                      _detailRow('Location Details', locationDetails),
+                      _detailRow(context.l10n.adminReportsDateTime, timeStr),
+                      _detailRow(context.l10n.adminReportsLga, lga),
+                      _detailRow(context.l10n.wardLabel, ward),
+                      _detailRow(
+                        context.l10n.adminReportsLocationDetails,
+                        locationDetails,
+                      ),
                       if (status == 'rejected')
                         _detailRow(
-                          'Rejection reason',
+                          context.l10n.adminReportsRejectionReason,
                           (rejectionReason == null || rejectionReason.isEmpty)
-                              ? 'No reason given'
+                              ? context.l10n.adminReportsNoReason
                               : rejectionReason,
                         ),
                       const SizedBox(height: 16),
                       Text(
-                        'Description',
+                        context.l10n.descriptionLabel,
                         style: GoogleFonts.lexend(
                           fontWeight: FontWeight.w600,
                           color: Colors.grey.shade600,
@@ -348,7 +369,7 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
                       const SizedBox(height: 16),
                       if (imageUrls.isNotEmpty) ...[
                         Text(
-                          'Images',
+                          context.l10n.adminReportsImages,
                           style: GoogleFonts.lexend(
                             fontWeight: FontWeight.w600,
                             color: Colors.grey.shade600,
@@ -421,7 +442,7 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
                                 Navigator.pop(context);
                               },
                               icon: const Icon(Icons.check, size: 18),
-                              label: const Text('Approve'),
+                              label: Text(context.l10n.staffApprove),
                             ),
                           if (actions.contains('rejected'))
                             ElevatedButton.icon(
@@ -436,7 +457,7 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
                                 _rejectWithReason(id);
                               },
                               icon: const Icon(Icons.close, size: 18),
-                              label: const Text('Reject'),
+                              label: Text(context.l10n.reject),
                             ),
                           if (actions.contains('verified'))
                             ElevatedButton.icon(
@@ -449,7 +470,9 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
                                 Navigator.pop(context);
                               },
                               icon: const Icon(Icons.verified, size: 18),
-                              label: const Text('Mark Verified'),
+                              label: Text(
+                                context.l10n.adminReportsMarkVerified,
+                              ),
                             ),
                           if (actions.contains('pending'))
                             OutlinedButton.icon(
@@ -458,7 +481,7 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
                                 Navigator.pop(context);
                               },
                               icon: const Icon(Icons.refresh, size: 18),
-                              label: const Text('Reopen (pending)'),
+                              label: Text(context.l10n.adminReportsReopen),
                             ),
                         ],
                       ),
@@ -478,7 +501,7 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
       backgroundColor: AppColors.background,
       appBar: AppBar(
         title: Text(
-          'Reports Overview',
+          context.l10n.reportsOverview,
           style: GoogleFonts.lexend(fontWeight: FontWeight.bold),
         ),
         backgroundColor: AppColors.primaryRed,
@@ -499,7 +522,9 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
                         padding: const EdgeInsets.only(right: 6),
                         child: ChoiceChip(
                           label: Text(
-                            s == 'all' ? 'All' : s.capitalize(),
+                            s == 'all'
+                                ? context.l10n.contactsFilterAll
+                                : reportStatusLabelFor(context.l10n, s),
                             style: GoogleFonts.lexend(fontSize: 12),
                           ),
                           selected: _statusFilter == s,
@@ -541,7 +566,8 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
               child: Column(
                 children: [
                   Text(
-                    _error ?? 'No reports found',
+                    _error?.call(context.l10n) ??
+                        context.l10n.adminReportsEmpty,
                     textAlign: TextAlign.center,
                     style: GoogleFonts.lexend(
                       color: _error != null
@@ -553,7 +579,7 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
                     const SizedBox(height: 12),
                     OutlinedButton(
                       onPressed: _reload,
-                      child: const Text('Retry'),
+                      child: Text(context.l10n.retry),
                     ),
                   ],
                 ],
@@ -590,7 +616,7 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
         child: Center(
           child: TextButton(
             onPressed: _loadMore,
-            child: const Text('Could not load more. Tap to retry.'),
+            child: Text(context.l10n.adminReportsLoadMoreError),
           ),
         ),
       );
@@ -602,7 +628,7 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
         child: OutlinedButton.icon(
           onPressed: _loadMore,
           icon: const Icon(Icons.expand_more),
-          label: const Text('Load more'),
+          label: Text(context.l10n.adminReportsLoadMore),
         ),
       ),
     );
@@ -610,7 +636,7 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
 
   Widget _buildReportTile(Map<String, dynamic> d) {
     final id = d[r'$id'] as String;
-    final hazard = d['hazardType'] as String? ?? 'Unknown';
+    final hazard = Hazard.labelFor(d['hazardType'], context.l10n);
     final lga = d['lga'] as String? ?? '';
     final ward = d['ward'] as String? ?? '';
     final status = d['status'] as String? ?? 'pending';
@@ -618,7 +644,7 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
     String timeStr = '';
     final dt = parseTimestamp(d['submittedAt'] ?? d['createdAt']);
     if (dt != null) {
-      timeStr = '${dt.day}/${dt.month}/${dt.year}';
+      timeStr = localizedDateFormat(context, 'd/M/y').format(dt);
     }
 
     final statusColor = _statusColors[status] ?? Colors.grey;
@@ -655,10 +681,10 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
             const SizedBox(height: 2),
             Row(
               children: [
-                _chip(status.capitalize(), statusColor),
+                _chip(reportStatusLabelFor(context.l10n, status), statusColor),
                 if (severity.isNotEmpty) ...[
                   const SizedBox(width: 4),
-                  _chip(severity, Colors.purple),
+                  _chip(severityLabel(context.l10n, severity), Colors.purple),
                 ],
                 if (timeStr.isNotEmpty) ...[
                   const SizedBox(width: 4),
@@ -680,24 +706,24 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
                 onSelected: (action) => _updateStatus(id, action),
                 itemBuilder: (_) => [
                   if (actions.contains('approved'))
-                    const PopupMenuItem(
+                    PopupMenuItem(
                       value: 'approved',
-                      child: Text('Approve'),
+                      child: Text(context.l10n.staffApprove),
                     ),
                   if (actions.contains('rejected'))
-                    const PopupMenuItem(
+                    PopupMenuItem(
                       value: 'rejected',
-                      child: Text('Reject'),
+                      child: Text(context.l10n.reject),
                     ),
                   if (actions.contains('verified'))
-                    const PopupMenuItem(
+                    PopupMenuItem(
                       value: 'verified',
-                      child: Text('Mark Verified'),
+                      child: Text(context.l10n.adminReportsMarkVerified),
                     ),
                   if (actions.contains('pending'))
-                    const PopupMenuItem(
+                    PopupMenuItem(
                       value: 'pending',
-                      child: Text('Reopen (reset to pending)'),
+                      child: Text(context.l10n.adminReportsReopenReset),
                     ),
                 ],
               ),
@@ -751,9 +777,4 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
       ),
     );
   }
-}
-
-extension _StringExt on String {
-  String capitalize() =>
-      isEmpty ? this : '${this[0].toUpperCase()}${substring(1)}';
 }

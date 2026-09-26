@@ -10,6 +10,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:climate_app/core/l10n/l10n.dart';
 
 class KnowledgeBaseScreen extends StatefulWidget {
   const KnowledgeBaseScreen({super.key});
@@ -57,7 +58,7 @@ class _KnowledgeBaseScreenState extends State<KnowledgeBaseScreen> {
       backgroundColor: AppColors.background,
       appBar: AppBar(
         title: Text(
-          'Knowledge Base',
+          context.l10n.knowledgeBaseTitle,
           style: GoogleFonts.lexend(
             fontWeight: FontWeight.bold,
             color: AppColors.textPrimary,
@@ -110,7 +111,7 @@ class _KnowledgeBaseScreenState extends State<KnowledgeBaseScreen> {
                   });
                 },
                 decoration: InputDecoration(
-                  hintText: 'Search guides, hazards, or contacts...',
+                  hintText: context.l10n.knowledgeBaseSearchHint,
                   hintStyle: GoogleFonts.lexend(
                     color: Colors.grey.shade400,
                     fontSize: 14,
@@ -182,8 +183,8 @@ class _KnowledgeBaseScreenState extends State<KnowledgeBaseScreen> {
                             children: [
                               Text(
                                 connectivity.manualOffline
-                                    ? 'Offline Mode Active'
-                                    : 'Offline Mode Available',
+                                    ? context.l10n.knowledgeOfflineActive
+                                    : context.l10n.knowledgeOfflineAvailable,
                                 style: GoogleFonts.lexend(
                                   fontSize: 14,
                                   fontWeight: FontWeight.bold,
@@ -192,8 +193,8 @@ class _KnowledgeBaseScreenState extends State<KnowledgeBaseScreen> {
                               ),
                               Text(
                                 connectivity.manualOffline
-                                    ? 'Using cached data'
-                                    : 'Content downloaded successfully',
+                                    ? context.l10n.knowledgeUsingCache
+                                    : context.l10n.knowledgeContentDownloaded,
                                 style: GoogleFonts.lexend(
                                   fontSize: 12,
                                   color: Colors.grey.shade500,
@@ -223,7 +224,7 @@ class _KnowledgeBaseScreenState extends State<KnowledgeBaseScreen> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    'Featured Guides',
+                    context.l10n.knowledgeFeaturedGuides,
                     style: GoogleFonts.lexend(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
@@ -235,7 +236,7 @@ class _KnowledgeBaseScreenState extends State<KnowledgeBaseScreen> {
                       context.push('/knowledge-base/guides');
                     },
                     child: Text(
-                      'See All',
+                      context.l10n.seeAll,
                       style: GoogleFonts.lexend(
                         fontSize: 14,
                         fontWeight: FontWeight.w500,
@@ -262,7 +263,7 @@ class _KnowledgeBaseScreenState extends State<KnowledgeBaseScreen> {
                   if (allGuides.isEmpty) {
                     return Center(
                       child: Text(
-                        'No guides available',
+                        context.l10n.knowledgeNoGuides,
                         style: GoogleFonts.lexend(color: Colors.grey),
                       ),
                     );
@@ -290,8 +291,8 @@ class _KnowledgeBaseScreenState extends State<KnowledgeBaseScreen> {
                       }
 
                       return _buildFavoriteCard(
-                        guide['title'] ?? 'Guide',
-                        tag,
+                        guide['title'] ?? context.l10n.knowledgeNoTitle,
+                        knowledgeTagDisplay(context.l10n, guide['tag']),
                         tagColor,
                         _resolveGuideImage(guide),
                         context,
@@ -309,7 +310,7 @@ class _KnowledgeBaseScreenState extends State<KnowledgeBaseScreen> {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Text(
-                'Browse Categories',
+                context.l10n.browseCategories,
                 style: GoogleFonts.lexend(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
@@ -328,8 +329,8 @@ class _KnowledgeBaseScreenState extends State<KnowledgeBaseScreen> {
               childAspectRatio: 1.5,
               children: [
                 _buildCategoryCard(
-                  'Hazard ID Guides',
-                  'Identify local threats',
+                  context.l10n.knowledgeHazardIdGuides,
+                  context.l10n.knowledgeHazardIdGuidesDesc,
                   Icons.warning,
                   Colors.orange,
                   () {
@@ -337,8 +338,8 @@ class _KnowledgeBaseScreenState extends State<KnowledgeBaseScreen> {
                   },
                 ),
                 _buildCategoryCard(
-                  'Fire Response',
-                  'Wildfire protocols',
+                  context.l10n.knowledgeFireResponse,
+                  context.l10n.knowledgeFireResponseDesc,
                   Icons.local_fire_department,
                   Colors.red,
                   () {
@@ -346,8 +347,8 @@ class _KnowledgeBaseScreenState extends State<KnowledgeBaseScreen> {
                   },
                 ),
                 _buildCategoryCard(
-                  'Flood Readiness',
-                  'Water & Storms',
+                  context.l10n.knowledgeFloodReadiness,
+                  context.l10n.knowledgeFloodReadinessDesc,
                   Icons.water_drop,
                   Colors.blue,
                   () {
@@ -355,8 +356,8 @@ class _KnowledgeBaseScreenState extends State<KnowledgeBaseScreen> {
                   },
                 ),
                 _buildCategoryCard(
-                  'Contacts Directory',
-                  'Emergency services',
+                  context.l10n.knowledgeContactsDirectory,
+                  context.l10n.knowledgeContactsDirectoryDesc,
                   Icons.contacts,
                   Colors.purple,
                   () {
@@ -372,7 +373,7 @@ class _KnowledgeBaseScreenState extends State<KnowledgeBaseScreen> {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Text(
-                'External News & Updates',
+                context.l10n.knowledgeExternalNews,
                 style: GoogleFonts.lexend(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
@@ -397,7 +398,7 @@ class _KnowledgeBaseScreenState extends State<KnowledgeBaseScreen> {
                     child: Padding(
                       padding: const EdgeInsets.all(24),
                       child: Text(
-                        newsProvider.error!,
+                        newsProvider.error!(context.l10n),
                         style: GoogleFonts.lexend(color: Colors.red),
                       ),
                     ),
@@ -411,7 +412,7 @@ class _KnowledgeBaseScreenState extends State<KnowledgeBaseScreen> {
                     child: Padding(
                       padding: const EdgeInsets.all(24),
                       child: Text(
-                        'No recent news updates found.',
+                        context.l10n.knowledgeNoNews,
                         style: GoogleFonts.lexend(color: Colors.grey),
                       ),
                     ),
@@ -444,8 +445,14 @@ class _KnowledgeBaseScreenState extends State<KnowledgeBaseScreen> {
                             }
                           },
                           child: _buildRecentItem(
-                            item['title'],
-                            [item['source'], formatKnowledgeDate(item['date'])]
+                            item['title'] ?? context.l10n.knowledgeNoTitle,
+                            [
+                                  item['source'],
+                                  formatKnowledgeDate(
+                                    item['date'],
+                                    context.intlLocale,
+                                  ),
+                                ]
                                 .where((p) => p != null && '$p'.isNotEmpty)
                                 .join(' • '),
                             Icons.public,
@@ -512,11 +519,7 @@ class _KnowledgeBaseScreenState extends State<KnowledgeBaseScreen> {
         } else {
           context.push(
             '/knowledge-base/detail',
-            extra: {
-              'title': title,
-              'category': tag,
-              'lastUpdated': 'Recently saved',
-            },
+            extra: {'title': title, 'category': tag},
           );
         }
       },

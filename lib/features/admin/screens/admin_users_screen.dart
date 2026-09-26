@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:climate_app/core/theme/app_colors.dart';
 import 'dart:developer' as developer;
+import 'package:climate_app/core/l10n/l10n.dart';
+import 'package:climate_app/features/auth/providers/auth_provider.dart';
 
 /// Admin User Management screen.
 /// Lists all users with approval status, allows role changes and approval.
@@ -29,7 +31,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
   final List<Map<String, dynamic>> _users = [];
   bool _loading = false;
   bool _hasMore = true;
-  String? _error;
+  LocalizedText? _error;
 
   /// Bumped on every reload so responses for a stale filter are dropped.
   int _generation = 0;
@@ -81,10 +83,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
     } on Exception catch (e) {
       developer.log('Users load failed: $e', name: 'AdminUsersScreen');
       if (mounted && generation == _generation) {
-        setState(
-          () => _error =
-              'Could not load users. You may not have permission to view them.',
-        );
+        setState(() => _error = (l) => l.adminUsersLoadError);
       }
     } finally {
       if (mounted && generation == _generation) {
@@ -133,16 +132,10 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
     'admin',
     'techSupport',
   ];
-  static const _roleLabels = {
-    'user': 'User',
-    'ewm': 'EW Monitor',
-    'ewv': 'EW Verifier',
-    'ewr': 'EW Responder',
-    'ldp_coordinator': 'LDP Coordinator',
-    'project_staff': 'Project Staff',
-    'admin': 'Admin',
-    'techSupport': 'Tech Support',
-  };
+
+  /// Display name of a stored role value.
+  String _roleLabel(String role) =>
+      UserRoleValue.fromDb(role)?.label(context.l10n) ?? role;
 
   void _showWriteError(Object e) {
     developer.log('User update failed: $e', name: 'AdminUsersScreen');
@@ -152,8 +145,8 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
         content: Text(
           SupabaseService.isPermissionDenied(e) ||
                   e is DocumentNotFoundException
-              ? 'You do not have permission to change this user.'
-              : 'Update failed. Please try again.',
+              ? context.l10n.adminUsersNoPermission
+              : context.l10n.adminUsersUpdateFailed,
         ),
         backgroundColor: Colors.red,
       ),
@@ -179,7 +172,11 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(approved ? 'User approved' : 'User rejected'),
+          content: Text(
+            approved
+                ? context.l10n.adminUsersApproved
+                : context.l10n.adminUsersRejected,
+          ),
           backgroundColor: approved ? Colors.green : Colors.red,
         ),
       );
@@ -187,12 +184,15 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
   }
 
   Future<void> _changeRole(String uid, String currentRole) async {
-    final roleOptions = _roleLabels.keys.toList();
+    final roleOptions = _roles.where((r) => r != 'all').toList();
     String? selected = currentRole;
     await showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text('Change Role', style: GoogleFonts.lexend()),
+        title: Text(
+          context.l10n.adminUsersChangeRole,
+          style: GoogleFonts.lexend(),
+        ),
         content: StatefulBuilder(
           builder: (ctx, setS) => SizedBox(
             width: double.maxFinite,
@@ -206,7 +206,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
                       (r) => RadioListTile<String>(
                         dense: true,
                         title: Text(
-                          _roleLabels[r] ?? r,
+                          _roleLabel(r),
                           style: GoogleFonts.lexend(fontSize: 14),
                         ),
                         value: r,
@@ -221,7 +221,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
+            child: Text(context.l10n.cancel),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
@@ -242,16 +242,15 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
                 );
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text(
-                        'Role updated. It takes effect once the user is approved.',
-                      ),
-                    ),
+                    SnackBar(content: Text(context.l10n.adminUsersRoleUpdated)),
                   );
                 }
               }
             },
-            child: const Text('Apply', style: TextStyle(color: Colors.white)),
+            child: Text(
+              context.l10n.adminUsersApply,
+              style: const TextStyle(color: Colors.white),
+            ),
           ),
         ],
       ),
@@ -273,7 +272,10 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
               (lga?.isNotEmpty ?? false) &&
               (ward?.isNotEmpty ?? false);
           return AlertDialog(
-            title: Text('Change location', style: GoogleFonts.lexend()),
+            title: Text(
+              context.l10n.adminUsersChangeLocationTitle,
+              style: GoogleFonts.lexend(),
+            ),
             content: SizedBox(
               width: double.maxFinite,
               child: SingleChildScrollView(
@@ -293,16 +295,16 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(ctx, false),
-                child: const Text('Cancel'),
+                child: Text(context.l10n.cancel),
               ),
               ElevatedButton(
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.primaryRed,
                 ),
                 onPressed: complete ? () => Navigator.pop(ctx, true) : null,
-                child: const Text(
-                  'Apply',
-                  style: TextStyle(color: Colors.white),
+                child: Text(
+                  context.l10n.adminUsersApply,
+                  style: const TextStyle(color: Colors.white),
                 ),
               ),
             ],
@@ -323,7 +325,15 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
     );
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Location updated to $ward, $lga, $state')),
+        SnackBar(
+          content: Text(
+            context.l10n.adminUsersLocationUpdated(
+              ward ?? '',
+              lga ?? '',
+              state ?? '',
+            ),
+          ),
+        ),
       );
     }
   }
@@ -338,7 +348,11 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(disabled ? 'User disabled' : 'User re-enabled'),
+          content: Text(
+            disabled
+                ? context.l10n.adminUsersDisabled
+                : context.l10n.adminUsersReenabled,
+          ),
           backgroundColor: disabled ? Colors.red : Colors.green,
         ),
       );
@@ -351,7 +365,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
       backgroundColor: AppColors.background,
       appBar: AppBar(
         title: Text(
-          'User Management',
+          context.l10n.userManagement,
           style: GoogleFonts.lexend(fontWeight: FontWeight.bold),
         ),
         backgroundColor: AppColors.primaryRed,
@@ -371,7 +385,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
                   onChanged: (v) =>
                       setState(() => _searchQuery = v.toLowerCase()),
                   decoration: InputDecoration(
-                    hintText: 'Search by name or email…',
+                    hintText: context.l10n.adminUsersSearchHint,
                     hintStyle: GoogleFonts.lexend(
                       fontSize: 13,
                       color: Colors.grey.shade400,
@@ -413,8 +427,8 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
                             child: ChoiceChip(
                               label: Text(
                                 r == 'all'
-                                    ? 'All Roles'
-                                    : (_roleLabels[r] ?? r),
+                                    ? context.l10n.adminUsersAllRoles
+                                    : (_roleLabel(r)),
                                 style: GoogleFonts.lexend(fontSize: 12),
                               ),
                               selected: _roleFilter == r,
@@ -438,8 +452,8 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
                   dense: true,
                   title: Text(
                     _pendingOnly
-                        ? 'Showing Pending Approvals'
-                        : 'Showing Approved Users',
+                        ? context.l10n.adminUsersShowingPending
+                        : context.l10n.adminUsersShowingApproved,
                     style: GoogleFonts.lexend(fontSize: 13),
                   ),
                   value: _pendingOnly,
@@ -475,7 +489,8 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
                       padding: const EdgeInsets.all(48),
                       children: [
                         Text(
-                          _error ?? 'No users found',
+                          _error?.call(context.l10n) ??
+                              context.l10n.adminUsersEmpty,
                           textAlign: TextAlign.center,
                           style: GoogleFonts.lexend(
                             color: _error != null
@@ -488,7 +503,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
                           Center(
                             child: OutlinedButton(
                               onPressed: _loadMore,
-                              child: const Text('Load more'),
+                              child: Text(context.l10n.adminReportsLoadMore),
                             ),
                           ),
                         ],
@@ -497,7 +512,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
                           Center(
                             child: OutlinedButton(
                               onPressed: _reload,
-                              child: const Text('Retry'),
+                              child: Text(context.l10n.retry),
                             ),
                           ),
                         ],
@@ -562,14 +577,23 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
                               const SizedBox(height: 2),
                               Row(
                                 children: [
-                                  _Chip(_roleLabels[role] ?? role, Colors.blue),
+                                  _Chip(_roleLabel(role), Colors.blue),
                                   const SizedBox(width: 4),
                                   if (!approved)
-                                    const _Chip('Pending', Colors.orange),
+                                    _Chip(
+                                      context.l10n.adminUsersPendingChip,
+                                      Colors.orange,
+                                    ),
                                   if (approved && !verified)
-                                    const _Chip('Unverified', Colors.grey),
+                                    _Chip(
+                                      context.l10n.profileUnverified,
+                                      Colors.grey,
+                                    ),
                                   if (approved && verified)
-                                    const _Chip('Active', Colors.green),
+                                    _Chip(
+                                      context.l10n.alertStatusActive,
+                                      Colors.green,
+                                    ),
                                 ],
                               ),
                             ],
@@ -587,22 +611,30 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
                             },
                             itemBuilder: (_) => [
                               if (!approved)
-                                const PopupMenuItem(
+                                PopupMenuItem(
                                   value: 'approve',
-                                  child: Text('✅ Approve'),
+                                  child: Text(
+                                    context.l10n.adminUsersApproveMenu,
+                                  ),
                                 ),
                               if (approved)
-                                const PopupMenuItem(
+                                PopupMenuItem(
                                   value: 'reject',
-                                  child: Text('❌ Revoke access'),
+                                  child: Text(
+                                    context.l10n.adminUsersRevokeMenu,
+                                  ),
                                 ),
-                              const PopupMenuItem(
+                              PopupMenuItem(
                                 value: 'role',
-                                child: Text('🔄 Change role'),
+                                child: Text(
+                                  context.l10n.adminUsersChangeRoleMenu,
+                                ),
                               ),
-                              const PopupMenuItem(
+                              PopupMenuItem(
                                 value: 'location',
-                                child: Text('📍 Change location'),
+                                child: Text(
+                                  context.l10n.adminUsersChangeLocationMenu,
+                                ),
                               ),
                               const PopupMenuDivider(),
                               PopupMenuItem(
@@ -611,8 +643,8 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
                                     : 'disable',
                                 child: Text(
                                   d['isDisabled'] == true
-                                      ? '🔓 Re-enable user'
-                                      : '🚫 Disable user',
+                                      ? context.l10n.adminUsersReenableMenu
+                                      : context.l10n.adminUsersDisableMenu,
                                   style: TextStyle(
                                     color: d['isDisabled'] == true
                                         ? Colors.green
@@ -649,7 +681,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
         child: Center(
           child: TextButton(
             onPressed: _loadMore,
-            child: const Text('Could not load more. Tap to retry.'),
+            child: Text(context.l10n.adminReportsLoadMoreError),
           ),
         ),
       );
@@ -661,7 +693,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
         child: OutlinedButton.icon(
           onPressed: _loadMore,
           icon: const Icon(Icons.expand_more),
-          label: const Text('Load more'),
+          label: Text(context.l10n.adminReportsLoadMore),
         ),
       ),
     );

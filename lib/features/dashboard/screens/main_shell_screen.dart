@@ -1,11 +1,11 @@
 import 'package:climate_app/core/theme/app_colors.dart';
 import 'package:climate_app/core/widgets/connectivity_banner.dart';
 import 'package:flutter/material.dart';
-import 'package:climate_app/core/providers/language_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:climate_app/features/auth/providers/auth_provider.dart';
 import 'package:climate_app/features/profile/providers/profile_provider.dart';
 import 'package:go_router/go_router.dart';
+import 'package:climate_app/core/l10n/l10n.dart';
 
 class MainShellScreen extends StatefulWidget {
   final Widget child;
@@ -87,10 +87,11 @@ class _MainShellScreenState extends State<MainShellScreen> {
       },
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('CRADI Early Warning'),
+          title: Text(context.l10n.shellAppBarTitle),
           actions: [
             IconButton(
               icon: const Icon(Icons.notifications),
+              tooltip: context.l10n.shellNotificationsTooltip,
               onPressed: () => context.push('/notifications'),
             ),
           ],
@@ -116,7 +117,7 @@ class _MainShellScreenState extends State<MainShellScreen> {
                     accountName: Text(
                       profileProvider.name.isNotEmpty
                           ? profileProvider.name
-                          : "Early Warning Monitor",
+                          : context.l10n.shellDrawerDefaultName,
                     ),
                     accountEmail: Text(
                       profileProvider.email.isNotEmpty
@@ -135,7 +136,7 @@ class _MainShellScreenState extends State<MainShellScreen> {
               ),
               ListTile(
                 leading: const Icon(Icons.person),
-                title: const Text('Profile'),
+                title: Text(context.l10n.shellDrawerProfile),
                 onTap: () {
                   Navigator.pop(context);
                   context.push('/profile');
@@ -143,7 +144,7 @@ class _MainShellScreenState extends State<MainShellScreen> {
               ),
               ListTile(
                 leading: const Icon(Icons.settings),
-                title: const Text('Settings'),
+                title: Text(context.l10n.navSettings),
                 onTap: () {
                   Navigator.pop(context);
                   context.go('/settings');
@@ -152,7 +153,7 @@ class _MainShellScreenState extends State<MainShellScreen> {
               const Divider(),
               ListTile(
                 leading: const Icon(Icons.logout),
-                title: const Text('Logout'),
+                title: Text(context.l10n.logout),
                 onTap: () async {
                   Navigator.pop(context);
                   context.read<ProfileProvider>().clearProfile();
@@ -166,8 +167,9 @@ class _MainShellScreenState extends State<MainShellScreen> {
           ),
         ),
         body: ConnectivityBanner(child: widget.child),
-        bottomNavigationBar: Consumer2<LanguageProvider, AuthProvider>(
-          builder: (context, langProvider, authProvider, _) {
+        bottomNavigationBar: Consumer<AuthProvider>(
+          builder: (context, authProvider, _) {
+            final l10n = context.l10n;
             final isAdmin = _showAdminTab(authProvider);
             return NavigationBar(
               selectedIndex: MainShellScreen.selectedIndexFor(
@@ -179,28 +181,28 @@ class _MainShellScreenState extends State<MainShellScreen> {
                 NavigationDestination(
                   icon: const Icon(Icons.grid_view),
                   selectedIcon: const Icon(Icons.grid_view_rounded, fill: 1),
-                  label: langProvider.navHome,
+                  label: l10n.navHome,
                 ),
                 NavigationDestination(
                   icon: const Icon(Icons.notifications_outlined),
                   selectedIcon: const Icon(Icons.notifications),
-                  label: langProvider.navAlerts,
+                  label: l10n.navAlerts,
                 ),
                 NavigationDestination(
                   icon: const Icon(Icons.add_circle_outline),
                   selectedIcon: const Icon(Icons.add_circle),
-                  label: langProvider.navReport,
+                  label: l10n.navReport,
                 ),
                 NavigationDestination(
                   icon: const Icon(Icons.settings_outlined),
                   selectedIcon: const Icon(Icons.settings),
-                  label: langProvider.navSettings,
+                  label: l10n.navSettings,
                 ),
                 if (isAdmin)
-                  const NavigationDestination(
-                    icon: Icon(Icons.admin_panel_settings_outlined),
-                    selectedIcon: Icon(Icons.admin_panel_settings),
-                    label: 'Admin',
+                  NavigationDestination(
+                    icon: const Icon(Icons.admin_panel_settings_outlined),
+                    selectedIcon: const Icon(Icons.admin_panel_settings),
+                    label: l10n.navAdmin,
                   ),
               ],
             );

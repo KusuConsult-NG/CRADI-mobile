@@ -1,4 +1,6 @@
 import 'package:climate_app/core/constants/hazards.dart';
+import 'package:climate_app/core/l10n/relative_time.dart';
+import 'package:climate_app/l10n/app_localizations.dart';
 import 'package:climate_app/features/reporting/providers/reporting_provider.dart'
     show normalizeSeverity;
 
@@ -10,6 +12,11 @@ class VerificationReport {
   final String? reporterId;
   final String location;
   final String time;
+
+  /// When the report was submitted (local time); drives the localised
+  /// "time ago" label (see [displayTime]). [time] is the fallback for data
+  /// without a timestamp.
+  final DateTime? submittedAt;
   final ReportStatus status;
   final String iconName;
   final String iconColor;
@@ -40,6 +47,7 @@ class VerificationReport {
     this.reporterId,
     required this.location,
     required this.time,
+    this.submittedAt,
     required this.status,
     required this.iconName,
     required this.iconColor,
@@ -73,6 +81,7 @@ class VerificationReport {
     String? reporterId,
     String? location,
     String? time,
+    DateTime? submittedAt,
     ReportStatus? status,
     String? iconName,
     String? iconColor,
@@ -97,6 +106,7 @@ class VerificationReport {
       reporterId: reporterId ?? this.reporterId,
       location: location ?? this.location,
       time: time ?? this.time,
+      submittedAt: submittedAt ?? this.submittedAt,
       status: status ?? this.status,
       iconName: iconName ?? this.iconName,
       iconColor: iconColor ?? this.iconColor,
@@ -120,13 +130,16 @@ class VerificationReport {
   factory VerificationReport.fromMap(Map<String, dynamic> data, String docId) {
     return VerificationReport(
       id: docId,
-      title: data['hazardType'] ?? data['title'] ?? 'Unknown Report',
+      title: data['hazardType'] ?? data['title'] ?? '',
       type: data['hazardType'] ?? data['type'] ?? 'unknown',
-      reporter: data['reporterName'] ?? data['reporter'] ?? 'Anonymous',
+      reporter: data['reporterName'] ?? data['reporter'] ?? '',
       reporterId: data['userId'] ?? data['reporterId'],
-      location: data['locationDetails'] ?? data['location'] ?? 'Unknown',
+      location: data['locationDetails'] ?? data['location'] ?? '',
       time: _formatTime(
         data['submittedAt'] ?? data['createdAt'] ?? data['time'],
+      ),
+      submittedAt: _parseDate(
+        data['submittedAt'] ?? data['createdAt'] ?? data['submittedAtIso'],
       ),
       status: _parseStatus(data['status']),
       iconName: Hazard.iconKeyFor(data['hazardType']),
@@ -156,6 +169,7 @@ class VerificationReport {
       'reporterId': reporterId,
       'location': location,
       'time': time,
+      'submittedAtIso': submittedAt?.toUtc().toIso8601String(),
       'status': status.name,
       'iconName': iconName,
       'iconColor': iconColor,
@@ -207,40 +221,62 @@ class VerificationReport {
     }
   }
 
+  /// Fallback text for [time] when there is no parseable timestamp (e.g. a
+  /// legacy cached "5m ago"); parseable timestamps are shown via
+  /// [submittedAt] instead, so this never produces display text itself.
   static String _formatTime(dynamic raw) {
     if (raw == null) return '';
-    // Supabase returns ISO-8601 strings; cached values may be DateTimes.
-    final date = raw is DateTime
-        ? raw.toLocal()
-        : raw is String
-        ? DateTime.tryParse(raw)?.toLocal()
-        : null;
-    if (date == null) return raw.toString();
-    try {
-      final diff = DateTime.now().difference(date);
-      if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
-      if (diff.inHours < 24) return '${diff.inHours}h ago';
-      if (diff.inDays < 7) return '${diff.inDays}d ago';
-      return '${date.day}/${date.month}/${date.year}';
-    } on Exception catch (_) {
-      return raw.toString();
-    }
+    if (raw is DateTime) return '';
+    if (raw is String && DateTime.tryParse(raw) != null) return '';
+    return raw.toString();
+  }
+
+  // ── Display (localised) ─────────────────────────────────────────────────
+
+  /// Card headline for this report's hazard.
+  String displayTitle(AppLocalizations l10n) => Hazard.titleFor(type, l10n);
+
+  /// Location text, or "Unknown Location".
+  String displayLocation(AppLocalizations l10n) =>
+      location.trim().isEmpty ? l10n.commonUnknownLocation : location;
+
+  /// Reporter name, or "Community Report" when unknown.
+  String displayReporter(AppLocalizations l10n) =>
+      reporter.trim().isEmpty ? l10n.commonCommunityReport : reporter;
+
+  /// "5m ago" style submission time (or the stored [time] fallback).
+  String displayTime(AppLocalizations l10n) {
+    final at = submittedAt;
+    if (at != null) return relativeTimeLabel(l10n, at);
+    return time.isEmpty ? l10n.commonUnknown : time;
   }
 }
 
 enum ReportStatus { pending, verified, approved, rejected }
 
+/// Display text for a stored report status value ('pending', 'approved',
+/// …); unknown values are shown as stored.
+String reportStatusLabelFor(AppLocalizations l10n, String status) {
+  final s = status.toLowerCase();
+  for (final value in ReportStatus.values) {
+    if (value.name == s) return value.label(l10n);
+  }
+  return status;
+}
+
 extension ReportStatusExtension on ReportStatus {
-  String get displayName {
+  /// Status badge text in the language of [l10n] (the stored value is
+  /// [name]).
+  String label(AppLocalizations l10n) {
     switch (this) {
       case ReportStatus.pending:
-        return 'Pending';
+        return l10n.reportStatusPending;
       case ReportStatus.verified:
-        return 'Verified';
+        return l10n.reportStatusVerified;
       case ReportStatus.approved:
-        return 'Approved';
+        return l10n.reportStatusApproved;
       case ReportStatus.rejected:
-        return 'Rejected';
+        return l10n.reportStatusRejected;
     }
   }
 }

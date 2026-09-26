@@ -1,26 +1,27 @@
 import 'dart:developer' as developer;
 import 'package:flutter/foundation.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
+import 'package:climate_app/core/l10n/l10n.dart';
 
 /// Secure error handler that prevents sensitive data leakage
 class ErrorHandler {
-  /// Get user-friendly error message
-  static String getUserMessage(dynamic error) {
+  /// Get a user-friendly error message in the language of [l10n].
+  static String getUserMessage(dynamic error, AppLocalizations l10n) {
     if (kReleaseMode) {
-      return _getGenericMessage(error);
+      return _getGenericMessage(error, l10n);
     }
-    return _getDetailedMessage(error);
+    return _getDetailedMessage(error, l10n);
   }
 
   /// Get generic user-friendly message (release builds).
   /// IMPORTANT: SDK-internal messages must NEVER be surfaced raw to the user —
   /// they leak implementation detail and confuse end users.
-  static String _getGenericMessage(dynamic error) {
+  static String _getGenericMessage(dynamic error, AppLocalizations l10n) {
     // Only the app's own exceptions carry a curated, user-facing message.
     // (A runtimeType name check would also match Supabase's AuthException,
     // whose raw server message must not be shown.)
     if (error is SecureException) {
-      return error.userMessage;
+      return error.userMessage(l10n);
     }
 
     final msg = error.toString().toLowerCase();
@@ -28,23 +29,28 @@ class ErrorHandler {
     if (msg.contains('network') ||
         msg.contains('socket') ||
         msg.contains('connection')) {
-      return 'Network error. Please check your connection.';
+      return l10n.errorNetwork;
     }
     // Permission / access
     if (msg.contains('permission') || msg.contains('denied')) {
-      return 'You do not have permission to perform this action.';
+      return l10n.errorNoPermission;
     }
     // SDK internal strings — must be scrubbed
     if (msg.contains('internal error') ||
         msg.contains('postgrest') ||
         msg.contains('authapiexception')) {
-      return 'An error occurred. Please try again or contact support.';
+      return l10n.errorContactSupport;
     }
-    return 'An unexpected error occurred. Please try again.';
+    return l10n.errorUnexpected;
   }
 
-  /// Get detailed message (debug mode only)
-  static String _getDetailedMessage(dynamic error) {
+  /// Get detailed message (debug mode only). The app's own exceptions still
+  /// show their curated (translated) text; anything else shows the raw error
+  /// for developers.
+  static String _getDetailedMessage(dynamic error, AppLocalizations l10n) {
+    if (error is SecureException) {
+      return error.userMessage(l10n);
+    }
     if (error is Exception) {
       return 'Error: ${error.toString()}';
     }
@@ -142,25 +148,33 @@ class ErrorHandler {
   }
 
   /// Handle and display error to user
-  static String handleError(dynamic error, {String? context}) {
+  static String handleError(
+    dynamic error,
+    AppLocalizations l10n, {
+    String? context,
+  }) {
     logError(error, context: context);
-    return getUserMessage(error);
+    return getUserMessage(error, l10n);
   }
 }
 
-/// Custom secure exception
+/// Custom secure exception. [userMessage] is resolved against the current
+/// locale's strings where it is shown (see [ErrorHandler.getUserMessage]).
 class SecureException implements Exception {
-  final String userMessage;
+  final LocalizedText userMessage;
   final String? technicalDetails;
 
   SecureException(this.userMessage, {this.technicalDetails});
 
+  /// The message in English, for logs and tests (never for the UI).
+  String get englishMessage => userMessage(englishL10n);
+
   @override
   String toString() {
     if (kDebugMode && technicalDetails != null) {
-      return 'SecureException: $userMessage\nDetails: $technicalDetails';
+      return 'SecureException: $englishMessage\nDetails: $technicalDetails';
     }
-    return userMessage;
+    return englishMessage;
   }
 }
 
@@ -173,7 +187,7 @@ class AuthException extends SecureException {
 /// A fresh verification code has been sent to [email].
 class EmailNotConfirmedException extends AuthException {
   EmailNotConfirmedException(this.email)
-    : super('Please verify your email first. We sent a new code to $email.');
+    : super((l) => l.authEmailNotConfirmed(email));
   final String email;
 }
 

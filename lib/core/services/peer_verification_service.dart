@@ -5,8 +5,12 @@ import 'package:climate_app/features/auth/providers/auth_provider.dart'
     show AuthProvider, UserRole;
 import 'dart:developer' as developer;
 import 'dart:math' as math;
+import 'package:climate_app/core/l10n/l10n.dart';
 
 /// Client side of the peer verification workflow.
+///
+/// Result maps carry `'message'` as a [LocalizedText] (resolved by the UI in
+/// the current language).
 ///
 /// Most of the workflow now runs in the database / backend:
 ///   * inserting into `verifications` fires `verifications_after_insert`,
@@ -48,7 +52,7 @@ class PeerVerificationService {
     if (reporterId == userId) {
       return {
         'success': false,
-        'message': 'You cannot verify your own report.',
+        'message': (AppLocalizations l) => l.verifyErrorOwnReport,
       };
     }
 
@@ -61,9 +65,8 @@ class PeerVerificationService {
         if (dist > 2.0) {
           return {
             'success': false,
-            'message':
-                'You must be within 2 km of the report location to verify. '
-                'Current distance: ${dist.toStringAsFixed(1)} km.',
+            'message': (AppLocalizations l) =>
+                l.verifyErrorTooFar(dist.toStringAsFixed(1)),
           };
         }
       }
@@ -88,15 +91,15 @@ class PeerVerificationService {
         'success': true,
         'verificationId': result['\$id'],
         'message': isConfirmed
-            ? 'Report confirmed successfully'
-            : 'Report disputed',
+            ? (AppLocalizations l) => l.verifyConfirmedMessage
+            : (AppLocalizations l) => l.verifyDisputedMessage,
       };
     } on Exception catch (e) {
       if (SupabaseService.isUniqueViolation(e)) {
         return {
           'success': false,
           'alreadyVoted': true,
-          'message': 'You have already voted on this report.',
+          'message': (AppLocalizations l) => l.verifyErrorAlreadyVoted,
         };
       }
       if (SupabaseService.isPermissionDenied(e)) {
@@ -111,9 +114,7 @@ class PeerVerificationService {
         }
         return {
           'success': false,
-          'message':
-              'Your account is not permitted to verify reports. '
-              'Verification requires an approved monitor role.',
+          'message': (AppLocalizations l) => l.verifyErrorNotPermitted,
         };
       }
       developer.log(
@@ -126,8 +127,8 @@ class PeerVerificationService {
 
   /// Message returned when a vote is refused because the report is no
   /// longer pending.
-  static const String noLongerPendingMessage =
-      'This report is no longer pending.';
+  static String noLongerPendingMessage(AppLocalizations l) =>
+      l.verifyErrorNoLongerPending;
 
   /// Re-reads the report after a refused vote: true when it is no longer
   /// pending (also when it is no longer visible: RLS hides reports that
@@ -176,7 +177,9 @@ class PeerVerificationService {
     );
     return {
       'success': true,
-      'message': isApproved ? 'Report approved' : 'Report rejected',
+      'message': isApproved
+          ? (AppLocalizations l) => l.reportResolvedItem
+          : (AppLocalizations l) => l.reportRejectedItem,
     };
   }
 

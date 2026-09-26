@@ -7,6 +7,8 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:climate_app/features/verification/providers/reports_status_provider.dart';
 import 'package:climate_app/core/widgets/location_selector_widget.dart';
+import 'package:climate_app/core/l10n/l10n.dart';
+import 'package:climate_app/core/l10n/severity_label.dart';
 
 /// Verification request screen - submit verification request
 /// This is a simplified stub implementation using Appwrite
@@ -30,12 +32,8 @@ class _VerificationRequestScreenState extends State<VerificationRequestScreen> {
   /// Stored hazard names (same values as the reporting flow).
   final List<String> _hazards = [for (final h in Hazard.values) h.storedName];
 
-  final List<Map<String, String>> _severities = [
-    {'value': 'low', 'label': 'Low'},
-    {'value': 'medium', 'label': 'Medium'},
-    {'value': 'high', 'label': 'High'},
-    {'value': 'critical', 'label': 'Critical'},
-  ];
+  /// Stored severity values (labels come from [severityLabel]).
+  static const List<String> _severities = ['low', 'medium', 'high', 'critical'];
 
   @override
   void dispose() {
@@ -54,7 +52,7 @@ class _VerificationRequestScreenState extends State<VerificationRequestScreen> {
         _selectedWard == null) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please select State, LGA, and Ward')),
+          SnackBar(content: Text(context.l10n.pleaseSelectStateLgaWard)),
         );
       }
       return;
@@ -66,7 +64,7 @@ class _VerificationRequestScreenState extends State<VerificationRequestScreen> {
       if (user == null) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('User not authenticated')),
+            SnackBar(content: Text(context.l10n.authErrorNotLoggedIn)),
           );
         }
         return;
@@ -74,6 +72,7 @@ class _VerificationRequestScreenState extends State<VerificationRequestScreen> {
 
       if (!mounted) return;
       final messenger = ScaffoldMessenger.of(context);
+      final l10n = context.l10n;
       final navigator = Navigator.of(context);
       try {
         await context.read<ReportsStatusProvider>().submitVerificationRequest(
@@ -87,21 +86,25 @@ class _VerificationRequestScreenState extends State<VerificationRequestScreen> {
           locationDetails: 'Verification Request',
         );
         messenger.showSnackBar(
-          const SnackBar(
-            content: Text('Verification request submitted successfully'),
-          ),
+          SnackBar(content: Text(l10n.verificationRequestSubmitted)),
         );
         if (mounted) navigator.pop();
       } on OfflineQueuedException catch (e) {
         // Saved to the sync queue: it will be uploaded automatically.
-        messenger.showSnackBar(SnackBar(content: Text(e.message)));
+        messenger.showSnackBar(SnackBar(content: Text(e.message(l10n))));
         if (mounted) navigator.pop();
       }
     } on Exception catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(ErrorHandler.handleError(e, context: 'Verification')),
+            content: Text(
+              ErrorHandler.handleError(
+                e,
+                context.l10n,
+                context: 'Verification',
+              ),
+            ),
             backgroundColor: Colors.red,
           ),
         );
@@ -113,7 +116,7 @@ class _VerificationRequestScreenState extends State<VerificationRequestScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Request Verification'),
+        title: Text(context.l10n.verificationRequestTitle),
         leading: IconButton(
           icon: const Icon(
             Icons.arrow_back_ios_new,
@@ -138,15 +141,15 @@ class _VerificationRequestScreenState extends State<VerificationRequestScreen> {
             const SizedBox(height: 16),
             DropdownButtonFormField<String>(
               initialValue: _selectedHazard,
-              decoration: const InputDecoration(
-                labelText: 'Hazard Type',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: context.l10n.hazardType,
+                border: const OutlineInputBorder(),
               ),
               items: _hazards
                   .map(
                     (h) => DropdownMenuItem(
                       value: h,
-                      child: Text(Hazard.labelFor(h)),
+                      child: Text(Hazard.labelFor(h, context.l10n)),
                     ),
                   )
                   .toList(),
@@ -155,15 +158,15 @@ class _VerificationRequestScreenState extends State<VerificationRequestScreen> {
             const SizedBox(height: 16),
             DropdownButtonFormField<String>(
               initialValue: _selectedSeverity,
-              decoration: const InputDecoration(
-                labelText: 'Severity',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: context.l10n.reportViewSeverity,
+                border: const OutlineInputBorder(),
               ),
               items: _severities
                   .map(
                     (s) => DropdownMenuItem(
-                      value: s['value'],
-                      child: Text(s['label']!),
+                      value: s,
+                      child: Text(severityLabel(context.l10n, s)),
                     ),
                   )
                   .toList(),
@@ -172,14 +175,17 @@ class _VerificationRequestScreenState extends State<VerificationRequestScreen> {
             const SizedBox(height: 16),
             TextFormField(
               controller: _descriptionController,
-              decoration: const InputDecoration(
-                labelText: 'Description',
-                hintText: 'Describe what needs verification...',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: context.l10n.descriptionLabel,
+                hintText: context.l10n.verificationRequestDescriptionHint,
+                border: const OutlineInputBorder(),
               ),
               maxLines: 5,
-              validator: (value) =>
-                  Validators.validateDescription(value, maxLength: 500),
+              validator: (value) => Validators.validateDescription(
+                value,
+                context.l10n,
+                maxLength: 500,
+              ),
             ),
             const SizedBox(height: 16),
             LocationSelectorWidget(
@@ -209,7 +215,7 @@ class _VerificationRequestScreenState extends State<VerificationRequestScreen> {
                           width: 20,
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
-                      : const Text('Submit Request'),
+                      : Text(context.l10n.verificationRequestSubmit),
                 );
               },
             ),

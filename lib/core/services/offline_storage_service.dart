@@ -11,18 +11,23 @@ import 'package:supabase_flutter/supabase_flutter.dart'
 
 import 'package:climate_app/core/services/hive_encryption_service.dart';
 import 'package:climate_app/core/services/supabase_service.dart';
+import 'package:climate_app/core/utils/error_handler.dart'
+    show ValidationException;
+import 'package:climate_app/core/l10n/l10n.dart';
 
 /// Thrown when an online submission could not reach the server and the
 /// payload was saved to the offline sync queue instead. The data is safe and
 /// will be uploaded automatically; UIs should treat this as "saved".
 class OfflineQueuedException implements Exception {
-  const OfflineQueuedException([
-    this.message = 'Saved offline. It will sync when you are back online.',
-  ]);
-  final String message;
+  const OfflineQueuedException([this.message = _defaultMessage]);
+
+  /// Shown to the user (resolved in the current language).
+  final LocalizedText message;
+
+  static String _defaultMessage(AppLocalizations l) => l.offlineSavedWillSync;
 
   @override
-  String toString() => message;
+  String toString() => message(englishL10n);
 }
 
 /// Postgres error codes that will fail the same way on every retry
@@ -137,7 +142,7 @@ class OfflineStorageService {
 
     // Check if we've reached the max draft limit
     if (_draftsBox!.length >= _maxDrafts) {
-      throw Exception('Maximum draft limit ($_maxDrafts) reached');
+      throw ValidationException((l) => l.offlineDraftLimit(_maxDrafts));
     }
 
     final draftId = DateTime.now().millisecondsSinceEpoch.toString();

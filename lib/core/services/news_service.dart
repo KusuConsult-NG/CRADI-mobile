@@ -60,7 +60,8 @@ class NewsService {
     final date = fields['date'];
     return {
       'id': item['id'],
-      'title': fields['title'] ?? 'No Title',
+      // A missing title is shown with a localised placeholder by the UI.
+      'title': fields['title'],
       'url': (pageUrl is String && pageUrl.isNotEmpty) ? pageUrl : item['href'],
       'date': date is Map ? (date['created'] ?? '') : '',
       'source': firstSource is Map

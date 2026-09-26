@@ -2,6 +2,7 @@ import 'dart:developer' as developer;
 import 'package:flutter/foundation.dart';
 import 'package:local_auth/local_auth.dart';
 import 'package:flutter/services.dart';
+import 'package:climate_app/core/l10n/l10n.dart';
 
 /// Biometric authentication service
 ///
@@ -35,7 +36,7 @@ class BiometricService {
 
   /// User-facing text for a failure [code]; null for a user cancellation
   /// (nothing to explain) or when there was no failure.
-  static String? messageFor(LocalAuthExceptionCode? code) {
+  static LocalizedText? messageFor(LocalAuthExceptionCode? code) {
     switch (code) {
       case null:
       case LocalAuthExceptionCode.userCanceled:
@@ -43,17 +44,15 @@ class BiometricService {
         return null;
       case LocalAuthExceptionCode.noBiometricsEnrolled:
       case LocalAuthExceptionCode.noCredentialsSet:
-        return 'No biometrics enrolled. Please add a fingerprint or Face ID '
-            'in your device Settings first.';
+        return (l) => l.biometricErrorNotEnrolled;
       case LocalAuthExceptionCode.noBiometricHardware:
       case LocalAuthExceptionCode.biometricHardwareTemporarilyUnavailable:
-        return 'Biometrics are not available on this device.';
+        return (l) => l.biometricErrorUnavailable;
       case LocalAuthExceptionCode.temporaryLockout:
       case LocalAuthExceptionCode.biometricLockout:
-        return 'Too many attempts. Biometrics are locked; unlock your device '
-            'and try again later.';
+        return (l) => l.biometricErrorLockedOut;
       default:
-        return 'Biometric authentication failed. Please try again.';
+        return (l) => l.biometricErrorFailed;
     }
   }
 
@@ -123,9 +122,10 @@ class BiometricService {
     }
   }
 
-  /// Authenticate using biometrics
+  /// Authenticate using biometrics. [reason] is shown in the system prompt;
+  /// UI callers pass it localised (the English default is a fallback).
   Future<bool> authenticate({
-    String reason = 'Please authenticate to continue',
+    String? reason,
     bool useErrorDialogs = true,
     bool stickyAuth = true,
   }) async {
@@ -137,7 +137,9 @@ class BiometricService {
         return false;
       }
 
-      return await _localAuth.authenticate(localizedReason: reason);
+      return await _localAuth.authenticate(
+        localizedReason: reason ?? englishL10n.biometricPromptDefault,
+      );
     } on LocalAuthException catch (e) {
       _recordError(e);
       developer.log('Authentication error: $e', name: 'BiometricService');
@@ -149,21 +151,12 @@ class BiometricService {
     }
   }
 
-  /// Authenticate for login
-  Future<bool> authenticateForLogin() async {
+  /// Authenticate for login; [reason] is the localised system-prompt text.
+  Future<bool> authenticateForLogin({String? reason}) async {
     return await authenticate(
-      reason: 'Authenticate to login to EWER Mobile',
+      reason: reason,
       useErrorDialogs: true,
       stickyAuth: true,
-    );
-  }
-
-  /// Authenticate for sensitive operations
-  Future<bool> authenticateForSensitiveOperation(String operation) async {
-    return await authenticate(
-      reason: 'Authenticate to $operation',
-      useErrorDialogs: true,
-      stickyAuth: false,
     );
   }
 
@@ -180,18 +173,17 @@ class BiometricService {
   }
 
   /// Get biometric type name for UI display
-  String getBiometricTypeName(BiometricType type) {
+  String getBiometricTypeName(BiometricType type, AppLocalizations l10n) {
     switch (type) {
       case BiometricType.face:
-        return 'Face ID';
+        return l10n.biometricTypeFace;
       case BiometricType.fingerprint:
-        return 'Fingerprint';
+        return l10n.biometricTypeFingerprint;
       case BiometricType.iris:
-        return 'Iris';
+        return l10n.biometricTypeIris;
       case BiometricType.strong:
-        return 'Biometric';
       case BiometricType.weak:
-        return 'Biometric';
+        return l10n.biometricTypeGeneric;
     }
   }
 

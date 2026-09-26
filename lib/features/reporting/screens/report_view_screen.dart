@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:intl/intl.dart';
+import 'package:climate_app/core/l10n/severity_label.dart';
 import 'package:provider/provider.dart';
 import 'package:climate_app/core/constants/hazards.dart';
 import 'package:climate_app/core/theme/app_colors.dart';
@@ -10,6 +10,7 @@ import 'package:climate_app/features/verification/providers/reports_status_provi
 import 'package:climate_app/features/verification/widgets/report_staff_actions.dart';
 import 'package:climate_app/features/verification/widgets/report_verifications_section.dart';
 import 'package:climate_app/features/verification/widgets/report_vote_actions.dart';
+import 'package:climate_app/core/l10n/l10n.dart';
 
 /// Screen that displays full report details, with the actions the
 /// signed-in user may take on it (peer vote, staff approve / reject /
@@ -69,7 +70,7 @@ class _ReportViewScreenState extends State<ReportViewScreen> {
               context.canPop() ? context.pop() : context.go('/reports-status'),
         ),
         title: Text(
-          'Report Details',
+          context.l10n.reportDetailsTitle,
           style: GoogleFonts.lexend(
             fontWeight: FontWeight.bold,
             color: AppColors.textPrimary,
@@ -113,16 +114,32 @@ class _ReportViewScreenState extends State<ReportViewScreen> {
 
             // ── Details Section ───────────────────────────────────────
             _buildSectionCard(
-              title: 'Details',
+              title: context.l10n.reportViewSectionDetails,
               children: [
-                _buildDetailRow(Icons.person, 'Reporter', report.reporter),
-                _buildDetailRow(Icons.location_on, 'Location', report.location),
-                _buildDetailRow(Icons.access_time, 'Reported', report.time),
+                _buildDetailRow(
+                  Icons.person,
+                  context.l10n.reportViewReporter,
+                  report.displayReporter(context.l10n),
+                ),
+                _buildDetailRow(
+                  Icons.location_on,
+                  context.l10n.locationLabel,
+                  report.displayLocation(context.l10n),
+                ),
+                _buildDetailRow(
+                  Icons.access_time,
+                  context.l10n.reportViewReported,
+                  report.displayTime(context.l10n),
+                ),
                 if (report.severity != null)
-                  _buildDetailRow(Icons.speed, 'Severity', report.severity!),
+                  _buildDetailRow(
+                    Icons.speed,
+                    context.l10n.reportViewSeverity,
+                    severityLabel(context.l10n, report.severity),
+                  ),
                 _buildDetailRow(
                   Icons.verified_user,
-                  'Verifications',
+                  context.l10n.reportViewVerifications,
                   '${report.verificationCount}',
                 ),
               ],
@@ -133,7 +150,7 @@ class _ReportViewScreenState extends State<ReportViewScreen> {
             if (report.description != null &&
                 report.description!.isNotEmpty) ...[
               _buildSectionCard(
-                title: 'Description',
+                title: context.l10n.descriptionLabel,
                 children: [
                   Text(
                     report.description!,
@@ -151,7 +168,9 @@ class _ReportViewScreenState extends State<ReportViewScreen> {
             // ── Evidence Photos ───────────────────────────────────────
             if (report.imageUrls.isNotEmpty) ...[
               _buildSectionCard(
-                title: 'Evidence (${report.imageUrls.length})',
+                title: context.l10n.reportViewEvidenceCount(
+                  report.imageUrls.length,
+                ),
                 children: [
                   SizedBox(
                     height: 200,
@@ -190,16 +209,16 @@ class _ReportViewScreenState extends State<ReportViewScreen> {
             // ── Location Coordinates ──────────────────────────────────
             if (report.latitude != null && report.longitude != null) ...[
               _buildSectionCard(
-                title: 'Coordinates',
+                title: context.l10n.reportViewCoordinates,
                 children: [
                   _buildDetailRow(
                     Icons.map,
-                    'Latitude',
+                    context.l10n.latitudeLabel,
                     report.latitude!.toStringAsFixed(6),
                   ),
                   _buildDetailRow(
                     Icons.map,
-                    'Longitude',
+                    context.l10n.longitudeLabel,
                     report.longitude!.toStringAsFixed(6),
                   ),
                 ],
@@ -253,7 +272,7 @@ class _ReportViewScreenState extends State<ReportViewScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  report.title,
+                  report.displayTitle(context.l10n),
                   style: GoogleFonts.lexend(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
@@ -262,7 +281,7 @@ class _ReportViewScreenState extends State<ReportViewScreen> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  Hazard.labelFor(report.type),
+                  Hazard.labelFor(report.type, context.l10n),
                   style: GoogleFonts.lexend(
                     fontSize: 13,
                     color: AppColors.textSecondary,
@@ -279,7 +298,7 @@ class _ReportViewScreenState extends State<ReportViewScreen> {
               border: Border.all(color: statusColor.withValues(alpha: 0.3)),
             ),
             child: Text(
-              report.status.displayName,
+              report.status.label(context.l10n),
               style: GoogleFonts.lexend(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
@@ -315,9 +334,10 @@ class _ReportViewScreenState extends State<ReportViewScreen> {
               children: [
                 Text(
                   at == null
-                      ? 'Report rejected'
-                      : 'Report rejected on '
-                            '${DateFormat('MMM d, y').format(at)}',
+                      ? context.l10n.reportRejectedItem
+                      : context.l10n.reportViewRejectedOn(
+                          localizedDateFormat(context, 'MMM d, y').format(at),
+                        ),
                   style: GoogleFonts.lexend(
                     fontSize: 14,
                     fontWeight: FontWeight.bold,
@@ -326,7 +346,7 @@ class _ReportViewScreenState extends State<ReportViewScreen> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  report.rejectionReason ?? 'No reason was given.',
+                  report.rejectionReason ?? context.l10n.reportViewNoReason,
                   style: GoogleFonts.lexend(
                     fontSize: 13,
                     color: AppColors.textPrimary,

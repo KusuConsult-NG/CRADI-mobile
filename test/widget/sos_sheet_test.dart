@@ -2,6 +2,7 @@ import 'package:climate_app/features/contacts/models/emergency_contact_model.dar
 import 'package:climate_app/features/profile/widgets/sos_sheet.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:climate_app/l10n/app_localizations.dart';
 
 void main() {
   testWidgets('a failed contacts load shows an error with retry', (
@@ -16,6 +17,8 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(
           body: Builder(
             builder: (context) =>

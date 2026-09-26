@@ -8,6 +8,7 @@ import 'package:climate_app/features/knowledge_base/providers/knowledge_provider
 import 'package:go_router/go_router.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:climate_app/core/l10n/l10n.dart';
 
 class KnowledgeDetailScreen extends StatefulWidget {
   final Map<String, dynamic> guide;
@@ -60,7 +61,9 @@ class _KnowledgeDetailScreenState extends State<KnowledgeDetailScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            _isBookmarked ? 'Guide bookmarked' : 'Bookmark removed',
+            _isBookmarked
+                ? context.l10n.knowledgeBookmarked
+                : context.l10n.knowledgeBookmarkRemoved,
           ),
           duration: const Duration(seconds: 1),
           backgroundColor: _isBookmarked
@@ -72,12 +75,29 @@ class _KnowledgeDetailScreenState extends State<KnowledgeDetailScreen> {
   }
 
   void _shareGuide() {
-    final title = widget.guide['title'] ?? 'CRADI Guide';
+    final l10n = context.l10n;
+    final title = widget.guide['title'] ?? l10n.knowledgeShareDefaultTitle;
     final description = widget.guide['description'] ?? '';
     final content = widget.guide['content'] ?? '';
-    final shareText =
-        '$title\n\n$description${content.isNotEmpty ? '\n\n$content' : ''}\n\nShared via CRADI Early Warning App';
+    final body = [
+      title,
+      description,
+      content,
+    ].where((p) => p.toString().isNotEmpty).join('\n\n');
+    final shareText = l10n.knowledgeShareText(body);
     SharePlus.instance.share(ShareParams(text: shareText));
+  }
+
+  /// "Updated 3 Mar 2026" (or "Updated recently" without a date).
+  String _updatedText(BuildContext context) {
+    final guide = widget.guide;
+    final date = formatKnowledgeDate(
+      guide['updatedAt'] ?? guide['lastUpdated'],
+      context.intlLocale,
+    );
+    return date != null
+        ? context.l10n.knowledgeUpdatedOn(date)
+        : context.l10n.knowledgeUpdatedRecently;
   }
 
   @override
@@ -117,7 +137,7 @@ class _KnowledgeDetailScreenState extends State<KnowledgeDetailScreen> {
               context.canPop() ? context.pop() : context.go('/knowledge-base'),
         ),
         title: Text(
-          'Guide Detail',
+          context.l10n.knowledgeDetailTitle,
           style: GoogleFonts.lexend(
             fontWeight: FontWeight.bold,
             color: AppColors.textPrimary,
@@ -153,16 +173,16 @@ class _KnowledgeDetailScreenState extends State<KnowledgeDetailScreen> {
                   await TTSService().speak(text);
                 } else {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('No text to speak')),
+                    SnackBar(
+                      content: Text(context.l10n.knowledgeNoTextToSpeak),
+                    ),
                   );
                 }
               } on Exception {
                 if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text(
-                        'Text-to-speech is unavailable. Please try again.',
-                      ),
+                    SnackBar(
+                      content: Text(context.l10n.knowledgeTtsUnavailable),
                     ),
                   );
                 }
@@ -190,7 +210,10 @@ class _KnowledgeDetailScreenState extends State<KnowledgeDetailScreen> {
                   Icon(categoryIcon, size: 14, color: categoryColor),
                   const SizedBox(width: 6),
                   Text(
-                    guide['category'] ?? 'General',
+                    knowledgeCategoryDisplay(
+                      context.l10n,
+                      guide['category'] ?? guide['hazardType'] ?? 'general',
+                    ),
                     style: GoogleFonts.lexend(
                       fontSize: 12,
                       fontWeight: FontWeight.bold,
@@ -216,14 +239,14 @@ class _KnowledgeDetailScreenState extends State<KnowledgeDetailScreen> {
                 const Icon(Icons.access_time, size: 14, color: Colors.grey),
                 const SizedBox(width: 4),
                 Text(
-                  'Updated ${formatKnowledgeDate(guide['updatedAt'] ?? guide['lastUpdated']) ?? 'recently'}',
+                  _updatedText(context),
                   style: GoogleFonts.lexend(fontSize: 12, color: Colors.grey),
                 ),
                 const SizedBox(width: 16),
                 const Icon(Icons.menu_book, size: 14, color: Colors.grey),
                 const SizedBox(width: 4),
                 Text(
-                  '5 min read',
+                  context.l10n.knowledgeReadTime(5),
                   style: GoogleFonts.lexend(fontSize: 12, color: Colors.grey),
                 ),
               ],
@@ -275,7 +298,7 @@ class _KnowledgeDetailScreenState extends State<KnowledgeDetailScreen> {
                       ),
                       const SizedBox(height: 16),
                       Text(
-                        'Detailed content coming soon.',
+                        context.l10n.knowledgeContentComingSoon,
                         style: GoogleFonts.lexend(
                           color: AppColors.textSecondary,
                           fontSize: 16,
@@ -289,7 +312,7 @@ class _KnowledgeDetailScreenState extends State<KnowledgeDetailScreen> {
             const Divider(),
             const SizedBox(height: 24),
             Text(
-              'Related Topics',
+              context.l10n.knowledgeRelatedTopics,
               style: GoogleFonts.lexend(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
@@ -317,7 +340,7 @@ class _KnowledgeDetailScreenState extends State<KnowledgeDetailScreen> {
                   return Padding(
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     child: Text(
-                      'No related topics found.',
+                      context.l10n.knowledgeNoRelated,
                       style: GoogleFonts.lexend(
                         color: AppColors.textSecondary,
                         fontSize: 14,

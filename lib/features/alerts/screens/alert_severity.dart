@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:climate_app/core/l10n/severity_label.dart';
+import 'package:climate_app/l10n/app_localizations.dart';
 
 /// Severity levels of staff broadcast alerts (`alerts.severity`).
 const List<String> alertSeverities = ['info', 'warning', 'critical'];
@@ -51,10 +53,25 @@ IconData alertSeverityIcon(Object? severity) {
   }
 }
 
-/// Human readable label for an alert severity (e.g. 'Warning').
-String alertSeverityLabel(Object? severity) {
+/// Human readable label for an alert severity (e.g. 'Warning'), in the
+/// language of [l10n]. Unknown values are shown title-cased as stored.
+String alertSeverityLabel(Object? severity, AppLocalizations l10n) {
   final raw = severity?.toString().trim() ?? '';
-  if (raw.isEmpty) return 'Unspecified severity';
+  if (raw.isEmpty) return l10n.alertSeverityUnspecified;
+  switch (_normalize(severity)) {
+    case 'info':
+      return l10n.alertSeverityInfo;
+    case 'warning':
+      return l10n.alertSeverityWarning;
+    case 'low':
+    case 'medium':
+    case 'moderate':
+    case 'high':
+    case 'critical':
+    case 'severe':
+    case 'extreme':
+      return severityLabel(l10n, severity);
+  }
   return raw
       .split(RegExp(r'\s+'))
       .map((w) => w.isEmpty ? w : '${w[0].toUpperCase()}${w.substring(1)}')

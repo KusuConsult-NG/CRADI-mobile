@@ -14,19 +14,21 @@ import 'package:climate_app/features/reporting/providers/reporting_provider.dart
 import 'package:climate_app/core/constants/hazards.dart';
 import 'package:climate_app/core/utils/error_handler.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' show PostgrestException;
+import 'package:climate_app/core/l10n/l10n.dart';
 
 export 'package:climate_app/core/services/offline_storage_service.dart'
     show OfflineQueuedException;
 
 /// Thrown when a verification is refused by business rules (self-verification,
-/// distance, not signed in). [message] is safe to show to the user.
+/// distance, not signed in). [message] is safe to show to the user once
+/// resolved in the current language.
 class VerificationRefusedException implements Exception {
   const VerificationRefusedException(
     this.message, {
     this.noLongerPending = false,
     this.alreadyVoted = false,
   });
-  final String message;
+  final LocalizedText message;
 
   /// The user has already voted on this report.
   final bool alreadyVoted;
@@ -36,34 +38,38 @@ class VerificationRefusedException implements Exception {
   final bool noLongerPending;
 
   @override
-  String toString() => message;
+  String toString() => message(englishL10n);
 }
 
 /// User-facing message for a failed report action (vote, approve, reject,
 /// reopen): the database's curated refusals are shown as such, everything
 /// else goes through [ErrorHandler].
-String reportActionErrorMessage(Object error, {String context = 'Report'}) {
-  if (error is VerificationRefusedException) return error.message;
+String reportActionErrorMessage(
+  Object error,
+  AppLocalizations l10n, {
+  String context = 'Report',
+}) {
+  if (error is VerificationRefusedException) return error.message(l10n);
   if (error is DocumentNotFoundException) {
-    return 'You do not have permission to change this report, '
-        'or it no longer exists.';
+    return l10n.reportActionErrorNoPermissionOrGone;
   }
   if (error is PostgrestException) {
     switch (error.code) {
       case '22023':
-        return 'This report is already pending.';
+        return l10n.reportActionErrorAlreadyPending;
       case 'P0002':
-        return 'This report no longer exists.';
+        return l10n.reportActionErrorGone;
       case '42501':
       case 'PGRST301':
-        // Trigger refusals carry a readable reason; RLS denials do not.
+        // Trigger refusals carry a readable reason (written by the
+        // database, so not translated); RLS denials do not.
         final msg = error.message;
         return msg.isNotEmpty && !msg.toLowerCase().contains('row-level')
             ? msg
-            : 'You do not have permission to change this report.';
+            : l10n.reportActionErrorNoPermission;
     }
   }
-  return ErrorHandler.handleError(error, context: context);
+  return ErrorHandler.handleError(error, l10n, context: context);
 }
 
 /// Page size used for report lists.
@@ -111,7 +117,7 @@ class ReportsStatusProvider extends ChangeNotifier {
   final Map<String, int> _totalCounts = {};
 
   /// Last fetch error per key (null once a fetch succeeds).
-  final Map<String, String> _errorMap = {};
+  final Map<String, LocalizedText> _errorMap = {};
 
   /// Monotonic request token per key; responses of superseded requests are
   /// dropped so a slow, older response never overwrites a newer one.
@@ -224,7 +230,8 @@ class ReportsStatusProvider extends ChangeNotifier {
       _totalCounts[_getKey(status, userId, excludeUserId: excludeUserId)] ?? 0;
 
   /// User-facing message of the last failed fetch for this list, or null.
-  String? errorFor(
+  /// Resolve it with the current [AppLocalizations].
+  LocalizedText? errorFor(
     ReportStatus? status, {
     String? userId,
     String? excludeUserId,
@@ -298,9 +305,7 @@ class ReportsStatusProvider extends ChangeNotifier {
         'docId': docId,
         'collectionId': AppConfig.reportsCollection,
       });
-      throw const OfflineQueuedException(
-        'Offline: request saved and will sync when you are back online.',
-      );
+      throw OfflineQueuedException((l) => l.verifyRequestQueuedOffline);
     } finally {
       _isSubmitting = false;
       notifyListeners();
@@ -612,8 +617,8 @@ class ReportsStatusProvider extends ChangeNotifier {
       );
       if (isCurrent()) {
         _errorMap[key] = isTransientNetworkError(e)
-            ? 'Could not reach the server. Check your connection and retry.'
-            : ErrorHandler.getUserMessage(e);
+            ? (l) => l.reportsLoadErrorOffline
+            : (l) => ErrorHandler.getUserMessage(e, l);
       }
     } finally {
       if (isCurrent()) {
@@ -646,7 +651,7 @@ class ReportsStatusProvider extends ChangeNotifier {
     final storedName = (data['reporterName'] as String?)?.trim();
     final reporterName = (storedName != null && storedName.isNotEmpty)
         ? storedName
-        : 'Community Report';
+        : '';
 
     // fromMap populates reporterId, coordinates, description,
     // severity, imageUrls, etc.; display fields are overridden below.
@@ -654,11 +659,12 @@ class ReportsStatusProvider extends ChangeNotifier {
       data,
       data['id'] as String? ?? data['\$id'] as String? ?? '',
     ).copyWith(
-      title: _formatTitle(data['hazardType'] ?? 'Unknown Hazard'),
+      title: data['hazardType'] ?? '',
       type: data['hazardType'] ?? 'Unknown',
       reporter: reporterName,
-      location: data['locationDetails'] ?? 'Unknown Location',
-      time: _formatTimeAgo(data['submittedAt']),
+      location: data['locationDetails'] ?? '',
+      time: '',
+      submittedAt: parseTimestamp(data['submittedAt'])?.toLocal(),
       status: reportStatus,
       iconName: _getIconName(data['hazardType']),
       iconColor: _getIconColor(data['severity']),
@@ -736,9 +742,7 @@ class ReportsStatusProvider extends ChangeNotifier {
   }) async {
     final uid = userId ?? _db.currentUserId;
     if (uid == null) {
-      throw const VerificationRefusedException(
-        'You must be signed in to verify reports.',
-      );
+      throw VerificationRefusedException((l) => l.verifyErrorSignedOut);
     }
     final result = await PeerVerificationService().submitVerification(
       reportId: reportId,
@@ -755,9 +759,9 @@ class ReportsStatusProvider extends ChangeNotifier {
       unawaited(refreshLoadedLists());
     }
     if (result['success'] != true) {
+      final message = result['message'];
       throw VerificationRefusedException(
-        (result['message'] ?? result['error'] ?? 'Verification failed')
-            .toString(),
+        message is LocalizedText ? message : (l) => l.verifyErrorFailed,
         noLongerPending: result['noLongerPending'] == true,
         alreadyVoted: result['alreadyVoted'] == true,
       );
@@ -798,8 +802,8 @@ class ReportsStatusProvider extends ChangeNotifier {
     String? comment,
   }) async {
     if (comment == null || comment.trim().isEmpty) {
-      throw const VerificationRefusedException(
-        'Please explain why you dispute this report.',
+      throw VerificationRefusedException(
+        (l) => l.verifyErrorDisputeReasonRequired,
       );
     }
     try {
@@ -910,7 +914,8 @@ class ReportsStatusProvider extends ChangeNotifier {
       final submitted = parseTimestamp(d['submittedAt'])?.toUtc();
       final fields = [
         d['id'] ?? d['\$id'],
-        Hazard.labelFor(d['hazardType']),
+        // Exported data: the canonical (English) stored hazard name.
+        Hazard.canonicalName(d['hazardType']),
         normalizeSeverity(d['severity']) ?? d['severity'],
         d['status'],
         submitted?.toIso8601String(),
@@ -940,8 +945,6 @@ class ReportsStatusProvider extends ChangeNotifier {
 
   // ── Helpers ────────────────────────────────────────────────────────────────
 
-  String _formatTitle(String hazardType) => Hazard.titleFor(hazardType);
-
   String _getIconName(String? hazardType) => Hazard.iconKeyFor(hazardType);
 
   String _getIconColor(Object? severity) =>
@@ -964,18 +967,5 @@ class ReportsStatusProvider extends ChangeNotifier {
       default:
         return ReportStatus.pending;
     }
-  }
-
-  String _formatTimeAgo(dynamic timestamp) {
-    if (timestamp == null) return 'Unknown';
-    final dateTime = parseTimestamp(timestamp);
-    if (dateTime == null) return 'Unknown';
-
-    final diff = DateTime.now().difference(dateTime);
-    if (diff.isNegative || diff.inMinutes < 1) return 'Just now';
-    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
-    if (diff.inHours < 24) return '${diff.inHours}h ago';
-    if (diff.inDays < 7) return '${diff.inDays}d ago';
-    return '${(diff.inDays / 7).floor()}w ago';
   }
 }

@@ -10,6 +10,7 @@ import 'package:go_router/go_router.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'dart:async';
 import 'dart:developer' as developer;
+import 'package:climate_app/core/l10n/l10n.dart';
 
 class OtpVerificationScreen extends StatefulWidget {
   final String phoneNumber;
@@ -91,14 +92,14 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
       if (mounted) {
         setState(() => _isLoading = false);
         if (success) {
-          _showToast('Verification successful!');
+          _showToast(context.l10n.otpSuccess);
           context.go('/dashboard');
         }
       }
     } on Exception catch (e) {
       if (mounted) {
         setState(() => _isLoading = false);
-        _showToast(ErrorHandler.getUserMessage(e), isError: true);
+        _showToast(ErrorHandler.getUserMessage(e, context.l10n), isError: true);
       }
       developer.log(
         'OTP Verification Error: $e',
@@ -122,14 +123,14 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
       if (mounted) {
         setState(() => _isResending = false);
         if (success) {
-          _showToast('A new code has been sent.');
+          _showToast(context.l10n.otpNewCodeSent);
           _startResendTimer();
         }
       }
     } on Exception catch (e) {
       if (mounted) {
         setState(() => _isResending = false);
-        _showToast(ErrorHandler.getUserMessage(e), isError: true);
+        _showToast(ErrorHandler.getUserMessage(e, context.l10n), isError: true);
       }
     }
   }
@@ -169,8 +170,8 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                 const SizedBox(height: 32),
                 Text(
                   widget.phoneNumber.contains('@')
-                      ? 'Verify Email'
-                      : 'Verify Phone Number',
+                      ? context.l10n.otpVerifyEmail
+                      : context.l10n.verifyPhoneNumber,
                   style: GoogleFonts.lexend(
                     fontSize: 28,
                     fontWeight: FontWeight.bold,
@@ -180,7 +181,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  'Enter the 6-digit code sent to\n${widget.phoneNumber}',
+                  context.l10n.otpCodeSentTo(widget.phoneNumber),
                   style: GoogleFonts.lexend(
                     fontSize: 16,
                     color: AppColors.textSecondary,
@@ -190,17 +191,17 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                 ),
                 const SizedBox(height: 48),
                 CustomTextField(
-                  label: 'Secure Code',
+                  label: context.l10n.otpSecureCode,
                   controller: _otpController,
-                  hint: 'Enter 6-digit code',
+                  hint: context.l10n.otpCodeHint,
                   keyboardType: TextInputType.number,
                   prefixIcon: const Icon(Icons.password),
                   validator: (value) {
                     if (value == null || value.isEmpty) {
-                      return 'Please enter the code';
+                      return context.l10n.otpCodeRequired;
                     }
                     if (value.length < 4) {
-                      return 'Invalid code format';
+                      return context.l10n.otpCodeInvalidFormat;
                     }
                     return null;
                   },
@@ -208,7 +209,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                 ),
                 const SizedBox(height: 32),
                 CustomButton(
-                  text: 'Verify & Login',
+                  text: context.l10n.otpVerifyAndLogin,
                   onPressed: _isLoading ? null : _handleVerify,
                   isLoading: _isLoading,
                 ),
@@ -217,7 +218,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Text(
-                      "Didn't receive code? ",
+                      context.l10n.otpNoCode,
                       style: GoogleFonts.lexend(
                         color: AppColors.textSecondary,
                         fontSize: 14,
@@ -239,8 +240,8 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                             )
                           : Text(
                               _resendSeconds > 0
-                                  ? 'Resend in ${_resendSeconds}s'
-                                  : 'Resend Code',
+                                  ? context.l10n.otpResendIn(_resendSeconds)
+                                  : context.l10n.resendCode,
                               style: GoogleFonts.lexend(
                                 fontSize: 14,
                                 fontWeight: FontWeight.bold,

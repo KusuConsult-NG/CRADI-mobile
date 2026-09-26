@@ -2,10 +2,10 @@ import 'package:climate_app/core/theme/app_colors.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:climate_app/l10n/app_localizations.dart';
 import 'package:provider/provider.dart';
 import 'package:climate_app/features/reporting/providers/reporting_provider.dart';
 import 'package:climate_app/shared/widgets/custom_button.dart';
+import 'package:climate_app/core/l10n/l10n.dart';
 
 class HazardSelectionScreen extends StatefulWidget {
   const HazardSelectionScreen({super.key});
@@ -21,55 +21,55 @@ class _HazardSelectionScreenState extends State<HazardSelectionScreen> {
     return [
       {
         'id': 'Flooding',
-        'name': l10n.flooding,
+        'name': l10n.hazardFlooding,
         'icon': Icons.flood,
         'color': AppColors.hazardFlood,
       },
       {
         'id': 'Extreme Temperatures',
-        'name': l10n.extremeHeat,
+        'name': l10n.hazardExtremeTemperatures,
         'icon': Icons.thermostat,
         'color': AppColors.hazardTemp,
       },
       {
         'id': 'Drought',
-        'name': l10n.drought,
+        'name': l10n.hazardDrought,
         'icon': Icons.wb_sunny_rounded,
         'color': AppColors.hazardDrought,
       },
       {
         'id': 'Windstorms',
-        'name': l10n.windstorms,
+        'name': l10n.hazardWindstorms,
         'icon': Icons.air,
         'color': AppColors.hazardWind,
       },
       {
         'id': 'Wildfires',
-        'name': l10n.wildfires,
+        'name': l10n.hazardWildfires,
         'icon': Icons.local_fire_department,
         'color': AppColors.hazardFire,
       },
       {
         'id': 'Erosion',
-        'name': l10n.erosion,
+        'name': l10n.hazardErosion,
         'icon': Icons.landslide,
         'color': AppColors.hazardErosion,
       },
       {
         'id': 'Pest Outbreak',
-        'name': l10n.pestOutbreak,
+        'name': l10n.hazardPestOutbreak,
         'icon': Icons.pest_control,
         'color': AppColors.hazardPest,
       },
       {
         'id': 'Crop Disease',
-        'name': l10n.cropDisease,
+        'name': l10n.hazardCropDisease,
         'icon': Icons.coronavirus_rounded,
         'color': Colors.green,
       },
       {
         'id': 'Conflict',
-        'name': l10n.conflict,
+        'name': l10n.hazardConflict,
         'icon': Icons.warning_amber_rounded,
         'color': AppColors.primaryRed,
       },
@@ -87,7 +87,7 @@ class _HazardSelectionScreenState extends State<HazardSelectionScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
+    final l10n = context.l10n;
     final hazards = _getHazards(l10n);
 
     return Scaffold(

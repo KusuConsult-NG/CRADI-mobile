@@ -12,6 +12,7 @@ import 'package:flutter_chat_ui/flutter_chat_ui.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
+import 'package:climate_app/core/l10n/l10n.dart';
 
 class ChatScreen extends StatelessWidget {
   const ChatScreen({super.key});
@@ -20,7 +21,7 @@ class ChatScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Support Chat'),
+        title: Text(context.l10n.profileSupportChat),
         backgroundColor: AppColors.primaryRed,
         foregroundColor: Colors.white,
         leading: IconButton(
@@ -38,7 +39,7 @@ class ChatScreen extends StatelessWidget {
         builder: (context) {
           final fbUser = SupabaseService().getCurrentUser();
           if (fbUser == null) {
-            return const Center(child: Text('Please login to chat'));
+            return Center(child: Text(context.l10n.chatLoginRequired));
           }
           return _ChatView(fbUser: fbUser);
         },
@@ -70,7 +71,7 @@ class _ChatViewState extends State<_ChatView> {
   final Map<String, Message> _pending = {};
 
   bool _isLoading = true;
-  String? _error;
+  LocalizedText? _error;
 
   @override
   void initState() {
@@ -98,7 +99,7 @@ class _ChatViewState extends State<_ChatView> {
             if (mounted) {
               setState(() {
                 _isLoading = false;
-                _error = 'Could not load messages.';
+                _error = (l) => l.chatLoadError;
               });
             }
           },
@@ -140,7 +141,10 @@ class _ChatViewState extends State<_ChatView> {
 
   Future<User?> _resolveUser(UserID id) async {
     if (id == widget.fbUser.id) {
-      return User(id: id, name: _displayName(widget.fbUser, 'Me'));
+      return User(
+        id: id,
+        name: _displayName(widget.fbUser, context.l10n.chatMe),
+      );
     }
     final name = _senderNames[id];
     return User(id: id, name: name);
@@ -188,8 +192,10 @@ class _ChatViewState extends State<_ChatView> {
           SnackBar(
             content: Text(
               e is sb.PostgrestException && SupabaseService.isRateLimited(e)
-                  ? '${e.message}. Please wait a moment.'
-                  : 'Message not sent. ${ErrorHandler.getUserMessage(e)}',
+                  ? context.l10n.chatRateLimited(e.message)
+                  : context.l10n.chatSendFailed(
+                      ErrorHandler.getUserMessage(e, context.l10n),
+                    ),
             ),
           ),
         );
@@ -207,7 +213,7 @@ class _ChatViewState extends State<_ChatView> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(_error!),
+            Text(_error!(context.l10n)),
             const SizedBox(height: 12),
             ElevatedButton(
               onPressed: () {
@@ -217,7 +223,7 @@ class _ChatViewState extends State<_ChatView> {
                 });
                 _subscribe();
               },
-              child: const Text('Retry'),
+              child: Text(context.l10n.retry),
             ),
           ],
         ),

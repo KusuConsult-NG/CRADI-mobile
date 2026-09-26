@@ -4,17 +4,20 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:climate_app/core/l10n/l10n.dart';
 
 class HelpSupportScreen extends StatelessWidget {
   const HelpSupportScreen({super.key});
+
+  static const String supportEmail = 'support@cradi.org';
 
   /// Builds the support mailto link. The query is encoded with
   /// [Uri.encodeComponent] (spaces as %20): `Uri(queryParameters:)` encodes
   /// spaces as '+', which mail apps show literally.
   static Uri supportMailUri({
-    String address = 'support@cradi.org',
-    String subject = 'CRADI App Support Request',
-    String body = 'Please describe your issue:\n\n',
+    String address = supportEmail,
+    required String subject,
+    required String body,
   }) {
     final query =
         'subject=${Uri.encodeComponent(subject)}'
@@ -23,7 +26,11 @@ class HelpSupportScreen extends StatelessWidget {
   }
 
   Future<void> _contactSupport(BuildContext context) async {
-    final uri = supportMailUri();
+    final l10n = context.l10n;
+    final uri = supportMailUri(
+      subject: l10n.helpSupportEmailSubject,
+      body: l10n.helpSupportEmailBody,
+    );
     var launched = false;
     try {
       launched = await launchUrl(uri);
@@ -32,9 +39,7 @@ class HelpSupportScreen extends StatelessWidget {
     }
     if (!launched && context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('No email app found. Contact support@cradi.org'),
-        ),
+        SnackBar(content: Text(context.l10n.helpNoEmailApp(supportEmail))),
       );
     }
   }
@@ -58,7 +63,7 @@ class HelpSupportScreen extends StatelessWidget {
           },
         ),
         title: Text(
-          'Help & Support',
+          context.l10n.helpSupport,
           style: GoogleFonts.lexend(
             fontWeight: FontWeight.bold,
             color: AppColors.textPrimary,
@@ -78,7 +83,7 @@ class HelpSupportScreen extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Frequently Asked Questions',
+              context.l10n.helpFaqTitle,
               style: GoogleFonts.lexend(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
@@ -87,24 +92,24 @@ class HelpSupportScreen extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             _buildExpansionTile(
-              'How do I report a hazard?',
-              'Navigate to the "Report" tab or tap the "+" button on the dashboard. Select the hazard type, add photos/videos, and submit your report.',
+              context.l10n.helpFaqReportQ,
+              context.l10n.helpFaqReportA,
             ),
             _buildExpansionTile(
-              'What do the alert colors mean?',
-              'Red indicates high severity (immediate danger), Orange is medium, and Yellow is low. Blue typically indicates water-related hazards like floods.',
+              context.l10n.helpFaqColorsQ,
+              context.l10n.helpFaqColorsA,
             ),
             _buildExpansionTile(
-              'Can I report without internet?',
-              'Yes! Use "Offline Mode" in Settings. Your reports will be saved locally and can be synced when you go online.',
+              context.l10n.helpFaqOfflineQ,
+              context.l10n.helpFaqOfflineA,
             ),
             _buildExpansionTile(
-              'How do I verify other reports?',
-              'Go to "Alerts" and look for pending reports nearby. You can confirm or reject them based on your observation.',
+              context.l10n.helpFaqVerifyQ,
+              context.l10n.helpFaqVerifyA,
             ),
             const SizedBox(height: 32),
             Text(
-              'Still need help?',
+              context.l10n.helpStillNeedHelp,
               style: GoogleFonts.lexend(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
@@ -113,7 +118,7 @@ class HelpSupportScreen extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             CustomButton(
-              text: 'Contact Support',
+              text: context.l10n.pendingContactSupport,
               icon: Icons.email_outlined,
               onPressed: () => _contactSupport(context),
             ),

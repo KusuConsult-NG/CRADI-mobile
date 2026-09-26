@@ -523,9 +523,9 @@ class MockAuthProvider extends _i1.Mock implements _i8.AuthProvider {
           as _i5.Future<void>);
 
   @override
-  _i5.Future<bool> unlockApp() =>
+  _i5.Future<bool> unlockApp({String? promptReason}) =>
       (super.noSuchMethod(
-            Invocation.method(#unlockApp, []),
+            Invocation.method(#unlockApp, [], {#promptReason: promptReason}),
             returnValue: _i5.Future<bool>.value(false),
           )
           as _i5.Future<bool>);
@@ -651,17 +651,23 @@ class MockAuthProvider extends _i1.Mock implements _i8.AuthProvider {
           as _i5.Future<void>);
 
   @override
-  _i5.Future<bool> authenticateWithBiometrics() =>
+  _i5.Future<bool> authenticateWithBiometrics({String? promptReason}) =>
       (super.noSuchMethod(
-            Invocation.method(#authenticateWithBiometrics, []),
+            Invocation.method(#authenticateWithBiometrics, [], {
+              #promptReason: promptReason,
+            }),
             returnValue: _i5.Future<bool>.value(false),
           )
           as _i5.Future<bool>);
 
   @override
-  _i5.Future<void> setBiometricEnabled(bool? enabled) =>
+  _i5.Future<void> setBiometricEnabled(bool? enabled, {String? promptReason}) =>
       (super.noSuchMethod(
-            Invocation.method(#setBiometricEnabled, [enabled]),
+            Invocation.method(
+              #setBiometricEnabled,
+              [enabled],
+              {#promptReason: promptReason},
+            ),
             returnValue: _i5.Future<void>.value(),
             returnValueForMissingStub: _i5.Future<void>.value(),
           )

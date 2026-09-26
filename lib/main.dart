@@ -25,13 +25,13 @@ import 'package:hive_flutter/hive_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:climate_app/core/l10n/fallback_localizations.dart';
 import 'package:climate_app/core/widgets/force_update_gate.dart';
-import 'package:climate_app/l10n/app_localizations.dart';
 import 'package:climate_app/core/services/remote_config_service.dart';
 import 'package:climate_app/core/services/security_service.dart';
 import 'package:climate_app/core/services/supabase_service.dart';
 import 'package:climate_app/core/constants/app_config.dart';
 import 'package:climate_app/core/utils/error_handler.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
+import 'package:climate_app/core/l10n/l10n.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -280,7 +280,7 @@ class _ClimateAppState extends State<ClimateApp> {
     // supply English ones instead of null.
     return Consumer<LanguageProvider>(
       builder: (context, language, _) => MaterialApp.router(
-        title: 'EWER Mobile - Early Warning System',
+        onGenerateTitle: (context) => context.l10n.appTitle,
         theme: AppTheme.lightTheme,
         routerConfig: _router,
         locale: language.locale,

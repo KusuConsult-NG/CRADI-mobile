@@ -4,6 +4,7 @@ import 'package:climate_app/core/services/offline_storage_service.dart';
 import 'package:climate_app/core/constants/app_config.dart';
 import 'dart:developer' as developer;
 import 'package:climate_app/core/utils/error_handler.dart';
+import 'package:climate_app/core/l10n/l10n.dart';
 
 class AlertsProvider extends ChangeNotifier {
   final SupabaseService _db = SupabaseService();
@@ -11,11 +12,13 @@ class AlertsProvider extends ChangeNotifier {
 
   List<Map<String, dynamic>> _alerts = [];
   bool _isLoading = false;
-  String? _error;
+
+  /// Last load failure, resolved in the current language by the UI.
+  LocalizedText? _error;
 
   List<Map<String, dynamic>> get alerts => _alerts;
   bool get isLoading => _isLoading;
-  String? get error => _error;
+  LocalizedText? get error => _error;
 
   AlertsProvider() {
     fetchAlerts();
@@ -77,7 +80,7 @@ class AlertsProvider extends ChangeNotifier {
       );
     } on Exception catch (e) {
       ErrorHandler.logError(e, context: 'AlertsProvider.fetchAlerts');
-      _error = 'Failed to load alerts';
+      _error = (l) => l.alertsLoadError;
 
       List<Map<String, dynamic>> cached = const [];
       try {

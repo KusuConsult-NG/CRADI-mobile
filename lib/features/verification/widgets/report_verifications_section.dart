@@ -3,8 +3,8 @@ import 'package:climate_app/core/theme/app_colors.dart';
 import 'package:climate_app/features/auth/providers/auth_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import 'package:climate_app/core/l10n/l10n.dart';
 
 /// Peer confirmations and disputes (with their comments) on a report, for
 /// the roles that may read them ([AuthProvider.verificationReaderRoles]).
@@ -82,14 +82,14 @@ class _ReportVerificationsSectionState
             children: [
               Expanded(
                 child: Text(
-                  'Could not load peer verifications.',
+                  context.l10n.verificationsLoadError,
                   style: GoogleFonts.lexend(
                     fontSize: 13,
                     color: AppColors.textSecondary,
                   ),
                 ),
               ),
-              TextButton(onPressed: _load, child: const Text('Retry')),
+              TextButton(onPressed: _load, child: Text(context.l10n.retry)),
             ],
           );
         } else {
@@ -107,7 +107,7 @@ class _ReportVerificationsSectionState
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Peer verifications',
+                context.l10n.verificationsTitle,
                 style: GoogleFonts.lexend(
                   fontSize: 15,
                   fontWeight: FontWeight.bold,
@@ -131,7 +131,7 @@ class _ReportVerificationsSectionState
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          '$confirmations confirmed · $disputes disputed',
+          context.l10n.verificationsSummary(confirmations, disputes),
           style: GoogleFonts.lexend(
             fontSize: 13,
             fontWeight: FontWeight.w600,
@@ -144,7 +144,7 @@ class _ReportVerificationsSectionState
           Padding(
             padding: const EdgeInsets.only(top: 8),
             child: Text(
-              'No peer votes yet.',
+              context.l10n.verificationsNone,
               style: GoogleFonts.lexend(
                 fontSize: 13,
                 color: AppColors.textSecondary,
@@ -158,10 +158,21 @@ class _ReportVerificationsSectionState
 
   Widget _buildVote(ReportVerification v, {required bool isMine}) {
     final color = v.isConfirmed ? AppColors.successGreen : Colors.orange;
-    final who = isMine ? 'You' : (v.verifierName ?? 'Peer verifier');
-    final when = v.submittedAt == null
-        ? ''
-        : ' · ${DateFormat('MMM d, h:mm a').format(v.submittedAt!)}';
+    final l10n = context.l10n;
+    final who = isMine
+        ? l10n.verificationsYou
+        : (v.verifierName ?? l10n.verificationsPeerVerifier);
+    final kind = v.isConfirmed ? 'confirmed' : 'disputed';
+    final line = v.submittedAt == null
+        ? l10n.verificationsVoteBy(kind, who)
+        : l10n.verificationsVoteByAt(
+            kind,
+            who,
+            localizedDateFormat(
+              context,
+              'MMM d, h:mm a',
+            ).format(v.submittedAt!),
+          );
     return Padding(
       padding: const EdgeInsets.only(top: 10),
       child: Row(
@@ -178,7 +189,7 @@ class _ReportVerificationsSectionState
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  '${v.isConfirmed ? 'Confirmed' : 'Disputed'} by $who$when',
+                  line,
                   style: GoogleFonts.lexend(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,

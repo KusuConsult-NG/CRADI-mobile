@@ -23,11 +23,7 @@ export 'package:climate_app/core/services/supabase_mapping.dart'
 /// Thrown when a picked image can't be re-encoded (so its metadata can't be
 /// stripped); it is not uploaded.
 class ImageEncodingException extends SecureException {
-  ImageEncodingException()
-    : super(
-        'A photo could not be processed. Please remove it or choose '
-        'another photo.',
-      );
+  ImageEncodingException() : super((l) => l.reportErrorPhotoProcessing);
 }
 
 /// Thrown by [SupabaseService.getDocument] / [SupabaseService.updateDocument]

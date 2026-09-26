@@ -1,6 +1,7 @@
 import 'package:climate_app/core/widgets/location_selector_widget.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:climate_app/l10n/app_localizations.dart';
 
 void main() {
   testWidgets('LocationSelectorWidget shows only focal states', (
@@ -8,6 +9,8 @@ void main() {
   ) async {
     await tester.pumpWidget(
       MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(
           body: LocationSelectorWidget(
             onLocationChanged: (state, lga, ward) {},
@@ -39,6 +42,8 @@ void main() {
   ) async {
     await tester.pumpWidget(
       MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(
           body: LocationSelectorWidget(
             onLocationChanged: (state, lga, ward) {},
@@ -49,7 +54,7 @@ void main() {
     await tester.pumpAndSettle();
 
     // Initially LGA should show disabled hint
-    expect(find.text('Select state first'), findsOneWidget);
+    expect(find.text('Select State first'), findsOneWidget);
 
     // Open State dropdown
     await tester.tap(find.text('Select State'), warnIfMissed: false);
@@ -61,7 +66,7 @@ void main() {
 
     // Now LGA hint should change
     expect(find.text('Select LGA'), findsOneWidget);
-    expect(find.text('Select state first'), findsNothing);
+    expect(find.text('Select State first'), findsNothing);
 
     // Open LGA dropdown
     await tester.tap(find.text('Select LGA'), warnIfMissed: false);

@@ -1,6 +1,7 @@
 import 'dart:ui';
 import 'package:climate_app/core/theme/app_colors.dart';
 import 'package:flutter/material.dart';
+import 'package:climate_app/core/l10n/l10n.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -136,9 +137,9 @@ class _SplashScreenState extends State<SplashScreen>
                   const SizedBox(height: 8),
 
                   // Tagline
-                  const Text(
-                    'Early Warning & Emergency Response',
-                    style: TextStyle(
+                  Text(
+                    context.l10n.splashTagline,
+                    style: const TextStyle(
                       fontSize: 14,
                       color: Colors.white70,
                       letterSpacing: 1.5,

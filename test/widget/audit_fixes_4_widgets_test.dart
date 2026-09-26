@@ -11,6 +11,7 @@ import 'package:mockito/mockito.dart';
 import 'package:provider/provider.dart';
 
 import 'reports_status_screen_test.mocks.dart';
+import 'package:climate_app/l10n/app_localizations.dart';
 
 VerificationReport _report(ReportStatus status) => VerificationReport(
   id: 'r1',
@@ -44,6 +45,8 @@ void main() {
       ChangeNotifierProvider<AuthProvider>.value(value: auth),
     ],
     child: MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       home: Scaffold(body: SingleChildScrollView(child: child)),
     ),
   );
@@ -166,6 +169,8 @@ void main() {
     String? result = 'unset';
     await tester.pumpWidget(
       MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: Builder(
           builder: (context) => TextButton(
             onPressed: () async =>

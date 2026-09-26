@@ -5,6 +5,7 @@ import 'package:climate_app/features/verification/providers/reports_status_provi
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import 'package:climate_app/core/l10n/l10n.dart';
 
 /// Asks senior staff for the (required) reason of a rejection; it is shown
 /// to the reporter. Returns the trimmed reason, or null when cancelled.
@@ -53,6 +54,7 @@ class _ReportStaffActionsState extends State<ReportStaffActions> {
   ) async {
     final provider = context.read<ReportsStatusProvider>();
     final messenger = ScaffoldMessenger.of(context);
+    final l10n = context.l10n;
     setState(() => _busy = true);
     try {
       await action(provider);
@@ -66,7 +68,7 @@ class _ReportStaffActionsState extends State<ReportStaffActions> {
     } on Exception catch (e) {
       messenger.showSnackBar(
         SnackBar(
-          content: Text(reportActionErrorMessage(e)),
+          content: Text(reportActionErrorMessage(e, l10n)),
           backgroundColor: Colors.red,
         ),
       );
@@ -80,7 +82,7 @@ class _ReportStaffActionsState extends State<ReportStaffActions> {
     if (reason == null || !mounted) return;
     await _run(
       (p) => p.staffRejectReport(widget.report.id, reason: reason),
-      'Report rejected.',
+      context.l10n.staffRejected,
     );
   }
 
@@ -111,7 +113,7 @@ class _ReportStaffActionsState extends State<ReportStaffActions> {
             children: [
               Expanded(
                 child: Text(
-                  'Staff actions',
+                  context.l10n.staffActionsTitle,
                   style: GoogleFonts.lexend(
                     fontSize: 15,
                     fontWeight: FontWeight.bold,
@@ -138,14 +140,14 @@ class _ReportStaffActionsState extends State<ReportStaffActions> {
                       ? null
                       : () => _run(
                           (p) => p.approveReport(id),
-                          'Report approved.',
+                          context.l10n.staffApproved,
                         ),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.blue,
                     foregroundColor: Colors.white,
                   ),
                   icon: const Icon(Icons.check, size: 18),
-                  label: const Text('Approve'),
+                  label: Text(context.l10n.staffApprove),
                 ),
               if (actions.reject)
                 OutlinedButton.icon(
@@ -155,7 +157,7 @@ class _ReportStaffActionsState extends State<ReportStaffActions> {
                     side: const BorderSide(color: Colors.red),
                   ),
                   icon: const Icon(Icons.close, size: 18),
-                  label: const Text('Reject'),
+                  label: Text(context.l10n.reject),
                 ),
               if (actions.reopen)
                 OutlinedButton.icon(
@@ -163,10 +165,10 @@ class _ReportStaffActionsState extends State<ReportStaffActions> {
                       ? null
                       : () => _run(
                           (p) => p.moveBackToPending(id),
-                          'Report reopened for verification.',
+                          context.l10n.staffReopened,
                         ),
                   icon: const Icon(Icons.refresh, size: 18),
-                  label: const Text('Reopen'),
+                  label: Text(context.l10n.reopen),
                 ),
             ],
           ),
@@ -206,7 +208,7 @@ class _RejectReasonDialogState extends State<_RejectReasonDialog> {
   Widget build(BuildContext context) {
     return AlertDialog(
       title: Text(
-        'Reject report?',
+        context.l10n.staffRejectTitle,
         style: GoogleFonts.lexend(fontWeight: FontWeight.bold),
       ),
       content: TextField(
@@ -218,20 +220,23 @@ class _RejectReasonDialogState extends State<_RejectReasonDialog> {
           if (_showError) setState(() => _showError = false);
         },
         decoration: InputDecoration(
-          labelText: 'Reason (required)',
-          hintText: 'Shown to the reporter',
+          labelText: context.l10n.staffRejectReasonLabel,
+          hintText: context.l10n.staffRejectReasonHint,
           border: const OutlineInputBorder(),
-          errorText: _showError ? 'Please give a reason.' : null,
+          errorText: _showError ? context.l10n.staffRejectReasonRequired : null,
         ),
       ),
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
+          child: Text(context.l10n.cancel),
         ),
         TextButton(
           onPressed: _submit,
-          child: const Text('Reject', style: TextStyle(color: Colors.red)),
+          child: Text(
+            context.l10n.reject,
+            style: const TextStyle(color: Colors.red),
+          ),
         ),
       ],
     );

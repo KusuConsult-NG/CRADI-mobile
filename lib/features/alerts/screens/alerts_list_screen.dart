@@ -15,12 +15,13 @@ import 'package:climate_app/shared/widgets/shimmer_loading.dart';
 import 'package:climate_app/shared/widgets/custom_toast.dart';
 import 'package:climate_app/shared/widgets/animated_list_item.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:intl/intl.dart';
+import 'package:climate_app/core/l10n/severity_label.dart';
 import 'package:climate_app/core/services/supabase_service.dart'
     show parseTimestamp;
 import 'package:climate_app/features/alerts/providers/alerts_provider.dart';
 import 'package:climate_app/features/alerts/screens/alert_severity.dart';
 import 'package:climate_app/features/profile/providers/profile_provider.dart';
+import 'package:climate_app/core/l10n/l10n.dart';
 
 class AlertsListScreen extends StatefulWidget {
   final String? initialCategory;
@@ -41,6 +42,8 @@ class _AlertsListScreenState extends State<AlertsListScreen>
 
   /// Canonical severity to show (see [normalizeSeverity]); null = all.
   String? _severityFilter;
+
+  /// Hazard filter ids (internal; shown via [_filterLabel]).
   final List<String> _filters = [
     'All Alerts',
     'Floods',
@@ -50,6 +53,26 @@ class _AlertsListScreenState extends State<AlertsListScreen>
     'Pests',
     'Erosion',
   ];
+
+  String _filterLabel(String id) {
+    final l10n = context.l10n;
+    switch (id) {
+      case 'Floods':
+        return l10n.floodsCategory;
+      case 'Conflict':
+        return l10n.hazardConflict;
+      case 'Drought':
+        return l10n.hazardDrought;
+      case 'Fire':
+        return l10n.alertsFilterFire;
+      case 'Pests':
+        return l10n.pestsCategory;
+      case 'Erosion':
+        return l10n.hazardErosion;
+      default:
+        return l10n.alertsFilterAll;
+    }
+  }
 
   @override
   void initState() {
@@ -145,7 +168,7 @@ class _AlertsListScreenState extends State<AlertsListScreen>
       backgroundColor: AppColors.background,
       appBar: AppBar(
         title: Text(
-          'Alerts',
+          context.l10n.alerts,
           style: GoogleFonts.lexend(
             fontWeight: FontWeight.bold,
             color: AppColors.textPrimary,
@@ -159,7 +182,7 @@ class _AlertsListScreenState extends State<AlertsListScreen>
                 context.watch<AuthProvider>().userRole,
               ))
             IconButton(
-              tooltip: 'Broadcast an alert',
+              tooltip: context.l10n.alertsBroadcastTooltip,
               icon: const Icon(
                 Icons.campaign_outlined,
                 color: AppColors.primaryRed,
@@ -168,7 +191,7 @@ class _AlertsListScreenState extends State<AlertsListScreen>
             ),
           if (onReportsTab)
             PopupMenuButton<String>(
-              tooltip: 'Filter by severity',
+              tooltip: context.l10n.alertsSeverityFilterTooltip,
               icon: Icon(
                 _severityFilter == null ? Icons.filter_list : Icons.filter_alt,
                 color: _severityFilter == null
@@ -179,16 +202,14 @@ class _AlertsListScreenState extends State<AlertsListScreen>
               onSelected: (v) =>
                   setState(() => _severityFilter = v == 'all' ? null : v),
               itemBuilder: (context) => [
-                const PopupMenuItem(
+                PopupMenuItem(
                   value: 'all',
-                  child: Text('All severities'),
+                  child: Text(context.l10n.alertsAllSeverities),
                 ),
                 for (final level in SeverityLevel.values)
                   PopupMenuItem(
                     value: level.name,
-                    child: Text(
-                      '${level.name[0].toUpperCase()}${level.name.substring(1)}',
-                    ),
+                    child: Text(severityLabel(context.l10n, level.name)),
                   ),
               ],
             ),
@@ -201,9 +222,9 @@ class _AlertsListScreenState extends State<AlertsListScreen>
           unselectedLabelColor: AppColors.textSecondary,
           indicatorColor: AppColors.primaryRed,
           labelStyle: GoogleFonts.lexend(fontWeight: FontWeight.w600),
-          tabs: const [
-            Tab(text: 'Broadcasts'),
-            Tab(text: 'Report History'),
+          tabs: [
+            Tab(text: context.l10n.alertsTabBroadcasts),
+            Tab(text: context.l10n.alertsTabReportHistory),
           ],
         ),
       ),
@@ -223,14 +244,14 @@ class _AlertsListScreenState extends State<AlertsListScreen>
                 textInputAction: TextInputAction.search,
                 decoration: InputDecoration(
                   hintText: onReportsTab
-                      ? 'Search location, hazard, or ID...'
-                      : 'Search alerts...',
+                      ? context.l10n.alertsSearchReportsHint
+                      : context.l10n.alertsSearchAlertsHint,
                   hintStyle: GoogleFonts.lexend(color: Colors.grey.shade400),
                   prefixIcon: Icon(Icons.search, color: Colors.grey.shade400),
                   suffixIcon: _query.isEmpty
                       ? null
                       : IconButton(
-                          tooltip: 'Clear search',
+                          tooltip: context.l10n.alertsClearSearch,
                           icon: const Icon(Icons.clear),
                           onPressed: _searchController.clear,
                         ),
@@ -286,13 +307,13 @@ class _AlertsListScreenState extends State<AlertsListScreen>
                     ? Icons.cloud_off
                     : Icons.notifications_off_outlined,
                 title: error != null
-                    ? 'Could not load alerts'
+                    ? context.l10n.alertsLoadError
                     : _query.isNotEmpty
-                    ? 'No matching alerts'
-                    : 'No active alerts',
+                    ? context.l10n.alertsNoMatching
+                    : context.l10n.noActiveAlerts,
                 message: error != null
-                    ? 'Pull down to try again.'
-                    : 'Official alerts for your area will appear here.',
+                    ? context.l10n.alertsPullToRetry
+                    : context.l10n.alertsEmptyBody,
               ),
             ],
           );
@@ -323,7 +344,8 @@ class _AlertsListScreenState extends State<AlertsListScreen>
     final severity = alert['severity']?.toString();
     final color = alertSeverityColor(severity);
     final created = parseTimestamp(alert['createdAt']);
-    final title = alert['title']?.toString() ?? 'Alert';
+    final title =
+        alert['title']?.toString() ?? context.l10n.alertDetailDefaultTitle;
     final message = alert['message']?.toString() ?? '';
     final target = alert['targetLga']?.toString() ?? 'All';
 
@@ -388,7 +410,10 @@ class _AlertsListScreenState extends State<AlertsListScreen>
                                 if (created != null) ...[
                                   const SizedBox(width: 8),
                                   Text(
-                                    DateFormat('MMM d, h:mm a').format(created),
+                                    localizedDateFormat(
+                                      context,
+                                      'MMM d, h:mm a',
+                                    ).format(created),
                                     style: GoogleFonts.lexend(
                                       fontSize: 12,
                                       color: Colors.grey.shade500,
@@ -414,10 +439,13 @@ class _AlertsListScreenState extends State<AlertsListScreen>
                               spacing: 8,
                               runSpacing: 4,
                               children: [
-                                _buildTag(alertSeverityLabel(severity), color),
+                                _buildTag(
+                                  alertSeverityLabel(severity, context.l10n),
+                                  color,
+                                ),
                                 _buildTag(
                                   target.toLowerCase() == 'all'
-                                      ? 'All LGAs'
+                                      ? context.l10n.alertsAllLgas
                                       : target,
                                   Colors.blueGrey,
                                 ),
@@ -524,7 +552,7 @@ class _AlertsListScreenState extends State<AlertsListScreen>
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text(
-                          'SYNC STATUS',
+                          context.l10n.syncStatus,
                           style: GoogleFonts.lexend(
                             fontSize: 10,
                             fontWeight: FontWeight.bold,
@@ -547,8 +575,8 @@ class _AlertsListScreenState extends State<AlertsListScreen>
                             const SizedBox(width: 8),
                             Text(
                               isLoading
-                                  ? 'Synchronizing...'
-                                  : 'Online • Just now',
+                                  ? context.l10n.alertsSynchronizing
+                                  : context.l10n.onlineJustNow,
                               style: GoogleFonts.lexend(
                                 fontSize: 10,
                                 fontWeight: FontWeight.bold,
@@ -576,7 +604,7 @@ class _AlertsListScreenState extends State<AlertsListScreen>
                       itemBuilder: (context, index) {
                         final isSelected = _selectedFilterIndex == index;
                         return ChoiceChip(
-                          label: Text(_filters[index]),
+                          label: Text(_filterLabel(_filters[index])),
                           selected: isSelected,
                           onSelected: (v) =>
                               setState(() => _selectedFilterIndex = index),
@@ -615,13 +643,15 @@ class _AlertsListScreenState extends State<AlertsListScreen>
                           ? Icons.notifications_off_outlined
                           : Icons.filter_list_off,
                       title: unfiltered
-                          ? 'No Reports Yet'
+                          ? context.l10n.alertsNoReportsYet
                           : _selectedFilterIndex == 0
-                          ? 'No matching reports'
-                          : 'No ${_filters[_selectedFilterIndex]}',
+                          ? context.l10n.alertsNoMatchingReports
+                          : context.l10n.alertsNoReportsForFilter(
+                              _filterLabel(_filters[_selectedFilterIndex]),
+                            ),
                       message: unfiltered
-                          ? 'When hazards are reported in your area,\nthey\'ll appear here'
-                          : 'No matching reports found in this area',
+                          ? context.l10n.alertsNoReportsYetBody
+                          : context.l10n.alertsNoMatchingReportsBody,
                     )
                   else ...[
                     Padding(
@@ -690,7 +720,7 @@ class _AlertsListScreenState extends State<AlertsListScreen>
       color = Colors.green;
     }
 
-    final statusStr = report.status.displayName;
+    final statusStr = report.status.label(context.l10n);
     Color statusColor = Colors.grey;
     if (report.status == ReportStatus.pending) statusColor = Colors.orange;
     if (report.status == ReportStatus.verified) statusColor = Colors.blue;
@@ -703,11 +733,11 @@ class _AlertsListScreenState extends State<AlertsListScreen>
       onTap: () => context.push(
         '/alerts/detail',
         extra: <String, dynamic>{
-          'title': report.title,
+          'title': report.displayTitle(context.l10n),
           'type': report.type,
           'severity': report.severity,
-          'location': report.location,
-          'time': report.time,
+          'location': report.displayLocation(context.l10n),
+          'time': report.displayTime(context.l10n),
           'status': report.status.name,
           'description': report.description,
           'reportId': report.id,
@@ -719,9 +749,9 @@ class _AlertsListScreenState extends State<AlertsListScreen>
         },
       ),
       child: _buildAlertCard(
-        title: report.title,
-        time: report.time,
-        location: report.location,
+        title: report.displayTitle(context.l10n),
+        time: report.displayTime(context.l10n),
+        location: report.displayLocation(context.l10n),
         icon: icon,
         color: color,
         severity: report.severity,
@@ -837,7 +867,10 @@ class _AlertsListScreenState extends State<AlertsListScreen>
                                 runSpacing: 4,
                                 children: [
                                   if (severity != null)
-                                    _buildTag(severity, color),
+                                    _buildTag(
+                                      severityLabel(context.l10n, severity),
+                                      color,
+                                    ),
                                   _buildTag(status, statusColor),
                                 ],
                               ),
@@ -870,7 +903,7 @@ class _AlertsListScreenState extends State<AlertsListScreen>
                           if (mounted) {
                             CustomToast.showSuccess(
                               context,
-                              'Dispute recorded',
+                              context.l10n.alertsDisputeRecorded,
                             );
                           }
                         } on Exception catch (e) {
@@ -878,16 +911,17 @@ class _AlertsListScreenState extends State<AlertsListScreen>
                             CustomToast.showError(
                               context,
                               e is VerificationRefusedException
-                                  ? e.message
+                                  ? e.message(context.l10n)
                                   : ErrorHandler.handleError(
                                       e,
+                                      context.l10n,
                                       context: 'Alert',
                                     ),
                             );
                           }
                         }
                       },
-                      text: 'Decline',
+                      text: context.l10n.voteDecline,
                       icon: Icons.close,
                       type: ButtonType.secondary,
                       foregroundColor: Colors.red,
@@ -904,7 +938,7 @@ class _AlertsListScreenState extends State<AlertsListScreen>
                           if (mounted) {
                             CustomToast.showSuccess(
                               context,
-                              'Report confirmed',
+                              context.l10n.alertsReportConfirmed,
                             );
                           }
                         } on Exception catch (e) {
@@ -912,16 +946,17 @@ class _AlertsListScreenState extends State<AlertsListScreen>
                             CustomToast.showError(
                               context,
                               e is VerificationRefusedException
-                                  ? e.message
+                                  ? e.message(context.l10n)
                                   : ErrorHandler.handleError(
                                       e,
+                                      context.l10n,
                                       context: 'Alert',
                                     ),
                             );
                           }
                         }
                       },
-                      text: 'Confirm',
+                      text: context.l10n.voteConfirm,
                       icon: Icons.check,
                       backgroundColor: AppColors.successGreen,
                       foregroundColor: Colors.black,

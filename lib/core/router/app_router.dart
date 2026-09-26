@@ -52,6 +52,7 @@ import 'package:climate_app/features/admin/screens/admin_knowledge_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+import 'package:climate_app/core/l10n/l10n.dart';
 
 /// Create router with authentication guards
 GoRouter createRouter(BuildContext context) {
@@ -387,9 +388,9 @@ GoRouter createRouter(BuildContext context) {
             load: () =>
                 context.read<ReportsStatusProvider>().fetchReportById(id),
             builder: (context, report) => ReportViewScreen(report: report),
-            notFoundTitle: 'Report not found',
+            notFoundTitle: context.l10n.routeReportNotFound,
             fallbackLocation: '/reports-status',
-            fallbackLabel: 'View reports',
+            fallbackLabel: context.l10n.routeViewReports,
           );
         },
       ),
@@ -401,9 +402,9 @@ GoRouter createRouter(BuildContext context) {
             key: ValueKey('alert-$id'),
             load: () => context.read<AlertsProvider>().fetchAlertById(id),
             builder: (context, alert) => AlertDetailScreen(alert: alert),
-            notFoundTitle: 'Alert not found',
+            notFoundTitle: context.l10n.routeAlertNotFound,
             fallbackLocation: '/alerts',
-            fallbackLabel: 'View alerts',
+            fallbackLabel: context.l10n.routeViewAlerts,
           );
         },
       ),

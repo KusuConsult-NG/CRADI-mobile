@@ -2,6 +2,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:climate_app/features/auth/providers/auth_provider.dart';
+import 'package:climate_app/core/l10n/l10n.dart';
 
 /// AuthProvider unit tests that do not need a Supabase backend.
 ///
@@ -48,7 +49,7 @@ void main() {
         () => auth.verifyOtpAndLogin('123456'),
         throwsA(
           isA<AuthException>().having(
-            (e) => e.userMessage,
+            (e) => e.userMessage(englishL10n),
             'message',
             contains('No user context'),
           ),
@@ -67,7 +68,7 @@ void main() {
       final e = EmailNotConfirmedException('a@b.com');
       expect(e, isA<AuthException>());
       expect(e.email, 'a@b.com');
-      expect(e.userMessage, contains('a@b.com'));
+      expect(e.userMessage(englishL10n), contains('a@b.com'));
     });
   });
 }

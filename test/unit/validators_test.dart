@@ -1,34 +1,47 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:climate_app/core/utils/validators.dart';
+import 'package:climate_app/core/l10n/l10n.dart';
 
 void main() {
   group('Phone Number Validation', () {
     test('valid local format', () {
-      expect(Validators.validatePhoneNumber('08012345678'), isNull);
+      expect(
+        Validators.validatePhoneNumber('08012345678', englishL10n),
+        isNull,
+      );
     });
 
     test('valid international format with +', () {
-      expect(Validators.validatePhoneNumber('+2348012345678'), isNull);
+      expect(
+        Validators.validatePhoneNumber('+2348012345678', englishL10n),
+        isNull,
+      );
     });
 
     test('valid international format without +', () {
-      expect(Validators.validatePhoneNumber('2348012345678'), isNull);
+      expect(
+        Validators.validatePhoneNumber('2348012345678', englishL10n),
+        isNull,
+      );
     });
 
     test('null returns error', () {
-      expect(Validators.validatePhoneNumber(null), isNotNull);
+      expect(Validators.validatePhoneNumber(null, englishL10n), isNotNull);
     });
 
     test('empty returns error', () {
-      expect(Validators.validatePhoneNumber(''), isNotNull);
+      expect(Validators.validatePhoneNumber('', englishL10n), isNotNull);
     });
 
     test('too short returns error', () {
-      expect(Validators.validatePhoneNumber('0801234'), isNotNull);
+      expect(Validators.validatePhoneNumber('0801234', englishL10n), isNotNull);
     });
 
     test('non-Nigerian prefix rejected', () {
-      expect(Validators.validatePhoneNumber('01012345678'), isNotNull);
+      expect(
+        Validators.validatePhoneNumber('01012345678', englishL10n),
+        isNotNull,
+      );
     });
   });
 
@@ -64,23 +77,26 @@ void main() {
 
   group('Email Validation', () {
     test('valid email', () {
-      expect(Validators.validateEmail('test@example.com'), isNull);
+      expect(Validators.validateEmail('test@example.com', englishL10n), isNull);
     });
 
     test('null email', () {
-      expect(Validators.validateEmail(null), isNotNull);
+      expect(Validators.validateEmail(null, englishL10n), isNotNull);
     });
 
     test('empty email', () {
-      expect(Validators.validateEmail(''), isNotNull);
+      expect(Validators.validateEmail('', englishL10n), isNotNull);
     });
 
     test('missing @', () {
-      expect(Validators.validateEmail('testexample.com'), isNotNull);
+      expect(
+        Validators.validateEmail('testexample.com', englishL10n),
+        isNotNull,
+      );
     });
 
     test('missing domain', () {
-      expect(Validators.validateEmail('test@'), isNotNull);
+      expect(Validators.validateEmail('test@', englishL10n), isNotNull);
     });
 
     test('isValidEmail helper', () {
@@ -92,31 +108,31 @@ void main() {
 
   group('Password Validation', () {
     test('valid strong password', () {
-      expect(Validators.validatePassword('MyP@ss1234'), isNull);
+      expect(Validators.validatePassword('MyP@ss1234', englishL10n), isNull);
     });
 
     test('null password', () {
-      expect(Validators.validatePassword(null), isNotNull);
+      expect(Validators.validatePassword(null, englishL10n), isNotNull);
     });
 
     test('too short', () {
-      expect(Validators.validatePassword('A1@b'), isNotNull);
+      expect(Validators.validatePassword('A1@b', englishL10n), isNotNull);
     });
 
     test('no uppercase', () {
-      expect(Validators.validatePassword('myp@ss1234'), isNotNull);
+      expect(Validators.validatePassword('myp@ss1234', englishL10n), isNotNull);
     });
 
     test('no lowercase', () {
-      expect(Validators.validatePassword('MYP@SS1234'), isNotNull);
+      expect(Validators.validatePassword('MYP@SS1234', englishL10n), isNotNull);
     });
 
     test('no number', () {
-      expect(Validators.validatePassword('MyP@ssword'), isNotNull);
+      expect(Validators.validatePassword('MyP@ssword', englishL10n), isNotNull);
     });
 
     test('no special char', () {
-      expect(Validators.validatePassword('MyPass1234'), isNotNull);
+      expect(Validators.validatePassword('MyPass1234', englishL10n), isNotNull);
     });
   });
 
@@ -134,7 +150,7 @@ void main() {
     });
 
     test('strength info returns label and color', () {
-      final info = Validators.getPasswordStrengthInfo(4);
+      final info = Validators.getPasswordStrengthInfo(4, englishL10n);
       expect(info['label'], equals('Strong'));
       expect(info['color'], isA<int>());
     });
@@ -150,35 +166,41 @@ void main() {
 
   group('Text Validation', () {
     test('valid text passes', () {
-      expect(Validators.validateText('Normal text'), isNull);
+      expect(Validators.validateText('Normal text', englishL10n), isNull);
     });
 
     test('null text fails', () {
-      expect(Validators.validateText(null), isNotNull);
+      expect(Validators.validateText(null, englishL10n), isNotNull);
     });
 
     test('empty text fails', () {
-      expect(Validators.validateText(''), isNotNull);
+      expect(Validators.validateText('', englishL10n), isNotNull);
     });
 
     test('min length enforced', () {
-      expect(Validators.validateText('ab', minLength: 5), isNotNull);
+      expect(
+        Validators.validateText('ab', englishL10n, minLength: 5),
+        isNotNull,
+      );
     });
 
     test('max length enforced', () {
-      expect(Validators.validateText('a' * 20, maxLength: 10), isNotNull);
+      expect(
+        Validators.validateText('a' * 20, englishL10n, maxLength: 10),
+        isNotNull,
+      );
     });
 
     test('SQL injection detected', () {
       expect(
-        Validators.validateText("'; DROP TABLE users;"),
+        Validators.validateText("'; DROP TABLE users;", englishL10n),
         contains('Invalid'),
       );
     });
 
     test('script injection detected', () {
       expect(
-        Validators.validateText('<script>alert("xss")</script>'),
+        Validators.validateText('<script>alert("xss")</script>', englishL10n),
         contains('Invalid'),
       );
     });
@@ -186,47 +208,62 @@ void main() {
 
   group('Address Validation', () {
     test('valid address passes', () {
-      expect(Validators.validateAddress('123 Main Street, Makurdi'), isNull);
+      expect(
+        Validators.validateAddress('123 Main Street, Makurdi', englishL10n),
+        isNull,
+      );
     });
 
     test('too short address fails', () {
-      expect(Validators.validateAddress('Short'), isNotNull);
+      expect(Validators.validateAddress('Short', englishL10n), isNotNull);
     });
 
     test('null address fails', () {
-      expect(Validators.validateAddress(null), isNotNull);
+      expect(Validators.validateAddress(null, englishL10n), isNotNull);
     });
   });
 
   group('Location Validation', () {
     test('valid location passes', () {
-      expect(Validators.validateLocation('Benue', 'State'), isNull);
+      expect(
+        Validators.validateLocation('Benue', 'State', englishL10n),
+        isNull,
+      );
     });
 
     test('empty location fails', () {
-      expect(Validators.validateLocation('', 'State'), isNotNull);
+      expect(Validators.validateLocation('', 'State', englishL10n), isNotNull);
     });
 
     test('too short location fails', () {
-      expect(Validators.validateLocation('A', 'LGA'), isNotNull);
+      expect(Validators.validateLocation('A', 'LGA', englishL10n), isNotNull);
     });
 
     test('special chars rejected', () {
-      expect(Validators.validateLocation('Test@#\$', 'Ward'), isNotNull);
+      expect(
+        Validators.validateLocation('Test@#\$', 'Ward', englishL10n),
+        isNotNull,
+      );
     });
   });
 
   group('Required Field Validation', () {
     test('non-empty passes', () {
-      expect(Validators.validateRequired('value', 'Field'), isNull);
+      expect(
+        Validators.validateRequired('value', 'Field', englishL10n),
+        isNull,
+      );
     });
 
     test('null fails with field name', () {
-      expect(Validators.validateRequired(null, 'Name'), contains('Name'));
+      expect(
+        Validators.validateRequired(null, 'Name', englishL10n),
+        contains('Name'),
+      );
     });
 
     test('empty string fails', () {
-      expect(Validators.validateRequired('', 'Phone'), isNotNull);
+      expect(Validators.validateRequired('', 'Phone', englishL10n), isNotNull);
     });
   });
 }

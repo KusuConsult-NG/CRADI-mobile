@@ -2,6 +2,7 @@ import 'package:climate_app/core/data/nigeria_locations_data.dart';
 import 'package:climate_app/core/theme/app_colors.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:climate_app/core/l10n/l10n.dart';
 
 /// Reusable cascading dropdown for Nigeria States and LGAs
 class LocationSelectorWidget extends StatefulWidget {
@@ -95,38 +96,43 @@ class _LocationSelectorWidgetState extends State<LocationSelectorWidget> {
     widget.onLocationChanged(_selectedState, _selectedLGA, _selectedWard);
   }
 
+  /// Field label, with a required marker when [LocationSelectorWidget.required].
+  String _label(String label) =>
+      widget.required ? context.l10n.formFieldRequiredLabel(label) : label;
+
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // State Dropdown
         _buildDropdown(
-          label: 'State${widget.required ? ' *' : ''}',
+          label: _label(l10n.stateLabel),
           value: _selectedState,
           items: NigeriaLocationsData.focalStates,
           onChanged: _onStateChanged,
-          hint: 'Select State',
+          hint: l10n.selectState,
         ),
         const SizedBox(height: 16),
 
         // LGA Dropdown
         _buildDropdown(
-          label: 'Local Government Area${widget.required ? ' *' : ''}',
+          label: _label(l10n.locationSelectorLgaLabel),
           value: _selectedLGA,
           items: _availableLGAs,
           onChanged: _selectedState != null ? _onLGAChanged : null,
-          hint: _selectedState != null ? 'Select LGA' : 'Select state first',
+          hint: _selectedState != null ? l10n.selectLga : l10n.selectStateFirst,
         ),
         const SizedBox(height: 16),
 
         // Ward Dropdown
         _buildDropdown(
-          label: 'Ward${widget.required ? ' *' : ''}',
+          label: _label(l10n.wardLabel),
           value: _selectedWard,
           items: _availableWards,
           onChanged: _selectedLGA != null ? _onWardChanged : null,
-          hint: _selectedLGA != null ? 'Select Ward' : 'Select LGA first',
+          hint: _selectedLGA != null ? l10n.selectWard : l10n.selectLgaFirst,
         ),
       ],
     );

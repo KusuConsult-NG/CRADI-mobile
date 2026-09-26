@@ -4,6 +4,7 @@ import 'package:climate_app/features/contacts/screens/emergency_contacts_screen.
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
+import 'package:climate_app/l10n/app_localizations.dart';
 
 class _EmptyStreamContactsProvider extends ChangeNotifier
     implements EmergencyContactsProvider {
@@ -21,7 +22,11 @@ void main() {
     await tester.pumpWidget(
       ChangeNotifierProvider<EmergencyContactsProvider>(
         create: (_) => _EmptyStreamContactsProvider(),
-        child: const MaterialApp(home: EmergencyContactsScreen()),
+        child: const MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: EmergencyContactsScreen(),
+        ),
       ),
     );
     await tester.pumpAndSettle();

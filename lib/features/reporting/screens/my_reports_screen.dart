@@ -8,6 +8,7 @@ import 'package:climate_app/features/auth/providers/auth_provider.dart';
 import 'package:climate_app/features/verification/providers/reports_status_provider.dart';
 import 'package:climate_app/features/verification/models/verification_report_model.dart';
 import 'package:climate_app/shared/widgets/shimmer_loading.dart';
+import 'package:climate_app/core/l10n/l10n.dart';
 
 /// My Reports screen with Active / History tabs.
 /// Active = pending + verified | History = approved + rejected
@@ -66,7 +67,7 @@ class _MyReportsScreenState extends State<MyReportsScreen>
       backgroundColor: AppColors.background,
       appBar: AppBar(
         title: Text(
-          'My Reports',
+          context.l10n.myReports,
           style: GoogleFonts.lexend(
             fontWeight: FontWeight.bold,
             color: AppColors.textPrimary,
@@ -84,9 +85,9 @@ class _MyReportsScreenState extends State<MyReportsScreen>
             fontWeight: FontWeight.w600,
             fontSize: 14,
           ),
-          tabs: const [
-            Tab(text: 'Active'),
-            Tab(text: 'History'),
+          tabs: [
+            Tab(text: context.l10n.myReportsTabActive),
+            Tab(text: context.l10n.myReportsTabHistory),
           ],
         ),
       ),
@@ -96,7 +97,7 @@ class _MyReportsScreenState extends State<MyReportsScreen>
           if (uid == null) {
             return Center(
               child: Text(
-                'Please sign in to view your reports.',
+                context.l10n.myReportsSignIn,
                 style: GoogleFonts.lexend(color: AppColors.textSecondary),
               ),
             );
@@ -118,15 +119,15 @@ class _MyReportsScreenState extends State<MyReportsScreen>
               _buildReportList(
                 activeReports,
                 isLoading,
-                'No active reports',
-                'Reports you submit will appear here while being verified.',
+                context.l10n.myReportsEmptyActiveTitle,
+                context.l10n.myReportsEmptyActiveBody,
                 error,
               ),
               _buildReportList(
                 historyReports,
                 isLoading,
-                'No report history',
-                'Your approved and rejected reports will appear here.',
+                context.l10n.myReportsEmptyHistoryTitle,
+                context.l10n.myReportsEmptyHistoryBody,
                 error,
               ),
             ],
@@ -139,7 +140,7 @@ class _MyReportsScreenState extends State<MyReportsScreen>
         backgroundColor: AppColors.successGreen,
         icon: const Icon(Icons.add, color: Colors.black),
         label: Text(
-          'New Report',
+          context.l10n.myReportsNewReport,
           style: GoogleFonts.lexend(
             fontWeight: FontWeight.w600,
             color: Colors.black,
@@ -154,7 +155,7 @@ class _MyReportsScreenState extends State<MyReportsScreen>
     bool isLoading,
     String emptyTitle,
     String emptySubtitle,
-    String? error,
+    LocalizedText? error,
   ) {
     if (isLoading && reports.isEmpty) {
       return Padding(
@@ -179,7 +180,7 @@ class _MyReportsScreenState extends State<MyReportsScreen>
               Icon(Icons.cloud_off, size: 56, color: Colors.red.shade200),
               const SizedBox(height: 12),
               Text(
-                error,
+                error(context.l10n),
                 textAlign: TextAlign.center,
                 style: GoogleFonts.lexend(color: AppColors.textSecondary),
               ),
@@ -187,7 +188,7 @@ class _MyReportsScreenState extends State<MyReportsScreen>
               ElevatedButton.icon(
                 onPressed: _refreshMyReports,
                 icon: const Icon(Icons.refresh),
-                label: const Text('Retry'),
+                label: Text(context.l10n.retry),
               ),
             ],
           ),
@@ -254,7 +255,7 @@ class _MyReportsScreenState extends State<MyReportsScreen>
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    error!,
+                    error!(context.l10n),
                     style: GoogleFonts.lexend(
                       fontSize: 12,
                       color: AppColors.textSecondary,
@@ -263,7 +264,7 @@ class _MyReportsScreenState extends State<MyReportsScreen>
                 ),
                 TextButton(
                   onPressed: _refreshMyReports,
-                  child: const Text('Retry'),
+                  child: Text(context.l10n.retry),
                 ),
               ],
             );
@@ -321,7 +322,7 @@ class _MyReportsScreenState extends State<MyReportsScreen>
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              report.title,
+                              report.displayTitle(context.l10n),
                               style: GoogleFonts.lexend(
                                 fontSize: 15,
                                 fontWeight: FontWeight.w600,
@@ -341,7 +342,7 @@ class _MyReportsScreenState extends State<MyReportsScreen>
                                 const SizedBox(width: 4),
                                 Expanded(
                                   child: Text(
-                                    report.location,
+                                    report.displayLocation(context.l10n),
                                     style: GoogleFonts.lexend(
                                       fontSize: 12,
                                       color: AppColors.textSecondary,
@@ -356,7 +357,9 @@ class _MyReportsScreenState extends State<MyReportsScreen>
                                 report.rejectionReason != null) ...[
                               const SizedBox(height: 4),
                               Text(
-                                'Reason: ${report.rejectionReason}',
+                                context.l10n.myReportsRejectionReason(
+                                  report.rejectionReason!,
+                                ),
                                 style: GoogleFonts.lexend(
                                   fontSize: 12,
                                   color: Colors.red.shade700,
@@ -383,7 +386,7 @@ class _MyReportsScreenState extends State<MyReportsScreen>
                               borderRadius: BorderRadius.circular(10),
                             ),
                             child: Text(
-                              report.status.displayName,
+                              report.status.label(context.l10n),
                               style: GoogleFonts.lexend(
                                 fontSize: 10,
                                 fontWeight: FontWeight.w600,
@@ -393,7 +396,7 @@ class _MyReportsScreenState extends State<MyReportsScreen>
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            report.time,
+                            report.displayTime(context.l10n),
                             style: GoogleFonts.lexend(
                               fontSize: 10,
                               color: Colors.grey.shade500,

@@ -12,6 +12,7 @@ import 'package:climate_app/features/reporting/providers/reporting_provider.dart
 import 'package:flutter_test/flutter_test.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:intl/intl.dart';
+import 'package:climate_app/core/l10n/l10n.dart';
 
 Position _pos(double lat, double lng) => Position(
   latitude: lat,
@@ -173,7 +174,7 @@ void main() {
         lastKnown: () async => _pos(1, 2),
       );
       expect(p!.latitude, 1);
-      expect(service.lastErrorMessage, contains('last known'));
+      expect(service.lastErrorMessage!(englishL10n), contains('last known'));
     });
 
     test(
@@ -185,7 +186,7 @@ void main() {
           lastKnown: () async => null,
         );
         expect(p, isNull);
-        expect(service.lastErrorMessage, contains('Timed out'));
+        expect(service.lastErrorMessage!(englishL10n), contains('Timed out'));
       },
     );
   });

@@ -1,5 +1,5 @@
 import 'package:climate_app/core/theme/app_colors.dart';
-import 'package:climate_app/core/providers/language_provider.dart';
+import 'package:climate_app/core/utils/error_handler.dart';
 import 'package:climate_app/features/reporting/providers/reporting_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -7,12 +7,11 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:provider/provider.dart';
-import 'package:intl/intl.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 import 'package:climate_app/shared/widgets/custom_button.dart';
 import 'package:climate_app/core/utils/input_sanitizer.dart';
-import 'package:climate_app/l10n/app_localizations.dart';
+import 'package:climate_app/core/l10n/l10n.dart';
 
 class ReportDetailsScreen extends StatefulWidget {
   const ReportDetailsScreen({super.key});
@@ -47,8 +46,8 @@ class _ReportDetailsScreenState extends State<ReportDetailsScreen> {
           if (!mounted) return;
           setState(() => _isListening = false);
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Speech recognition error. Please try again.'),
+            SnackBar(
+              content: Text(context.l10n.reportDetailsSpeechError),
               backgroundColor: Colors.red,
             ),
           );
@@ -67,14 +66,7 @@ class _ReportDetailsScreenState extends State<ReportDetailsScreen> {
         final locales = await _speech.locales();
         // Get current app locale
         if (!mounted || locales.isEmpty) return;
-        final selectedLanguage = context
-            .read<LanguageProvider>()
-            .selectedLanguage;
-
-        String appLocaleCode = 'en';
-        if (selectedLanguage == 'Hausa') appLocaleCode = 'ha';
-        if (selectedLanguage == 'Yoruba') appLocaleCode = 'yo';
-        if (selectedLanguage == 'Igbo') appLocaleCode = 'ig';
+        final appLocaleCode = Localizations.localeOf(context).languageCode;
 
         // Try to find matching locale
         final matchingLocale = locales.firstWhere(
@@ -100,7 +92,7 @@ class _ReportDetailsScreenState extends State<ReportDetailsScreen> {
     if (!_speechAvailable) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(AppLocalizations.of(context)!.speechNotAvailable),
+          content: Text(context.l10n.speechNotAvailable),
           backgroundColor: Colors.orange,
         ),
       );
@@ -152,14 +144,16 @@ class _ReportDetailsScreenState extends State<ReportDetailsScreen> {
   Future<void> _pickImageFromCamera(ReportingProvider provider) async {
     try {
       await provider.pickImage(ImageSource.camera);
+    } on ValidationException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(e.userMessage(context.l10n))));
+      }
     } on Exception {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Camera is not available. Please try using the gallery.',
-            ),
-          ),
+          SnackBar(content: Text(context.l10n.reportDetailsCameraUnavailable)),
         );
       }
     }
@@ -169,12 +163,16 @@ class _ReportDetailsScreenState extends State<ReportDetailsScreen> {
   Future<void> _pickImageFromGallery(ReportingProvider provider) async {
     try {
       await provider.pickImage(ImageSource.gallery);
+    } on ValidationException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(e.userMessage(context.l10n))));
+      }
     } on Exception {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Could not access gallery. Please try again.'),
-          ),
+          SnackBar(content: Text(context.l10n.reportDetailsGalleryError)),
         );
       }
     }
@@ -243,12 +241,7 @@ class _ReportDetailsScreenState extends State<ReportDetailsScreen> {
         provider.setReportDateTime(newDateTime);
         if (inFuture && context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                'The incident time cannot be in the future. '
-                'It has been set to the current time.',
-              ),
-            ),
+            SnackBar(content: Text(context.l10n.reportDetailsFutureTime)),
           );
         }
       }
@@ -269,7 +262,7 @@ class _ReportDetailsScreenState extends State<ReportDetailsScreen> {
           onPressed: () => context.pop(),
         ),
         title: Text(
-          AppLocalizations.of(context)!.reportDetailsTitle,
+          context.l10n.reportDetailsTitle,
           style: GoogleFonts.lexend(
             fontWeight: FontWeight.bold,
             color: AppColors.textPrimary,
@@ -293,7 +286,7 @@ class _ReportDetailsScreenState extends State<ReportDetailsScreen> {
                 children: [
                   // Description Section
                   Text(
-                    AppLocalizations.of(context)!.descriptionLabel,
+                    context.l10n.descriptionLabel,
                     style: GoogleFonts.lexend(
                       fontSize: 20,
                       fontWeight: FontWeight.bold,
@@ -318,9 +311,7 @@ class _ReportDetailsScreenState extends State<ReportDetailsScreen> {
                           color: AppColors.textPrimary,
                         ),
                         decoration: InputDecoration(
-                          hintText: AppLocalizations.of(
-                            context,
-                          )!.describeHazardHint,
+                          hintText: context.l10n.describeHazardHint,
                           hintStyle: GoogleFonts.lexend(
                             color: Colors.grey.shade400,
                           ),
@@ -396,12 +387,8 @@ class _ReportDetailsScreenState extends State<ReportDetailsScreen> {
                           const SizedBox(width: 4),
                           Text(
                             _isListening
-                                ? AppLocalizations.of(
-                                    context,
-                                  )!.listeningSpeakNow
-                                : AppLocalizations.of(
-                                    context,
-                                  )!.beSpecificLocationSeverity,
+                                ? context.l10n.listeningSpeakNow
+                                : context.l10n.beSpecificLocationSeverity,
                             style: GoogleFonts.lexend(
                               fontSize: 12,
                               fontWeight: FontWeight.w500,
@@ -436,7 +423,7 @@ class _ReportDetailsScreenState extends State<ReportDetailsScreen> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
-                        AppLocalizations.of(context)!.whenDidThisOccur,
+                        context.l10n.whenDidThisOccur,
                         style: GoogleFonts.lexend(
                           fontSize: 20,
                           fontWeight: FontWeight.bold,
@@ -453,7 +440,7 @@ class _ReportDetailsScreenState extends State<ReportDetailsScreen> {
                           borderRadius: BorderRadius.circular(6),
                         ),
                         child: Text(
-                          AppLocalizations.of(context)!.optionalLabel,
+                          context.l10n.optionalLabel,
                           style: GoogleFonts.lexend(
                             fontSize: 10,
                             fontWeight: FontWeight.bold,
@@ -505,9 +492,7 @@ class _ReportDetailsScreenState extends State<ReportDetailsScreen> {
                                   children: [
                                     Text(
                                       isToday
-                                          ? AppLocalizations.of(
-                                              context,
-                                            )!.todayLabel
+                                          ? context.l10n.todayLabel
                                           : _formatDate(selectedDate),
                                       style: GoogleFonts.lexend(
                                         fontSize: 16,
@@ -547,7 +532,7 @@ class _ReportDetailsScreenState extends State<ReportDetailsScreen> {
                       const SizedBox(width: 4),
                       Expanded(
                         child: Text(
-                          AppLocalizations.of(context)!.tapToSelectDateTime,
+                          context.l10n.tapToSelectDateTime,
                           style: GoogleFonts.lexend(
                             fontSize: 12,
                             fontWeight: FontWeight.w500,
@@ -568,7 +553,7 @@ class _ReportDetailsScreenState extends State<ReportDetailsScreen> {
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
                       Text(
-                        AppLocalizations.of(context)!.evidenceLabel,
+                        context.l10n.evidenceLabel,
                         style: GoogleFonts.lexend(
                           fontSize: 20,
                           fontWeight: FontWeight.bold,
@@ -585,7 +570,7 @@ class _ReportDetailsScreenState extends State<ReportDetailsScreen> {
                           borderRadius: BorderRadius.circular(6),
                         ),
                         child: Text(
-                          AppLocalizations.of(context)!.max3Photos,
+                          context.l10n.max3Photos,
                           style: GoogleFonts.lexend(
                             fontSize: 10,
                             fontWeight: FontWeight.bold,
@@ -658,19 +643,13 @@ class _ReportDetailsScreenState extends State<ReportDetailsScreen> {
                               ),
                               children: [
                                 TextSpan(
-                                  text: AppLocalizations.of(
-                                    context,
-                                  )!.offlineModeReady,
+                                  text: context.l10n.offlineModeReady,
                                   style: GoogleFonts.lexend(
                                     fontWeight: FontWeight.bold,
                                     color: Colors.blue.shade700,
                                   ),
                                 ),
-                                TextSpan(
-                                  text: AppLocalizations.of(
-                                    context,
-                                  )!.offlineModeMessage,
-                                ),
+                                TextSpan(text: context.l10n.offlineModeMessage),
                               ],
                             ),
                           ),
@@ -704,7 +683,7 @@ class _ReportDetailsScreenState extends State<ReportDetailsScreen> {
                   );
                   context.push('/report/review');
                 },
-                text: AppLocalizations.of(context)!.reviewReportBtn,
+                text: context.l10n.reviewReportBtn,
                 icon: Icons.arrow_forward,
               ),
             ),
@@ -715,11 +694,11 @@ class _ReportDetailsScreenState extends State<ReportDetailsScreen> {
   }
 
   String _formatDate(DateTime date) {
-    return DateFormat('MMM dd, yyyy').format(date);
+    return localizedDateFormat(context, 'MMM dd, yyyy').format(date);
   }
 
   String _formatTime(DateTime date) {
-    return DateFormat('h:mm a').format(date);
+    return localizedDateFormat(context, 'h:mm a').format(date);
   }
 
   Widget _buildImageThumbnail(ReportingProvider provider, int index) {
@@ -782,7 +761,7 @@ class _ReportDetailsScreenState extends State<ReportDetailsScreen> {
             ),
             const SizedBox(height: 8),
             Text(
-              AppLocalizations.of(context)!.cameraBtn,
+              context.l10n.cameraBtn,
               style: GoogleFonts.lexend(
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
@@ -811,7 +790,7 @@ class _ReportDetailsScreenState extends State<ReportDetailsScreen> {
             Icon(Icons.photo_library, size: 28, color: Colors.green.shade600),
             const SizedBox(height: 4),
             Text(
-              AppLocalizations.of(context)!.galleryBtn,
+              context.l10n.galleryBtn,
               style: GoogleFonts.lexend(
                 fontSize: 11,
                 fontWeight: FontWeight.w500,

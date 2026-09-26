@@ -1,10 +1,13 @@
-/// Input validators for security
+import 'package:climate_app/core/l10n/l10n.dart';
+
+/// Input validators for security. Messages are returned in the language of
+/// the [AppLocalizations] passed in.
 class Validators {
   /// Validate Nigerian phone number
   /// Formats: 08012345678, +2348012345678, 2348012345678
-  static String? validatePhoneNumber(String? value) {
+  static String? validatePhoneNumber(String? value, AppLocalizations l10n) {
     if (value == null || value.isEmpty) {
-      return 'Phone number is required';
+      return l10n.validatorPhoneRequired;
     }
 
     // Remove spaces and special characters
@@ -20,7 +23,7 @@ class Validators {
     final isValid = patterns.any((pattern) => pattern.hasMatch(cleaned));
 
     if (!isValid) {
-      return 'Please enter a valid Nigerian phone number';
+      return l10n.validatorPhoneInvalid;
     }
 
     return null;
@@ -53,28 +56,33 @@ class Validators {
 
   /// Validate address
   /// Basic validation for user address
-  static String? validateAddress(String? value) {
+  static String? validateAddress(String? value, AppLocalizations l10n) {
     if (value == null || value.trim().isEmpty) {
-      return 'Address is required';
+      return l10n.validatorAddressRequired;
     }
 
     final cleaned = value.trim();
 
     if (cleaned.length < 10) {
-      return 'Address must be at least 10 characters';
+      return l10n.validatorAddressTooShort(10);
     }
 
     if (cleaned.length > 200) {
-      return 'Address is too long (max 200 characters)';
+      return l10n.validatorAddressTooLong(200);
     }
 
     return null;
   }
 
   /// Validate required field
-  static String? validateRequired(String? value, String fieldName) {
+  /// [fieldName] is the (already localised) field label.
+  static String? validateRequired(
+    String? value,
+    String fieldName,
+    AppLocalizations l10n,
+  ) {
     if (value == null || value.trim().isEmpty) {
-      return '$fieldName is required';
+      return l10n.validatorFieldRequired(fieldName);
     }
     return null;
   }
@@ -82,49 +90,60 @@ class Validators {
   /// Validate text input (general purpose)
   /// Prevents extremely long inputs and some special characters
   static String? validateText(
-    String? value, {
+    String? value,
+    AppLocalizations l10n, {
     String? fieldName,
     int? maxLength,
     int? minLength,
     bool allowSpecialChars = true,
   }) {
     if (value == null || value.trim().isEmpty) {
-      return '${fieldName ?? 'This field'} is required';
+      return fieldName != null
+          ? l10n.validatorFieldRequired(fieldName)
+          : l10n.validation_required;
     }
 
     if (minLength != null && value.length < minLength) {
-      return '${fieldName ?? 'This field'} must be at least $minLength characters';
+      return fieldName != null
+          ? l10n.validatorFieldMinLength(fieldName, minLength)
+          : l10n.validation_minLength(minLength);
     }
 
     if (maxLength != null && value.length > maxLength) {
-      return '${fieldName ?? 'This field'} must not exceed $maxLength characters';
+      return fieldName != null
+          ? l10n.validatorFieldMaxLength(fieldName, maxLength)
+          : l10n.validation_maxLength(maxLength);
     }
 
     // Check for SQL injection patterns
     if (_containsSQLInjection(value)) {
-      return 'Invalid characters detected';
+      return l10n.validatorInvalidCharacters;
     }
 
     // Check for script injection
     if (_containsScriptInjection(value)) {
-      return 'Invalid characters detected';
+      return l10n.validatorInvalidCharacters;
     }
 
     return null;
   }
 
   /// Validate description/notes field
-  static String? validateDescription(String? value, {int maxLength = 500}) {
+  static String? validateDescription(
+    String? value,
+    AppLocalizations l10n, {
+    int maxLength = 500,
+  }) {
     if (value == null || value.trim().isEmpty) {
-      return 'Description is required';
+      return l10n.validatorDescriptionRequired;
     }
 
     if (value.length > maxLength) {
-      return 'Description must not exceed $maxLength characters';
+      return l10n.validatorDescriptionTooLong(maxLength);
     }
 
     if (_containsSQLInjection(value) || _containsScriptInjection(value)) {
-      return 'Invalid characters detected';
+      return l10n.validatorInvalidCharacters;
     }
 
     return null;
@@ -155,9 +174,9 @@ class Validators {
   }
 
   /// Validate email (if needed in future)
-  static String? validateEmail(String? value) {
+  static String? validateEmail(String? value, AppLocalizations l10n) {
     if (value == null || value.isEmpty) {
-      return 'Email is required';
+      return l10n.validatorEmailRequired;
     }
 
     final emailRegex = RegExp(
@@ -165,7 +184,7 @@ class Validators {
     );
 
     if (!emailRegex.hasMatch(value)) {
-      return 'Please enter a valid email address';
+      return l10n.validation_invalidEmail;
     }
 
     return null;
@@ -191,29 +210,29 @@ class Validators {
   /// - At least 1 lowercase letter
   /// - At least 1 number
   /// - At least 1 special character
-  static String? validatePassword(String? value) {
+  static String? validatePassword(String? value, AppLocalizations l10n) {
     if (value == null || value.isEmpty) {
-      return 'Password is required';
+      return l10n.validatorPasswordRequired;
     }
 
     if (value.length < 8) {
-      return 'Password must be at least 8 characters';
+      return l10n.validatorPasswordMinLength(8);
     }
 
     if (!RegExp(r'[A-Z]').hasMatch(value)) {
-      return 'Must contain at least one uppercase letter';
+      return l10n.validatorPasswordUppercase;
     }
 
     if (!RegExp(r'[a-z]').hasMatch(value)) {
-      return 'Must contain at least one lowercase letter';
+      return l10n.validatorPasswordLowercase;
     }
 
     if (!RegExp(r'[0-9]').hasMatch(value)) {
-      return 'Must contain at least one number';
+      return l10n.validatorPasswordNumber;
     }
 
     if (!RegExp(r'[!@#$%^&*(),.?":{}|<>_\-+=\[\]\\\/]').hasMatch(value)) {
-      return 'Must contain at least one special character';
+      return l10n.validatorPasswordSpecial;
     }
 
     return null;
@@ -249,39 +268,47 @@ class Validators {
   }
 
   /// Get password strength label and color
-  static Map<String, dynamic> getPasswordStrengthInfo(int strength) {
+  static Map<String, dynamic> getPasswordStrengthInfo(
+    int strength,
+    AppLocalizations l10n,
+  ) {
     switch (strength) {
       case 0:
       case 1:
-        return {'label': 'Weak', 'color': 0xFFE53935}; // Red
+        return {'label': l10n.passwordStrengthWeak, 'color': 0xFFE53935};
       case 2:
-        return {'label': 'Fair', 'color': 0xFFFB8C00}; // Orange
+        return {'label': l10n.passwordStrengthFair, 'color': 0xFFFB8C00};
       case 3:
-        return {'label': 'Good', 'color': 0xFF43A047}; // Green
+        return {'label': l10n.passwordStrengthGood, 'color': 0xFF43A047};
       case 4:
-        return {'label': 'Strong', 'color': 0xFF1E88E5}; // Blue
+        return {'label': l10n.passwordStrengthStrong, 'color': 0xFF1E88E5};
       default:
-        return {'label': 'Unknown', 'color': 0xFF757575}; // Gray
+        return {'label': l10n.commonUnknown, 'color': 0xFF757575};
     }
   }
 
   /// Validate location name
-  static String? validateLocation(String? value, String locationType) {
+  /// [locationType] is the (already localised) field label, e.g. "State".
+  static String? validateLocation(
+    String? value,
+    String locationType,
+    AppLocalizations l10n,
+  ) {
     if (value == null || value.trim().isEmpty) {
-      return '$locationType is required';
+      return l10n.validatorFieldRequired(locationType);
     }
 
     if (value.length < 2) {
-      return '$locationType must be at least 2 characters';
+      return l10n.validatorFieldMinLength(locationType, 2);
     }
 
     if (value.length > 100) {
-      return '$locationType must not exceed 100 characters';
+      return l10n.validatorFieldMaxLength(locationType, 100);
     }
 
     // Allow only letters, numbers, spaces, hyphens, and apostrophes
     if (!RegExp(r"^[a-zA-Z0-9\s\-']+$").hasMatch(value)) {
-      return '$locationType contains invalid characters';
+      return l10n.validatorFieldInvalidCharacters(locationType);
     }
 
     return null;

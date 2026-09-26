@@ -10,6 +10,7 @@ import 'package:climate_app/features/verification/providers/reports_status_provi
 import 'package:climate_app/features/verification/models/verification_report_model.dart';
 import 'package:climate_app/features/profile/providers/profile_provider.dart';
 import 'package:climate_app/shared/widgets/shimmer_loading.dart';
+import 'package:climate_app/core/l10n/l10n.dart';
 
 /// Nearby Reports feed — shows reports from the user's LGA/monitoring zone
 /// and, when coordinates are available, sorts by proximity.
@@ -23,7 +24,7 @@ class NearbyReportsScreen extends StatefulWidget {
 class _NearbyReportsScreenState extends State<NearbyReportsScreen> {
   List<_NearbyEntry> _nearbyReports = [];
   bool _isLoading = true;
-  String? _error;
+  LocalizedText? _error;
 
   /// Plain users may only read their own reports (RLS), so a feed of
   /// other people's reports is not available to them.
@@ -166,7 +167,7 @@ class _NearbyReportsScreenState extends State<NearbyReportsScreen> {
       backgroundColor: AppColors.background,
       appBar: AppBar(
         title: Text(
-          'Nearby Reports',
+          context.l10n.nearbyTitle,
           style: GoogleFonts.lexend(
             fontWeight: FontWeight.bold,
             color: AppColors.textPrimary,
@@ -178,6 +179,7 @@ class _NearbyReportsScreenState extends State<NearbyReportsScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh, color: AppColors.textPrimary),
+            tooltip: context.l10n.refresh,
             onPressed: _loadNearby,
           ),
         ],
@@ -194,10 +196,8 @@ class _NearbyReportsScreenState extends State<NearbyReportsScreen> {
     if (_isPlainUser) {
       return _buildMessage(
         icon: Icons.lock_outline,
-        title: 'Not available for your account',
-        message:
-            'Nearby reports are visible to approved monitors and staff. '
-            'You can follow your own reports under My Reports.',
+        title: context.l10n.nearbyNotAvailableTitle,
+        message: context.l10n.nearbyNotAvailableBody,
       );
     }
     if (_isLoading) {
@@ -237,7 +237,7 @@ class _NearbyReportsScreenState extends State<NearbyReportsScreen> {
               ),
               const SizedBox(height: 24),
               Text(
-                'Location Not Set',
+                context.l10n.nearbyLocationNotSetTitle,
                 style: GoogleFonts.lexend(
                   fontSize: 20,
                   fontWeight: FontWeight.bold,
@@ -246,7 +246,7 @@ class _NearbyReportsScreenState extends State<NearbyReportsScreen> {
               ),
               const SizedBox(height: 12),
               Text(
-                'Set your LGA or monitoring zone in\nyour profile to see reports near you.',
+                context.l10n.nearbyLocationNotSetBody,
                 textAlign: TextAlign.center,
                 style: GoogleFonts.lexend(
                   fontSize: 14,
@@ -263,8 +263,8 @@ class _NearbyReportsScreenState extends State<NearbyReportsScreen> {
     if (_nearbyReports.isEmpty && _error != null) {
       return _buildMessage(
         icon: Icons.cloud_off,
-        title: 'Could not load reports',
-        message: _error!,
+        title: context.l10n.nearbyLoadErrorTitle,
+        message: _error!(context.l10n),
         onRetry: _loadNearby,
       );
     }
@@ -290,7 +290,7 @@ class _NearbyReportsScreenState extends State<NearbyReportsScreen> {
               ),
               const SizedBox(height: 24),
               Text(
-                'No Nearby Reports',
+                context.l10n.nearbyEmptyTitle,
                 style: GoogleFonts.lexend(
                   fontSize: 20,
                   fontWeight: FontWeight.bold,
@@ -299,7 +299,7 @@ class _NearbyReportsScreenState extends State<NearbyReportsScreen> {
               ),
               const SizedBox(height: 12),
               Text(
-                'There are no reports from your\narea at this time.',
+                context.l10n.nearbyEmptyBody,
                 textAlign: TextAlign.center,
                 style: GoogleFonts.lexend(
                   fontSize: 14,
@@ -387,7 +387,7 @@ class _NearbyReportsScreenState extends State<NearbyReportsScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              report.title,
+                              report.displayTitle(context.l10n),
                               style: GoogleFonts.lexend(
                                 fontSize: 15,
                                 fontWeight: FontWeight.w600,
@@ -407,7 +407,7 @@ class _NearbyReportsScreenState extends State<NearbyReportsScreen> {
                                 const SizedBox(width: 4),
                                 Expanded(
                                   child: Text(
-                                    report.location,
+                                    report.displayLocation(context.l10n),
                                     style: GoogleFonts.lexend(
                                       fontSize: 12,
                                       color: AppColors.textSecondary,
@@ -436,7 +436,7 @@ class _NearbyReportsScreenState extends State<NearbyReportsScreen> {
                               borderRadius: BorderRadius.circular(10),
                             ),
                             child: Text(
-                              report.status.displayName,
+                              report.status.label(context.l10n),
                               style: GoogleFonts.lexend(
                                 fontSize: 10,
                                 fontWeight: FontWeight.w600,
@@ -446,7 +446,7 @@ class _NearbyReportsScreenState extends State<NearbyReportsScreen> {
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            report.time,
+                            report.displayTime(context.l10n),
                             style: GoogleFonts.lexend(
                               fontSize: 10,
                               color: Colors.grey.shade500,
@@ -522,7 +522,7 @@ class _NearbyReportsScreenState extends State<NearbyReportsScreen> {
               ElevatedButton.icon(
                 onPressed: onRetry,
                 icon: const Icon(Icons.refresh),
-                label: const Text('Retry'),
+                label: Text(context.l10n.retry),
               ),
             ],
           ],

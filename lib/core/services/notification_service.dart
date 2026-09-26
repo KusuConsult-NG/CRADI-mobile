@@ -220,7 +220,8 @@ class NotificationService {
     unawaited(
       _saveNotification(
         notificationId: n.notificationId,
-        title: n.title ?? 'New Alert',
+        // Empty: the history screen shows a localised default title.
+        title: n.title ?? '',
         body: n.body ?? '',
         data: n.additionalData,
       ),
@@ -239,7 +240,8 @@ class NotificationService {
     unawaited(
       recordOpenedNotification(
         notificationId: n.notificationId,
-        title: n.title ?? 'New Alert',
+        // Empty: the history screen shows a localised default title.
+        title: n.title ?? '',
         body: n.body ?? '',
         data: data,
       ),

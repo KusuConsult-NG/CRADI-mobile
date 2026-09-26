@@ -10,6 +10,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:go_router/go_router.dart';
+import 'package:climate_app/core/l10n/l10n.dart';
 
 class AccessCodeVerificationScreen extends StatefulWidget {
   const AccessCodeVerificationScreen({super.key});
@@ -40,24 +41,27 @@ class _AccessCodeVerificationScreenState
 
       if (isVerified) {
         Fluttertoast.showToast(
-          msg: 'Account verified successfully!',
+          msg: context.l10n.accessCodeVerified,
           backgroundColor: Colors.green,
         );
         context.go('/dashboard');
       } else {
         Fluttertoast.showToast(
-          msg: 'Not verified yet. Please enter the code sent to your email.',
+          msg: context.l10n.accessCodeNotVerified,
           backgroundColor: Colors.orange,
         );
       }
     } on AuthException catch (e) {
       if (mounted) {
-        Fluttertoast.showToast(msg: e.userMessage, backgroundColor: Colors.red);
+        Fluttertoast.showToast(
+          msg: e.userMessage(context.l10n),
+          backgroundColor: Colors.red,
+        );
       }
     } on Exception catch (e) {
       if (mounted) {
         Fluttertoast.showToast(
-          msg: ErrorHandler.getUserMessage(e),
+          msg: ErrorHandler.getUserMessage(e, context.l10n),
           backgroundColor: Colors.red,
         );
       }
@@ -78,19 +82,22 @@ class _AccessCodeVerificationScreenState
       await context.read<AuthProvider>().resendVerificationLink();
       if (mounted) {
         Fluttertoast.showToast(
-          msg: 'Verification code sent!',
+          msg: context.l10n.accessCodeSent,
           backgroundColor: Colors.green,
         );
         _openCodeEntry();
       }
     } on AuthException catch (e) {
       if (mounted) {
-        Fluttertoast.showToast(msg: e.userMessage, backgroundColor: Colors.red);
+        Fluttertoast.showToast(
+          msg: e.userMessage(context.l10n),
+          backgroundColor: Colors.red,
+        );
       }
     } on Exception catch (e) {
       if (mounted) {
         Fluttertoast.showToast(
-          msg: ErrorHandler.getUserMessage(e),
+          msg: ErrorHandler.getUserMessage(e, context.l10n),
           backgroundColor: Colors.red,
         );
       }
@@ -107,7 +114,7 @@ class _AccessCodeVerificationScreenState
     final email = context.read<AuthProvider>().currentUser?.email;
     if (email == null || email.isEmpty) {
       Fluttertoast.showToast(
-        msg: 'No email found for this account. Please log in again.',
+        msg: context.l10n.accessCodeNoEmail,
         backgroundColor: Colors.red,
       );
       return;
@@ -156,7 +163,7 @@ class _AccessCodeVerificationScreenState
               ),
               const SizedBox(height: 32),
               Text(
-                'Verify Your Email',
+                context.l10n.accessCodeTitle,
                 style: GoogleFonts.lexend(
                   fontSize: 24,
                   fontWeight: FontWeight.bold,
@@ -166,7 +173,9 @@ class _AccessCodeVerificationScreenState
               ),
               const SizedBox(height: 16),
               Text(
-                'We have sent a 6-digit verification code to ${email ?? "your email"}.\nEnter the code to activate your account.',
+                email != null
+                    ? context.l10n.accessCodeBody(email)
+                    : context.l10n.accessCodeBodyNoEmail,
                 style: GoogleFonts.lexend(
                   fontSize: 16,
                   color: AppColors.textSecondary,
@@ -175,10 +184,13 @@ class _AccessCodeVerificationScreenState
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 40),
-              CustomButton(text: 'Enter Code', onPressed: _openCodeEntry),
+              CustomButton(
+                text: context.l10n.accessCodeEnterCode,
+                onPressed: _openCodeEntry,
+              ),
               const SizedBox(height: 16),
               CustomButton(
-                text: 'I have verified my account',
+                text: context.l10n.accessCodeIHaveVerified,
                 onPressed: _handleVerify, // Force enabled for debug
                 isLoading: _isLoading,
                 type: ButtonType.secondary,
@@ -193,7 +205,7 @@ class _AccessCodeVerificationScreenState
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
                     : Text(
-                        'Resend Code',
+                        context.l10n.resendCode,
                         style: GoogleFonts.lexend(
                           color: AppColors.primaryRed,
                           fontWeight: FontWeight.w500,
@@ -205,7 +217,7 @@ class _AccessCodeVerificationScreenState
               TextButton(
                 onPressed: _handleLogout, // Force enabled for debug
                 child: Text(
-                  'Logout',
+                  context.l10n.logout,
                   style: GoogleFonts.lexend(
                     color: AppColors.primaryRed,
                     fontWeight: FontWeight.w500,

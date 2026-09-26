@@ -3,6 +3,7 @@ import 'package:climate_app/core/services/supabase_service.dart';
 import 'package:climate_app/features/contacts/models/emergency_contact_model.dart';
 import 'package:climate_app/core/constants/app_config.dart';
 import 'dart:developer' as developer;
+import 'package:climate_app/core/utils/error_handler.dart' show AuthException;
 
 class EmergencyContactsProvider extends ChangeNotifier {
   final SupabaseService _db = SupabaseService();
@@ -37,7 +38,7 @@ class EmergencyContactsProvider extends ChangeNotifier {
   Future<void> addContact(EmergencyContact contact) async {
     try {
       final user = _db.getCurrentUser();
-      if (user == null) throw Exception('User not logged in');
+      if (user == null) throw AuthException((l) => l.authErrorNotLoggedIn);
 
       final data = contact.toMap();
       data['userId'] = user.id;

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import 'package:climate_app/core/l10n/l10n.dart';
 
 class PendingApprovalScreen extends StatelessWidget {
   const PendingApprovalScreen({super.key});
@@ -36,7 +37,7 @@ class PendingApprovalScreen extends StatelessWidget {
               ),
               const SizedBox(height: 32),
               Text(
-                'Approval Pending',
+                context.l10n.pendingTitle,
                 style: GoogleFonts.lexend(
                   fontSize: 24,
                   fontWeight: FontWeight.bold,
@@ -46,7 +47,7 @@ class PendingApprovalScreen extends StatelessWidget {
               ),
               const SizedBox(height: 16),
               Text(
-                'Your account has been created successfully but is waiting for admin approval.\n\nYou will be able to access the full application once an administrator reviews and approves your account.',
+                context.l10n.pendingBody,
                 style: GoogleFonts.lexend(
                   fontSize: 16,
                   color: Colors.grey.shade600,
@@ -67,10 +68,8 @@ class PendingApprovalScreen extends StatelessWidget {
                       if (context.mounted) context.go('/dashboard');
                     } else {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text(
-                            'Your account is still awaiting approval.',
-                          ),
+                        SnackBar(
+                          content: Text(context.l10n.pendingStillWaiting),
                         ),
                       );
                     }
@@ -84,7 +83,7 @@ class PendingApprovalScreen extends StatelessWidget {
                     ),
                   ),
                   child: Text(
-                    'Check approval status',
+                    context.l10n.pendingCheckStatus,
                     style: GoogleFonts.lexend(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
@@ -113,7 +112,7 @@ class PendingApprovalScreen extends StatelessWidget {
                     ),
                   ),
                   child: Text(
-                    'Logout',
+                    context.l10n.logout,
                     style: GoogleFonts.lexend(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
@@ -128,7 +127,7 @@ class PendingApprovalScreen extends StatelessWidget {
                 // account waits for approval.
                 onPressed: () => context.push('/help'),
                 child: Text(
-                  'Contact Support',
+                  context.l10n.pendingContactSupport,
                   style: GoogleFonts.lexend(
                     color: Colors.grey.shade500,
                     fontWeight: FontWeight.w500,

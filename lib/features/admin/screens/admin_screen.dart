@@ -6,7 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:climate_app/core/theme/app_colors.dart';
-import 'package:climate_app/l10n/app_localizations.dart';
+import 'package:climate_app/core/l10n/l10n.dart';
 
 /// Admin Dashboard — entry point for admin and techSupport roles.
 /// Shows live summary cards for pending users, open reports, and system health.
@@ -65,7 +65,7 @@ class _AdminScreenState extends State<AdminScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
+    final l10n = context.l10n;
     // Profile writes (approve / role / disable) are admin-only in the
     // database, so tech support gets no user management.
     final canManageUsers =
@@ -102,15 +102,13 @@ class _AdminScreenState extends State<AdminScreen> {
                         color: Colors.red,
                       ),
                       title: Text(
-                        'Could not load dashboard counts',
+                        context.l10n.adminCountsError,
                         style: GoogleFonts.lexend(fontWeight: FontWeight.w600),
                       ),
-                      subtitle: const Text(
-                        'Check your connection and permissions, then retry.',
-                      ),
+                      subtitle: Text(context.l10n.adminCountsErrorBody),
                       trailing: TextButton(
                         onPressed: _refresh,
-                        child: const Text('Retry'),
+                        child: Text(context.l10n.retry),
                       ),
                     ),
                   ),
@@ -135,7 +133,7 @@ class _AdminScreenState extends State<AdminScreen> {
                       )
                     else
                       IconButton(
-                        tooltip: 'Refresh',
+                        tooltip: context.l10n.refresh,
                         icon: const Icon(Icons.refresh),
                         onPressed: _refresh,
                       ),
@@ -217,7 +215,7 @@ class _SummaryGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
+    final l10n = context.l10n;
     return GridView.count(
       crossAxisCount: 2,
       shrinkWrap: true,
@@ -421,20 +419,20 @@ class _HealthCard extends StatelessWidget {
       ),
       child: Column(
         children: [
-          const _HealthRow(
-            label: 'Database',
-            status: 'Connected',
+          _HealthRow(
+            label: context.l10n.adminHealthDatabase,
+            status: context.l10n.connected,
             icon: Icons.cloud_done_outlined,
             color: Colors.green,
           ),
           const Divider(height: 16),
           _HealthRow(
-            label: 'Active Alerts',
+            label: context.l10n.activeAlertsAdmin,
             status: activeAlerts == null
-                ? 'Unknown'
+                ? context.l10n.commonUnknown
                 : activeAlerts == 0
-                ? 'None'
-                : '$activeAlerts active',
+                ? context.l10n.none
+                : context.l10n.adminHealthActiveCount(activeAlerts!),
             icon: Icons.campaign_outlined,
             color: activeAlerts == null
                 ? Colors.grey
@@ -444,8 +442,10 @@ class _HealthCard extends StatelessWidget {
           ),
           const Divider(height: 16),
           _HealthRow(
-            label: 'Total Reports',
-            status: totalReports == null ? 'Unknown' : '$totalReports reports',
+            label: context.l10n.totalReports,
+            status: totalReports == null
+                ? context.l10n.commonUnknown
+                : context.l10n.adminHealthReportCount(totalReports!),
             icon: Icons.bar_chart_outlined,
             color: Colors.indigo,
           ),

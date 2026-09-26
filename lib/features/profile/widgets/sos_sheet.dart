@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:climate_app/core/l10n/l10n.dart';
 
 /// Nigeria's national emergency number.
 const String kNationalEmergencyNumber = '112';
@@ -44,7 +45,7 @@ Future<void> showSosSheet(BuildContext context) {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
-              'SOS Emergency',
+              context.l10n.sosTitle,
               textAlign: TextAlign.center,
               style: GoogleFonts.lexend(
                 fontSize: 18,
@@ -53,8 +54,7 @@ Future<void> showSosSheet(BuildContext context) {
             ),
             const SizedBox(height: 8),
             Text(
-              'Call for help directly. This does not send an alert '
-              'through the app.',
+              context.l10n.sosBody,
               textAlign: TextAlign.center,
               style: GoogleFonts.lexend(
                 fontSize: 13,
@@ -64,8 +64,8 @@ Future<void> showSosSheet(BuildContext context) {
             const SizedBox(height: 16),
             _CallTile(
               icon: Icons.local_hospital,
-              title: 'Call Emergency ($kNationalEmergencyNumber)',
-              subtitle: 'National emergency number',
+              title: context.l10n.sosCallEmergency(kNationalEmergencyNumber),
+              subtitle: context.l10n.sosNationalNumber,
               phone: kNationalEmergencyNumber,
               hostContext: context,
             ),
@@ -73,7 +73,7 @@ Future<void> showSosSheet(BuildContext context) {
             const SizedBox(height: 8),
             TextButton(
               onPressed: () => Navigator.pop(sheetContext),
-              child: const Text('Close'),
+              child: Text(context.l10n.close),
             ),
           ],
         ),
@@ -136,14 +136,11 @@ class _SosContactsListState extends State<SosContactsList> {
           return Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              _message(
-                "Couldn't load your contacts. Check your connection and "
-                'try again.',
-              ),
+              _message(context.l10n.sosContactsLoadError),
               TextButton.icon(
                 onPressed: _retry,
                 icon: const Icon(Icons.refresh),
-                label: const Text('Retry'),
+                label: Text(context.l10n.retry),
               ),
             ],
           );
@@ -153,10 +150,7 @@ class _SosContactsListState extends State<SosContactsList> {
             .take(5)
             .toList();
         if (contacts.isEmpty) {
-          return _message(
-            'No personal emergency contacts saved yet. '
-            'Add them under Emergency Contacts.',
-          );
+          return _message(context.l10n.sosNoContacts);
         }
         return Column(
           mainAxisSize: MainAxisSize.min,
@@ -164,9 +158,9 @@ class _SosContactsListState extends State<SosContactsList> {
             for (final c in contacts)
               _CallTile(
                 icon: Icons.person,
-                title: 'Call ${c.name}',
+                title: context.l10n.sosCallContact(c.name),
                 subtitle: c.role.isNotEmpty
-                    ? '${c.role} · ${c.phone}'
+                    ? context.l10n.sosContactSubtitle(c.role, c.phone)
                     : c.phone,
                 phone: c.phone,
                 hostContext: widget.hostContext,
@@ -209,7 +203,7 @@ class _CallTile extends StatelessWidget {
         if (!ok && hostContext.mounted) {
           ScaffoldMessenger.of(hostContext).showSnackBar(
             SnackBar(
-              content: Text('Could not open the phone app. Dial $phone.'),
+              content: Text(hostContext.l10n.sosDialFailed(phone)),
               backgroundColor: Colors.red,
             ),
           );

@@ -4,6 +4,8 @@ import 'package:climate_app/shared/widgets/app_card.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:climate_app/core/l10n/l10n.dart';
+import 'package:climate_app/core/l10n/relative_time.dart';
 
 class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({super.key});
@@ -49,7 +51,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     await _loadNotifications();
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('All notifications marked as read')),
+        SnackBar(content: Text(context.l10n.notificationsAllRead)),
       );
     }
   }
@@ -58,18 +60,19 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Clear All'),
-        content: const Text(
-          'Are you sure you want to delete all notifications?',
-        ),
+        title: Text(context.l10n.notificationsClearAll),
+        content: Text(context.l10n.notificationsClearConfirm),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
+            child: Text(context.l10n.cancel),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+            child: Text(
+              context.l10n.delete,
+              style: const TextStyle(color: Colors.red),
+            ),
           ),
         ],
       ),
@@ -100,7 +103,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           },
         ),
         title: Text(
-          'Notifications',
+          context.l10n.shellNotificationsTooltip,
           style: GoogleFonts.lexend(
             fontWeight: FontWeight.bold,
             color: AppColors.textPrimary,
@@ -116,11 +119,14 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                 if (value == 'clear') _clearAll();
               },
               itemBuilder: (context) => [
-                const PopupMenuItem(
+                PopupMenuItem(
                   value: 'read',
-                  child: Text('Mark all as read'),
+                  child: Text(context.l10n.notificationsMarkAllRead),
                 ),
-                const PopupMenuItem(value: 'clear', child: Text('Clear all')),
+                PopupMenuItem(
+                  value: 'clear',
+                  child: Text(context.l10n.notificationsClearAllMenu),
+                ),
               ],
             ),
         ],
@@ -145,7 +151,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                   ),
                   const SizedBox(height: 16),
                   Text(
-                    'No notifications yet',
+                    context.l10n.notificationsEmpty,
                     style: GoogleFonts.lexend(
                       color: Colors.grey.shade500,
                       fontSize: 16,
@@ -197,7 +203,13 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                                     children: [
                                       Expanded(
                                         child: Text(
-                                          notif['title'] ?? 'Notification',
+                                          (notif['title'] as String?)
+                                                      ?.isNotEmpty ==
+                                                  true
+                                              ? notif['title'] as String
+                                              : context
+                                                    .l10n
+                                                    .notificationsDefaultTitle,
                                           style: GoogleFonts.lexend(
                                             fontWeight: isRead
                                                 ? FontWeight.w500
@@ -239,13 +251,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   }
 
   String _formatTime(DateTime time) {
-    final now = DateTime.now();
-    final difference = now.difference(time);
-
-    if (difference.inMinutes < 1) return 'Just now';
-    if (difference.inMinutes < 60) return '${difference.inMinutes}m ago';
-    if (difference.inHours < 24) return '${difference.inHours}h ago';
-    return '${time.day}/${time.month}';
+    final difference = DateTime.now().difference(time);
+    if (difference.inHours < 24) return relativeTimeLabel(context.l10n, time);
+    return localizedDateFormat(context, 'd/M').format(time);
   }
 }
 

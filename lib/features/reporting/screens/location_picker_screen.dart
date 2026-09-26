@@ -15,7 +15,7 @@ import 'package:climate_app/shared/widgets/custom_button.dart';
 import 'package:climate_app/features/profile/providers/profile_provider.dart';
 
 import 'package:flutter_map/flutter_map.dart';
-import 'package:climate_app/l10n/app_localizations.dart';
+import 'package:climate_app/core/l10n/l10n.dart';
 
 /// Where the picker's position came from. Only [gps] is a precise, fresh
 /// fix; [lastKnown] is a fallback / stale device position.
@@ -49,41 +49,56 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
   bool _mapReady = false;
   bool _isLoadingLocation = true;
   String _locationError = '';
-  String _lga = 'Loading...';
-  String _ward = 'Loading...';
+
+  /// Reverse-geocoded area (display only); null while loading, empty when
+  /// unknown.
+  String? _lga;
+  String? _ward;
 
   // Ward & LGA Selection (for MVP)
   String? _selectedState;
   String? _selectedLGA;
   String? _selectedWard;
 
-  // Severity Configuration
-  final Map<int, Map<String, dynamic>> _severityLevels = {
-    1: {
-      'label': 'Low Severity',
-      'value': 'low',
-      'color': const Color(0xFF13ec5b),
-      'desc': 'Minor issue. No immediate threat.',
-    },
-    2: {
-      'label': 'Medium Severity',
-      'value': 'medium',
-      'color': const Color(0xFFfacc15),
-      'desc': 'Moderate issue. Monitor situation.',
-    },
-    3: {
-      'label': 'High Severity',
-      'value': 'high',
-      'color': const Color(0xFFf97316),
-      'desc': 'Significant threat to property or health. Response required.',
-    },
-    4: {
-      'label': 'Critical Severity',
-      'value': 'critical',
-      'color': const Color(0xFFef4444),
-      'desc': 'Life-threatening situation. Immediate action required.',
-    },
+  // Severity Configuration ('value' is the stored severity).
+  static const Map<int, Map<String, dynamic>> _severityLevels = {
+    1: {'value': 'low', 'color': Color(0xFF13ec5b)},
+    2: {'value': 'medium', 'color': Color(0xFFfacc15)},
+    3: {'value': 'high', 'color': Color(0xFFf97316)},
+    4: {'value': 'critical', 'color': Color(0xFFef4444)},
   };
+
+  static String _severityTitle(AppLocalizations l10n, String value) {
+    switch (value) {
+      case 'low':
+        return l10n.locationPickerSeverityLow;
+      case 'medium':
+        return l10n.locationPickerSeverityMedium;
+      case 'high':
+        return l10n.locationPickerSeverityHigh;
+      default:
+        return l10n.locationPickerSeverityCritical;
+    }
+  }
+
+  static String _severityDescription(AppLocalizations l10n, String value) {
+    switch (value) {
+      case 'low':
+        return l10n.locationPickerSeverityLowDesc;
+      case 'medium':
+        return l10n.locationPickerSeverityMediumDesc;
+      case 'high':
+        return l10n.locationPickerSeverityHighDesc;
+      default:
+        return l10n.locationPickerSeverityCriticalDesc;
+    }
+  }
+
+  /// Display text for a reverse-geocoded LGA / ward.
+  String _areaText(String? value, String unknown) {
+    if (value == null) return context.l10n.commonLoading;
+    return value.isEmpty ? unknown : value;
+  }
 
   @override
   void initState() {
@@ -175,9 +190,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
         if (mounted) {
           setState(() {
             _isLoadingLocation = false;
-            _locationError = AppLocalizations.of(
-              context,
-            )!.locationPermissionDenied;
+            _locationError = context.l10n.locationPermissionDenied;
           });
         }
         return;
@@ -219,7 +232,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
         if (notice != null) {
           ScaffoldMessenger.of(
             context,
-          ).showSnackBar(SnackBar(content: Text(notice)));
+          ).showSnackBar(SnackBar(content: Text(notice(context.l10n))));
         }
 
         // Get location details (display only).
@@ -232,16 +245,16 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
         if (!identical(_currentPosition, position)) return;
 
         setState(() {
-          _lga = details['lga'] ?? 'Unknown LGA';
-          _ward = details['ward'] ?? 'Unknown Ward';
+          _lga = details['lga'] ?? '';
+          _ward = details['ward'] ?? '';
         });
       } else {
         if (mounted) {
           setState(() {
             _isLoadingLocation = false;
             _locationError =
-                _geoService.lastErrorMessage ??
-                AppLocalizations.of(context)!.enableGpsMessage;
+                _geoService.lastErrorMessage?.call(context.l10n) ??
+                context.l10n.enableGpsMessage;
           });
         }
       }
@@ -249,41 +262,43 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
       if (mounted) {
         setState(() {
           _isLoadingLocation = false;
-          _locationError = AppLocalizations.of(context)!.locationError;
+          _locationError = context.l10n.locationError;
         });
       }
     }
   }
 
   String _getGpsStatus(BuildContext context) {
-    if (_isLoadingLocation) return AppLocalizations.of(context)!.acquiringGps;
+    if (_isLoadingLocation) return context.l10n.acquiringGps;
     if (_locationError.isNotEmpty) {
-      return AppLocalizations.of(context)!.noSignalGps;
+      return context.l10n.noSignalGps;
     }
     if (_currentPosition == null) {
-      return AppLocalizations.of(context)!.noSignalGps;
+      return context.l10n.noSignalGps;
     }
 
     // A geocoded area centre or a tapped point has no accuracy (0): it is
     // not a GPS fix, so never report it as "GPS Strong".
-    if (_positionSource != _PositionSource.gps) return 'Approximate';
+    if (_positionSource != _PositionSource.gps) {
+      return context.l10n.locationPickerGpsApproximate;
+    }
 
     final accuracy = _currentPosition!.accuracy;
-    if (accuracy <= 20) return AppLocalizations.of(context)!.gpsStrong;
-    if (accuracy <= 50) return AppLocalizations.of(context)!.gpsGood;
-    return AppLocalizations.of(context)!.gpsWeak;
+    if (accuracy <= 20) return context.l10n.gpsStrong;
+    if (accuracy <= 50) return context.l10n.gpsGood;
+    return context.l10n.gpsWeak;
   }
 
   Color _getGpsStatusColor(BuildContext context) {
     final status = _getGpsStatus(context);
-    if (status == AppLocalizations.of(context)!.gpsStrong) {
+    if (status == context.l10n.gpsStrong) {
       return Colors.green.shade700;
     }
-    if (status == AppLocalizations.of(context)!.gpsGood ||
-        status == 'Approximate') {
+    if (status == context.l10n.gpsGood ||
+        status == context.l10n.locationPickerGpsApproximate) {
       return Colors.orange.shade700;
     }
-    if (status == AppLocalizations.of(context)!.acquiringGps) {
+    if (status == context.l10n.acquiringGps) {
       return Colors.blue.shade700;
     }
     return Colors.red.shade700;
@@ -353,14 +368,14 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
       } else {
         setState(() {
           _isLoadingLocation = false;
-          _locationError = AppLocalizations.of(context)!.couldNotFindLocation;
+          _locationError = context.l10n.couldNotFindLocation;
         });
       }
     } on Exception {
       if (mounted && requestId == _geocodeRequestId && !keepPosition()) {
         setState(() {
           _isLoadingLocation = false;
-          _locationError = AppLocalizations.of(context)!.mapUpdateError;
+          _locationError = context.l10n.mapUpdateError;
         });
       }
     }
@@ -410,8 +425,8 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
         // Display only: the report's LGA / ward come from the dropdowns
         // (reverse-geocoded names often do not match the INEC lists).
         setState(() {
-          _lga = details['lga'] ?? 'Unknown LGA';
-          _ward = details['ward'] ?? 'Unknown Ward';
+          _lga = details['lga'] ?? '';
+          _ward = details['ward'] ?? '';
         });
       }
     } on Exception {
@@ -436,7 +451,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
           onPressed: () => context.pop(),
         ),
         title: Text(
-          AppLocalizations.of(context)!.reportDetailsTitle,
+          context.l10n.reportDetailsTitle,
           style: GoogleFonts.lexend(
             fontWeight: FontWeight.bold,
             color: AppColors.textPrimary,
@@ -460,8 +475,8 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                 children: [
                   // Severity Section
                   _buildSectionTitle(
-                    AppLocalizations.of(context)!.severityLevelLabel,
-                    AppLocalizations.of(context)!.severityDesc,
+                    context.l10n.severityLevelLabel,
+                    context.l10n.severityDesc,
                   ),
                   const SizedBox(height: 12),
                   Container(
@@ -501,7 +516,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  'Selected Level',
+                                  context.l10n.locationPickerSelectedLevel,
                                   style: GoogleFonts.lexend(
                                     fontSize: 10,
                                     fontWeight: FontWeight.w600,
@@ -510,7 +525,10 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                                   ),
                                 ),
                                 Text(
-                                  severity['label'],
+                                  _severityTitle(
+                                    context.l10n,
+                                    severity['value'] as String,
+                                  ),
                                   style: GoogleFonts.lexend(
                                     fontSize: 18,
                                     fontWeight: FontWeight.bold,
@@ -532,7 +550,10 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                             ),
                           ),
                           child: Text(
-                            severity['desc'],
+                            _severityDescription(
+                              context.l10n,
+                              severity['value'] as String,
+                            ),
                             style: GoogleFonts.lexend(
                               fontSize: 13,
                               fontWeight: FontWeight.w500,
@@ -575,28 +596,28 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               Text(
-                                AppLocalizations.of(context)!.severityLowShort,
+                                context.l10n.severityLowShort,
                                 style: const TextStyle(
                                   fontSize: 11,
                                   color: Colors.grey,
                                 ),
                               ),
                               Text(
-                                AppLocalizations.of(context)!.severityMedShort,
+                                context.l10n.severityMedShort,
                                 style: const TextStyle(
                                   fontSize: 11,
                                   color: Colors.grey,
                                 ),
                               ),
                               Text(
-                                AppLocalizations.of(context)!.severityHighShort,
+                                context.l10n.severityHighShort,
                                 style: const TextStyle(
                                   fontSize: 11,
                                   color: Colors.grey,
                                 ),
                               ),
                               Text(
-                                AppLocalizations.of(context)!.severityCritShort,
+                                context.l10n.severityCritShort,
                                 style: const TextStyle(
                                   fontSize: 11,
                                   color: Colors.grey,
@@ -615,10 +636,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      _buildSectionTitle(
-                        AppLocalizations.of(context)!.incidentLocation,
-                        '',
-                      ),
+                      _buildSectionTitle(context.l10n.incidentLocation, ''),
                       Container(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 8,
@@ -692,9 +710,9 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                                               ),
                                               const SizedBox(height: 8),
                                               Text(
-                                                AppLocalizations.of(
-                                                  context,
-                                                )!.locationUnavailable,
+                                                context
+                                                    .l10n
+                                                    .locationUnavailable,
                                                 style: TextStyle(
                                                   color: Colors.grey.shade600,
                                                 ),
@@ -765,9 +783,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                                               ),
                                               const SizedBox(width: 4),
                                               Text(
-                                                AppLocalizations.of(
-                                                  context,
-                                                )!.refresh,
+                                                context.l10n.refresh,
                                                 style: GoogleFonts.lexend(
                                                   fontSize: 12,
                                                   fontWeight: FontWeight.w600,
@@ -789,11 +805,23 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                               Row(
                                 children: [
                                   Expanded(
-                                    child: _buildLocationInfo('LGA', _lga),
+                                    child: _buildLocationInfo(
+                                      context.l10n.locationPickerLgaHeading,
+                                      _areaText(
+                                        _lga,
+                                        context.l10n.locationPickerUnknownLga,
+                                      ),
+                                    ),
                                   ),
                                   const SizedBox(width: 16),
                                   Expanded(
-                                    child: _buildLocationInfo('WARD', _ward),
+                                    child: _buildLocationInfo(
+                                      context.l10n.locationPickerWardHeading,
+                                      _areaText(
+                                        _ward,
+                                        context.l10n.locationPickerUnknownWard,
+                                      ),
+                                    ),
                                   ),
                                 ],
                               ),
@@ -809,9 +837,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                                         CrossAxisAlignment.start,
                                     children: [
                                       Text(
-                                        AppLocalizations.of(
-                                          context,
-                                        )!.coordinatesLabel,
+                                        context.l10n.coordinatesLabel,
                                         style: GoogleFonts.lexend(
                                           fontSize: 10,
                                           fontWeight: FontWeight.w600,
@@ -826,12 +852,8 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                                                 _currentPosition!.longitude,
                                               )
                                             : (_isLoadingLocation
-                                                  ? AppLocalizations.of(
-                                                      context,
-                                                    )!.gettingLocation
-                                                  : AppLocalizations.of(
-                                                      context,
-                                                    )!.noGpsData),
+                                                  ? context.l10n.gettingLocation
+                                                  : context.l10n.noGpsData),
                                         style: GoogleFonts.robotoMono(
                                           fontSize: 12,
                                           color: AppColors.textPrimary,
@@ -844,9 +866,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                                       _showLocationDetailsDialog(context);
                                     },
                                     child: Text(
-                                      AppLocalizations.of(
-                                        context,
-                                      )!.viewDetailsBtn,
+                                      context.l10n.viewDetailsBtn,
                                       style: GoogleFonts.lexend(
                                         fontSize: 12,
                                         fontWeight: FontWeight.w600,
@@ -867,8 +887,8 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
 
                   // Ward & LGA Selection Section
                   _buildSectionTitle(
-                    AppLocalizations.of(context)!.wardAndLgaSelection,
-                    AppLocalizations.of(context)!.selectWardDropdown,
+                    context.l10n.wardAndLgaSelection,
+                    context.l10n.selectWardDropdown,
                   ),
                   const SizedBox(height: 12),
                   Container(
@@ -906,9 +926,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                               const SizedBox(width: 12),
                               Expanded(
                                 child: Text(
-                                  AppLocalizations.of(
-                                    context,
-                                  )!.selectLgaWardIncident,
+                                  context.l10n.selectLgaWardIncident,
                                   style: GoogleFonts.lexend(
                                     fontSize: 12,
                                     color: Colors.blue.shade900,
@@ -922,7 +940,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
 
                         // State Dropdown
                         Text(
-                          AppLocalizations.of(context)!.stateLabel,
+                          context.l10n.stateLabel,
                           style: GoogleFonts.lexend(
                             fontSize: 13,
                             fontWeight: FontWeight.w600,
@@ -934,7 +952,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                           key: ValueKey('state_$_selectedState'),
                           initialValue: _selectedState,
                           decoration: InputDecoration(
-                            hintText: AppLocalizations.of(context)!.selectState,
+                            hintText: context.l10n.selectState,
                             filled: true,
                             fillColor: Colors.grey.shade50,
                             border: OutlineInputBorder(
@@ -998,7 +1016,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
 
                         // LGA Dropdown
                         Text(
-                          AppLocalizations.of(context)!.lgaLabel,
+                          context.l10n.lgaLabel,
                           style: GoogleFonts.lexend(
                             fontSize: 13,
                             fontWeight: FontWeight.w600,
@@ -1011,8 +1029,8 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                           initialValue: _selectedLGA,
                           decoration: InputDecoration(
                             hintText: _selectedState == null
-                                ? AppLocalizations.of(context)!.selectStateFirst
-                                : AppLocalizations.of(context)!.selectLga,
+                                ? context.l10n.selectStateFirst
+                                : context.l10n.selectLga,
                             filled: true,
                             fillColor: _selectedState == null
                                 ? Colors.grey.shade100
@@ -1087,7 +1105,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
 
                         // Ward Dropdown
                         Text(
-                          AppLocalizations.of(context)!.wardLabel,
+                          context.l10n.wardLabel,
                           style: GoogleFonts.lexend(
                             fontSize: 13,
                             fontWeight: FontWeight.w600,
@@ -1100,8 +1118,8 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                           initialValue: _selectedWard,
                           decoration: InputDecoration(
                             hintText: _selectedLGA == null
-                                ? AppLocalizations.of(context)!.selectLgaFirst
-                                : AppLocalizations.of(context)!.selectWard,
+                                ? context.l10n.selectLgaFirst
+                                : context.l10n.selectWard,
                             filled: true,
                             fillColor: _selectedLGA == null
                                 ? Colors.grey.shade100
@@ -1223,9 +1241,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                     child: Center(
                       child: OutlinedButton.icon(
                         icon: const Icon(Icons.my_location, size: 16),
-                        label: Text(
-                          AppLocalizations.of(context)!.useMyLocationInfo,
-                        ),
+                        label: Text(context.l10n.useMyLocationInfo),
                         style: OutlinedButton.styleFrom(
                           foregroundColor: AppColors.primaryRed,
                           side: const BorderSide(color: AppColors.primaryRed),
@@ -1235,9 +1251,9 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                         ),
                         onPressed: () {
                           // Try to match _lga from GPS to the state's LGAs
-                          if (_selectedState != null &&
-                              _lga != 'Loading...' &&
-                              _lga != 'Unknown LGA') {
+                          final gpsLga = _lga ?? '';
+                          final gpsWard = _ward ?? '';
+                          if (_selectedState != null && gpsLga.isNotEmpty) {
                             final lgas = MVPLocationsData.getLGAsForState(
                               _selectedState!,
                             );
@@ -1245,8 +1261,8 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                             // Check if GPS LGA exists in our MVP list for the selected state
                             String matchedLGA = '';
                             for (var l in lgas) {
-                              if (l.toLowerCase() == _lga.toLowerCase() ||
-                                  _lga.toLowerCase().contains(
+                              if (l.toLowerCase() == gpsLga.toLowerCase() ||
+                                  gpsLga.toLowerCase().contains(
                                     l.toLowerCase(),
                                   )) {
                                 matchedLGA = l;
@@ -1268,11 +1284,11 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                                 state: _selectedState,
                               );
                               String matchedWard = '';
-                              if (_ward != 'Loading...' &&
-                                  _ward != 'Unknown Ward') {
+                              if (gpsWard.isNotEmpty) {
                                 for (var w in wards) {
-                                  if (w.toLowerCase() == _ward.toLowerCase() ||
-                                      _ward.toLowerCase().contains(
+                                  if (w.toLowerCase() ==
+                                          gpsWard.toLowerCase() ||
+                                      gpsWard.toLowerCase().contains(
                                         w.toLowerCase(),
                                       )) {
                                     matchedWard = w;
@@ -1301,8 +1317,10 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                               }
 
                               ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('Auto-filled from GPS'),
+                                SnackBar(
+                                  content: Text(
+                                    context.l10n.locationPickerAutofilled,
+                                  ),
                                 ),
                               );
                             } else {
@@ -1310,16 +1328,19 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
                                   content: Text(
-                                    'GPS Location ($_lga) not found in $_selectedState',
+                                    context.l10n.locationPickerGpsLgaNotFound(
+                                      gpsLga,
+                                      _selectedState!,
+                                    ),
                                   ),
                                 ),
                               );
                             }
                           } else {
                             ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
+                              SnackBar(
                                 content: Text(
-                                  'GPS Location unavailable or State not selected',
+                                  context.l10n.locationPickerGpsUnavailable,
                                 ),
                               ),
                             );
@@ -1343,27 +1364,19 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                                   : '',
                             );
                             return AlertDialog(
-                              title: Text(
-                                AppLocalizations.of(
-                                  context,
-                                )!.enterLocationManually,
-                              ),
+                              title: Text(context.l10n.enterLocationManually),
                               content: TextField(
                                 controller: controller,
                                 maxLength:
                                     ReportingProvider.maxLocationDetailsLength,
                                 decoration: InputDecoration(
-                                  hintText: AppLocalizations.of(
-                                    context,
-                                  )!.addressOrCoordinates,
+                                  hintText: context.l10n.addressOrCoordinates,
                                 ),
                               ),
                               actions: [
                                 TextButton(
                                   onPressed: () => Navigator.pop(context),
-                                  child: Text(
-                                    AppLocalizations.of(context)!.cancelBtn,
-                                  ),
+                                  child: Text(context.l10n.cancelBtn),
                                 ),
                                 TextButton(
                                   onPressed: () {
@@ -1385,20 +1398,14 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                                       ).showSnackBar(
                                         SnackBar(
                                           content: Text(
-                                            AppLocalizations.of(
-                                              context,
-                                            )!.manualLocationSet,
+                                            context.l10n.manualLocationSet,
                                           ),
                                         ),
                                       );
                                     }
                                     Navigator.pop(context);
                                   },
-                                  child: Text(
-                                    AppLocalizations.of(
-                                      context,
-                                    )!.setLocationBtn,
-                                  ),
+                                  child: Text(context.l10n.setLocationBtn),
                                 ),
                               ],
                             );
@@ -1406,7 +1413,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                         );
                       },
                       child: Text(
-                        AppLocalizations.of(context)!.locationIncorrectManual,
+                        context.l10n.locationIncorrectManual,
                         style: GoogleFonts.lexend(
                           fontSize: 14,
                           color: AppColors.textSecondary,
@@ -1437,11 +1444,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                       _selectedWard == null) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
-                        content: Text(
-                          AppLocalizations.of(
-                            context,
-                          )!.pleaseSelectStateLgaWard,
-                        ),
+                        content: Text(context.l10n.pleaseSelectStateLgaWard),
                         backgroundColor: Colors.red,
                         behavior: SnackBarBehavior.floating,
                       ),
@@ -1489,7 +1492,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
 
                   context.push('/report/details');
                 },
-                text: AppLocalizations.of(context)!.confirmAndContinue,
+                text: context.l10n.confirmAndContinue,
                 icon: Icons.arrow_forward,
               ),
             ),
@@ -1568,7 +1571,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  AppLocalizations.of(context)!.locationDetailsTitle,
+                  context.l10n.locationDetailsTitle,
                   style: GoogleFonts.lexend(
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
@@ -1583,33 +1586,37 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
             const SizedBox(height: 20),
             _buildDetailRow(
               Icons.my_location,
-              AppLocalizations.of(context)!.latitudeLabel,
+              context.l10n.latitudeLabel,
               _currentPosition!.latitude.toStringAsFixed(6),
             ),
             const SizedBox(height: 12),
             _buildDetailRow(
               Icons.my_location,
-              AppLocalizations.of(context)!.longitudeLabel,
+              context.l10n.longitudeLabel,
               _currentPosition!.longitude.toStringAsFixed(6),
             ),
             const SizedBox(height: 12),
             _buildDetailRow(
               Icons.gps_fixed,
-              AppLocalizations.of(context)!.accuracyLabel,
-              '${_currentPosition!.accuracy.toStringAsFixed(1)} meters',
+              context.l10n.accuracyLabel,
+              context.l10n.locationPickerMeters(
+                _currentPosition!.accuracy.toStringAsFixed(1),
+              ),
             ),
             const SizedBox(height: 12),
             _buildDetailRow(
               Icons.height,
-              AppLocalizations.of(context)!.altitudeLabel,
-              '${_currentPosition!.altitude.toStringAsFixed(1)} m',
+              context.l10n.altitudeLabel,
+              context.l10n.locationPickerMetersShort(
+                _currentPosition!.altitude.toStringAsFixed(1),
+              ),
             ),
             const SizedBox(height: 24),
             SizedBox(
               width: double.infinity,
               child: CustomButton(
                 onPressed: () => Navigator.pop(context),
-                text: AppLocalizations.of(context)!.closeBtn,
+                text: context.l10n.closeBtn,
               ),
             ),
           ],

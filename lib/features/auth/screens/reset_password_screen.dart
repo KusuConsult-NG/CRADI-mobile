@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:climate_app/core/utils/validators.dart';
+import 'package:climate_app/core/l10n/l10n.dart';
 
 /// Password reset screen.
 ///
@@ -49,9 +50,9 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
 
   String? _validateEmail(String? value) {
     if (value == null || value.trim().isEmpty) {
-      return 'Please enter your email';
+      return context.l10n.authEmailRequired;
     }
-    if (!value.contains('@')) return 'Please enter a valid email';
+    if (!value.contains('@')) return context.l10n.authEmailInvalid;
     return null;
   }
 
@@ -67,18 +68,15 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
         _emailController.text.trim(),
       );
       if (mounted) {
-        CustomToast.showSuccess(
-          context,
-          'If an account exists, a new code has been sent.',
-        );
+        CustomToast.showSuccess(context, context.l10n.resetCodeResent);
       }
     } on AuthException catch (e) {
-      if (mounted) CustomToast.showError(context, e.userMessage);
+      if (mounted) CustomToast.showError(context, e.userMessage(context.l10n));
     } on Exception catch (e) {
       if (mounted) {
         CustomToast.showError(
           context,
-          ErrorHandler.handleError(e, context: 'Password Reset'),
+          ErrorHandler.handleError(e, context.l10n, context: 'Password Reset'),
         );
       }
     } finally {
@@ -90,7 +88,10 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
     if (!_formKey.currentState!.validate()) return;
 
     if (_passwordController.text != _confirmPasswordController.text) {
-      CustomToast.showError(context, 'Passwords do not match');
+      CustomToast.showError(
+        context,
+        context.l10n.registrationPasswordsMismatch,
+      );
       return;
     }
 
@@ -111,14 +112,14 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
     } on AuthException catch (e) {
       if (mounted) {
         setState(() => _isLoading = false);
-        CustomToast.showError(context, e.userMessage);
+        CustomToast.showError(context, e.userMessage(context.l10n));
       }
     } on Exception catch (e) {
       if (mounted) {
         setState(() => _isLoading = false);
         CustomToast.showError(
           context,
-          ErrorHandler.handleError(e, context: 'Password Reset'),
+          ErrorHandler.handleError(e, context.l10n, context: 'Password Reset'),
         );
       }
     }
@@ -176,7 +177,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
           ),
           const SizedBox(height: 24),
           Text(
-            'Create New Password',
+            context.l10n.resetTitle,
             style: GoogleFonts.lexend(
               fontSize: 28,
               fontWeight: FontWeight.bold,
@@ -186,8 +187,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
           ),
           const SizedBox(height: 12),
           Text(
-            'Enter the 6-digit code from the reset email and choose a new '
-            'secure password.',
+            context.l10n.resetBody,
             style: GoogleFonts.lexend(
               fontSize: 16,
               color: Colors.grey.shade600,
@@ -198,7 +198,10 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
           TextFormField(
             controller: _emailController,
             keyboardType: TextInputType.emailAddress,
-            decoration: _decoration('Email Address', Icons.email_outlined),
+            decoration: _decoration(
+              context.l10n.emailAddress,
+              Icons.email_outlined,
+            ),
             validator: _validateEmail,
           ),
           const SizedBox(height: 16),
@@ -210,16 +213,20 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
               LengthLimitingTextInputFormatter(10),
             ],
             decoration: _decoration(
-              'Reset Code',
+              context.l10n.resetCodeLabel,
               Icons.pin_outlined,
               suffix: TextButton(
                 onPressed: _isSendingCode ? null : _sendCode,
-                child: Text(_isSendingCode ? 'Sending…' : 'Send code'),
+                child: Text(
+                  _isSendingCode
+                      ? context.l10n.resetSendingCode
+                      : context.l10n.resetSendCode,
+                ),
               ),
             ),
             validator: (value) {
               if (value == null || value.trim().length < 6) {
-                return 'Enter the code from the email';
+                return context.l10n.resetCodeRequired;
               }
               return null;
             },
@@ -229,7 +236,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
             controller: _passwordController,
             obscureText: _obscurePassword,
             decoration: _decoration(
-              'New Password',
+              context.l10n.resetNewPassword,
               Icons.lock_outline,
               suffix: IconButton(
                 icon: Icon(
@@ -242,16 +249,19 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
             ),
             // Same rules as registration, checked before the single-use
             // recovery code is spent.
-            validator: Validators.validatePassword,
+            validator: (v) => Validators.validatePassword(v, context.l10n),
           ),
           const SizedBox(height: 16),
           TextFormField(
             controller: _confirmPasswordController,
             obscureText: _obscurePassword,
-            decoration: _decoration('Confirm Password', Icons.lock_outline),
+            decoration: _decoration(
+              context.l10n.registrationConfirmPassword,
+              Icons.lock_outline,
+            ),
             validator: (value) {
               if (value == null || value.isEmpty) {
-                return 'Please confirm your password';
+                return context.l10n.registrationConfirmPasswordRequired;
               }
               return null;
             },
@@ -277,9 +287,12 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                       strokeWidth: 2,
                     ),
                   )
-                : const Text(
-                    'Reset Password',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                : Text(
+                    context.l10n.resetSubmit,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
           ),
           const SizedBox(height: 20),
@@ -307,7 +320,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
         ),
         const SizedBox(height: 32),
         Text(
-          'Password Reset!',
+          context.l10n.resetSuccessTitle,
           style: GoogleFonts.lexend(
             fontSize: 24,
             fontWeight: FontWeight.bold,
@@ -316,8 +329,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
         ),
         const SizedBox(height: 16),
         Text(
-          'Your password has been reset successfully. You can now login with '
-          'your new password.',
+          context.l10n.resetSuccessBody,
           style: GoogleFonts.lexend(
             fontSize: 16,
             color: Colors.grey.shade600,
@@ -336,9 +348,9 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
               borderRadius: BorderRadius.circular(12),
             ),
           ),
-          child: const Text(
-            'Continue to Login',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+          child: Text(
+            context.l10n.resetContinueToLogin,
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
           ),
         ),
       ],

@@ -14,6 +14,7 @@ import 'package:climate_app/shared/widgets/custom_toast.dart';
 import 'package:climate_app/core/design/glass_container.dart';
 import 'package:climate_app/core/widgets/location_selector_widget.dart';
 import 'dart:developer' as developer;
+import 'package:climate_app/core/l10n/l10n.dart';
 
 class RegistrationScreen extends StatefulWidget {
   final String? prefilledEmail;
@@ -57,7 +58,6 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
   /// Phone Auth stays hidden until an SMS provider is configured for phone
   /// OTP in the Supabase dashboard (shared with the login screen).
   static const bool _phoneAuthEnabled = AuthProvider.phoneAuthEnabled;
-  static const String _ndpaPolicyText = kNdpaPolicyText;
 
   @override
   void initState() {
@@ -104,7 +104,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  'Data Privacy Notice',
+                  context.l10n.registrationPrivacyTitle,
                   style: GoogleFonts.lexend(
                     fontWeight: FontWeight.bold,
                     fontSize: 16,
@@ -116,7 +116,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
               width: double.maxFinite,
               child: SingleChildScrollView(
                 child: Text(
-                  _ndpaPolicyText,
+                  context.l10n.privacyNoticeText,
                   style: GoogleFonts.lexend(fontSize: 13, height: 1.6),
                 ),
               ),
@@ -125,7 +125,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
               TextButton(
                 onPressed: () => Navigator.pop(context, false),
                 child: Text(
-                  'Decline',
+                  context.l10n.registrationDecline,
                   style: GoogleFonts.lexend(color: Colors.grey),
                 ),
               ),
@@ -139,7 +139,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                 ),
                 onPressed: () => Navigator.pop(context, true),
                 child: Text(
-                  'I Agree',
+                  context.l10n.registrationAgree,
                   style: GoogleFonts.lexend(fontWeight: FontWeight.bold),
                 ),
               ),
@@ -157,10 +157,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
       final agreed = await _showNdpaConsentDialog();
       if (!mounted) return;
       if (!agreed) {
-        _showToast(
-          'You must accept the Data Privacy Notice to register.',
-          isError: true,
-        );
+        _showToast(context.l10n.registrationMustAccept, isError: true);
         return;
       }
       setState(() => _ndpaConsented = true);
@@ -169,15 +166,15 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
     // Additional validation for Dropdowns
 
     if (_selectedState == null) {
-      _showToast('Please select a state', isError: true);
+      _showToast(context.l10n.registrationSelectState, isError: true);
       return;
     }
     if (_selectedLga == null) {
-      _showToast('Please select an LGA', isError: true);
+      _showToast(context.l10n.registrationSelectLga, isError: true);
       return;
     }
     if (_selectedWard == null || _selectedWard!.trim().isEmpty) {
-      _showToast('Please select a ward', isError: true);
+      _showToast(context.l10n.registrationSelectWard, isError: true);
       return;
     }
 
@@ -219,10 +216,8 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                 context: context,
                 barrierDismissible: false,
                 builder: (dialogContext) => AlertDialog(
-                  title: const Text('Verify Your Phone Number'),
-                  content: Text(
-                    'A 6-digit verification code has been sent to $phone.\n\nPlease enter the code to activate your account.',
-                  ),
+                  title: Text(context.l10n.registrationVerifyPhoneTitle),
+                  content: Text(context.l10n.registrationPhoneCodeSent(phone)),
                   actions: [
                     TextButton(
                       onPressed: () {
@@ -233,7 +228,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                           extra: registrationData,
                         );
                       },
-                      child: const Text('Enter Code'),
+                      child: Text(context.l10n.accessCodeEnterCode),
                     ),
                   ],
                 ),
@@ -243,12 +238,15 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
         } on AuthException catch (e) {
           if (mounted) {
             setState(() => _isLoading = false);
-            _showToast(e.userMessage, isError: true);
+            _showToast(e.userMessage(context.l10n), isError: true);
           }
         } on Exception catch (e) {
           if (mounted) {
             setState(() => _isLoading = false);
-            _showToast(ErrorHandler.getUserMessage(e), isError: true);
+            _showToast(
+              ErrorHandler.getUserMessage(e, context.l10n),
+              isError: true,
+            );
           }
         }
         return;
@@ -283,7 +281,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
         if (success) {
           // Email confirmation disabled in Supabase → already signed in.
           if (context.read<AuthProvider>().isAuthenticated) {
-            _showToast('Account created!');
+            _showToast(context.l10n.registrationAccountCreated);
             context.go('/dashboard');
             return; // Stop here
           }
@@ -304,10 +302,8 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
               context: context,
               barrierDismissible: false,
               builder: (dialogContext) => AlertDialog(
-                title: const Text('Verify Your Email Address'),
-                content: Text(
-                  'Account created successfully!\n\nA 6-digit verification code has been sent to $email.\n\nPlease enter the code to activate your account.',
-                ),
+                title: Text(context.l10n.registrationVerifyEmailTitle),
+                content: Text(context.l10n.registrationEmailCodeSent(email)),
                 actions: [
                   TextButton(
                     onPressed: () {
@@ -318,25 +314,25 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                         extra: registrationData,
                       ); // Go to verification screen
                     },
-                    child: const Text('Enter Code'),
+                    child: Text(context.l10n.accessCodeEnterCode),
                   ),
                 ],
               ),
             );
           }
         } else {
-          _showToast('Registration failed. Please try again.', isError: true);
+          _showToast(context.l10n.authErrorRegistrationFailed, isError: true);
         }
       }
     } on AuthException catch (e) {
       if (mounted) {
         setState(() => _isLoading = false);
-        _showToast(e.userMessage, isError: true);
+        _showToast(e.userMessage(context.l10n), isError: true);
       }
     } on Exception catch (e) {
       if (mounted) {
         setState(() => _isLoading = false);
-        _showToast(ErrorHandler.getUserMessage(e), isError: true);
+        _showToast(ErrorHandler.getUserMessage(e, context.l10n), isError: true);
       }
       ErrorHandler.logError(e, context: 'RegistrationScreen._handleRegister');
     }
@@ -381,7 +377,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                           ),
                           Expanded(
                             child: Text(
-                              'Create Account',
+                              context.l10n.registrationCreateAccount,
                               textAlign: TextAlign.center,
                               style: GoogleFonts.lexend(
                                 fontSize: 20, // Increased from 18
@@ -398,7 +394,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
 
                       // Title
                       Text(
-                        'Join the Network',
+                        context.l10n.registrationJoinNetwork,
                         style: GoogleFonts.lexend(
                           fontSize: 34, // Increased from 30
                           fontWeight: FontWeight.bold,
@@ -408,7 +404,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                       ),
                       const SizedBox(height: 12),
                       Text(
-                        'Select your location to get started.',
+                        context.l10n.registrationSelectLocation,
                         style: GoogleFonts.lexend(
                           fontSize: 18, // Increased from 16
                           color: AppColors.textSecondary,
@@ -425,7 +421,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'Registration Method',
+                              context.l10n.registrationMethod,
                               style: GoogleFonts.lexend(
                                 fontSize: 16,
                                 fontWeight: FontWeight.bold,
@@ -459,7 +455,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                                           ),
                                           alignment: Alignment.center,
                                           child: Text(
-                                            'Email',
+                                            context.l10n.authMethodEmail,
                                             style: GoogleFonts.lexend(
                                               color: !_isPhoneAuth
                                                   ? Colors.white
@@ -485,7 +481,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                                           ),
                                           alignment: Alignment.center,
                                           child: Text(
-                                            'Phone Number',
+                                            context.l10n.authPhoneNumber,
                                             style: GoogleFonts.lexend(
                                               color: _isPhoneAuth
                                                   ? Colors.white
@@ -501,7 +497,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                               ),
                             const SizedBox(height: 24),
                             Text(
-                              'Personal Information',
+                              context.l10n.registrationPersonalInfo,
                               style: GoogleFonts.lexend(
                                 fontSize: 18, // Increased from 16
                                 fontWeight: FontWeight.bold,
@@ -511,13 +507,14 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                             const SizedBox(height: 16),
                             // Full Name
                             CustomTextField(
-                              label: 'Full Name',
+                              label: context.l10n.fullName,
                               controller: _nameController,
-                              hint: 'John Doe',
+                              hint: context.l10n.registrationNameHint,
                               prefixIcon: const Icon(Icons.person_outline),
                               validator: (v) => Validators.validateRequired(
                                 v?.trim(),
-                                'Name',
+                                context.l10n.registrationNameField,
+                                context.l10n,
                               ),
                               enabled: !_isLoading,
                             ),
@@ -526,13 +523,15 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                             // Email (conditional)
                             if (!_isPhoneAuth) ...[
                               CustomTextField(
-                                label: 'Email Address',
+                                label: context.l10n.emailAddress,
                                 controller: _emailController,
                                 hint: 'name@example.com',
                                 prefixIcon: const Icon(Icons.email_outlined),
                                 keyboardType: TextInputType.emailAddress,
-                                validator: (v) =>
-                                    Validators.validateEmail(v?.trim()),
+                                validator: (v) => Validators.validateEmail(
+                                  v?.trim(),
+                                  context.l10n,
+                                ),
                                 enabled:
                                     !_isLoading &&
                                     widget.prefilledEmail == null,
@@ -542,35 +541,38 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
 
                             // Phone Number
                             CustomTextField(
-                              label: 'Phone Number',
+                              label: context.l10n.authPhoneNumber,
                               controller: _phoneController,
                               hint: '+234...',
                               prefixIcon: const Icon(Icons.phone_outlined),
                               keyboardType: TextInputType.phone,
-                              validator: (v) =>
-                                  Validators.validatePhoneNumber(v),
+                              validator: (v) => Validators.validatePhoneNumber(
+                                v,
+                                context.l10n,
+                              ),
                               enabled: !_isLoading,
                             ),
                             const SizedBox(height: 16),
 
                             // Address
                             CustomTextField(
-                              label: 'Address Description',
+                              label: context.l10n.registrationAddressLabel,
                               controller: _addressController,
-                              hint: 'e.g., No 5, Main Street',
+                              hint: context.l10n.registrationAddressHint,
                               prefixIcon: const Icon(
                                 Icons.location_on_outlined,
                               ),
                               validator: (v) => Validators.validateRequired(
                                 v?.trim(),
-                                'Address',
+                                context.l10n.registrationAddressField,
+                                context.l10n,
                               ),
                               enabled: !_isLoading,
                             ),
                             const SizedBox(height: 24),
 
                             Text(
-                              'Location',
+                              context.l10n.locationLabel,
                               style: GoogleFonts.lexend(
                                 fontSize: 16,
                                 fontWeight: FontWeight.bold,
@@ -598,7 +600,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
 
                             if (!_isPhoneAuth) ...[
                               Text(
-                                'Security',
+                                context.l10n.registrationSecurity,
                                 style: GoogleFonts.lexend(
                                   fontSize: 16,
                                   fontWeight: FontWeight.bold,
@@ -608,9 +610,9 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                               const SizedBox(height: 16),
                               // Password
                               CustomTextField(
-                                label: 'Password',
+                                label: context.l10n.authPassword,
                                 controller: _passwordController,
-                                hint: 'Create a password',
+                                hint: context.l10n.registrationPasswordHint,
                                 obscureText: !_isPasswordVisible,
                                 prefixIcon: const Icon(Icons.lock_outline),
                                 suffixIcon: IconButton(
@@ -627,16 +629,21 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                                   },
                                 ),
                                 validator: (value) =>
-                                    Validators.validatePassword(value),
+                                    Validators.validatePassword(
+                                      value,
+                                      context.l10n,
+                                    ),
                                 enabled: !_isLoading,
                               ),
                               const SizedBox(height: 16),
 
                               // Confirm Password
                               CustomTextField(
-                                label: 'Confirm Password',
+                                label: context.l10n.registrationConfirmPassword,
                                 controller: _confirmPasswordController,
-                                hint: 'Re-enter your password',
+                                hint: context
+                                    .l10n
+                                    .registrationConfirmPasswordHint,
                                 obscureText: !_isConfirmPasswordVisible,
                                 prefixIcon: const Icon(Icons.lock_outline),
                                 suffixIcon: IconButton(
@@ -655,10 +662,14 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                                 ),
                                 validator: (value) {
                                   if (value == null || value.isEmpty) {
-                                    return 'Please confirm your password';
+                                    return context
+                                        .l10n
+                                        .registrationConfirmPasswordRequired;
                                   }
                                   if (value != _passwordController.text) {
-                                    return 'Passwords do not match';
+                                    return context
+                                        .l10n
+                                        .registrationPasswordsMismatch;
                                   }
                                   return null;
                                 },
@@ -671,8 +682,8 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                             // Register Button
                             CustomButton(
                               text: _isPhoneAuth
-                                  ? 'Send OTP & Register'
-                                  : 'Create Account',
+                                  ? context.l10n.registrationSendOtp
+                                  : context.l10n.registrationCreateAccount,
                               onPressed: _isLoading ? null : _handleRegister,
                               isLoading: _isLoading,
                             ),
@@ -687,7 +698,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Text(
-                            "Already have an account? ",
+                            context.l10n.registrationHaveAccount,
                             style: GoogleFonts.lexend(
                               color: AppColors.textSecondary,
                               fontSize: 16, // Large size
@@ -696,7 +707,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                           TextButton(
                             onPressed: () => context.go('/login'),
                             child: Text(
-                              'Login',
+                              context.l10n.authLogin,
                               style: GoogleFonts.lexend(
                                 fontSize: 18, // Large bold size
                                 fontWeight: FontWeight.bold,
@@ -734,7 +745,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                       ),
                       const SizedBox(height: 16),
                       Text(
-                        'Creating account...',
+                        context.l10n.registrationCreating,
                         style: GoogleFonts.lexend(
                           fontSize: 16,
                           color: AppColors.textPrimary,

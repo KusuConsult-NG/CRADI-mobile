@@ -20,7 +20,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:climate_app/shared/widgets/custom_button.dart';
 import 'package:climate_app/shared/widgets/custom_text_field.dart';
-import 'package:climate_app/l10n/app_localizations.dart';
+import 'package:climate_app/core/l10n/l10n.dart';
 
 class UserProfileScreen extends StatefulWidget {
   const UserProfileScreen({super.key});
@@ -57,17 +57,20 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
 
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Profile photo updated!'),
+              SnackBar(
+                content: Text(context.l10n.profilePhotoUpdated),
                 backgroundColor: Colors.green,
-                duration: Duration(seconds: 2),
+                duration: const Duration(seconds: 2),
               ),
             );
           }
         } on ProfileSaveException catch (e) {
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text(e.message), backgroundColor: Colors.red),
+              SnackBar(
+                content: Text(e.message(context.l10n)),
+                backgroundColor: Colors.red,
+              ),
             );
           }
         } on Exception catch (e) {
@@ -75,7 +78,11 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 content: Text(
-                  ErrorHandler.handleError(e, context: 'Profile Upload'),
+                  ErrorHandler.handleError(
+                    e,
+                    context.l10n,
+                    context: 'Profile Upload',
+                  ),
                 ),
                 backgroundColor: Colors.red,
               ),
@@ -88,7 +95,9 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              'Error: ${e.toString().contains('camera') ? 'Camera not available. Please use the gallery.' : 'Failed to pick image. Please try again.'}',
+              e.toString().contains('camera')
+                  ? context.l10n.profileCameraUnavailable
+                  : context.l10n.profilePickImageFailed,
             ),
             backgroundColor: Colors.red,
           ),
@@ -112,7 +121,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  'Update Profile Photo',
+                  context.l10n.profileUpdatePhoto,
                   style: GoogleFonts.lexend(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
@@ -124,18 +133,18 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                     Icons.photo_library,
                     color: AppColors.primaryRed,
                   ),
-                  title: const Text('Choose from Gallery'),
-                  subtitle: const Text('Select a photo from your device'),
+                  title: Text(context.l10n.profileChooseGallery),
+                  subtitle: Text(context.l10n.profileChooseGallerySubtitle),
                   onTap: () {
                     Navigator.of(context).pop();
                     _pickImage(ImageSource.gallery);
                   },
                 ),
                 const Divider(),
-                const ListTile(
-                  leading: Icon(Icons.info_outline, color: Colors.grey),
-                  title: Text('Camera not available on web'),
-                  subtitle: Text('Please use the gallery option'),
+                ListTile(
+                  leading: const Icon(Icons.info_outline, color: Colors.grey),
+                  title: Text(context.l10n.profileCameraWebUnavailable),
+                  subtitle: Text(context.l10n.profileUseGallery),
                   enabled: false,
                 ),
               ],
@@ -155,7 +164,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
             children: [
               ListTile(
                 leading: const Icon(Icons.photo_library),
-                title: const Text('Photo Library'),
+                title: Text(context.l10n.profilePhotoLibrary),
                 onTap: () {
                   Navigator.of(context).pop();
                   _pickImage(ImageSource.gallery);
@@ -163,7 +172,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
               ),
               ListTile(
                 leading: const Icon(Icons.camera_alt),
-                title: const Text('Camera'),
+                title: Text(context.l10n.camera),
                 onTap: () {
                   Navigator.of(context).pop();
                   _pickImage(ImageSource.camera);
@@ -199,7 +208,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
           builder: (context, setState) {
             return AlertDialog(
               title: Text(
-                'Edit Profile',
+                context.l10n.profileEdit,
                 style: GoogleFonts.lexend(fontWeight: FontWeight.bold),
               ),
               content: SingleChildScrollView(
@@ -208,12 +217,12 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                   children: [
                     CustomTextField(
                       controller: nameController,
-                      label: 'Full Name',
+                      label: context.l10n.fullName,
                     ),
                     const SizedBox(height: 16),
                     CustomTextField(
                       controller: emailController,
-                      label: 'Email Address',
+                      label: context.l10n.emailAddress,
                       keyboardType: TextInputType.emailAddress,
                     ),
                     const SizedBox(height: 16),
@@ -229,7 +238,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                           style: GoogleFonts.lexend(fontSize: 14),
                         ),
                         subtitle: Text(
-                          'Ask an admin to change your area',
+                          context.l10n.profileAskAdminArea,
                           style: GoogleFonts.lexend(fontSize: 12),
                         ),
                       )
@@ -253,7 +262,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                 SizedBox(
                   width: 100,
                   child: CustomButton(
-                    text: 'Cancel',
+                    text: context.l10n.cancel,
                     type: ButtonType.ghost,
                     onPressed: () => Navigator.pop(context),
                   ),
@@ -261,7 +270,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                 SizedBox(
                   width: 100,
                   child: CustomButton(
-                    text: 'Save',
+                    text: context.l10n.save,
                     onPressed: () => Navigator.pop(context, {
                       'name': nameController.text,
                       'email': emailController.text,
@@ -279,22 +288,27 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     );
 
     if (result != null && mounted) {
+      final l10n = context.l10n;
       String? nameMessage;
       if (result['name'] != null) {
-        nameMessage = await profileProvider.updateName(result['name']!);
+        nameMessage = (await profileProvider.updateName(
+          result['name']!,
+        ))?.call(l10n);
       }
       String? emailMessage;
       if (result['email'] != null) {
-        emailMessage = await profileProvider.updateEmail(result['email']!);
+        emailMessage = (await profileProvider.updateEmail(
+          result['email']!,
+        ))?.call(l10n);
       }
       // Update location (approved staff cannot change their own area).
       final locationMessage = locationLocked
           ? null
-          : await profileProvider.updateLocation(
+          : (await profileProvider.updateLocation(
               result['state'],
               result['lga'],
               result['ward'],
-            );
+            ))?.call(l10n);
 
       if (mounted) {
         // A set: offline, name and location report the same problem.
@@ -305,9 +319,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
         }.join('\n');
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(
-              message.isEmpty ? 'Profile updated successfully!' : message,
-            ),
+            content: Text(message.isEmpty ? l10n.profileUpdated : message),
             backgroundColor: message.isEmpty ? Colors.green : null,
           ),
         );
@@ -331,14 +343,14 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                 borderRadius: BorderRadius.circular(16),
               ),
               title: Text(
-                'Verify Account',
+                context.l10n.profileVerifyAccount,
                 style: GoogleFonts.lexend(fontWeight: FontWeight.bold),
               ),
               content: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    'Enter the Access Code sent to your email to verify your account.',
+                    context.l10n.profileVerifyAccountBody,
                     style: GoogleFonts.lexend(
                       fontSize: 14,
                       color: AppColors.textSecondary,
@@ -347,8 +359,8 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                   const SizedBox(height: 16),
                   CustomTextField(
                     controller: codeController,
-                    label: 'Access Code',
-                    hint: 'e.g., ABC-123',
+                    label: context.l10n.profileAccessCode,
+                    hint: context.l10n.profileAccessCodeHint,
                     enabled: !isVerifying,
                   ),
                 ],
@@ -356,7 +368,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
               actions: [
                 TextButton(
                   onPressed: isVerifying ? null : () => Navigator.pop(context),
-                  child: Text(AppLocalizations.of(context)!.cancel),
+                  child: Text(context.l10n.cancel),
                 ),
                 ElevatedButton(
                   style: ElevatedButton.styleFrom(
@@ -381,7 +393,9 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                             final authProvider = context
                                 .read<app_auth.AuthProvider>();
                             if (authProvider.currentUser == null) {
-                              throw Exception("User not found");
+                              throw AuthException(
+                                (l) => l.authErrorNotLoggedIn,
+                              );
                             }
 
                             await authProvider.verifyOtpAndLogin(code);
@@ -389,9 +403,9 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                             if (context.mounted) {
                               Navigator.pop(context);
                               ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
+                                SnackBar(
                                   content: Text(
-                                    'Account verified successfully!',
+                                    context.l10n.accessCodeVerified,
                                   ),
                                   backgroundColor: Colors.green,
                                 ),
@@ -409,6 +423,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                                   content: Text(
                                     ErrorHandler.handleError(
                                       e,
+                                      context.l10n,
                                       context: 'Account Verification',
                                     ),
                                   ),
@@ -427,7 +442,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                             color: Colors.white,
                           ),
                         )
-                      : const Text('Verify'),
+                      : Text(context.l10n.verify),
                 ),
               ],
               // Added UI Hint / Fallback for Flawless SMS / Email Delivery Assumption
@@ -474,7 +489,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
           },
         ),
         title: Text(
-          'My Profile',
+          context.l10n.myProfile,
           style: GoogleFonts.lexend(
             fontWeight: FontWeight.bold,
             color: AppColors.textPrimary,
@@ -524,7 +539,9 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                   const SizedBox(height: 16),
                   Consumer<ProfileProvider>(
                     builder: (context, profileProvider, _) => Text(
-                      profileProvider.name,
+                      profileProvider.name.isNotEmpty
+                          ? profileProvider.name
+                          : context.l10n.profileDefaultName,
                       style: GoogleFonts.lexend(
                         fontSize: 24,
                         fontWeight: FontWeight.bold,
@@ -534,36 +551,9 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                   ),
                   Consumer<app_auth.AuthProvider>(
                     builder: (context, authProvider, _) {
-                      String roleText = 'Early Warning Monitor';
-                      if (authProvider.rawUserRole != null) {
-                        // Simple formatted string from enum
-                        switch (authProvider.rawUserRole!) {
-                          case app_auth.UserRole.user:
-                            roleText = 'User';
-                            break;
-                          case app_auth.UserRole.ewm:
-                            roleText = 'Early Warning Monitor';
-                            break;
-                          case app_auth.UserRole.ewv:
-                            roleText = 'Early Warning Validator';
-                            break;
-                          case app_auth.UserRole.ewr:
-                            roleText = 'Early Warning Responder';
-                            break;
-                          case app_auth.UserRole.ldpCoordinator:
-                            roleText = 'LDP Coordinator';
-                            break;
-                          case app_auth.UserRole.projectStaff:
-                            roleText = 'Project Staff';
-                            break;
-                          case app_auth.UserRole.admin:
-                            roleText = 'Administrator';
-                            break;
-                          case app_auth.UserRole.techSupport:
-                            roleText = 'Tech Support';
-                            break;
-                        }
-                      }
+                      final roleText =
+                          authProvider.rawUserRole?.label(context.l10n) ??
+                          context.l10n.roleEwm;
                       return Text(
                         roleText,
                         style: GoogleFonts.lexend(
@@ -598,10 +588,12 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                         Consumer<ProfileProvider>(
                           builder: (context, profile, _) {
                             // Show actual registration code from database
-                            final code = profile.registrationCode ?? 'N/A';
+                            final code =
+                                profile.registrationCode ??
+                                context.l10n.commonNotAvailable;
 
                             return Text(
-                              'ID: $code',
+                              context.l10n.profileIdLabel(code),
                               style: GoogleFonts.lexend(
                                 fontSize: 14,
                                 fontWeight: FontWeight.w500,
@@ -653,7 +645,9 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                                 ),
                                 const SizedBox(width: 8),
                                 Text(
-                                  isVerified ? 'Verified' : 'Unverified',
+                                  isVerified
+                                      ? context.l10n.profileVerified
+                                      : context.l10n.profileUnverified,
                                   style: GoogleFonts.lexend(
                                     fontSize: 13,
                                     fontWeight: FontWeight.w500,
@@ -682,7 +676,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                                   ),
                                 ),
                                 child: Text(
-                                  'Verify Now',
+                                  context.l10n.profileVerifyNow,
                                   style: GoogleFonts.lexend(
                                     fontSize: 13,
                                     fontWeight: FontWeight.w600,
@@ -742,7 +736,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                                 onTap: () => context.push('/my-reports'),
                                 child: _buildStatCard(
                                   '$totalReports',
-                                  'Reports',
+                                  context.l10n.profileStatReports,
                                 ),
                               ),
                             ),
@@ -752,7 +746,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                                 onTap: () => context.push('/reports-status'),
                                 child: _buildStatCard(
                                   '$verifiedCount',
-                                  'Verified',
+                                  context.l10n.profileVerified,
                                 ),
                               ),
                             ),
@@ -768,14 +762,14 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
             const SizedBox(height: 24),
 
             // Account Settings
-            _buildSectionHeader(null, 'Account Settings'),
+            _buildSectionHeader(null, context.l10n.profileAccountSettings),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Column(
                 children: [
                   _buildSettingsTile(
                     Icons.person,
-                    'Edit Profile Details',
+                    context.l10n.editProfileDetails,
                     onTap: _editProfileDetails,
                   ),
                   const SizedBox(height: 8),
@@ -798,7 +792,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                             : Colors.grey.shade400,
                       ),
                       title: Text(
-                        'Biometric Login',
+                        context.l10n.biometricLogin,
                         style: GoogleFonts.lexend(
                           fontSize: 14,
                           fontWeight: FontWeight.w500,
@@ -806,7 +800,9 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                         ),
                       ),
                       subtitle: Text(
-                        profile.biometricsEnabled ? 'Enabled' : 'Disabled',
+                        profile.biometricsEnabled
+                            ? context.l10n.enabled
+                            : context.l10n.disabled,
                         style: GoogleFonts.lexend(
                           fontSize: 12,
                           color: Colors.grey.shade400,
@@ -818,25 +814,27 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                       // AuthProvider (it prompts for biometrics first).
                       onChanged: (value) async {
                         final messenger = ScaffoldMessenger.of(context);
+                        final l10n = context.l10n;
                         final auth = context.read<app_auth.AuthProvider>();
                         if (value && !await auth.isBiometricAvailable()) {
                           messenger.showSnackBar(
-                            const SnackBar(
-                              content: Text(
-                                'Biometrics not available on this device',
-                              ),
+                            SnackBar(
+                              content: Text(l10n.biometricsNotAvailable),
                               backgroundColor: Colors.red,
                             ),
                           );
                           return;
                         }
                         try {
-                          await auth.setBiometricEnabled(value);
+                          await auth.setBiometricEnabled(
+                            value,
+                            promptReason: l10n.biometricEnablePrompt,
+                          );
                           await profile.refreshBiometricsEnabled();
                           if (value) {
                             messenger.showSnackBar(
-                              const SnackBar(
-                                content: Text('Biometrics enabled!'),
+                              SnackBar(
+                                content: Text(l10n.profileBiometricsEnabled),
                                 backgroundColor: Colors.green,
                               ),
                             );
@@ -845,9 +843,9 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                           final message =
                               BiometricService.messageFor(
                                 BiometricService().lastErrorCode,
-                              ) ??
+                              )?.call(l10n) ??
                               (BiometricService().lastErrorCode == null
-                                  ? 'Could not change biometric login'
+                                  ? l10n.profileBiometricChangeFailed
                                   : null);
                           if (message != null) {
                             messenger.showSnackBar(
@@ -866,7 +864,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                     builder: (context, languageProvider, _) =>
                         _buildSettingsTile(
                           Icons.language,
-                          'Language Preference',
+                          context.l10n.languagePreference,
                           subtitle: languageProvider.selectedLanguage,
                           // A sheet, not push('/settings'): Profile is often
                           // opened from Settings already.
@@ -879,14 +877,14 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                   const SizedBox(height: 8),
                   _buildSettingsTile(
                     Icons.sync,
-                    'Offline Data Sync',
-                    subtitle: 'Up to date',
+                    context.l10n.offlineDataSync,
+                    subtitle: context.l10n.upToDate,
                     subtitleColor: AppColors.successGreen,
                     onTap: () async {
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
                           content: Text(
-                            'Syncing offline data...',
+                            context.l10n.profileSyncingOffline,
                             style: GoogleFonts.lexend(),
                           ),
                         ),
@@ -901,8 +899,8 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                         context.read<EmergencyContactsProvider>().getContacts();
 
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Sync complete!'),
+                          SnackBar(
+                            content: Text(context.l10n.profileSyncComplete),
                             backgroundColor: AppColors.successGreen,
                           ),
                         );
@@ -912,21 +910,21 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                   const SizedBox(height: 8),
                   _buildSettingsTile(
                     Icons.assignment_outlined,
-                    'My Reports',
+                    context.l10n.myReports,
                     onTap: () => context.push('/my-reports'),
                   ),
                   if (RemoteConfigService().featureFlagPeerChat) ...[
                     const SizedBox(height: 8),
                     _buildSettingsTile(
                       Icons.chat_bubble_outline,
-                      'Support Chat',
+                      context.l10n.profileSupportChat,
                       onTap: () => context.push('/chat'),
                     ),
                   ],
                   const SizedBox(height: 8),
                   _buildSettingsTile(
                     Icons.help,
-                    'Help & Support',
+                    context.l10n.helpSupport,
                     onTap: () => context.push('/help'),
                   ),
                 ],
@@ -944,13 +942,13 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                     // Offers calls to 112 / the user's emergency contacts;
                     // nothing is sent through the app.
                     onPressed: () => showSosSheet(context),
-                    text: 'SOS / Emergency Call',
+                    text: context.l10n.profileSosButton,
                     icon: Icons.sos,
                     // Note: Using primary red for SOS to make it prominent
                   ),
                   const SizedBox(height: 16),
                   CustomButton(
-                    text: 'Log Out',
+                    text: context.l10n.logout,
                     type: ButtonType.ghost,
                     onPressed: () async {
                       // Explicitly clear profile data including offline cache

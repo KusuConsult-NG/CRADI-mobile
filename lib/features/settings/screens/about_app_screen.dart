@@ -1,8 +1,8 @@
-import 'package:climate_app/core/constants/privacy_notice.dart';
 import 'package:climate_app/core/theme/app_colors.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:climate_app/core/l10n/l10n.dart';
 
 class AboutAppScreen extends StatelessWidget {
   const AboutAppScreen({super.key});
@@ -26,7 +26,7 @@ class AboutAppScreen extends StatelessWidget {
           },
         ),
         title: Text(
-          'About App',
+          context.l10n.aboutApp,
           style: GoogleFonts.lexend(
             fontWeight: FontWeight.bold,
             color: AppColors.textPrimary,
@@ -59,7 +59,7 @@ class AboutAppScreen extends StatelessWidget {
               ),
               const SizedBox(height: 24),
               Text(
-                'EWER Mobile',
+                context.l10n.aboutAppName,
                 style: GoogleFonts.outfit(
                   fontSize: 24,
                   fontWeight: FontWeight.bold,
@@ -68,7 +68,7 @@ class AboutAppScreen extends StatelessWidget {
               ),
               const SizedBox(height: 8),
               Text(
-                'Early Warning System',
+                context.l10n.aboutTagline,
                 style: GoogleFonts.lexend(
                   fontSize: 16,
                   color: AppColors.textSecondary,
@@ -85,7 +85,7 @@ class AboutAppScreen extends StatelessWidget {
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
-                  'Version 2.4.1 (Build 204)',
+                  context.l10n.aboutVersion('2.4.1', '204'),
                   style: GoogleFonts.lexend(
                     fontSize: 14,
                     color: Colors.grey.shade700,
@@ -95,7 +95,7 @@ class AboutAppScreen extends StatelessWidget {
               ),
               const SizedBox(height: 48),
               Text(
-                '© 2024 EWER. All rights reserved.',
+                context.l10n.aboutCopyright('2024'),
                 style: GoogleFonts.lexend(
                   fontSize: 12,
                   color: Colors.grey.shade500,
@@ -109,25 +109,25 @@ class AboutAppScreen extends StatelessWidget {
                   context: context,
                   builder: (dialogContext) => AlertDialog(
                     title: Text(
-                      'Privacy Policy',
+                      context.l10n.aboutPrivacyPolicy,
                       style: GoogleFonts.lexend(fontWeight: FontWeight.bold),
                     ),
                     content: SingleChildScrollView(
                       child: Text(
-                        kNdpaPolicyText,
+                        context.l10n.privacyNoticeText,
                         style: GoogleFonts.lexend(fontSize: 13, height: 1.5),
                       ),
                     ),
                     actions: [
                       TextButton(
                         onPressed: () => Navigator.of(dialogContext).pop(),
-                        child: const Text('Close'),
+                        child: Text(context.l10n.close),
                       ),
                     ],
                   ),
                 ),
                 child: Text(
-                  'Privacy Policy',
+                  context.l10n.aboutPrivacyPolicy,
                   style: GoogleFonts.lexend(color: AppColors.primaryRed),
                 ),
               ),

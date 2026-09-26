@@ -6,10 +6,10 @@ import 'package:climate_app/features/reporting/providers/reporting_provider.dart
 import 'package:climate_app/shared/widgets/custom_button.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:climate_app/core/providers/connectivity_provider.dart';
 import 'package:climate_app/features/auth/providers/auth_provider.dart';
+import 'package:climate_app/core/l10n/l10n.dart';
 
 class OfflineHomeScreen extends StatefulWidget {
   const OfflineHomeScreen({super.key});
@@ -23,7 +23,7 @@ class _OfflineHomeScreenState extends State<OfflineHomeScreen> {
     if (isoString == null) return '';
     final date = DateTime.tryParse(isoString.toString())?.toLocal();
     if (date == null) return '';
-    return DateFormat('MMM d, h:mm a').format(date);
+    return localizedDateFormat(context, 'MMM d, h:mm a').format(date);
   }
 
   /// Drafts plus unsynced sync-queue items of the signed-in user, newest
@@ -35,7 +35,7 @@ class _OfflineHomeScreenState extends State<OfflineHomeScreen> {
     final items = <_PendingItem>[
       for (final d in storage.getDraftsFor(uid))
         _PendingItem(
-          title: Hazard.labelFor(d['hazardType']),
+          title: Hazard.labelFor(d['hazardType'], context.l10n),
           subtitle: (d['locationDetails'] ?? '').toString(),
           date: d['createdAt'],
           failed: d['status'] == OfflineStorageService.statusRejected,
@@ -45,7 +45,7 @@ class _OfflineHomeScreenState extends State<OfflineHomeScreen> {
         ),
       for (final q in storage.getUnsyncedItems(userId: uid))
         _PendingItem(
-          title: Hazard.labelFor(_queueData(q)['hazardType']),
+          title: Hazard.labelFor(_queueData(q)['hazardType'], context.l10n),
           subtitle: (_queueData(q)['locationDetails'] ?? '').toString(),
           date: q['addedToQueueAt'],
           failed: OfflineStorageService.isTerminalFailure(q),
@@ -64,7 +64,7 @@ class _OfflineHomeScreenState extends State<OfflineHomeScreen> {
     final reporting = context.read<ReportingProvider>();
     ScaffoldMessenger.of(
       context,
-    ).showSnackBar(const SnackBar(content: Text('Syncing pending data...')));
+    ).showSnackBar(SnackBar(content: Text(context.l10n.offlineSyncingPending)));
     await reporting.syncPendingReports(context);
   }
 
@@ -73,19 +73,19 @@ class _OfflineHomeScreenState extends State<OfflineHomeScreen> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (c) => AlertDialog(
-        title: const Text('Discard report?'),
-        content: const Text(
-          'This report has not been sent and will be deleted from this '
-          'device.',
-        ),
+        title: Text(context.l10n.offlineDiscardTitle),
+        content: Text(context.l10n.offlineDiscardBody),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(c, false),
-            child: const Text('Cancel'),
+            child: Text(context.l10n.cancel),
           ),
           TextButton(
             onPressed: () => Navigator.pop(c, true),
-            child: const Text('Discard', style: TextStyle(color: Colors.red)),
+            child: Text(
+              context.l10n.offlineDiscard,
+              style: const TextStyle(color: Colors.red),
+            ),
           ),
         ],
       ),
@@ -135,26 +135,35 @@ class _OfflineHomeScreenState extends State<OfflineHomeScreen> {
     final draftId = item.draftId;
     if (draftId != null) {
       return PopupMenuButton<String>(
-        tooltip: 'Actions',
+        tooltip: context.l10n.offlineActions,
         onSelected: (action) => _onDraftAction(action, draftId),
         itemBuilder: (_) => [
           if (item.ownerless && isSignedIn)
-            const PopupMenuItem(value: 'submit', child: Text('Submit as me'))
+            PopupMenuItem(
+              value: 'submit',
+              child: Text(context.l10n.offlineSubmitAsMe),
+            )
           else if (item.failed && !item.ownerless)
-            const PopupMenuItem(value: 'retry', child: Text('Retry')),
-          const PopupMenuItem(value: 'discard', child: Text('Discard')),
+            PopupMenuItem(value: 'retry', child: Text(context.l10n.retry)),
+          PopupMenuItem(
+            value: 'discard',
+            child: Text(context.l10n.offlineDiscard),
+          ),
         ],
       );
     }
     final queueId = item.queueId;
     if (queueId == null) return null;
     return PopupMenuButton<String>(
-      tooltip: 'Actions',
+      tooltip: context.l10n.offlineActions,
       onSelected: (action) => _onQueueItemAction(action, queueId),
       itemBuilder: (_) => [
         if (item.failed)
-          const PopupMenuItem(value: 'retry', child: Text('Retry')),
-        const PopupMenuItem(value: 'discard', child: Text('Discard')),
+          PopupMenuItem(value: 'retry', child: Text(context.l10n.retry)),
+        PopupMenuItem(
+          value: 'discard',
+          child: Text(context.l10n.offlineDiscard),
+        ),
       ],
     );
   }
@@ -168,7 +177,7 @@ class _OfflineHomeScreenState extends State<OfflineHomeScreen> {
     );
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Offline Mode'),
+        title: Text(context.l10n.settingsOfflineMode),
         backgroundColor: AppColors.primaryGrey,
       ),
       body: Padding(
@@ -179,15 +188,15 @@ class _OfflineHomeScreenState extends State<OfflineHomeScreen> {
             const Icon(Icons.wifi_off, size: 64, color: AppColors.primaryGrey),
             const SizedBox(height: 16),
             Text(
-              'No Internet Connection',
+              context.l10n.offlineNoInternet,
               style: Theme.of(context).textTheme.displayMedium,
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 8),
             Text(
               isSignedIn
-                  ? 'You can still view your saved guides and draft reports.'
-                  : 'Reconnect to sign in.',
+                  ? context.l10n.offlineCanViewSaved
+                  : context.l10n.offlineReconnectToSignIn,
               style: Theme.of(context).textTheme.bodyMedium,
               textAlign: TextAlign.center,
             ),
@@ -195,7 +204,7 @@ class _OfflineHomeScreenState extends State<OfflineHomeScreen> {
 
             // Pending Reports Section
             Text(
-              'Pending Reports',
+              context.l10n.pendingReports,
               style: Theme.of(
                 context,
               ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
@@ -205,7 +214,7 @@ class _OfflineHomeScreenState extends State<OfflineHomeScreen> {
             const SizedBox(height: 16),
 
             CustomButton(
-              text: 'Try Reconnecting & Sync',
+              text: context.l10n.offlineTryReconnect,
               onPressed: () async {
                 final connectivityProvider = context
                     .read<ConnectivityProvider>();
@@ -218,18 +227,16 @@ class _OfflineHomeScreenState extends State<OfflineHomeScreen> {
                 if (connectivityProvider.manualOffline) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                      content: const Text(
-                        'Offline Mode is enabled in Settings.',
-                      ),
+                      content: Text(context.l10n.offlineModeEnabledInSettings),
                       backgroundColor: Colors.orange,
                       action: isSignedIn
                           ? SnackBarAction(
-                              label: 'Settings',
+                              label: context.l10n.navSettings,
                               onPressed: () => context.push('/settings'),
                               textColor: Colors.white,
                             )
                           : SnackBarAction(
-                              label: 'Go online',
+                              label: context.l10n.offlineGoOnline,
                               onPressed: () =>
                                   connectivityProvider.setManualOffline(false),
                               textColor: Colors.white,
@@ -240,8 +247,8 @@ class _OfflineHomeScreenState extends State<OfflineHomeScreen> {
 
                 if (!isOnline && !connectivityProvider.manualOffline) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Still no internet connection'),
+                    SnackBar(
+                      content: Text(context.l10n.offlineStillNoInternet),
                       backgroundColor: Colors.orange,
                     ),
                   );
@@ -263,20 +270,20 @@ class _OfflineHomeScreenState extends State<OfflineHomeScreen> {
             if (isSignedIn) ...[
               const SizedBox(height: 16),
               CustomButton(
-                text: 'Create New Report',
+                text: context.l10n.myReportsNewReport,
                 onPressed: () => context.push('/report'),
                 icon: Icons.add_circle_outline,
               ),
               const SizedBox(height: 16),
               CustomButton(
-                text: 'Open Settings',
+                text: context.l10n.offlineOpenSettings,
                 type: ButtonType.secondary,
                 onPressed: () => context.push('/settings'),
                 icon: Icons.settings,
               ),
               const SizedBox(height: 16),
               CustomButton(
-                text: 'View Saved Guides',
+                text: context.l10n.offlineViewSavedGuides,
                 type: ButtonType.secondary,
                 onPressed: () => context.push('/knowledge-base'),
                 icon: Icons.menu_book,
@@ -302,7 +309,7 @@ class _OfflineHomeScreenState extends State<OfflineHomeScreen> {
             ),
             const SizedBox(height: 8),
             Text(
-              'No pending reports',
+              context.l10n.offlineNoPending,
               style: TextStyle(color: Colors.grey.shade500),
             ),
           ],
@@ -330,11 +337,12 @@ class _OfflineHomeScreenState extends State<OfflineHomeScreen> {
         itemBuilder: (context, index) {
           final item = items[index];
           final status = item.ownerless
-              ? 'Saved by an earlier version: submit or discard it'
+              ? context.l10n.offlineStatusOwnerless
               : item.failed
-              ? 'Failed, will not sync automatically'
-                    '${item.error != null ? ': ${item.error}' : ''}'
-              : 'Waiting to sync';
+              ? (item.error != null
+                    ? context.l10n.offlineStatusFailedWithError(item.error!)
+                    : context.l10n.offlineStatusFailed)
+              : context.l10n.offlineStatusWaiting;
           return Padding(
             padding: const EdgeInsets.only(bottom: 12),
             child: AppCard(
@@ -352,7 +360,11 @@ class _OfflineHomeScreenState extends State<OfflineHomeScreen> {
                   style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
                 subtitle: Text(
-                  '${item.subtitle}\n${_formatDate(item.date)} • $status',
+                  context.l10n.offlineItemSubtitle(
+                    item.subtitle,
+                    _formatDate(item.date),
+                    status,
+                  ),
                   maxLines: 3,
                   overflow: TextOverflow.ellipsis,
                 ),

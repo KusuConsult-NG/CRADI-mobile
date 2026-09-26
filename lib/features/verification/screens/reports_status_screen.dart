@@ -18,7 +18,7 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:climate_app/features/auth/providers/auth_provider.dart';
-import 'package:climate_app/l10n/app_localizations.dart';
+import 'package:climate_app/core/l10n/l10n.dart';
 
 class ReportsStatusScreen extends StatefulWidget {
   const ReportsStatusScreen({super.key, this.initialTab});
@@ -93,7 +93,7 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
           },
         ),
         title: Text(
-          AppLocalizations.of(context)!.reportsStatus,
+          context.l10n.reportsStatus,
           style: GoogleFonts.lexend(
             fontWeight: FontWeight.bold,
             color: AppColors.textPrimary,
@@ -116,10 +116,10 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
             fontWeight: FontWeight.normal,
           ),
           tabs: [
-            Tab(text: AppLocalizations.of(context)!.pending),
-            Tab(text: AppLocalizations.of(context)!.verified),
-            Tab(text: AppLocalizations.of(context)!.approved),
-            Tab(text: AppLocalizations.of(context)!.rejected),
+            Tab(text: context.l10n.pending),
+            Tab(text: context.l10n.verified),
+            Tab(text: context.l10n.approved),
+            Tab(text: context.l10n.rejected),
           ],
         ),
       ),
@@ -143,7 +143,7 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
         backgroundColor: AppColors.primaryRed,
         icon: const Icon(Icons.download, color: Colors.white),
         label: Text(
-          AppLocalizations.of(context)!.generateReport,
+          context.l10n.generateReport,
           style: GoogleFonts.lexend(color: Colors.white),
         ),
       ),
@@ -169,7 +169,7 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
 
     if (reports.isEmpty && error != null) {
       return _buildErrorState(
-        error,
+        error(context.l10n),
         () => provider.fetchReports(status: status, userId: uid),
       );
     }
@@ -182,7 +182,7 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
             Icon(Icons.inbox_outlined, size: 64, color: Colors.grey.shade300),
             const SizedBox(height: 16),
             Text(
-              AppLocalizations.of(context)!.noReportsStatus(status.displayName),
+              context.l10n.noReportsStatus(status.label(context.l10n)),
               style: GoogleFonts.lexend(
                 fontSize: 16,
                 color: AppColors.textSecondary,
@@ -192,7 +192,7 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
               onPressed: () {
                 provider.fetchReports(status: status, userId: uid);
               },
-              child: Text(AppLocalizations.of(context)!.refresh),
+              child: Text(context.l10n.refresh),
             ),
           ],
         ),
@@ -223,7 +223,7 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
             if (index == reports.length) {
               if (error != null) {
                 return _buildInlineError(
-                  error,
+                  error(context.l10n),
                   () => provider.fetchReports(
                     loadMore: true,
                     status: status,
@@ -301,7 +301,7 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      report.title,
+                      report.displayTitle(context.l10n),
                       style: GoogleFonts.lexend(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
@@ -310,7 +310,9 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      AppLocalizations.of(context)!.reportedBy(report.reporter),
+                      context.l10n.reportedBy(
+                        report.displayReporter(context.l10n),
+                      ),
                       style: GoogleFonts.lexend(
                         fontSize: 12,
                         color: AppColors.textSecondary,
@@ -333,7 +335,7 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
               const SizedBox(width: 4),
               Flexible(
                 child: Text(
-                  report.location,
+                  report.displayLocation(context.l10n),
                   style: GoogleFonts.lexend(
                     fontSize: 12,
                     color: AppColors.textSecondary,
@@ -350,7 +352,7 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
               ),
               const SizedBox(width: 4),
               Text(
-                report.time,
+                report.displayTime(context.l10n),
                 style: GoogleFonts.lexend(
                   fontSize: 12,
                   color: AppColors.textSecondary,
@@ -367,7 +369,7 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
                   context.push('/report-view', extra: report);
                 },
                 child: Text(
-                  AppLocalizations.of(context)!.viewDetails,
+                  context.l10n.viewDetails,
                   style: GoogleFonts.lexend(
                     color: AppColors.primaryRed,
                     fontWeight: FontWeight.bold,
@@ -388,7 +390,7 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
                       ElevatedButton(
                         onPressed: () => _runAction(
                           () => provider.verifyReport(report.id),
-                          AppLocalizations.of(context)!.reportVerified,
+                          context.l10n.reportVerified,
                         ),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppColors.primaryRed,
@@ -398,7 +400,7 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
                             borderRadius: BorderRadius.circular(8),
                           ),
                         ),
-                        child: Text(AppLocalizations.of(context)!.verifyReport),
+                        child: Text(context.l10n.verifyReport),
                       ),
                       // A peer "no" vote: it does not reject the report.
                       OutlinedButton(
@@ -410,14 +412,14 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
                             borderRadius: BorderRadius.circular(8),
                           ),
                         ),
-                        child: const Text('Dispute'),
+                        child: Text(context.l10n.voteDispute),
                       ),
                     ],
                     if (isStaff && report.status == ReportStatus.verified)
                       ElevatedButton(
                         onPressed: () => _runAction(
                           () => provider.approveReport(report.id),
-                          AppLocalizations.of(context)!.reportResolvedItem,
+                          context.l10n.reportResolvedItem,
                         ),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.blue,
@@ -432,7 +434,7 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
                           ),
                         ),
                         child: Text(
-                          AppLocalizations.of(context)!.markResolved,
+                          context.l10n.markResolved,
                           style: GoogleFonts.lexend(fontSize: 13),
                         ),
                       ),
@@ -453,7 +455,7 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
                           ),
                         ),
                         child: Text(
-                          AppLocalizations.of(context)!.reject,
+                          context.l10n.reject,
                           style: GoogleFonts.lexend(fontSize: 13),
                         ),
                       ),
@@ -462,10 +464,8 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
                         onPressed: () => _runAction(
                           () => provider.moveBackToPending(report.id),
                           report.status == ReportStatus.verified
-                              ? AppLocalizations.of(context)!.reportMovedPending
-                              : AppLocalizations.of(
-                                  context,
-                                )!.reportReopenedPending,
+                              ? context.l10n.reportMovedPending
+                              : context.l10n.reportReopenedPending,
                         ),
                         style: OutlinedButton.styleFrom(
                           side: BorderSide(color: Colors.grey.shade300),
@@ -478,7 +478,7 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
                           ),
                         ),
                         child: Text(
-                          AppLocalizations.of(context)!.reopen,
+                          context.l10n.reopen,
                           style: GoogleFonts.lexend(fontSize: 13),
                         ),
                       ),
@@ -499,6 +499,7 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
     Color? successColor,
   }) async {
     final messenger = ScaffoldMessenger.of(context);
+    final l10n = context.l10n;
     try {
       await action();
       messenger.showSnackBar(
@@ -510,7 +511,7 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
     } on Exception catch (e) {
       messenger.showSnackBar(
         SnackBar(
-          content: Text(reportActionErrorMessage(e)),
+          content: Text(reportActionErrorMessage(e, l10n)),
           backgroundColor: Colors.red,
         ),
       );
@@ -526,7 +527,7 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
     if (comment == null || !mounted) return;
     await _runAction(
       () => provider.disputeReport(report.id, comment: comment),
-      'Dispute recorded. Staff will review the report.',
+      context.l10n.voteDisputeRecorded,
       successColor: Colors.orange,
     );
   }
@@ -541,7 +542,7 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
     if (reason == null || !mounted) return;
     await _runAction(
       () => provider.staffRejectReport(report.id, reason: reason),
-      AppLocalizations.of(context)!.reportRejectedItem,
+      context.l10n.reportRejectedItem,
       successColor: Colors.red,
     );
   }
@@ -567,7 +568,7 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
             ElevatedButton.icon(
               onPressed: onRetry,
               icon: const Icon(Icons.refresh),
-              label: const Text('Retry'),
+              label: Text(context.l10n.retry),
             ),
           ],
         ),
@@ -591,7 +592,7 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
               ),
             ),
           ),
-          TextButton(onPressed: onRetry, child: const Text('Retry')),
+          TextButton(onPressed: onRetry, child: Text(context.l10n.retry)),
         ],
       ),
     );
@@ -622,7 +623,7 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
         border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
       child: Text(
-        status.displayName,
+        status.label(context.l10n),
         style: GoogleFonts.lexend(
           fontSize: 11,
           fontWeight: FontWeight.w600,
@@ -639,7 +640,7 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
       context: context,
       builder: (c) => AlertDialog(
         title: Text(
-          AppLocalizations.of(context)!.generateReport,
+          context.l10n.generateReport,
           style: GoogleFonts.lexend(fontWeight: FontWeight.bold),
         ),
         content: Column(
@@ -647,38 +648,33 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              AppLocalizations.of(context)!.selectStatusExport,
+              context.l10n.selectStatusExport,
               style: GoogleFonts.lexend(fontSize: 14),
             ),
             const SizedBox(height: 12),
+            _buildExportOption(c, provider, context.l10n.allReports, null),
             _buildExportOption(
               c,
               provider,
-              AppLocalizations.of(context)!.allReports,
-              null,
-            ),
-            _buildExportOption(
-              c,
-              provider,
-              AppLocalizations.of(context)!.pendingOnly,
+              context.l10n.pendingOnly,
               ReportStatus.pending,
             ),
             _buildExportOption(
               c,
               provider,
-              AppLocalizations.of(context)!.verifiedOnly,
+              context.l10n.verifiedOnly,
               ReportStatus.verified,
             ),
             _buildExportOption(
               c,
               provider,
-              AppLocalizations.of(context)!.approvedOnly,
+              context.l10n.approvedOnly,
               ReportStatus.approved,
             ),
             _buildExportOption(
               c,
               provider,
-              'Rejected only',
+              context.l10n.exportRejectedOnly,
               ReportStatus.rejected,
             ),
           ],
@@ -686,7 +682,7 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(c),
-            child: Text(AppLocalizations.of(context)!.cancel),
+            child: Text(context.l10n.cancel),
           ),
         ],
       ),
@@ -732,16 +728,15 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
     ReportStatus? status,
   ) async {
     final messenger = ScaffoldMessenger.of(context);
-    messenger.showSnackBar(const SnackBar(content: Text('Preparing export…')));
+    final l10n = context.l10n;
+    messenger.showSnackBar(SnackBar(content: Text(l10n.exportPreparing)));
     try {
       final csv = await provider.generateCSVReport(status);
       if (kIsWeb) {
         await Clipboard.setData(ClipboardData(text: csv));
         messenger
           ..hideCurrentSnackBar()
-          ..showSnackBar(
-            const SnackBar(content: Text('CSV copied to the clipboard.')),
-          );
+          ..showSnackBar(SnackBar(content: Text(l10n.exportCopied)));
         return;
       }
       final dir = await getApplicationDocumentsDirectory();
@@ -754,7 +749,7 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
         ..hideCurrentSnackBar()
         ..showSnackBar(
           SnackBar(
-            content: Text('Report saved to ${file.path}'),
+            content: Text(l10n.exportSavedTo(file.path)),
             duration: const Duration(seconds: 6),
           ),
         );
@@ -763,7 +758,7 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
         await SharePlus.instance.share(
           ShareParams(
             files: [XFile(file.path, mimeType: 'text/csv')],
-            subject: 'CRADI reports export',
+            subject: l10n.exportShareSubject,
             sharePositionOrigin: _shareOrigin(),
           ),
         );
@@ -774,10 +769,7 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
           ..hideCurrentSnackBar()
           ..showSnackBar(
             SnackBar(
-              content: Text(
-                'Could not open the share sheet. '
-                'The report is saved to ${file.path}',
-              ),
+              content: Text(l10n.exportShareFailed(file.path)),
               backgroundColor: Colors.orange,
               duration: const Duration(seconds: 6),
             ),
@@ -788,7 +780,7 @@ class _ReportsStatusScreenState extends State<ReportsStatusScreen>
         ..hideCurrentSnackBar()
         ..showSnackBar(
           SnackBar(
-            content: Text(ErrorHandler.handleError(e, context: 'Export')),
+            content: Text(ErrorHandler.handleError(e, l10n, context: 'Export')),
             backgroundColor: Colors.red,
           ),
         );

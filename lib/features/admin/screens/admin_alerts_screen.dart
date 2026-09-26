@@ -9,6 +9,9 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:climate_app/core/theme/app_colors.dart';
 import 'dart:developer' as developer;
+import 'package:climate_app/core/l10n/l10n.dart';
+import 'package:climate_app/core/utils/error_handler.dart';
+import 'package:climate_app/features/alerts/screens/alert_severity.dart';
 
 /// Admin Alerts & Broadcast screen.
 /// Allows admins to send emergency alerts to all users or specific LGAs.
@@ -102,8 +105,8 @@ class _AdminAlertsScreenState extends State<AdminAlertsScreen> {
           _targetLga = 'All';
         });
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('✅ Alert broadcast successfully'),
+          SnackBar(
+            content: Text(context.l10n.adminAlertBroadcastSuccess),
             backgroundColor: Colors.green,
           ),
         );
@@ -113,7 +116,11 @@ class _AdminAlertsScreenState extends State<AdminAlertsScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to send alert: $e'),
+            content: Text(
+              context.l10n.adminAlertSendFailed(
+                ErrorHandler.getUserMessage(e, context.l10n),
+              ),
+            ),
             backgroundColor: Colors.red,
           ),
         );
@@ -136,8 +143,8 @@ class _AdminAlertsScreenState extends State<AdminAlertsScreen> {
     } on Exception catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Could not dismiss alert.'),
+          SnackBar(
+            content: Text(context.l10n.adminAlertDismissFailed),
             backgroundColor: Colors.red,
           ),
         );
@@ -151,7 +158,7 @@ class _AdminAlertsScreenState extends State<AdminAlertsScreen> {
       backgroundColor: AppColors.background,
       appBar: AppBar(
         title: Text(
-          'Alerts & Broadcast',
+          context.l10n.alertsBroadcast,
           style: GoogleFonts.lexend(fontWeight: FontWeight.bold),
         ),
         backgroundColor: AppColors.primaryRed,
@@ -181,7 +188,7 @@ class _AdminAlertsScreenState extends State<AdminAlertsScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Compose Alert',
+                    context.l10n.adminAlertCompose,
                     style: GoogleFonts.lexend(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
@@ -192,7 +199,7 @@ class _AdminAlertsScreenState extends State<AdminAlertsScreen> {
 
                   // Severity picker
                   Text(
-                    'Severity',
+                    context.l10n.reportViewSeverity,
                     style: GoogleFonts.lexend(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
@@ -233,7 +240,7 @@ class _AdminAlertsScreenState extends State<AdminAlertsScreen> {
                                   ),
                                   const SizedBox(height: 4),
                                   Text(
-                                    s[0].toUpperCase() + s.substring(1),
+                                    alertSeverityLabel(s, context.l10n),
                                     style: GoogleFonts.lexend(
                                       fontSize: 11,
                                       fontWeight: FontWeight.w600,
@@ -253,7 +260,7 @@ class _AdminAlertsScreenState extends State<AdminAlertsScreen> {
 
                   // Target LGA
                   Text(
-                    'Target Area',
+                    context.l10n.adminAlertTargetArea,
                     style: GoogleFonts.lexend(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
@@ -286,7 +293,7 @@ class _AdminAlertsScreenState extends State<AdminAlertsScreen> {
                           (l) => DropdownMenuItem(
                             value: l,
                             child: Text(
-                              l == 'All' ? '🌍 All Areas' : l,
+                              l == 'All' ? context.l10n.adminAlertAllAreas : l,
                               style: GoogleFonts.lexend(fontSize: 14),
                             ),
                           ),
@@ -302,15 +309,16 @@ class _AdminAlertsScreenState extends State<AdminAlertsScreen> {
                     controller: _titleCtrl,
                     style: GoogleFonts.lexend(),
                     decoration: InputDecoration(
-                      labelText: 'Alert Title',
+                      labelText: context.l10n.adminAlertTitleLabel,
                       labelStyle: GoogleFonts.lexend(fontSize: 14),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
                       ),
                       prefixIcon: const Icon(Icons.title),
                     ),
-                    validator: (v) =>
-                        (v == null || v.trim().isEmpty) ? 'Required' : null,
+                    validator: (v) => (v == null || v.trim().isEmpty)
+                        ? context.l10n.adminAlertRequired
+                        : null,
                     textCapitalization: TextCapitalization.sentences,
                   ),
 
@@ -322,7 +330,7 @@ class _AdminAlertsScreenState extends State<AdminAlertsScreen> {
                     style: GoogleFonts.lexend(),
                     maxLines: 4,
                     decoration: InputDecoration(
-                      labelText: 'Message',
+                      labelText: context.l10n.adminAlertMessageLabel,
                       labelStyle: GoogleFonts.lexend(fontSize: 14),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
@@ -333,8 +341,9 @@ class _AdminAlertsScreenState extends State<AdminAlertsScreen> {
                         child: Icon(Icons.message_outlined),
                       ),
                     ),
-                    validator: (v) =>
-                        (v == null || v.trim().isEmpty) ? 'Required' : null,
+                    validator: (v) => (v == null || v.trim().isEmpty)
+                        ? context.l10n.adminAlertRequired
+                        : null,
                     textCapitalization: TextCapitalization.sentences,
                   ),
 
@@ -364,7 +373,9 @@ class _AdminAlertsScreenState extends State<AdminAlertsScreen> {
                             )
                           : Icon(_severityIcons[_severity]),
                       label: Text(
-                        _sending ? 'Sending…' : 'Broadcast Alert',
+                        _sending
+                            ? context.l10n.resetSendingCode
+                            : context.l10n.adminAlertBroadcastButton,
                         style: GoogleFonts.lexend(fontWeight: FontWeight.bold),
                       ),
                     ),
@@ -378,7 +389,7 @@ class _AdminAlertsScreenState extends State<AdminAlertsScreen> {
 
           // ── Recent active alerts ──
           Text(
-            'Active Alerts',
+            context.l10n.activeAlertsAdmin,
             style: GoogleFonts.lexend(
               fontSize: 16,
               fontWeight: FontWeight.bold,
@@ -398,7 +409,7 @@ class _AdminAlertsScreenState extends State<AdminAlertsScreen> {
                   child: Padding(
                     padding: const EdgeInsets.all(24),
                     child: Text(
-                      'Could not load alerts. You may not have permission to view them.',
+                      context.l10n.adminAlertsLoadError,
                       textAlign: TextAlign.center,
                       style: GoogleFonts.lexend(color: Colors.red),
                     ),
@@ -418,7 +429,7 @@ class _AdminAlertsScreenState extends State<AdminAlertsScreen> {
                   child: Padding(
                     padding: const EdgeInsets.symmetric(vertical: 24),
                     child: Text(
-                      'No active alerts',
+                      context.l10n.noActiveAlerts,
                       style: GoogleFonts.lexend(color: AppColors.textSecondary),
                     ),
                   ),
@@ -432,7 +443,7 @@ class _AdminAlertsScreenState extends State<AdminAlertsScreen> {
                   String timeStr = '';
                   final dt = parseTimestamp(createdAt);
                   if (dt != null) {
-                    timeStr = '${dt.day}/${dt.month}/${dt.year}';
+                    timeStr = localizedDateFormat(context, 'd/M/y').format(dt);
                   }
                   return Card(
                     margin: const EdgeInsets.only(bottom: 8),
@@ -473,11 +484,16 @@ class _AdminAlertsScreenState extends State<AdminAlertsScreen> {
                           Row(
                             children: [
                               _alertChip(
-                                d['targetLga'] as String? ?? 'All',
+                                (d['targetLga'] as String? ?? 'All') == 'All'
+                                    ? context.l10n.alertsAllLgas
+                                    : d['targetLga'] as String,
                                 Colors.teal,
                               ),
                               const SizedBox(width: 6),
-                              _alertChip(severity, color),
+                              _alertChip(
+                                alertSeverityLabel(severity, context.l10n),
+                                color,
+                              ),
                               if (timeStr.isNotEmpty) ...[
                                 const SizedBox(width: 6),
                                 Text(
@@ -494,7 +510,7 @@ class _AdminAlertsScreenState extends State<AdminAlertsScreen> {
                       ),
                       trailing: IconButton(
                         icon: const Icon(Icons.close, size: 18),
-                        tooltip: 'Dismiss alert',
+                        tooltip: context.l10n.adminAlertDismissTooltip,
                         onPressed: () => _dismissAlert(d['\$id'] as String),
                       ),
                       isThreeLine: true,

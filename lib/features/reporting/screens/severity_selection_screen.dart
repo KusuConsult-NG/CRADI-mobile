@@ -3,8 +3,8 @@ import 'package:climate_app/features/reporting/providers/reporting_provider.dart
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
-import 'package:climate_app/l10n/app_localizations.dart';
 import 'package:climate_app/shared/widgets/custom_button.dart';
+import 'package:climate_app/core/l10n/l10n.dart';
 
 class SeveritySelectionScreen extends StatefulWidget {
   const SeveritySelectionScreen({super.key});
@@ -45,7 +45,7 @@ class _SeveritySelectionScreenState extends State<SeveritySelectionScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
+    final l10n = context.l10n;
 
     return Scaffold(
       appBar: AppBar(title: Text(l10n.setSeverity)),

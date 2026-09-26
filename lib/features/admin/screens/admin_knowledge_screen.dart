@@ -6,6 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:climate_app/core/constants/app_config.dart';
 import 'package:climate_app/core/theme/app_colors.dart';
 import 'dart:developer' as developer;
+import 'package:climate_app/core/l10n/l10n.dart';
 
 /// Admin Knowledge Base Management screen.
 /// Allows admins to add, edit, and delete knowledge base guides.
@@ -37,15 +38,18 @@ class _AdminKnowledgeScreenState extends State<AdminKnowledgeScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text('Delete Guide', style: GoogleFonts.lexend()),
+        title: Text(
+          context.l10n.adminGuideDeleteTitle,
+          style: GoogleFonts.lexend(),
+        ),
         content: Text(
-          'Are you sure you want to delete this guide? This cannot be undone.',
+          context.l10n.adminGuideDeleteBody,
           style: GoogleFonts.lexend(fontSize: 14),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
+            child: Text(context.l10n.cancel),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
@@ -53,7 +57,7 @@ class _AdminKnowledgeScreenState extends State<AdminKnowledgeScreen> {
               foregroundColor: Colors.white,
             ),
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Delete'),
+            child: Text(context.l10n.delete),
           ),
         ],
       ),
@@ -74,10 +78,8 @@ class _AdminKnowledgeScreenState extends State<AdminKnowledgeScreen> {
             SnackBar(
               content: Text(
                 denied
-                    ? 'You do not have permission to delete this guide, '
-                          'or it was already removed.'
-                    : 'Could not delete guide. Check your connection and '
-                          'try again.',
+                    ? context.l10n.adminGuideDeleteDenied
+                    : context.l10n.adminGuideDeleteFailed,
               ),
               backgroundColor: Colors.red,
             ),
@@ -88,8 +90,8 @@ class _AdminKnowledgeScreenState extends State<AdminKnowledgeScreen> {
       developer.log('Guide deleted: $id', name: 'AdminKnowledgeScreen');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Guide deleted'),
+          SnackBar(
+            content: Text(context.l10n.adminGuideDeleted),
             backgroundColor: Colors.red,
           ),
         );
@@ -116,7 +118,7 @@ class _AdminKnowledgeScreenState extends State<AdminKnowledgeScreen> {
       backgroundColor: AppColors.background,
       appBar: AppBar(
         title: Text(
-          'Knowledge Management',
+          context.l10n.knowledgeManagement,
           style: GoogleFonts.lexend(fontWeight: FontWeight.bold),
         ),
         backgroundColor: AppColors.primaryRed,
@@ -128,7 +130,7 @@ class _AdminKnowledgeScreenState extends State<AdminKnowledgeScreen> {
         foregroundColor: Colors.white,
         icon: const Icon(Icons.add),
         label: Text(
-          'Add Guide',
+          context.l10n.adminGuideAdd,
           style: GoogleFonts.lexend(fontWeight: FontWeight.w600),
         ),
       ),
@@ -145,7 +147,10 @@ class _AdminKnowledgeScreenState extends State<AdminKnowledgeScreen> {
                   return Padding(
                     padding: const EdgeInsets.only(right: 6),
                     child: ChoiceChip(
-                      label: Text(c, style: GoogleFonts.lexend(fontSize: 12)),
+                      label: Text(
+                        knowledgeCategoryDisplay(context.l10n, c),
+                        style: GoogleFonts.lexend(fontSize: 12),
+                      ),
                       selected: _categoryFilter == c,
                       selectedColor: AppColors.primaryRed,
                       labelStyle: TextStyle(
@@ -170,7 +175,7 @@ class _AdminKnowledgeScreenState extends State<AdminKnowledgeScreen> {
                 if (snap.hasError) {
                   return Center(
                     child: Text(
-                      'Error loading guides',
+                      context.l10n.adminGuidesLoadError,
                       style: GoogleFonts.lexend(color: Colors.red),
                     ),
                   );
@@ -196,7 +201,7 @@ class _AdminKnowledgeScreenState extends State<AdminKnowledgeScreen> {
                         ),
                         const SizedBox(height: 12),
                         Text(
-                          'No guides found',
+                          context.l10n.adminGuidesEmpty,
                           style: GoogleFonts.lexend(
                             color: AppColors.textSecondary,
                           ),
@@ -205,7 +210,7 @@ class _AdminKnowledgeScreenState extends State<AdminKnowledgeScreen> {
                         TextButton.icon(
                           onPressed: () => _openGuideForm(),
                           icon: const Icon(Icons.add),
-                          label: const Text('Add the first guide'),
+                          label: Text(context.l10n.adminGuideAddFirst),
                         ),
                       ],
                     ),
@@ -274,7 +279,10 @@ class _AdminKnowledgeScreenState extends State<AdminKnowledgeScreen> {
                                 borderRadius: BorderRadius.circular(6),
                               ),
                               child: Text(
-                                hazardType.toUpperCase(),
+                                knowledgeCategoryDisplay(
+                                  context.l10n,
+                                  hazardType,
+                                ).toUpperCase(),
                                 style: GoogleFonts.lexend(
                                   fontSize: 10,
                                   fontWeight: FontWeight.w600,
@@ -291,16 +299,16 @@ class _AdminKnowledgeScreenState extends State<AdminKnowledgeScreen> {
                             }
                             if (action == 'delete') _deleteGuide(id);
                           },
-                          itemBuilder: (_) => const [
+                          itemBuilder: (_) => [
                             PopupMenuItem(
                               value: 'edit',
-                              child: Text('✏️ Edit'),
+                              child: Text(context.l10n.adminGuideEditMenu),
                             ),
                             PopupMenuItem(
                               value: 'delete',
                               child: Text(
-                                '🗑️ Delete',
-                                style: TextStyle(color: Colors.red),
+                                context.l10n.adminGuideDeleteMenu,
+                                style: const TextStyle(color: Colors.red),
                               ),
                             ),
                           ],
@@ -404,7 +412,9 @@ class _GuideFormSheetState extends State<_GuideFormSheet> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              widget.docId != null ? 'Guide updated' : 'Guide created',
+              widget.docId != null
+                  ? context.l10n.adminGuideUpdated
+                  : context.l10n.adminGuideCreated,
             ),
             backgroundColor: Colors.green,
           ),
@@ -415,7 +425,11 @@ class _GuideFormSheetState extends State<_GuideFormSheet> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              ErrorHandler.handleError(e, context: 'Knowledge Base'),
+              ErrorHandler.handleError(
+                e,
+                context.l10n,
+                context: 'Knowledge Base',
+              ),
             ),
             backgroundColor: Colors.red,
           ),
@@ -460,7 +474,9 @@ class _GuideFormSheetState extends State<_GuideFormSheet> {
               const SizedBox(height: 16),
 
               Text(
-                widget.docId != null ? 'Edit Guide' : 'New Guide',
+                widget.docId != null
+                    ? context.l10n.adminGuideEditTitle
+                    : context.l10n.adminGuideNewTitle,
                 style: GoogleFonts.lexend(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
@@ -473,7 +489,7 @@ class _GuideFormSheetState extends State<_GuideFormSheet> {
               DropdownButtonFormField<String>(
                 initialValue: _selectedCategory,
                 decoration: InputDecoration(
-                  labelText: 'Category / Hazard Type',
+                  labelText: context.l10n.adminGuideCategoryLabel,
                   labelStyle: GoogleFonts.lexend(fontSize: 14),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(8),
@@ -488,7 +504,10 @@ class _GuideFormSheetState extends State<_GuideFormSheet> {
                     .map(
                       (c) => DropdownMenuItem(
                         value: c,
-                        child: Text(c, style: GoogleFonts.lexend(fontSize: 14)),
+                        child: Text(
+                          knowledgeCategoryDisplay(context.l10n, c),
+                          style: GoogleFonts.lexend(fontSize: 14),
+                        ),
                       ),
                     )
                     .toList(),
@@ -501,15 +520,16 @@ class _GuideFormSheetState extends State<_GuideFormSheet> {
                 controller: _titleCtrl,
                 style: GoogleFonts.lexend(),
                 decoration: InputDecoration(
-                  labelText: 'Guide Title',
+                  labelText: context.l10n.adminGuideTitleLabel,
                   labelStyle: GoogleFonts.lexend(fontSize: 14),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(8),
                   ),
                   prefixIcon: const Icon(Icons.title),
                 ),
-                validator: (v) =>
-                    (v == null || v.trim().isEmpty) ? 'Required' : null,
+                validator: (v) => (v == null || v.trim().isEmpty)
+                    ? context.l10n.adminAlertRequired
+                    : null,
                 textCapitalization: TextCapitalization.sentences,
               ),
               const SizedBox(height: 12),
@@ -519,7 +539,7 @@ class _GuideFormSheetState extends State<_GuideFormSheet> {
                 controller: _sourceCtrl,
                 style: GoogleFonts.lexend(),
                 decoration: InputDecoration(
-                  labelText: 'Source (e.g. NEMA, WHO)',
+                  labelText: context.l10n.adminGuideSourceLabel,
                   labelStyle: GoogleFonts.lexend(fontSize: 14),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(8),
@@ -535,15 +555,16 @@ class _GuideFormSheetState extends State<_GuideFormSheet> {
                 style: GoogleFonts.lexend(fontSize: 13),
                 maxLines: 8,
                 decoration: InputDecoration(
-                  labelText: 'Content (Markdown supported)',
+                  labelText: context.l10n.adminGuideContentLabel,
                   labelStyle: GoogleFonts.lexend(fontSize: 14),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(8),
                   ),
                   alignLabelWithHint: true,
                 ),
-                validator: (v) =>
-                    (v == null || v.trim().isEmpty) ? 'Required' : null,
+                validator: (v) => (v == null || v.trim().isEmpty)
+                    ? context.l10n.adminAlertRequired
+                    : null,
                 textCapitalization: TextCapitalization.sentences,
               ),
               const SizedBox(height: 20),
@@ -571,8 +592,8 @@ class _GuideFormSheetState extends State<_GuideFormSheet> {
                         )
                       : Text(
                           widget.docId != null
-                              ? 'Update Guide'
-                              : 'Create Guide',
+                              ? context.l10n.adminGuideUpdate
+                              : context.l10n.adminGuideCreate,
                           style: GoogleFonts.lexend(
                             fontWeight: FontWeight.bold,
                           ),

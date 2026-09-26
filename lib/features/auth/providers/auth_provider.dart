@@ -16,6 +16,7 @@ import 'package:climate_app/core/services/device_fingerprint_service.dart';
 import 'package:climate_app/core/services/fraud_detection_service.dart';
 import 'package:climate_app/core/constants/app_config.dart';
 import 'package:climate_app/core/utils/validators.dart';
+import 'package:climate_app/core/l10n/l10n.dart';
 
 enum UserRole {
   user,
@@ -34,6 +35,19 @@ extension UserRoleValue on UserRole {
     UserRole.ldpCoordinator => 'ldp_coordinator',
     UserRole.projectStaff => 'project_staff',
     _ => name,
+  };
+
+  /// Display name of the role in the language of [l10n] (the stored value
+  /// is [dbValue]).
+  String label(AppLocalizations l10n) => switch (this) {
+    UserRole.user => l10n.roleUser,
+    UserRole.ewm => l10n.roleEwm,
+    UserRole.ewv => l10n.roleEwv,
+    UserRole.ewr => l10n.roleEwr,
+    UserRole.ldpCoordinator => l10n.roleLdpCoordinator,
+    UserRole.projectStaff => l10n.roleProjectStaff,
+    UserRole.admin => l10n.roleAdmin,
+    UserRole.techSupport => l10n.roleTechSupport,
   };
 
   /// Parses a `profiles.role` value (null when unknown).
@@ -652,12 +666,15 @@ class AuthProvider extends ChangeNotifier {
 
   // ─────────────────────────── Biometric Lock ───────────────────────────────
 
-  Future<bool> unlockApp() async {
+  /// [promptReason] is the localised text of the system biometric prompt.
+  Future<bool> unlockApp({String? promptReason}) async {
     try {
       _isLoading = true;
       notifyListeners();
 
-      final authenticated = await _biometricService.authenticateForLogin();
+      final authenticated = await _biometricService.authenticateForLogin(
+        reason: promptReason ?? englishL10n.biometricLoginPrompt,
+      );
 
       if (authenticated) {
         final isValid = await _isServerSessionValid();
@@ -741,7 +758,7 @@ class AuthProvider extends ChangeNotifier {
           identities != null &&
           identities.isEmpty) {
         _justLoggedIn = false;
-        throw AuthException('Email is already registered. Please login.');
+        throw AuthException((l) => l.authErrorEmailRegistered);
       }
 
       if (response.session == null) {
@@ -773,45 +790,35 @@ class AuthProvider extends ChangeNotifier {
       _justLoggedIn = false;
       notifyListeners();
       ErrorHandler.logError(e, context: 'AuthProvider.signUpWithEmail');
-      throw AuthException('Registration failed. Please try again.');
+      throw AuthException((l) => l.authErrorRegistrationFailed);
     }
   }
 
   AuthException _mapSignUpError(sb.AuthException e) {
     if (e is sb.AuthRetryableFetchException) {
-      return AuthException(
-        'Network error. Please check your connection and try again.',
-      );
+      return AuthException((l) => l.authErrorNetworkRetry);
     }
     if (e is sb.AuthWeakPasswordException || e.code == 'weak_password') {
-      return AuthException(
-        'Password is too weak. Use at least 8 characters with letters, numbers and symbols.',
-      );
+      return AuthException((l) => l.authErrorWeakPassword);
     }
     switch (e.code) {
       case 'user_already_exists':
       case 'email_exists':
       case 'phone_exists':
-        return AuthException(
-          'This account is already registered. Please login.',
-        );
+        return AuthException((l) => l.authErrorAccountRegistered);
       case 'email_address_invalid':
       case 'validation_failed':
-        return AuthException('Please enter a valid email address.');
+        return AuthException((l) => l.validation_invalidEmail);
       case 'signup_disabled':
       case 'email_provider_disabled':
       case 'phone_provider_disabled':
-        return AuthException(
-          'Registration is currently disabled. Please contact support.',
-        );
+        return AuthException((l) => l.authErrorRegistrationDisabled);
       case 'over_email_send_rate_limit':
       case 'over_sms_send_rate_limit':
       case 'over_request_rate_limit':
-        return AuthException(
-          'Too many attempts. Please wait a few minutes before trying again.',
-        );
+        return AuthException((l) => l.authErrorTooManyAttempts);
       default:
-        return AuthException('Registration failed. Please try again.');
+        return AuthException((l) => l.authErrorRegistrationFailed);
     }
   }
 
@@ -866,13 +873,11 @@ class AuthProvider extends ChangeNotifier {
         password: password,
       );
       final user = response.user ?? response.session?.user;
-      if (user == null) throw AuthException('Login failed. Please try again.');
+      if (user == null) throw AuthException((l) => l.authErrorLoginFailed);
 
       await _ensureSignedIn(user);
       if (_accountDisabled || _currentUser == null) {
-        throw AuthException(
-          'This account has been disabled. Please contact support.',
-        );
+        throw AuthException((l) => l.authErrorAccountDisabled);
       }
 
       // Fraud assessment (non-blocking)
@@ -930,13 +935,13 @@ class AuthProvider extends ChangeNotifier {
         name: 'AuthProvider',
       );
       if (e is sb.AuthRetryableFetchException) {
-        throw AuthException('Login failed. Please check your connection.');
+        throw AuthException((l) => l.authErrorLoginConnection);
       }
       switch (e.code) {
         case 'invalid_credentials':
         case 'user_not_found':
           await _rateLimiter.recordFailedLogin();
-          throw AuthException('Invalid email or password');
+          throw AuthException((l) => l.authErrorInvalidCredentials);
         case 'email_not_confirmed':
           _pendingEmail = normalisedEmail;
           try {
@@ -946,19 +951,15 @@ class AuthProvider extends ChangeNotifier {
           }
           throw EmailNotConfirmedException(normalisedEmail);
         case 'user_banned':
-          throw AuthException(
-            'This account has been disabled. Please contact support.',
-          );
+          throw AuthException((l) => l.authErrorAccountDisabled);
         case 'over_request_rate_limit':
-          throw AuthException(
-            'Too many login attempts. Please wait a few minutes and try again.',
-          );
+          throw AuthException((l) => l.authErrorTooManyLogins);
         default:
           ErrorHandler.logError(
             'Unhandled AuthException: ${e.code} – ${e.message}',
             context: 'AuthProvider.signInWithEmail',
           );
-          throw AuthException('Login failed. Please try again.');
+          throw AuthException((l) => l.authErrorLoginFailed);
       }
     } on Exception catch (e) {
       _isLoading = false;
@@ -966,13 +967,13 @@ class AuthProvider extends ChangeNotifier {
       notifyListeners();
       ErrorHandler.logError(e, context: 'AuthProvider.signInWithEmail');
       if (kDebugMode) {
-        throw AuthException(
-          'Login error: ${e.runtimeType} – ${e.toString().substring(0, e.toString().length.clamp(0, 200))}',
-        );
+        // Debug builds only: raw diagnostics for developers (not
+        // translated on purpose).
+        final detail =
+            'Login error: ${e.runtimeType} – ${e.toString().substring(0, e.toString().length.clamp(0, 200))}';
+        throw AuthException((_) => detail);
       }
-      throw AuthException(
-        'An unexpected error occurred during login. Please try again.',
-      );
+      throw AuthException((l) => l.authErrorLoginUnexpected);
     }
   }
 
@@ -1015,7 +1016,7 @@ class AuthProvider extends ChangeNotifier {
 
       final normalised = Validators.normalizePhoneNumber(phone.trim());
       if (normalised.length < 8) {
-        throw AuthException('Invalid phone number.');
+        throw AuthException((l) => l.authErrorInvalidPhone);
       }
 
       if (loginOnly) {
@@ -1058,26 +1059,20 @@ class AuthProvider extends ChangeNotifier {
       switch (e.code) {
         case 'phone_provider_disabled':
         case 'sms_send_failed':
-          throw AuthException(
-            'SMS service is not available. Please contact support.',
-          );
+          throw AuthException((l) => l.authErrorSmsUnavailable);
         case 'otp_disabled':
-          throw AuthException(
-            'No account found for this number. Please register first.',
-          );
+          throw AuthException((l) => l.authErrorPhoneNotRegistered);
         case 'over_sms_send_rate_limit':
         case 'over_request_rate_limit':
-          throw AuthException(
-            'Too many attempts. Please wait a few minutes before trying again.',
-          );
+          throw AuthException((l) => l.authErrorTooManyAttempts);
         default:
-          throw AuthException('Failed to send verification SMS.');
+          throw AuthException((l) => l.authErrorSmsFailed);
       }
     } on Exception catch (e) {
       _isLoading = false;
       notifyListeners();
       ErrorHandler.logError(e, context: 'AuthProvider.sendOtpForPhone');
-      throw AuthException('Failed to send verification SMS.');
+      throw AuthException((l) => l.authErrorSmsFailed);
     }
   }
 
@@ -1108,16 +1103,14 @@ class AuthProvider extends ChangeNotifier {
       developer.log('Resend error: ${e.code} ${e.message}');
       if (e.code == 'over_email_send_rate_limit' ||
           e.code == 'over_request_rate_limit') {
-        throw AuthException(
-          'Too many attempts. Please wait a few minutes before trying again.',
-        );
+        throw AuthException((l) => l.authErrorTooManyAttempts);
       }
-      throw AuthException('Failed to send verification code.');
+      throw AuthException((l) => l.authErrorCodeSendFailed);
     } on Exception catch (e) {
       _isLoading = false;
       notifyListeners();
       ErrorHandler.logError(e, context: 'AuthProvider.sendOtpForEmail');
-      throw AuthException('Failed to send verification code.');
+      throw AuthException((l) => l.authErrorCodeSendFailed);
     }
   }
 
@@ -1140,9 +1133,7 @@ class AuthProvider extends ChangeNotifier {
           (!data.containsKey('email') && !data.containsKey('phone'))) {
         final email = pendingEmail;
         if (email == null || email.isEmpty) {
-          throw AuthException(
-            'No user context for verification. Please login again.',
-          );
+          throw AuthException((l) => l.authErrorNoUserContext);
         }
         data = {'email': email};
       }
@@ -1169,14 +1160,12 @@ class AuthProvider extends ChangeNotifier {
 
       final user = response.user ?? response.session?.user;
       if (user == null) {
-        throw AuthException('Verification failed. Please try again.');
+        throw AuthException((l) => l.authErrorVerificationFailed);
       }
       _pendingPhoneMetadata = null;
       await _ensureSignedIn(user);
       if (_accountDisabled) {
-        throw AuthException(
-          'This account has been disabled. Please contact support.',
-        );
+        throw AuthException((l) => l.authErrorAccountDisabled);
       }
       _isVerified = true;
       await _startUserSession(user, _userRole ?? UserRole.user);
@@ -1198,41 +1187,35 @@ class AuthProvider extends ChangeNotifier {
         name: 'AuthProvider',
       );
       if (e is sb.AuthRetryableFetchException) {
-        throw AuthException('Network error. Please check your connection.');
+        throw AuthException((l) => l.errorNetwork);
       }
       if (e.code == 'otp_expired' || e.code == 'invalid_credentials') {
-        throw AuthException(
-          'Invalid or expired verification code. Please request a new one.',
-        );
+        throw AuthException((l) => l.authErrorInvalidCode);
       }
       if (e.code == 'over_request_rate_limit') {
-        throw AuthException(
-          'Too many attempts. Please wait a few minutes and try again.',
-        );
+        throw AuthException((l) => l.authErrorTooManyAttemptsRetry);
       }
-      throw AuthException('Verification failed. Please try again.');
+      throw AuthException((l) => l.authErrorVerificationFailed);
     } on Exception catch (e) {
       _isLoading = false;
       _justLoggedIn = false;
       notifyListeners();
       ErrorHandler.logError(e, context: 'AuthProvider.verifyOtpAndLogin');
-      throw AuthException('Failed to verify code.');
+      throw AuthException((l) => l.authErrorVerifyCodeFailed);
     }
   }
 
   Future<void> resendVerificationLink() async {
     final email = pendingEmail;
     if (email == null || email.isEmpty) {
-      throw AuthException('User not logged in');
+      throw AuthException((l) => l.authErrorNotLoggedIn);
     }
     try {
       await sendOtpForEmail(email);
     } on AuthException {
       rethrow;
     } on Exception catch (_) {
-      throw AuthException(
-        'Failed to resend verification code. Please try again.',
-      );
+      throw AuthException((l) => l.authErrorResendFailed);
     }
   }
 
@@ -1274,7 +1257,7 @@ class AuthProvider extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
       ErrorHandler.logError(e, context: 'AuthProvider.sendPasswordResetEmail');
-      throw AuthException('Failed to send reset email. Please try again.');
+      throw AuthException((l) => l.authErrorResetEmailFailed);
     }
   }
 
@@ -1299,28 +1282,20 @@ class AuthProvider extends ChangeNotifier {
     } on sb.AuthException catch (e) {
       ErrorHandler.logError(e, context: 'AuthProvider.confirmPasswordReset');
       if (e is sb.AuthWeakPasswordException || e.code == 'weak_password') {
-        throw AuthException(
-          'Password is too weak. The code has been used, so please request '
-          'a new code and choose a stronger password.',
-        );
+        throw AuthException((l) => l.authErrorResetWeakPassword);
       }
       switch (e.code) {
         case 'otp_expired':
         case 'invalid_credentials':
-          throw AuthException(
-            'This reset code is invalid or has expired. Please request a new one.',
-          );
+          throw AuthException((l) => l.authErrorResetCodeInvalid);
         case 'same_password':
-          throw AuthException(
-            'Your new password must be different from the old one. The code '
-            'has been used, so please request a new code.',
-          );
+          throw AuthException((l) => l.authErrorResetSamePassword);
         default:
-          throw AuthException('Failed to reset password. Please try again.');
+          throw AuthException((l) => l.authErrorResetFailed);
       }
     } on Exception catch (e) {
       ErrorHandler.logError(e, context: 'AuthProvider.confirmPasswordReset');
-      throw AuthException('Failed to reset password. Please try again.');
+      throw AuthException((l) => l.authErrorResetFailed);
     } finally {
       try {
         if (_db.getCurrentUser() != null) await _db.logout();
@@ -1336,14 +1311,16 @@ class AuthProvider extends ChangeNotifier {
   /// Unlocks with biometrics using the persisted Supabase session. Returns
   /// false when there is no usable session (the user must sign in with
   /// their password).
-  Future<bool> authenticateWithBiometrics() async {
+  Future<bool> authenticateWithBiometrics({String? promptReason}) async {
     try {
       final isBiometricEnabled = await _storage.isBiometricEnabled(
         forUserId: _db.currentUserId,
       );
       if (!isBiometricEnabled) return false;
 
-      final authenticated = await _biometricService.authenticateForLogin();
+      final authenticated = await _biometricService.authenticateForLogin(
+        reason: promptReason ?? englishL10n.biometricLoginPrompt,
+      );
       if (!authenticated) return false;
 
       final isValid = await _isServerSessionValid();
@@ -1369,12 +1346,13 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> setBiometricEnabled(bool enabled) async {
+  /// [promptReason] is the localised text of the system biometric prompt.
+  Future<void> setBiometricEnabled(bool enabled, {String? promptReason}) async {
     if (enabled) {
       final canAuth = await _biometricService.authenticate(
-        reason: 'Enable biometric login for EWER',
+        reason: promptReason ?? englishL10n.biometricEnablePrompt,
       );
-      if (!canAuth) throw AuthException('Biometric authentication failed');
+      if (!canAuth) throw AuthException((l) => l.biometricErrorFailed);
     }
     final user = _db.getCurrentUser();
     await _storage.setBiometricEnabled(enabled, userId: user?.id);

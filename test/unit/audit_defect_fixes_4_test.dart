@@ -21,6 +21,7 @@ import 'package:hive/hive.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart'
     show PostgrestException, StorageException;
+import 'package:climate_app/core/l10n/l10n.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -118,6 +119,7 @@ void main() {
       expect(
         reportActionErrorMessage(
           const PostgrestException(message: 'x', code: '22023'),
+          englishL10n,
         ),
         'This report is already pending.',
       );
@@ -127,6 +129,7 @@ void main() {
             message: 'You cannot reopen your own report',
             code: '42501',
           ),
+          englishL10n,
         ),
         'You cannot reopen your own report',
       );
@@ -136,17 +139,22 @@ void main() {
             message: 'new row violates row-level security policy',
             code: '42501',
           ),
+          englishL10n,
         ),
         'You do not have permission to change this report.',
       );
       expect(
         reportActionErrorMessage(
           const DocumentNotFoundException('reports', 'r'),
+          englishL10n,
         ),
         contains('permission'),
       );
       expect(
-        reportActionErrorMessage(const VerificationRefusedException('nope')),
+        reportActionErrorMessage(
+          VerificationRefusedException((_) => 'nope'),
+          englishL10n,
+        ),
         'nope',
       );
     });
@@ -365,10 +373,10 @@ void main() {
 
   group('L7 verification detail badge', () {
     test('shows the actual status', () {
-      expect(statusBadgeFor('pending').$1, 'PENDING VERIFICATION');
-      expect(statusBadgeFor('verified').$1, 'VERIFIED');
-      expect(statusBadgeFor('rejected').$1, 'REJECTED');
-      expect(statusBadgeFor('approved').$1, 'APPROVED');
+      expect(statusBadgeFor('pending', englishL10n).$1, 'PENDING VERIFICATION');
+      expect(statusBadgeFor('verified', englishL10n).$1, 'VERIFIED');
+      expect(statusBadgeFor('rejected', englishL10n).$1, 'REJECTED');
+      expect(statusBadgeFor('approved', englishL10n).$1, 'APPROVED');
     });
   });
 
