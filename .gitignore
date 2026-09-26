@@ -53,11 +53,11 @@ node_modules/
 
 # Runtime configuration (--dart-define-from-file); see env.example.json
 env.json
+env.production.json
 
 # Environment variables
 .env
 .env.*
-!.env.example
 
 # SMS Configuration (contains API keys - NEVER commit!)
 lib/core/config/sms_config.dart
