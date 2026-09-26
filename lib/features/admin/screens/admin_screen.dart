@@ -1,4 +1,4 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:climate_app/core/services/supabase_service.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -10,18 +10,22 @@ import 'package:climate_app/l10n/app_localizations.dart';
 class AdminScreen extends StatelessWidget {
   const AdminScreen({super.key});
 
-  Future<int> _count(String collection, {Map<String, dynamic>? where}) async {
-    Query<Map<String, dynamic>> q = FirebaseFirestore.instance.collection(
-      collection,
-    );
-    if (where != null) {
-      where.forEach((k, v) => q = q.where(k, isEqualTo: v));
-    }
+  Future<int> _count(
+    String collection, {
+    Map<String, dynamic>? where,
+  }) async {
     try {
-      final snap = await q.count().get().timeout(const Duration(seconds: 5));
-      return snap.count ?? 0;
+      final queries = <QueryFilter>[
+        SQuery.limit(500),
+        if (where != null)
+          ...where.entries.map((e) => SQuery.equal(e.key, e.value)),
+      ];
+      final docs = await SupabaseService()
+          .listDocuments(collectionId: collection, queries: queries)
+          .timeout(const Duration(seconds: 5));
+      return docs.length;
     } on Exception catch (_) {
-      return 0; // Return 0 if timeout or offline
+      return 0;
     }
   }
 
@@ -41,11 +45,11 @@ class AdminScreen extends StatelessWidget {
       ),
       body: FutureBuilder<List<int>>(
         future: Future.wait([
-          _count('users', where: {'isApproved': false}),
+          _count('users', where: {'is_approved': false}),
           _count('reports', where: {'status': 'pending'}),
           _count('reports', where: {'status': 'verified'}),
           _count('users'),
-          _count('alerts', where: {'isActive': true}),
+          _count('alerts', where: {'is_active': true}),
           _count('reports'),
         ]),
         builder: (context, snap) {

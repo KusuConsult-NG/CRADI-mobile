@@ -1,5 +1,5 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:climate_app/core/utils/error_handler.dart';
+import 'package:climate_app/core/services/supabase_service.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:climate_app/core/constants/app_config.dart';
@@ -17,6 +17,9 @@ class AdminKnowledgeScreen extends StatefulWidget {
 
 class _AdminKnowledgeScreenState extends State<AdminKnowledgeScreen> {
   String _categoryFilter = 'All';
+  final SupabaseService _supabase = SupabaseService();
+  List<Map<String, dynamic>> _guides = [];
+  bool _loading = false;
 
   static const _categories = [
     'All',
@@ -30,15 +33,28 @@ class _AdminKnowledgeScreenState extends State<AdminKnowledgeScreen> {
     'General',
   ];
 
-  late final Stream<QuerySnapshot<Map<String, dynamic>>> _knowledgeStream;
-
   @override
   void initState() {
     super.initState();
-    _knowledgeStream = FirebaseFirestore.instance
-        .collection(AppConfig.knowledgeBaseCollection)
-        .orderBy('updatedAt', descending: true)
-        .snapshots();
+    _loadGuides();
+  }
+
+  Future<void> _loadGuides() async {
+    setState(() => _loading = true);
+    try {
+      final docs = await _supabase.listDocuments(
+        collectionId: AppConfig.knowledgeBaseCollection,
+        queries: [
+          SQuery.orderDesc('updated_at'),
+          SQuery.limit(200),
+        ],
+      );
+      if (mounted) setState(() => _guides = docs);
+    } on Exception catch (e) {
+      developer.log('Error loading guides: $e', name: 'AdminKnowledgeScreen');
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
   }
 
   Future<void> _deleteGuide(String id) async {
@@ -67,18 +83,23 @@ class _AdminKnowledgeScreenState extends State<AdminKnowledgeScreen> {
       ),
     );
     if (confirmed == true) {
-      await FirebaseFirestore.instance
-          .collection(AppConfig.knowledgeBaseCollection)
-          .doc(id)
-          .delete();
-      developer.log('Guide deleted: $id', name: 'AdminKnowledgeScreen');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Guide deleted'),
-            backgroundColor: Colors.red,
-          ),
+      try {
+        await _supabase.deleteDocument(
+          collectionId: AppConfig.knowledgeBaseCollection,
+          documentId: id,
         );
+        developer.log('Guide deleted: $id', name: 'AdminKnowledgeScreen');
+        _loadGuides();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Guide deleted'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      } on Exception catch (e) {
+        developer.log('Error deleting guide: $e', name: 'AdminKnowledgeScreen');
       }
     }
   }
@@ -92,12 +113,21 @@ class _AdminKnowledgeScreenState extends State<AdminKnowledgeScreen> {
         existing: existing,
         docId: docId,
         categories: _categories.where((c) => c != 'All').toList(),
+        onSaved: _loadGuides,
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final filteredDocs = _guides.where((d) {
+      if (_categoryFilter != 'All') {
+        final hazard = (d['hazard_type'] ?? d['hazardType'] ?? '').toString();
+        if (hazard.toLowerCase() != _categoryFilter.toLowerCase()) return false;
+      }
+      return true;
+    }).toList();
+
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
@@ -147,160 +177,137 @@ class _AdminKnowledgeScreenState extends State<AdminKnowledgeScreen> {
 
           // ── Guides list ──
           Expanded(
-            child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-              stream: _knowledgeStream,
-              builder: (context, snap) {
-                if (snap.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                if (snap.hasError) {
-                  return Center(
-                    child: Text(
-                      'Error loading guides',
-                      style: GoogleFonts.lexend(color: Colors.red),
-                    ),
-                  );
-                }
-                final allDocs = snap.data?.docs ?? [];
-
-                // Client-side filtering
-                final docs = allDocs.where((d) {
-                  final data = d.data();
-                  if (_categoryFilter != 'All') {
-                    final hazard = data['hazardType'] as String? ?? '';
-                    if (hazard != _categoryFilter.toLowerCase()) return false;
-                  }
-                  return true;
-                }).toList();
-
-                if (docs.isEmpty) {
-                  return Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.menu_book_outlined,
-                          size: 48,
-                          color: Colors.grey.shade400,
-                        ),
-                        const SizedBox(height: 12),
-                        Text(
-                          'No guides found',
-                          style: GoogleFonts.lexend(
-                            color: AppColors.textSecondary,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        TextButton.icon(
-                          onPressed: () => _openGuideForm(),
-                          icon: const Icon(Icons.add),
-                          label: const Text('Add the first guide'),
-                        ),
-                      ],
-                    ),
-                  );
-                }
-                return ListView.builder(
-                  padding: const EdgeInsets.fromLTRB(12, 8, 12, 100),
-                  itemCount: docs.length,
-                  itemBuilder: (_, i) {
-                    final d = docs[i].data();
-                    final id = docs[i].id;
-                    final hazardType =
-                        d['hazardType'] as String? ??
-                        d['category'] as String? ??
-                        'general';
-                    final color = _categoryColor(hazardType);
-
-                    return Card(
-                      margin: const EdgeInsets.only(bottom: 8),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: ListTile(
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 6,
-                        ),
-                        leading: Container(
-                          width: 44,
-                          height: 44,
-                          decoration: BoxDecoration(
-                            color: color.withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Icon(
-                            _categoryIcon(hazardType),
-                            color: color,
-                            size: 22,
-                          ),
-                        ),
-                        title: Text(
-                          d['title'] as String? ?? 'Untitled',
-                          style: GoogleFonts.lexend(
-                            fontWeight: FontWeight.w600,
-                            fontSize: 14,
-                          ),
-                        ),
-                        subtitle: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              d['source'] as String? ?? '',
-                              style: GoogleFonts.lexend(
-                                fontSize: 11,
-                                color: AppColors.textSecondary,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 6,
-                                vertical: 2,
-                              ),
-                              decoration: BoxDecoration(
-                                color: color.withValues(alpha: 0.1),
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                              child: Text(
-                                hazardType.toUpperCase(),
-                                style: GoogleFonts.lexend(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w600,
-                                  color: color,
+            child: _loading
+                ? const Center(child: CircularProgressIndicator())
+                : RefreshIndicator(
+                    onRefresh: _loadGuides,
+                    child: filteredDocs.isEmpty
+                        ? Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  Icons.menu_book_outlined,
+                                  size: 48,
+                                  color: Colors.grey.shade400,
                                 ),
-                              ),
+                                const SizedBox(height: 12),
+                                Text(
+                                  'No guides found',
+                                  style: GoogleFonts.lexend(
+                                    color: AppColors.textSecondary,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                TextButton.icon(
+                                  onPressed: () => _openGuideForm(),
+                                  icon: const Icon(Icons.add),
+                                  label: const Text('Add the first guide'),
+                                ),
+                              ],
                             ),
-                          ],
-                        ),
-                        trailing: PopupMenuButton<String>(
-                          onSelected: (action) {
-                            if (action == 'edit') {
-                              _openGuideForm(existing: d, docId: id);
-                            }
-                            if (action == 'delete') _deleteGuide(id);
-                          },
-                          itemBuilder: (_) => const [
-                            PopupMenuItem(
-                              value: 'edit',
-                              child: Text('✏️ Edit'),
-                            ),
-                            PopupMenuItem(
-                              value: 'delete',
-                              child: Text(
-                                '🗑️ Delete',
-                                style: TextStyle(color: Colors.red),
-                              ),
-                            ),
-                          ],
-                        ),
-                        isThreeLine: true,
-                      ),
-                    );
-                  },
-                );
-              },
-            ),
+                          )
+                        : ListView.builder(
+                            padding: const EdgeInsets.fromLTRB(12, 8, 12, 100),
+                            itemCount: filteredDocs.length,
+                            itemBuilder: (_, i) {
+                              final d = filteredDocs[i];
+                              final id = (d['id'] ?? d['\$id'] ?? '').toString();
+                              final hazardType = (d['hazard_type'] ??
+                                      d['hazardType'] ??
+                                      d['category'] ??
+                                      'general')
+                                  .toString();
+                              final color = _categoryColor(hazardType);
+
+                              return Card(
+                                margin: const EdgeInsets.only(bottom: 8),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: ListTile(
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 14,
+                                    vertical: 6,
+                                  ),
+                                  leading: Container(
+                                    width: 44,
+                                    height: 44,
+                                    decoration: BoxDecoration(
+                                      color: color.withValues(alpha: 0.12),
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                    child: Icon(
+                                      _categoryIcon(hazardType),
+                                      color: color,
+                                      size: 22,
+                                    ),
+                                  ),
+                                  title: Text(
+                                    (d['title'] ?? 'Untitled').toString(),
+                                    style: GoogleFonts.lexend(
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                  subtitle: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        (d['source'] ?? '').toString(),
+                                        style: GoogleFonts.lexend(
+                                          fontSize: 11,
+                                          color: AppColors.textSecondary,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 6,
+                                          vertical: 2,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: color.withValues(alpha: 0.1),
+                                          borderRadius: BorderRadius.circular(6),
+                                        ),
+                                        child: Text(
+                                          hazardType.toUpperCase(),
+                                          style: GoogleFonts.lexend(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.w600,
+                                            color: color,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  trailing: PopupMenuButton<String>(
+                                    onSelected: (action) {
+                                      if (action == 'edit') {
+                                        _openGuideForm(existing: d, docId: id);
+                                      }
+                                      if (action == 'delete') _deleteGuide(id);
+                                    },
+                                    itemBuilder: (_) => const [
+                                      PopupMenuItem(
+                                        value: 'edit',
+                                        child: Text('Edit'),
+                                      ),
+                                      PopupMenuItem(
+                                        value: 'delete',
+                                        child: Text(
+                                          'Delete',
+                                          style: TextStyle(color: Colors.red),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  isThreeLine: true,
+                                ),
+                              );
+                            },
+                          ),
+                  ),
           ),
         ],
       ),
@@ -358,8 +365,14 @@ class _GuideFormSheet extends StatefulWidget {
   final Map<String, dynamic>? existing;
   final String? docId;
   final List<String> categories;
+  final VoidCallback onSaved;
 
-  const _GuideFormSheet({this.existing, this.docId, required this.categories});
+  const _GuideFormSheet({
+    this.existing,
+    this.docId,
+    required this.categories,
+    required this.onSaved,
+  });
 
   @override
   State<_GuideFormSheet> createState() => _GuideFormSheetState();
@@ -380,7 +393,7 @@ class _GuideFormSheetState extends State<_GuideFormSheet> {
     _titleCtrl = TextEditingController(text: e?['title'] as String? ?? '');
     _contentCtrl = TextEditingController(text: e?['content'] as String? ?? '');
     _sourceCtrl = TextEditingController(text: e?['source'] as String? ?? '');
-    final hazardType = e?['hazardType'] as String? ?? '';
+    final hazardType = (e?['hazard_type'] ?? e?['hazardType'] ?? '') as String;
     _selectedCategory = widget.categories.firstWhere(
       (c) => c.toLowerCase() == hazardType.toLowerCase(),
       orElse: () => widget.categories.first,
@@ -399,30 +412,38 @@ class _GuideFormSheetState extends State<_GuideFormSheet> {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _saving = true);
 
-    final data = {
+    final nowIso = DateTime.now().toUtc().toIso8601String();
+    final data = <String, dynamic>{
       'title': _titleCtrl.text.trim(),
       'content': _contentCtrl.text.trim(),
       'source': _sourceCtrl.text.trim(),
       'category': _selectedCategory,
-      'hazardType': _selectedCategory.toLowerCase(),
-      'updatedAt': FieldValue.serverTimestamp(),
+      'hazard_type': _selectedCategory.toLowerCase(),
+      'updated_at': nowIso,
     };
 
     try {
-      final col = FirebaseFirestore.instance.collection(
-        AppConfig.knowledgeBaseCollection,
-      );
+      final supabase = SupabaseService();
       if (widget.docId != null) {
-        await col.doc(widget.docId).update(data);
+        await supabase.updateDocument(
+          collectionId: AppConfig.knowledgeBaseCollection,
+          documentId: widget.docId!,
+          data: data,
+        );
         developer.log(
           'Guide updated: ${widget.docId}',
           name: 'AdminKnowledgeScreen',
         );
       } else {
-        data['createdAt'] = FieldValue.serverTimestamp();
-        await col.add(data);
+        data['created_at'] = nowIso;
+        await supabase.createDocument(
+          collectionId: AppConfig.knowledgeBaseCollection,
+          data: data,
+        );
         developer.log('Guide created', name: 'AdminKnowledgeScreen');
       }
+
+      widget.onSaved();
 
       if (mounted) {
         Navigator.pop(context);
@@ -459,150 +480,91 @@ class _GuideFormSheetState extends State<_GuideFormSheet> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       padding: EdgeInsets.only(
+        top: 20,
         left: 20,
         right: 20,
-        top: 16,
-        bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+        bottom: MediaQuery.of(context).viewInsets.bottom + 20,
       ),
       child: Form(
         key: _formKey,
         child: SingleChildScrollView(
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Handle
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade300,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-
               Text(
                 widget.docId != null ? 'Edit Guide' : 'New Guide',
                 style: GoogleFonts.lexend(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
-                  color: AppColors.textPrimary,
                 ),
               ),
-              const SizedBox(height: 20),
-
-              // Category
+              const SizedBox(height: 16),
               DropdownButtonFormField<String>(
                 initialValue: _selectedCategory,
-                decoration: InputDecoration(
+                decoration: const InputDecoration(
                   labelText: 'Category / Hazard Type',
-                  labelStyle: GoogleFonts.lexend(fontSize: 14),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  prefixIcon: const Icon(Icons.category_outlined),
-                ),
-                style: GoogleFonts.lexend(
-                  fontSize: 14,
-                  color: AppColors.textPrimary,
+                  border: OutlineInputBorder(),
                 ),
                 items: widget.categories
-                    .map(
-                      (c) => DropdownMenuItem(
-                        value: c,
-                        child: Text(c, style: GoogleFonts.lexend(fontSize: 14)),
-                      ),
-                    )
+                    .map((c) => DropdownMenuItem(value: c, child: Text(c)))
                     .toList(),
-                onChanged: (v) => setState(() => _selectedCategory = v!),
+                onChanged: (v) {
+                  if (v != null) setState(() => _selectedCategory = v);
+                },
               ),
               const SizedBox(height: 12),
-
-              // Title
               TextFormField(
                 controller: _titleCtrl,
-                style: GoogleFonts.lexend(),
-                decoration: InputDecoration(
-                  labelText: 'Guide Title',
-                  labelStyle: GoogleFonts.lexend(fontSize: 14),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  prefixIcon: const Icon(Icons.title),
+                decoration: const InputDecoration(
+                  labelText: 'Title',
+                  border: OutlineInputBorder(),
                 ),
                 validator: (v) =>
-                    (v == null || v.trim().isEmpty) ? 'Required' : null,
-                textCapitalization: TextCapitalization.sentences,
+                    v == null || v.trim().isEmpty ? 'Title is required' : null,
               ),
               const SizedBox(height: 12),
-
-              // Source
               TextFormField(
                 controller: _sourceCtrl,
-                style: GoogleFonts.lexend(),
-                decoration: InputDecoration(
-                  labelText: 'Source (e.g. NEMA, WHO)',
-                  labelStyle: GoogleFonts.lexend(fontSize: 14),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  prefixIcon: const Icon(Icons.source_outlined),
+                decoration: const InputDecoration(
+                  labelText: 'Source (e.g. NEMA, NIHSA)',
+                  border: OutlineInputBorder(),
                 ),
               ),
               const SizedBox(height: 12),
-
-              // Content
               TextFormField(
                 controller: _contentCtrl,
-                style: GoogleFonts.lexend(fontSize: 13),
-                maxLines: 8,
-                decoration: InputDecoration(
-                  labelText: 'Content (Markdown supported)',
-                  labelStyle: GoogleFonts.lexend(fontSize: 14),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
+                decoration: const InputDecoration(
+                  labelText: 'Content',
+                  border: OutlineInputBorder(),
                   alignLabelWithHint: true,
                 ),
-                validator: (v) =>
-                    (v == null || v.trim().isEmpty) ? 'Required' : null,
-                textCapitalization: TextCapitalization.sentences,
+                maxLines: 6,
+                validator: (v) => v == null || v.trim().isEmpty
+                    ? 'Content is required'
+                    : null,
               ),
               const SizedBox(height: 20),
-
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: _saving ? null : _save,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primaryRed,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                  ),
-                  child: _saving
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                      : Text(
-                          widget.docId != null
-                              ? 'Update Guide'
-                              : 'Create Guide',
-                          style: GoogleFonts.lexend(
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primaryRed,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
                 ),
+                onPressed: _saving ? null : _save,
+                child: _saving
+                    ? const SizedBox(
+                        height: 20,
+                        width: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : Text(
+                        widget.docId != null ? 'Update Guide' : 'Save Guide',
+                        style: GoogleFonts.lexend(fontWeight: FontWeight.w600),
+                      ),
               ),
             ],
           ),

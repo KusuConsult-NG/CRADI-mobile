@@ -5,7 +5,7 @@ import 'package:climate_app/shared/widgets/custom_text_field.dart';
 import 'package:climate_app/core/utils/error_handler.dart';
 import 'package:climate_app/core/utils/validators.dart';
 import 'package:climate_app/core/utils/input_sanitizer.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:climate_app/core/services/supabase_service.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -161,26 +161,28 @@ By tapping "I Agree", you consent to these terms and the international transfer 
         false;
   }
 
-  /// Records the consent in Firestore for NDPA audit trail.
+  /// Records the consent in Supabase for NDPA audit trail.
   Future<void> _recordNdpaConsent(String uid) async {
     try {
-      await FirebaseFirestore.instance
-          .collection('ndpa_consents')
-          .doc(uid)
-          .set({
-            'uid': uid,
-            'consentedAt': FieldValue.serverTimestamp(),
-            'policyVersion': _ndpaPolicyVersion,
-            'dataResidency': 'us-central1',
-            'platform': 'mobile',
-            'method': 'registration_screen',
-          });
+      await SupabaseService().createDocument(
+        collectionId: 'ndpa_consents',
+        documentId: uid,
+        data: {
+          'id': uid,
+          'uid': uid,
+          'consented_at': DateTime.now().toUtc().toIso8601String(),
+          'policy_version': _ndpaPolicyVersion,
+          'data_residency': 'eu-central-1',
+          'platform': 'mobile',
+          'method': 'registration_screen',
+        },
+      );
       developer.log(
         'NDPA consent recorded for $uid',
         name: 'RegistrationScreen',
       );
     } on Exception catch (e) {
-      // Non-fatal: log but don\'t block registration. Retry on next launch.
+      // Non-fatal: log but don't block registration. Retry on next launch.
       developer.log(
         'NDPA consent record failed: $e',
         name: 'RegistrationScreen',

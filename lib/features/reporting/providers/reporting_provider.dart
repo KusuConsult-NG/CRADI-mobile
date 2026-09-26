@@ -1,16 +1,16 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:climate_app/core/services/firebase_service.dart';
+import 'package:climate_app/core/services/supabase_service.dart';
 import 'package:climate_app/core/utils/error_handler.dart';
 import 'package:climate_app/core/services/offline_storage_service.dart';
 import 'package:climate_app/core/services/peer_verification_service.dart';
 import 'package:climate_app/core/data/mvp_locations_data.dart';
 import 'package:climate_app/core/providers/connectivity_provider.dart';
 import 'package:climate_app/core/constants/app_config.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'dart:developer' as developer;
 import 'package:provider/provider.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 
 enum HazardType { flood, drought, temp, wind, erosion, fire, pest }
@@ -20,7 +20,7 @@ enum SeverityLevel { low, medium, high, critical }
 class ReportingProvider extends ChangeNotifier {
   ReportingProvider();
 
-  final FirebaseService _firebase = FirebaseService();
+  final SupabaseService _supabase = SupabaseService();
   final ImagePicker _picker = ImagePicker();
 
   String? _hazardType;
@@ -128,7 +128,7 @@ class ReportingProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Submit report using Firestore (with offline support).
+  /// Submit report using Supabase (with offline support).
   Future<Map<String, dynamic>> submitReport(BuildContext context) async {
     try {
       _isLoading = true;
@@ -175,51 +175,49 @@ class ReportingProvider extends ChangeNotifier {
         };
       }
 
-      // Get current Firebase user
-      final firebaseUser = FirebaseAuth.instance.currentUser;
-      if (firebaseUser == null) {
+      // Get current Supabase user
+      final supabaseUser = Supabase.instance.client.auth.currentUser;
+      if (supabaseUser == null) {
         throw Exception('User must be logged in to submit a report');
       }
 
       final String docId = const Uuid().v4();
 
-      // Upload images to Firebase Storage
+      // Upload images to Supabase Storage
       final List<String> imageUrls = [];
       for (int i = 0; i < _photos.length; i++) {
         final photo = _photos[i];
         final file = File(photo.path);
         final fileName = photo.name;
-        final url = await _firebase.uploadFileFromPath(
+        final url = await _supabase.uploadFileFromPath(
           storagePath:
-              '${AppConfig.reportImagesBucket}/${firebaseUser.uid}/${docId}_${i}_$fileName',
+              '${AppConfig.reportImagesBucket}/${supabaseUser.id}/${docId}_${i}_$fileName',
           file: file,
         );
         imageUrls.add(url);
       }
 
       final reportData = {
-        'userId': firebaseUser.uid,
-        'hazardType': _hazardType,
+        'id': docId,
+        'user_id': supabaseUser.id,
+        'hazard_type': _hazardType,
         'severity': _severity,
         'latitude': _latitude,
         'longitude': _longitude,
-        'locationDetails': _locationDetails,
-        'location': _locationDetails,
-        'address': _locationDetails,
+        'location_description': _locationDetails,
         'ward': _ward,
         'lga': _lga,
         'state': MVPLocationsData.getStateForLGA(_lga!),
         'description': _description ?? '',
-        'submittedAt': DateTime.now().toIso8601String(),
-        'imageUrls': imageUrls,
+        'submitted_at': DateTime.now().toUtc().toIso8601String(),
+        'image_urls': imageUrls,
         'status': 'pending',
-        'isAlert': _severity == 'critical' || _severity == 'high',
-        'verificationCount': 0,
+        'verification_count': 0,
       };
 
       try {
-        developer.log('Checking network connectivity for submission...');
-        final doc = await _firebase
+        developer.log('Submitting report to Supabase...');
+        final doc = await _supabase
             .createDocument(
               collectionId: AppConfig.reportsCollection,
               documentId: docId,
@@ -234,7 +232,7 @@ class ReportingProvider extends ChangeNotifier {
             reportId: reportId,
             ward: _ward!,
             lga: _lga!,
-            reporterId: firebaseUser.uid,
+            reporterId: supabaseUser.id,
           );
         } on Exception catch (e) {
           developer.log(
@@ -280,7 +278,7 @@ class ReportingProvider extends ChangeNotifier {
     }
   }
 
-  /// Sync pending drafts and failed submissions to Firestore.
+  /// Sync pending drafts and failed submissions to Supabase.
   Future<Map<String, dynamic>> syncPendingReports(BuildContext context) async {
     _isLoading = true;
     notifyListeners();
@@ -288,8 +286,8 @@ class ReportingProvider extends ChangeNotifier {
 
     try {
       final offlineService = OfflineStorageService();
-      final firebaseUser = FirebaseAuth.instance.currentUser;
-      if (firebaseUser == null) throw Exception('User not logged in');
+      final supabaseUser = Supabase.instance.client.auth.currentUser;
+      if (supabaseUser == null) throw Exception('User not logged in');
 
       // Process sync queue (failed submissions)
       final queue = offlineService.getSyncQueue();
@@ -297,7 +295,7 @@ class ReportingProvider extends ChangeNotifier {
         if (item['status'] == 'synced') continue;
         try {
           final docId = item['docId'] as String?;
-          await _firebase.createDocument(
+          await _supabase.createDocument(
             collectionId: AppConfig.reportsCollection,
             documentId: docId,
             data: {...item, 'status': 'pending'}
@@ -327,9 +325,9 @@ class ReportingProvider extends ChangeNotifier {
               final path = paths[i];
               if (File(path).existsSync()) {
                 final fileName = path.split('/').last;
-                final url = await _firebase.uploadFileFromPath(
+                final url = await _supabase.uploadFileFromPath(
                   storagePath:
-                      '${AppConfig.reportImagesBucket}/${firebaseUser.uid}/${draftId}_${i}_$fileName',
+                      '${AppConfig.reportImagesBucket}/${supabaseUser.id}/${draftId}_${i}_$fileName',
                   file: File(path),
                 );
                 imageUrls.add(url);
@@ -337,29 +335,27 @@ class ReportingProvider extends ChangeNotifier {
             }
           }
 
-          await _firebase.createDocument(
+          await _supabase.createDocument(
             collectionId: AppConfig.reportsCollection,
             documentId: draftId,
             data: {
-              'userId': firebaseUser.uid,
-              'hazardType': draft['hazardType'],
+              'id': draftId,
+              'user_id': supabaseUser.id,
+              'hazard_type': draft['hazardType'],
               'severity': draft['severity'],
               'latitude': draft['latitude'],
               'longitude': draft['longitude'],
-              'locationDetails': draft['locationDetails'],
+              'location_description': draft['locationDetails'],
               'ward': draft['ward'] ?? 'Unknown',
               'lga': draft['lga'] ?? 'Makurdi',
               'state': MVPLocationsData.getStateForLGA(
                 (draft['lga'] ?? 'Makurdi').toString(),
               ),
               'description': draft['description'],
-              'submittedAt': DateTime.now().toIso8601String(),
-              'imageUrls': imageUrls,
+              'submitted_at': DateTime.now().toUtc().toIso8601String(),
+              'image_urls': imageUrls,
               'status': 'pending',
-              'isAlert':
-                  draft['severity'] == 'critical' ||
-                  draft['severity'] == 'high',
-              'verificationCount': 0,
+              'verification_count': 0,
             },
           );
           await offlineService.deleteDraft(draft['id']);

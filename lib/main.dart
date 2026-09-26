@@ -18,10 +18,13 @@ import 'package:climate_app/core/services/session_manager.dart';
 import 'package:climate_app/core/services/offline_storage_service.dart';
 import 'package:climate_app/core/providers/settings_provider.dart';
 import 'package:climate_app/core/services/notification_service.dart';
+import 'package:climate_app/core/services/onesignal_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:provider/provider.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:climate_app/core/constants/app_config.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -73,6 +76,18 @@ Future<void> main() async {
   } on Exception catch (e) {
     // Firebase not configured yet - app will work without crash reporting
     debugPrint('Firebase initialization failed: $e');
+  }
+
+  // Initialize Supabase
+  try {
+    await Supabase.initialize(
+      url: AppConfig.supabaseUrl,
+      // ignore: deprecated_member_use
+      anonKey: AppConfig.supabaseAnonKey,
+    );
+    debugPrint('✅ Supabase initialized');
+  } on Exception catch (e) {
+    debugPrint('Supabase initialization warning: $e');
   }
 
   // Security: Initialize secure storage (singleton pattern - no need to store reference)
@@ -187,12 +202,29 @@ class _ClimateAppState extends State<ClimateApp> {
               }
             }
           }
+          // Initialize OneSignal
+          try {
+            final oneSignal = OneSignalService();
+            if (_router != null) {
+              oneSignal.router = _router;
+            }
+            await oneSignal.initialize(appId: AppConfig.oneSignalAppId);
+            // Sync user tags if already logged in
+            await oneSignal.setUserTags(
+              state: profileProvider.state,
+              lga: profileProvider.lga,
+              ward: profileProvider.ward,
+              role: profileProvider.role,
+            );
+          } on Exception catch (e) {
+            debugPrint('OneSignal initialization error: $e');
+          }
         } on Exception catch (e) {
-          debugPrint('FCM initialization error: $e');
+          debugPrint('Notifications initialization error: $e');
         }
       });
     } on Exception catch (e) {
-      debugPrint('FCM initialization error: $e');
+      debugPrint('Notifications initialization error: $e');
       // App continues to work without notifications
     }
   }

@@ -1,27 +1,27 @@
 import 'package:climate_app/core/services/secure_storage_service.dart';
-import 'package:climate_app/core/services/firebase_service.dart';
+import 'package:climate_app/core/services/supabase_service.dart';
 import 'package:climate_app/core/services/offline_storage_service.dart';
+import 'package:climate_app/core/services/onesignal_service.dart';
 import 'package:climate_app/core/constants/app_config.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:io';
 import 'dart:developer' as developer;
 
-/// Provider for managing user profile data with Firebase + Firestore
+/// Provider for managing user profile data with Supabase.
 class ProfileProvider extends ChangeNotifier {
   ProfileProvider({
-    FirebaseService? firebaseService,
+    SupabaseService? supabaseService,
     Connectivity? connectivity,
-  }) : _firebase = firebaseService ?? FirebaseService(),
+  }) : _supabase = supabaseService ?? SupabaseService(),
        _connectivity = connectivity ?? Connectivity() {
     loadProfile();
   }
 
   final SecureStorageService _storage = SecureStorageService();
-  final FirebaseService _firebase;
+  final SupabaseService _supabase;
   final OfflineStorageService _offlineStorage = OfflineStorageService();
   Map<String, dynamic>? _userProfile;
   final Connectivity _connectivity;
@@ -52,17 +52,18 @@ class ProfileProvider extends ChangeNotifier {
   DateTime? get registrationDate => _registrationDate;
   bool get biometricsEnabled => _biometricsEnabled;
   bool get isLoading => _isLoading;
+  String? get role => _userProfile?['role'] as String?;
 
-  /// Get current user's reports as a real-time Firestore stream.
+  /// Get current user's reports as a real-time Supabase Realtime stream.
   Stream<List<Map<String, dynamic>>> getUserReportsStream() {
-    final user = FirebaseAuth.instance.currentUser;
+    final user = Supabase.instance.client.auth.currentUser;
     if (user == null) return const Stream.empty();
 
-    return _firebase.subscribeToCollection(
+    return _supabase.subscribeToCollection(
       collectionId: AppConfig.reportsCollection,
       queries: [
-        FQuery.equal('userId', user.uid),
-        FQuery.orderDesc('createdAt'),
+        SQuery.equal('user_id', user.id),
+        SQuery.orderDesc('submitted_at'),
       ],
     );
   }
@@ -72,20 +73,20 @@ class ProfileProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final user = FirebaseAuth.instance.currentUser;
+      final user = Supabase.instance.client.auth.currentUser;
 
       if (user != null) {
         _email = user.email ?? '';
+
         // ── Fast path: load from secure-storage cache immediately ──────────
-        // This ensures the name is correct on the very first frame,
-        // without waiting for the Firestore round-trip.
         final cachedEmail = await _storage.read('profile_email');
         if (cachedEmail == user.email) {
           final cachedName = await _storage.read('profile_name');
           if (cachedName != null && cachedName.isNotEmpty) {
             _name = cachedName;
           } else {
-            _name = user.displayName ?? 'User';
+            _name =
+                user.userMetadata?['full_name'] as String? ?? 'User';
           }
           _phone = await _storage.read('profile_phone') ?? '';
           _profileImagePath = await _storage.read('profile_image');
@@ -93,44 +94,47 @@ class ProfileProvider extends ChangeNotifier {
           _lga = await _storage.read('profile_lga');
           _ward = await _storage.read('profile_ward');
           final storedZone = await _storage.read('monitoring_zone');
-          _monitoringZone = (storedZone != null && storedZone.isNotEmpty)
-              ? storedZone
-              : null;
+          _monitoringZone =
+              (storedZone != null && storedZone.isNotEmpty)
+                  ? storedZone
+                  : null;
           final bioEnabled = await _storage.read('biometric_enabled');
           _biometricsEnabled = bioEnabled == 'true';
           // Notify immediately so the UI shows cached data, then continue
-          // fetching from Firestore to refresh.
+          // fetching from Supabase to refresh.
           notifyListeners();
         } else {
-          _name = user.displayName ?? 'User';
+          _name = user.userMetadata?['full_name'] as String? ?? 'User';
         }
-        _registrationDate = user.metadata.creationTime;
 
-        // Load from Firestore (source of truth)
+        // Parse account creation time from JWT
+        _registrationDate = user.createdAt.isNotEmpty
+            ? DateTime.tryParse(user.createdAt)
+            : null;
+
+        // Load from Supabase (source of truth)
         try {
-          final doc = await _firebase.getDocument(
+          final doc = await _supabase.getDocument(
             collectionId: AppConfig.usersCollection,
-            documentId: user.uid,
+            documentId: user.id,
           );
 
           if (doc.isNotEmpty) {
-            // Sanitize the Firestore document BEFORE storing in _userProfile.
-            // Firestore returns Timestamp, GeoPoint, and DocumentReference objects
-            // which Hive cannot serialize. By converting here, every downstream
-            // call that merges into or caches _userProfile is safe by default.
-            _userProfile = _sanitizeFirestoreDoc(doc);
+            // Sanitize before storing: Supabase returns plain Dart types,
+            // but dates come as Strings which Hive handles fine.
+            _userProfile = _sanitizeDoc(doc);
             await _offlineStorage.cacheUserProfile(_userProfile!);
 
-            _name = doc['name'] ?? _name;
-            _email = doc['email'] ?? _email;
-            _phone = doc['phone'] ?? '';
-            _state = doc['state'];
-            _lga = doc['lga'];
-            _ward = doc['ward'];
-            _registrationCode = doc['registrationCode'];
-            _biometricsEnabled = doc['biometricsEnabled'] ?? false;
+            _name = doc['full_name'] as String? ?? _name;
+            _email = doc['email'] as String? ?? _email;
+            _phone = doc['phone'] as String? ?? '';
+            _state = doc['state'] as String?;
+            _lga = doc['lga'] as String?;
+            _ward = doc['ward'] as String?;
+            _registrationCode = doc['registration_code'] as String?;
+            _biometricsEnabled = doc['biometrics_enabled'] as bool? ?? false;
 
-            final remoteZone = doc['monitoringZone'] as String?;
+            final remoteZone = doc['monitoring_zone'] as String?;
             if (remoteZone != null && remoteZone.isNotEmpty) {
               _monitoringZone = remoteZone;
               await _storage.write('monitoring_zone', remoteZone);
@@ -138,8 +142,9 @@ class ProfileProvider extends ChangeNotifier {
               _monitoringZone = await _storage.read('monitoring_zone');
             }
 
-            if (doc['profileImageUrl'] != null) {
-              _profileImagePath = doc['profileImageUrl'] as String;
+            if (doc['avatar_url'] != null &&
+                (doc['avatar_url'] as String).isNotEmpty) {
+              _profileImagePath = doc['avatar_url'] as String;
             }
 
             // Cache to secure storage
@@ -157,10 +162,18 @@ class ProfileProvider extends ChangeNotifier {
               _biometricsEnabled.toString(),
             );
 
-            developer.log('Profile loaded from Firestore: ${user.uid}');
+            developer.log('Profile loaded from Supabase: ${user.id}');
+            // Link user ID and sync tags to OneSignal
+            await OneSignalService().login(user.id);
+            await OneSignalService().setUserTags(
+              state: _state,
+              lga: _lga,
+              ward: _ward,
+              role: role,
+            );
           }
         } on Exception catch (e) {
-          developer.log('Firestore error, using local fallback: $e');
+          developer.log('Supabase error, using local fallback: $e');
           final cached = _offlineStorage.getCachedUserProfile();
           if (cached != null) {
             _userProfile = cached;
@@ -192,13 +205,14 @@ class ProfileProvider extends ChangeNotifier {
     _biometricsEnabled = false;
     _userProfile = null;
     await _offlineStorage.clearUserData();
+    await OneSignalService().logout();
     notifyListeners();
   }
 
-  /// Sync changes to Firestore
-  Future<void> _syncToFirestore(Map<String, dynamic> data) async {
+  /// Sync changes to Supabase
+  Future<void> _syncToSupabase(Map<String, dynamic> data) async {
     try {
-      final user = FirebaseAuth.instance.currentUser;
+      final user = Supabase.instance.client.auth.currentUser;
       if (user == null) return;
 
       final connectivityResults = await _connectivity.checkConnectivity();
@@ -211,15 +225,15 @@ class ProfileProvider extends ChangeNotifier {
         return;
       }
 
-      await _firebase.updateDocument(
+      await _supabase.updateDocument(
         collectionId: AppConfig.usersCollection,
-        documentId: user.uid,
+        documentId: user.id,
         data: data,
       );
 
-      developer.log('Profile synced to Firestore', name: 'ProfileProvider');
+      developer.log('Profile synced to Supabase', name: 'ProfileProvider');
     } on Exception catch (e) {
-      developer.log('Error syncing to Firestore: $e', name: 'ProfileProvider');
+      developer.log('Error syncing to Supabase: $e', name: 'ProfileProvider');
     }
   }
 
@@ -232,9 +246,9 @@ class ProfileProvider extends ChangeNotifier {
   Future<void> updateName(String name) async {
     _name = name;
     await _storage.write('profile_name', name);
-    await _updateLocalState({'name': name});
+    await _updateLocalState({'full_name': name});
     notifyListeners();
-    await _syncToFirestore({'name': name});
+    await _syncToSupabase({'full_name': name});
   }
 
   Future<void> updateEmail(String email) async {
@@ -242,7 +256,7 @@ class ProfileProvider extends ChangeNotifier {
     await _storage.write('profile_email', email);
     await _updateLocalState({'email': email});
     notifyListeners();
-    await _syncToFirestore({'email': email});
+    await _syncToSupabase({'email': email});
   }
 
   Future<void> updatePhone(String phone) async {
@@ -250,43 +264,42 @@ class ProfileProvider extends ChangeNotifier {
     await _storage.write('profile_phone', phone);
     await _updateLocalState({'phone': phone});
     notifyListeners();
-    await _syncToFirestore({'phone': phone});
+    await _syncToSupabase({'phone': phone});
   }
 
   Future<void> updateProfileImage(String imagePath) async {
     _profileImagePath = imagePath;
     await _storage.write('profile_image', imagePath);
-    await _updateLocalState({'profileImageUrl': imagePath});
+    await _updateLocalState({'avatar_url': imagePath});
     notifyListeners();
-    await _syncToFirestore({'profileImageUrl': imagePath});
+    await _syncToSupabase({'avatar_url': imagePath});
   }
 
-  /// Upload profile image to Firebase Storage and update Firestore
+  /// Upload profile image to Supabase Storage and update profile row.
   Future<void> uploadProfileImage(XFile imageFile) async {
     try {
       _isLoading = true;
       notifyListeners();
 
-      final user = FirebaseAuth.instance.currentUser;
+      final user = Supabase.instance.client.auth.currentUser;
       if (user == null) {
         throw Exception('User must be logged in to upload profile image');
       }
 
       final file = File(imageFile.path);
       final ext = imageFile.path.split('.').last.toLowerCase();
-      final validExt = (ext == 'png' || ext == 'jpg' || ext == 'jpeg')
-          ? ext
-          : 'jpg';
+      final validExt =
+          (ext == 'png' || ext == 'jpg' || ext == 'jpeg') ? ext : 'jpg';
       final timestamp = DateTime.now().millisecondsSinceEpoch;
       final storagePath =
-          'profile_images/${user.uid}/profile_$timestamp.$validExt';
+          'profile_images/${user.id}/profile_$timestamp.$validExt';
 
       developer.log(
-        'Uploading profile image to Firebase Storage: $storagePath',
+        'Uploading profile image to Supabase Storage: $storagePath',
         name: 'ProfileProvider',
       );
 
-      final fileUrl = await _firebase.uploadFileFromPath(
+      final fileUrl = await _supabase.uploadFileFromPath(
         storagePath: storagePath,
         file: file,
         contentType: 'image/$validExt',
@@ -294,8 +307,8 @@ class ProfileProvider extends ChangeNotifier {
 
       _profileImagePath = fileUrl;
       await _storage.write('profile_image', fileUrl);
-      await _updateLocalState({'profileImageUrl': fileUrl});
-      await _syncToFirestore({'profileImageUrl': fileUrl});
+      await _updateLocalState({'avatar_url': fileUrl});
+      await _syncToSupabase({'avatar_url': fileUrl});
 
       developer.log('Profile image uploaded: $fileUrl');
     } on Exception catch (e) {
@@ -316,61 +329,59 @@ class ProfileProvider extends ChangeNotifier {
     if (ward != null) await _storage.write('profile_ward', ward);
     await _updateLocalState({'state': state, 'lga': lga, 'ward': ward});
     notifyListeners();
-    await _syncToFirestore({'state': state, 'lga': lga, 'ward': ward});
+    await _syncToSupabase({'state': state, 'lga': lga, 'ward': ward});
+    await OneSignalService().setUserTags(
+      state: state,
+      lga: lga,
+      ward: ward,
+      role: role,
+    );
   }
 
   Future<void> updateMonitoringZone(String zone) async {
     final effectiveZone = zone.isEmpty ? null : zone;
     _monitoringZone = effectiveZone;
     await _storage.write('monitoring_zone', effectiveZone ?? '');
-    await _updateLocalState({'monitoringZone': effectiveZone ?? ''});
+    await _updateLocalState({'monitoring_zone': effectiveZone ?? ''});
     notifyListeners();
-    await _syncToFirestore({'monitoringZone': effectiveZone ?? ''});
+    await _syncToSupabase({'monitoring_zone': effectiveZone ?? ''});
+    await OneSignalService().setUserTags(
+      state: _state,
+      lga: _lga,
+      ward: _ward,
+      role: role,
+    );
   }
 
   Future<void> setBiometricsEnabled(bool enabled) async {
     _biometricsEnabled = enabled;
     await _storage.write('biometric_enabled', enabled.toString());
-    await _updateLocalState({'biometricsEnabled': enabled});
+    await _updateLocalState({'biometrics_enabled': enabled});
     notifyListeners();
-    await _syncToFirestore({'biometricsEnabled': enabled});
+    await _syncToSupabase({'biometrics_enabled': enabled});
   }
 
   Future<void> updateFCMToken(String token) async {
-    await _updateLocalState({'fcmToken': token});
-    await _syncToFirestore({'fcmToken': token});
+    await _updateLocalState({'fcm_token': token});
+    await _syncToSupabase({'fcm_token': token});
   }
 
-  /// Recursively converts Firestore-specific types to Hive-safe primitives.
-  /// Call this on any raw Firestore document map before storing in [_userProfile]
-  /// or writing to a Hive box — Hive has no built-in adapter for [Timestamp],
-  /// [GeoPoint], or [DocumentReference].
-  Map<String, dynamic> _sanitizeFirestoreDoc(Map<String, dynamic> data) {
+  /// Sanitizes document maps before storing in Hive.
+  /// Supabase returns plain Dart types; only DateTime and nested
+  /// maps/lists need conversion.
+  Map<String, dynamic> _sanitizeDoc(Map<String, dynamic> data) {
     final result = <String, dynamic>{};
     data.forEach((key, value) {
-      if (value is Timestamp) {
-        result[key] = value.toDate().toIso8601String();
-      } else if (value is GeoPoint) {
-        result[key] = {
-          'latitude': value.latitude,
-          'longitude': value.longitude,
-        };
-      } else if (value is DocumentReference) {
-        result[key] = value.path;
+      if (value is DateTime) {
+        result[key] = value.toIso8601String();
       } else if (value is Map<String, dynamic>) {
-        result[key] = _sanitizeFirestoreDoc(value);
+        result[key] = _sanitizeDoc(value);
       } else if (value is List) {
         result[key] = value.map((e) {
-          if (e is Timestamp) return e.toDate().toIso8601String();
-          if (e is GeoPoint) {
-            return {'latitude': e.latitude, 'longitude': e.longitude};
-          }
-          if (e is DocumentReference) return e.path;
-          if (e is Map<String, dynamic>) return _sanitizeFirestoreDoc(e);
+          if (e is DateTime) return e.toIso8601String();
+          if (e is Map<String, dynamic>) return _sanitizeDoc(e);
           return e;
         }).toList();
-      } else if (value is DateTime) {
-        result[key] = value.toIso8601String();
       } else {
         result[key] = value;
       }

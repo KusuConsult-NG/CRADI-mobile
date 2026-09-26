@@ -1,10 +1,9 @@
-import 'package:climate_app/core/theme/app_colors.dart';
-import 'package:climate_app/core/services/firebase_service.dart';
-import 'package:climate_app/core/constants/app_config.dart';
-import 'package:firebase_auth/firebase_auth.dart' as fb_auth;
 import 'package:flutter/material.dart';
-import 'package:flutter_chat_core/flutter_chat_core.dart';
 import 'package:flutter_chat_ui/flutter_chat_ui.dart';
+import 'package:flutter_chat_core/flutter_chat_core.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' as sp;
+import 'package:climate_app/core/services/supabase_service.dart';
+import 'package:climate_app/core/constants/app_config.dart';
 import 'package:go_router/go_router.dart';
 import 'package:uuid/uuid.dart';
 
@@ -15,11 +14,9 @@ class ChatScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Support Chat'),
-        backgroundColor: AppColors.primaryRed,
-        foregroundColor: Colors.white,
+        title: const Text('Community Chat'),
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white),
+          icon: const Icon(Icons.arrow_back),
           onPressed: () {
             if (context.canPop()) {
               context.pop();
@@ -31,11 +28,11 @@ class ChatScreen extends StatelessWidget {
       ),
       body: Builder(
         builder: (context) {
-          final fbUser = fb_auth.FirebaseAuth.instance.currentUser;
-          if (fbUser == null) {
+          final user = sp.Supabase.instance.client.auth.currentUser;
+          if (user == null) {
             return const Center(child: Text('Please login to chat'));
           }
-          return _ChatView(fbUser: fbUser);
+          return _ChatView(user: user);
         },
       ),
     );
@@ -43,15 +40,15 @@ class ChatScreen extends StatelessWidget {
 }
 
 class _ChatView extends StatefulWidget {
-  final fb_auth.User fbUser;
-  const _ChatView({required this.fbUser});
+  final sp.User user;
+  const _ChatView({required this.user});
 
   @override
   State<_ChatView> createState() => _ChatViewState();
 }
 
 class _ChatViewState extends State<_ChatView> {
-  final FirebaseService _firebase = FirebaseService();
+  final SupabaseService _supabase = SupabaseService();
   late final InMemoryChatController _chatController;
   bool _isLoading = true;
 
@@ -70,23 +67,26 @@ class _ChatViewState extends State<_ChatView> {
 
   Future<void> _loadMessages() async {
     try {
-      final docs = await _firebase.listDocuments(
+      final docs = await _supabase.listDocuments(
         collectionId: AppConfig.messagesCollection,
         queries: [
-          FQuery.equal('chatId', 'general'),
-          FQuery.orderAsc('sentAt'),
-          FQuery.limit(50),
+          SQuery.equal('chat_id', 'general'),
+          SQuery.orderAsc('sent_at'),
+          SQuery.limit(50),
         ],
       );
 
       for (final data in docs) {
+        final id = (data['id'] ?? data['\$id'] ?? const Uuid().v4()).toString();
+        final senderId = (data['sender_id'] ?? data['senderId'] ?? 'unknown').toString();
+        final text = (data['message'] ?? '').toString();
+        final sentAt = data['sent_at'] ?? data['sentAt'];
+
         final msg = Message.text(
-          id: data['\$id'] as String? ?? const Uuid().v4(),
-          authorId: data['senderId'] as String? ?? 'unknown',
-          text: data['message'] as String? ?? '',
-          createdAt: data['sentAt'] != null
-              ? DateTime.tryParse(data['sentAt'] as String)
-              : null,
+          id: id,
+          authorId: senderId,
+          text: text,
+          createdAt: sentAt != null ? DateTime.tryParse(sentAt.toString()) : null,
         );
         await _chatController.insertMessage(msg, animated: false);
       }
@@ -98,36 +98,37 @@ class _ChatViewState extends State<_ChatView> {
   }
 
   Future<User?> _resolveUser(UserID id) async {
-    if (id == widget.fbUser.uid) {
-      return User(id: id, name: widget.fbUser.displayName ?? 'Me');
+    if (id == widget.user.id) {
+      final name = widget.user.userMetadata?['full_name'] as String? ?? 'Me';
+      return User(id: id, name: name);
     }
     return User(id: id);
   }
 
   Future<void> _handleMessageSend(String text) async {
     if (text.trim().isEmpty) return;
-    final user = widget.fbUser;
+    final user = widget.user;
     final msgId = const Uuid().v4();
 
     // Optimistic insert
     final message = Message.text(
       id: msgId,
-      authorId: user.uid,
+      authorId: user.id,
       text: text.trim(),
       createdAt: DateTime.now(),
     );
     await _chatController.insertMessage(message);
 
     try {
-      await _firebase.createDocument(
+      await _supabase.createDocument(
         collectionId: AppConfig.messagesCollection,
         data: {
-          'chatId': 'general',
-          'senderId': user.uid,
-          'senderName': user.displayName ?? 'User',
+          'chat_id': 'general',
+          'sender_id': user.id,
+          'sender_name': user.userMetadata?['full_name'] as String? ?? 'User',
           'message': text.trim(),
           'type': 'text',
-          'sentAt': DateTime.now().toIso8601String(),
+          'sent_at': DateTime.now().toUtc().toIso8601String(),
           'read': false,
         },
       );
@@ -149,7 +150,7 @@ class _ChatViewState extends State<_ChatView> {
     }
 
     return Chat(
-      currentUserId: widget.fbUser.uid,
+      currentUserId: widget.user.id,
       chatController: _chatController,
       resolveUser: _resolveUser,
       onMessageSend: _handleMessageSend,

@@ -1,17 +1,16 @@
 import 'package:flutter/material.dart';
-import 'package:climate_app/core/services/firebase_service.dart';
+import 'package:climate_app/core/services/supabase_service.dart';
 import 'package:climate_app/core/services/peer_verification_service.dart';
 import 'package:climate_app/features/verification/models/verification_report_model.dart';
 import 'package:climate_app/core/constants/app_config.dart';
 import 'dart:async';
 import 'dart:developer' as developer;
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:climate_app/core/services/offline_storage_service.dart';
 import 'package:climate_app/features/profile/providers/profile_provider.dart';
 import 'package:climate_app/core/data/mvp_locations_data.dart';
 
 class ReportsStatusProvider extends ChangeNotifier {
-  final FirebaseService _firebase = FirebaseService();
+  final SupabaseService _supabase = SupabaseService();
   final OfflineStorageService _offlineStorage = OfflineStorageService();
   ProfileProvider? _profileProvider;
 
@@ -28,7 +27,7 @@ class ReportsStatusProvider extends ChangeNotifier {
   bool get isSubmitting => _isSubmitting;
 
   final Map<String, List<VerificationReport>> _reportsMap = {};
-  final Map<String, DocumentSnapshot?> _lastDocMap = {};
+  final Map<String, String?> _lastDocMap = {};
   final Map<String, bool> _hasMoreMap = {};
   final Map<String, bool> _loadingMap = {};
   final Map<String, int> _totalCounts = {};
@@ -76,30 +75,25 @@ class ReportsStatusProvider extends ChangeNotifier {
 
     final defaultLocation = locationDetails ?? 'User Requested Verification';
     final data = {
-      'userId': userId,
+      'user_id': userId,
       'description': description,
-      'hazardType': hazardType,
+      'hazard_type': hazardType,
       'severity': severity,
       'status': 'pending',
-      'submittedAt': DateTime.now().toIso8601String(),
-      'locationDetails': defaultLocation,
-      'location': defaultLocation,
-      'address': defaultLocation,
+      'submitted_at': DateTime.now().toUtc().toIso8601String(),
+      'location_description': defaultLocation,
       'ward': ward,
       'lga': lga,
       'state': state,
       'latitude': latitude ?? 0.0,
       'longitude': longitude ?? 0.0,
-      'imageUrls': [],
-      'isAlert':
-          severity.toLowerCase() == 'critical' ||
-          severity.toLowerCase() == 'high',
-      'verificationCount': 0,
+      'image_urls': <String>[],
+      'verification_count': 0,
     };
 
     try {
       developer.log('Checking network connectivity for submission...');
-      await _firebase
+      await _supabase
           .createDocument(collectionId: AppConfig.reportsCollection, data: data)
           .timeout(const Duration(seconds: 10));
       developer.log('Verification request submitted online');
@@ -111,7 +105,6 @@ class ReportsStatusProvider extends ChangeNotifier {
           'type': 'verification_request',
           'collectionId': AppConfig.reportsCollection,
         });
-        // Re-throw with offline indicator for UI
         throw Exception('Connection failed. Request saved to offline queue.');
       } on Exception catch (queueError) {
         developer.log('Failed to save to offline queue: $queueError');
@@ -169,33 +162,33 @@ class ReportsStatusProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      // Build base filters (always needed)
+      // Build base filters
       final baseQueries = <QueryFilter>[];
       if (status != null) {
-        baseQueries.add(FQuery.equal('status', status.name));
+        baseQueries.add(SQuery.equal('status', status.name));
       }
       if (userId != null) {
-        baseQueries.add(FQuery.equal('userId', userId));
+        baseQueries.add(SQuery.equal('user_id', userId));
       }
       if (excludeUserId != null) {
-        baseQueries.add(FQuery.notEqual('userId', excludeUserId));
+        baseQueries.add(SQuery.notEqual('user_id', excludeUserId));
       }
 
-      // Build zone filter (may require composite index)
+      // Build zone filter
       final zoneQueries = <QueryFilter>[];
       if (userId == null && _profileProvider?.monitoringZone != null) {
         final zone = _profileProvider!.monitoringZone!;
         if (zone.toLowerCase().contains('all zone')) {
-          // "All Zones" — no filter needed
+          // No filter needed
         } else if (zone.toLowerCase().contains('state')) {
-          zoneQueries.add(FQuery.equal('state', zone.replaceAll(' State', '')));
+          zoneQueries.add(SQuery.equal('state', zone.replaceAll(' State', '')));
         } else if (zone.contains(',')) {
           final lgaName = zone.split(',').first.trim();
-          zoneQueries.add(FQuery.equal('lga', lgaName));
+          zoneQueries.add(SQuery.equal('lga', lgaName));
         } else if (MVPLocationsData.getAllStates().any(
           (s) => s.toLowerCase() == zone.toLowerCase(),
         )) {
-          zoneQueries.add(FQuery.equal('state', zone));
+          zoneQueries.add(SQuery.equal('state', zone));
         } else {
           developer.log(
             'Skipping zone filter for unrecognized zone "$zone"',
@@ -204,11 +197,10 @@ class ReportsStatusProvider extends ChangeNotifier {
         }
       }
 
-      // Combine: base + zone + orderBy
       final queries = <QueryFilter>[
         ...baseQueries,
         ...zoneQueries,
-        FQuery.orderDesc('submittedAt'),
+        SQuery.orderDesc('submitted_at'),
       ];
 
       developer.log(
@@ -218,26 +210,20 @@ class ReportsStatusProvider extends ChangeNotifier {
         name: 'ReportsStatusProvider',
       );
 
-      // Try the primary query (with zone filter)
       List<Map<String, dynamic>> docs;
       try {
         if (!loadMore) {
-          _totalCounts[key] = await _firebase.countDocuments(
+          _totalCounts[key] = await _supabase.countDocuments(
             collectionId: AppConfig.reportsCollection,
             queries: queries,
           );
         }
-        docs = await _firebase.listDocuments(
+        docs = await _supabase.listDocuments(
           collectionId: AppConfig.reportsCollection,
           queries: queries,
           limitCount: 20,
-          startAfter: loadMore ? _lastDocMap[key] : null,
         );
       } on Exception catch (primaryError) {
-        // ── DEFENSIVE FALLBACK ──────────────────────────────────────
-        // If the zone-filtered query fails (usually a missing Firestore
-        // composite index), retry WITHOUT the zone filter so the user
-        // still sees reports rather than an empty screen.
         developer.log(
           '⚠️ Primary query failed for key=$key: $primaryError\n'
           '   Retrying without zone filter as fallback...',
@@ -246,20 +232,19 @@ class ReportsStatusProvider extends ChangeNotifier {
 
         final fallbackQueries = <QueryFilter>[
           ...baseQueries,
-          FQuery.orderDesc('submittedAt'),
+          SQuery.orderDesc('submitted_at'),
         ];
 
         if (!loadMore) {
-          _totalCounts[key] = await _firebase.countDocuments(
+          _totalCounts[key] = await _supabase.countDocuments(
             collectionId: AppConfig.reportsCollection,
             queries: fallbackQueries,
           );
         }
-        docs = await _firebase.listDocuments(
+        docs = await _supabase.listDocuments(
           collectionId: AppConfig.reportsCollection,
           queries: fallbackQueries,
           limitCount: 20,
-          startAfter: loadMore ? _lastDocMap[key] : null,
         );
 
         developer.log(
@@ -282,30 +267,28 @@ class ReportsStatusProvider extends ChangeNotifier {
           final reportStatus = _parseStatus(data['status']);
 
           String reporterName = 'Community Report';
-          if (data['userId'] != null) {
+          if (data['user_id'] != null) {
             try {
-              final userDoc = await FirebaseFirestore.instance
-                  .collection(AppConfig.usersCollection)
-                  .doc(data['userId'])
-                  .get();
-              if (userDoc.exists && userDoc.data() != null) {
-                final n = userDoc.data()!['fullName'] as String?;
-                if (n != null && n.trim().isNotEmpty) {
-                  reporterName = n;
-                }
+              final userDoc = await _supabase.getDocument(
+                collectionId: AppConfig.usersCollection,
+                documentId: data['user_id'] as String,
+              );
+              final n = userDoc['full_name'] as String?;
+              if (n != null && n.trim().isNotEmpty) {
+                reporterName = n;
               }
             } on Exception catch (_) {}
           }
 
           return VerificationReport(
             id: data['id'] as String? ?? data['\$id'] as String? ?? '',
-            title: _formatTitle(data['hazardType'] ?? 'Unknown Hazard'),
-            type: data['hazardType'] ?? 'Unknown',
+            title: _formatTitle(data['hazard_type'] ?? 'Unknown Hazard'),
+            type: data['hazard_type'] ?? 'Unknown',
             reporter: reporterName,
-            location: data['locationDetails'] ?? 'Unknown Location',
-            time: _formatTimeAgo(data['submittedAt']),
+            location: data['location_description'] ?? 'Unknown Location',
+            time: _formatTimeAgo(data['submitted_at']),
             status: reportStatus,
-            iconName: _getIconName(data['hazardType']),
+            iconName: _getIconName(data['hazard_type']),
             iconColor: _getIconColor(data['severity']),
             bgIconColor: '${_getIconColor(data['severity'])}_50',
           );
@@ -318,9 +301,9 @@ class ReportsStatusProvider extends ChangeNotifier {
         _reportsMap[key] = newReports;
       }
 
-      // Store pagination cursor
+      // Store last doc ID for pagination cursor
       if (docs.isNotEmpty) {
-        _lastDocMap[key] = docs.last['\$snapshot'];
+        _lastDocMap[key] = docs.last['id'] as String?;
       }
     } on Exception catch (e, stack) {
       developer.log(
@@ -337,20 +320,20 @@ class ReportsStatusProvider extends ChangeNotifier {
 
   Future<List<VerificationReport>> getAllReports() async {
     try {
-      final docs = await _firebase.listDocuments(
+      final docs = await _supabase.listDocuments(
         collectionId: AppConfig.reportsCollection,
-        limitCount: 100, // Safety cap — no unbounded reads
+        limitCount: 100,
       );
       return docs.map((data) {
         return VerificationReport(
           id: data['\$id'] as String? ?? '',
-          title: _formatTitle(data['hazardType'] ?? 'Unknown'),
-          type: data['hazardType'] ?? 'Unknown',
+          title: _formatTitle(data['hazard_type'] ?? 'Unknown'),
+          type: data['hazard_type'] ?? 'Unknown',
           reporter: 'Community Report',
-          location: data['locationDetails'] ?? 'Unknown',
-          time: _formatTimeAgo(data['submittedAt']),
+          location: data['location_description'] ?? 'Unknown',
+          time: _formatTimeAgo(data['submitted_at']),
           status: _parseStatus(data['status']),
-          iconName: _getIconName(data['hazardType']),
+          iconName: _getIconName(data['hazard_type']),
           iconColor: _getIconColor(data['severity']),
           bgIconColor: '${_getIconColor(data['severity'])}_50',
         );
@@ -368,7 +351,7 @@ class ReportsStatusProvider extends ChangeNotifier {
         userId: userId ?? 'system_admin',
         isConfirmed: true,
       );
-      await _firebase.updateDocument(
+      await _supabase.updateDocument(
         collectionId: AppConfig.reportsCollection,
         documentId: reportId,
         data: {'status': 'verified'},
@@ -385,7 +368,7 @@ class ReportsStatusProvider extends ChangeNotifier {
 
   Future<void> approveReport(String reportId) async {
     try {
-      await _firebase.updateDocument(
+      await _supabase.updateDocument(
         collectionId: AppConfig.reportsCollection,
         documentId: reportId,
         data: {'status': 'approved'},
@@ -407,7 +390,7 @@ class ReportsStatusProvider extends ChangeNotifier {
         userId: userId ?? 'system_admin',
         isConfirmed: false,
       );
-      await _firebase.updateDocument(
+      await _supabase.updateDocument(
         collectionId: AppConfig.reportsCollection,
         documentId: reportId,
         data: {'status': 'rejected'},
@@ -424,7 +407,7 @@ class ReportsStatusProvider extends ChangeNotifier {
 
   Future<void> moveBackToPending(String reportId) async {
     try {
-      await _firebase.updateDocument(
+      await _supabase.updateDocument(
         collectionId: AppConfig.reportsCollection,
         documentId: reportId,
         data: {'status': 'pending'},
@@ -511,11 +494,11 @@ class ReportsStatusProvider extends ChangeNotifier {
       case 'pending':
         return ReportStatus.pending;
       case 'verified':
-      case 'acknowledged': // legacy compat
-      case 'validated': // legacy compat
+      case 'acknowledged':
+      case 'validated':
         return ReportStatus.verified;
       case 'approved':
-      case 'resolved': // legacy compat
+      case 'resolved':
         return ReportStatus.approved;
       case 'rejected':
         return ReportStatus.rejected;
@@ -533,8 +516,6 @@ class ReportsStatusProvider extends ChangeNotifier {
       } on Exception {
         return 'Unknown';
       }
-    } else if (timestamp is Timestamp) {
-      dateTime = timestamp.toDate();
     } else if (timestamp is DateTime) {
       dateTime = timestamp;
     } else {

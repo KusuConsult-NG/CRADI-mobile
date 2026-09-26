@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:climate_app/core/services/firebase_service.dart';
+import 'package:climate_app/core/services/supabase_service.dart';
 import 'package:climate_app/core/services/offline_storage_service.dart';
 import 'package:climate_app/core/constants/app_config.dart';
 import 'dart:developer' as developer;
 import 'package:climate_app/core/utils/error_handler.dart';
 
 class AlertsProvider extends ChangeNotifier {
-  final FirebaseService _firebase = FirebaseService();
+  final SupabaseService _supabase = SupabaseService();
   final OfflineStorageService _offlineStorage = OfflineStorageService();
 
   List<Map<String, dynamic>> _alerts = [];
@@ -27,9 +27,9 @@ class AlertsProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final documents = await _firebase.listDocuments(
+      final documents = await _supabase.listDocuments(
         collectionId: AppConfig.alertsCollection,
-        queries: [FQuery.orderDesc('createdAt')],
+        queries: [SQuery.orderDesc('created_at')],
         limitCount: 20,
       );
 

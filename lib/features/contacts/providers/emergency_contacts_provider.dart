@@ -1,21 +1,21 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:climate_app/core/services/firebase_service.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:climate_app/core/services/supabase_service.dart';
 import 'package:climate_app/features/contacts/models/emergency_contact_model.dart';
 import 'package:climate_app/core/constants/app_config.dart';
 import 'dart:developer' as developer;
 
 class EmergencyContactsProvider extends ChangeNotifier {
-  final FirebaseService _firebase = FirebaseService();
+  final SupabaseService _supabase = SupabaseService();
 
   Future<List<EmergencyContact>> getContacts() async {
     try {
-      final user = FirebaseAuth.instance.currentUser;
+      final user = Supabase.instance.client.auth.currentUser;
       if (user == null) return [];
 
-      final docs = await _firebase.listDocuments(
+      final docs = await _supabase.listDocuments(
         collectionId: AppConfig.contactsCollection,
-        queries: [FQuery.orderAsc('name')],
+        queries: [SQuery.orderAsc('name')],
       );
 
       return docs
@@ -32,13 +32,13 @@ class EmergencyContactsProvider extends ChangeNotifier {
 
   Future<void> addContact(EmergencyContact contact) async {
     try {
-      final user = FirebaseAuth.instance.currentUser;
+      final user = Supabase.instance.client.auth.currentUser;
       if (user == null) throw Exception('User not logged in');
 
       final data = contact.toFirestore();
-      data['userId'] = user.uid;
+      data['user_id'] = user.id;
 
-      await _firebase.createDocument(
+      await _supabase.createDocument(
         collectionId: AppConfig.contactsCollection,
         data: data,
       );
@@ -52,7 +52,7 @@ class EmergencyContactsProvider extends ChangeNotifier {
 
   Future<void> updateContact(String id, EmergencyContact contact) async {
     try {
-      await _firebase.updateDocument(
+      await _supabase.updateDocument(
         collectionId: AppConfig.contactsCollection,
         documentId: id,
         data: contact.toFirestore(),
@@ -67,7 +67,7 @@ class EmergencyContactsProvider extends ChangeNotifier {
 
   Future<void> deleteContact(String id) async {
     try {
-      await _firebase.deleteDocument(
+      await _supabase.deleteDocument(
         collectionId: AppConfig.contactsCollection,
         documentId: id,
       );
@@ -96,12 +96,12 @@ class EmergencyContactsProvider extends ChangeNotifier {
     }
   }
 
-  /// Real-time stream via Firestore snapshots (replaces polling loop).
+  /// Real-time stream via Supabase Realtime.
   Stream<List<EmergencyContact>> getContactsStream() {
-    return _firebase
+    return _supabase
         .subscribeToCollection(
           collectionId: AppConfig.contactsCollection,
-          queries: [FQuery.orderAsc('name')],
+          queries: [SQuery.orderAsc('name')],
         )
         .map(
           (docs) => docs
@@ -116,12 +116,12 @@ class EmergencyContactsProvider extends ChangeNotifier {
   }
 
   Stream<List<EmergencyContact>> getContactsByCategory(String category) {
-    return _firebase
+    return _supabase
         .subscribeToCollection(
           collectionId: AppConfig.contactsCollection,
           queries: [
-            FQuery.equal('category', category),
-            FQuery.orderAsc('name'),
+            SQuery.equal('category', category),
+            SQuery.orderAsc('name'),
           ],
         )
         .map(

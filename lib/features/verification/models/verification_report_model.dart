@@ -157,18 +157,25 @@ class VerificationReport {
 
   static String _formatTime(dynamic raw) {
     if (raw == null) return '';
-    if (raw is String) return raw;
-    try {
-      // Firestore Timestamp has a toDate() method via dynamic dispatch
-      final date = (raw as dynamic).toDate() as DateTime;
+    DateTime? date;
+    if (raw is DateTime) {
+      date = raw;
+    } else if (raw is String) {
+      date = DateTime.tryParse(raw);
+      if (date == null) return raw;
+    } else {
+      try {
+        date = (raw as dynamic).toDate() as DateTime?;
+      } on Exception catch (_) {}
+    }
+    if (date != null) {
       final diff = DateTime.now().difference(date);
       if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
       if (diff.inHours < 24) return '${diff.inHours}h ago';
       if (diff.inDays < 7) return '${diff.inDays}d ago';
       return '${date.day}/${date.month}/${date.year}';
-    } on Exception catch (_) {
-      return raw.toString();
     }
+    return raw.toString();
   }
 
   static String _iconForHazard(String type) {

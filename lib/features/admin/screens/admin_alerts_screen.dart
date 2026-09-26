@@ -1,4 +1,4 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:climate_app/core/services/supabase_service.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:climate_app/core/theme/app_colors.dart';
@@ -17,17 +17,33 @@ class _AdminAlertsScreenState extends State<AdminAlertsScreen> {
   final _formKey = GlobalKey<FormState>();
   final _titleCtrl = TextEditingController();
   final _messageCtrl = TextEditingController();
-  late final Stream<QuerySnapshot<Map<String, dynamic>>> _alertsStream;
+  final SupabaseService _supabase = SupabaseService();
+  List<Map<String, dynamic>> _alerts = [];
+  bool _loadingAlerts = false;
 
   @override
   void initState() {
     super.initState();
-    _alertsStream = FirebaseFirestore.instance
-        .collection('alerts')
-        .where('isActive', isEqualTo: true)
-        .orderBy('createdAt', descending: true)
-        .limit(20)
-        .snapshots();
+    _loadAlerts();
+  }
+
+  Future<void> _loadAlerts() async {
+    setState(() => _loadingAlerts = true);
+    try {
+      final docs = await _supabase.listDocuments(
+        collectionId: 'alerts',
+        queries: [
+          SQuery.equal('is_active', true),
+          SQuery.orderDesc('created_at'),
+          SQuery.limit(20),
+        ],
+      );
+      if (mounted) setState(() => _alerts = docs);
+    } on Exception catch (e) {
+      developer.log('Error loading alerts: $e', name: 'AdminAlertsScreen');
+    } finally {
+      if (mounted) setState(() => _loadingAlerts = false);
+    }
   }
 
   String _severity = 'warning';
@@ -71,15 +87,18 @@ class _AdminAlertsScreenState extends State<AdminAlertsScreen> {
     setState(() => _sending = true);
 
     try {
-      await FirebaseFirestore.instance.collection('alerts').add({
-        'title': _titleCtrl.text.trim(),
-        'message': _messageCtrl.text.trim(),
-        'severity': _severity,
-        'targetLga': _targetLga,
-        'createdAt': FieldValue.serverTimestamp(),
-        'createdBy': 'admin',
-        'isActive': true,
-      });
+      await _supabase.createDocument(
+        collectionId: 'alerts',
+        data: {
+          'title': _titleCtrl.text.trim(),
+          'message': _messageCtrl.text.trim(),
+          'severity': _severity,
+          'target_lga': _targetLga,
+          'created_at': DateTime.now().toUtc().toIso8601String(),
+          'created_by': 'admin',
+          'is_active': true,
+        },
+      );
 
       developer.log(
         'Alert broadcast: ${_titleCtrl.text} → $_targetLga',
@@ -99,6 +118,7 @@ class _AdminAlertsScreenState extends State<AdminAlertsScreen> {
             backgroundColor: Colors.green,
           ),
         );
+        _loadAlerts();
       }
     } on Exception catch (e) {
       developer.log('Alert send error: $e', name: 'AdminAlertsScreen');
@@ -116,9 +136,12 @@ class _AdminAlertsScreenState extends State<AdminAlertsScreen> {
   }
 
   Future<void> _dismissAlert(String id) async {
-    await FirebaseFirestore.instance.collection('alerts').doc(id).update({
-      'isActive': false,
-    });
+    await _supabase.updateDocument(
+      collectionId: 'alerts',
+      documentId: id,
+      data: {'is_active': false},
+    );
+    _loadAlerts();
   }
 
   @override
@@ -363,105 +386,98 @@ class _AdminAlertsScreenState extends State<AdminAlertsScreen> {
           ),
           const SizedBox(height: 12),
 
-          StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-            stream: _alertsStream,
-            builder: (context, snap) {
-              if (snap.connectionState == ConnectionState.waiting) {
-                return const Center(child: CircularProgressIndicator());
-              }
-              final docs = snap.data?.docs ?? [];
-              if (docs.isEmpty) {
-                return Center(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 24),
-                    child: Text(
-                      'No active alerts',
-                      style: GoogleFonts.lexend(color: AppColors.textSecondary),
+          if (_loadingAlerts)
+            const Center(child: CircularProgressIndicator())
+          else if (_alerts.isEmpty)
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 24),
+                child: Text(
+                  'No active alerts',
+                  style: GoogleFonts.lexend(color: AppColors.textSecondary),
+                ),
+              ),
+            )
+          else
+            Column(
+              children: _alerts.map((d) {
+                final id = d['\$id'] as String? ?? d['id'] as String? ?? '';
+                final severity = d['severity'] as String? ?? 'info';
+                final color = _severityColors[severity] ?? Colors.blue;
+                final createdAtStr = d['created_at'] as String?;
+                String timeStr = '';
+                if (createdAtStr != null) {
+                  final dt = DateTime.tryParse(createdAtStr);
+                  if (dt != null) timeStr = '${dt.day}/${dt.month}/${dt.year}';
+                }
+                return Card(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    side: BorderSide(color: color.withValues(alpha: 0.3)),
+                  ),
+                  child: ListTile(
+                    leading: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: color.withValues(alpha: 0.12),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        _severityIcons[severity] ?? Icons.info_outline,
+                        color: color,
+                        size: 20,
+                      ),
                     ),
+                    title: Text(
+                      d['title'] as String? ?? '',
+                      style: GoogleFonts.lexend(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
+                      ),
+                    ),
+                    subtitle: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          d['message'] as String? ?? '',
+                          style: GoogleFonts.lexend(fontSize: 12),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            _alertChip(
+                              d['target_lga'] as String? ?? 'All',
+                              Colors.teal,
+                            ),
+                            const SizedBox(width: 6),
+                            _alertChip(severity, color),
+                            if (timeStr.isNotEmpty) ...[
+                              const SizedBox(width: 6),
+                              Text(
+                                timeStr,
+                                style: GoogleFonts.lexend(
+                                  fontSize: 10,
+                                  color: AppColors.textSecondary,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ],
+                    ),
+                    trailing: IconButton(
+                      icon: const Icon(Icons.close, size: 18),
+                      tooltip: 'Dismiss alert',
+                      onPressed: () => _dismissAlert(id),
+                    ),
+                    isThreeLine: true,
                   ),
                 );
-              }
-              return Column(
-                children: docs.map((doc) {
-                  final d = doc.data();
-                  final severity = d['severity'] as String? ?? 'info';
-                  final color = _severityColors[severity] ?? Colors.blue;
-                  final createdAt = d['createdAt'];
-                  String timeStr = '';
-                  if (createdAt is Timestamp) {
-                    final dt = createdAt.toDate();
-                    timeStr = '${dt.day}/${dt.month}/${dt.year}';
-                  }
-                  return Card(
-                    margin: const EdgeInsets.only(bottom: 8),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      side: BorderSide(color: color.withValues(alpha: 0.3)),
-                    ),
-                    child: ListTile(
-                      leading: Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: color.withValues(alpha: 0.12),
-                          shape: BoxShape.circle,
-                        ),
-                        child: Icon(
-                          _severityIcons[severity] ?? Icons.info_outline,
-                          color: color,
-                          size: 20,
-                        ),
-                      ),
-                      title: Text(
-                        d['title'] as String? ?? '',
-                        style: GoogleFonts.lexend(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 14,
-                        ),
-                      ),
-                      subtitle: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            d['message'] as String? ?? '',
-                            style: GoogleFonts.lexend(fontSize: 12),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          const SizedBox(height: 4),
-                          Row(
-                            children: [
-                              _alertChip(
-                                d['targetLga'] as String? ?? 'All',
-                                Colors.teal,
-                              ),
-                              const SizedBox(width: 6),
-                              _alertChip(severity, color),
-                              if (timeStr.isNotEmpty) ...[
-                                const SizedBox(width: 6),
-                                Text(
-                                  timeStr,
-                                  style: GoogleFonts.lexend(
-                                    fontSize: 10,
-                                    color: AppColors.textSecondary,
-                                  ),
-                                ),
-                              ],
-                            ],
-                          ),
-                        ],
-                      ),
-                      trailing: IconButton(
-                        icon: const Icon(Icons.close, size: 18),
-                        tooltip: 'Dismiss alert',
-                        onPressed: () => _dismissAlert(doc.id),
-                      ),
-                      isThreeLine: true,
-                    ),
-                  );
-                }).toList(),
-              );
-            },
-          ),
+              }).toList(),
+            ),
         ],
       ),
     );

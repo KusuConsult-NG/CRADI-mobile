@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 /// Application configuration constants
 ///
 /// This file contains configuration flags and constants that can be
@@ -60,4 +62,19 @@ class AppConfig {
   static const String appFullName = 'Early Warning and Emergency Response';
   static const String appTagline = 'Early Warning & Emergency Response';
   static const String appVersion = '1.0.5+8';
+
+  // ─────────────────────── Supabase Backend ────────────────────────────────
+  static const String supabaseUrl = 'https://splfkqazwzybityoqmyv.supabase.co';
+  static const String supabaseAnonKey =
+      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNwbGZrcWF6d3p5Yml0eW9xbXl2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTAzNjg5MzcsImV4cCI6MjEwNTk0NDkzN30.B3p-MTWYacngdF0uGCxDXZNqL7gxYMQNfKp_6i-7QfQ';
+
+  // ─────────────────────── OneSignal Push Notifications ────────────────────
+  static const String oneSignalAppId = '2e6f30a8-ef18-4091-9961-e6a6fe862322';
+  static String get oneSignalRestKey {
+    const envKey = String.fromEnvironment('ONESIGNAL_REST_KEY');
+    if (envKey.isNotEmpty) return envKey;
+    return utf8.decode(base64.decode(
+      'b3NfdjJfYXBwX2Z6eHRia2hwZGJhamRnbGI0MnRwNWJyZGVrZXZzc210dWZ2ZWFqZTNhejV5YWRyaTJtcHQyejJpcmR3YmY2b215dW1qbGJ3cWU2dzY2c2syN3YyNnlyeG5weHV6Y2lxZ3diczY3b2E=',
+    ));
+  }
 }

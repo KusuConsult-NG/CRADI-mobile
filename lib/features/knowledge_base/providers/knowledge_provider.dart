@@ -1,4 +1,4 @@
-import 'package:climate_app/core/services/firebase_service.dart';
+import 'package:climate_app/core/services/supabase_service.dart';
 import 'package:climate_app/core/services/emergency_guides_service.dart';
 import 'package:climate_app/core/services/offline_storage_service.dart';
 import 'package:climate_app/core/constants/app_config.dart';
@@ -6,7 +6,7 @@ import 'package:flutter/material.dart';
 import 'dart:developer' as developer;
 
 class KnowledgeProvider extends ChangeNotifier {
-  final FirebaseService _firebase = FirebaseService();
+  final SupabaseService _supabase = SupabaseService();
   final EmergencyGuidesService _fallbackService = EmergencyGuidesService();
   final OfflineStorageService _offlineStorage = OfflineStorageService();
 
@@ -27,10 +27,10 @@ class KnowledgeProvider extends ChangeNotifier {
       try {
         final queries = <QueryFilter>[];
         if (category != null && category != 'All') {
-          queries.add(FQuery.equal('hazardType', category.toLowerCase()));
+          queries.add(SQuery.equal('category', category.toLowerCase()));
         }
 
-        final docs = await _firebase.listDocuments(
+        final docs = await _supabase.listDocuments(
           collectionId: AppConfig.knowledgeBaseCollection,
           queries: queries,
           limitCount: 100,
@@ -38,28 +38,28 @@ class KnowledgeProvider extends ChangeNotifier {
 
         if (docs.isNotEmpty) {
           _guides = docs.map((data) {
-            final rawUrl = data['imageUrl']?.toString() ?? '';
+            final rawUrl = data['thumbnail_url']?.toString() ?? '';
             final imageUrl = (rawUrl.isNotEmpty && rawUrl.startsWith('http'))
                 ? rawUrl
-                : _getImageForType(data['hazardType'] ?? data['category']);
+                : _getImageForType(data['hazard_type'] ?? data['category']);
             return <String, dynamic>{
               'id': data['\$id'],
               'title': data['title'] ?? '',
               'subtitle': data['category'] ?? 'Manual',
               'content': data['content'] ?? '',
               'category': data['category'] ?? 'General',
-              'hazardType': data['hazardType'],
-              'tag': (data['hazardType'] as String?)?.toUpperCase() ?? 'GUIDE',
+              'hazardType': data['hazard_type'],
+              'tag': (data['hazard_type'] as String?)?.toUpperCase() ?? 'GUIDE',
               'imageUrl': imageUrl,
               'source': data['source'] ?? 'EWER Admin',
-              'updatedAt': data['updatedAt'],
+              'updatedAt': data['updated_at'],
               'isOffline': false,
             };
           }).toList();
 
           await _offlineStorage.cacheGuides(_guides);
           developer.log(
-            'Fetched ${_guides.length} guides from Firestore',
+            'Fetched ${_guides.length} guides from Supabase',
             name: 'KnowledgeProvider',
           );
         } else {
@@ -80,7 +80,7 @@ class KnowledgeProvider extends ChangeNotifier {
         }
       } on Exception catch (e) {
         developer.log(
-          'Firestore fetch failed, using fallback: $e',
+          'Supabase fetch failed, using fallback: $e',
           name: 'KnowledgeProvider',
         );
         final cached = _offlineStorage.getCachedGuides();
@@ -165,37 +165,27 @@ class KnowledgeProvider extends ChangeNotifier {
   String _getImageForType(String? type) {
     switch (type?.toLowerCase()) {
       case 'flood':
-        // Flooded street / submerged homes
         return 'https://images.unsplash.com/photo-1504701954957-2010ec3bcec1?auto=format&fit=crop&q=80&w=800';
       case 'fire':
       case 'wildfires':
-        // Active wildfire / burning landscape
         return 'https://images.unsplash.com/photo-1516912481808-3406841bd33c?auto=format&fit=crop&q=80&w=800';
       case 'accident':
-        // Road accident / emergency response scene
         return 'https://images.unsplash.com/photo-1544636331-e26879cd4d9b?auto=format&fit=crop&q=80&w=800';
       case 'erosion':
-        // Severe soil erosion / cracked ground
         return 'https://images.unsplash.com/photo-1591700608620-4cdcf1d47898?auto=format&fit=crop&q=80&w=800';
       case 'disease':
       case 'epidemic':
-        // Healthcare / disease response
         return 'https://images.unsplash.com/photo-1584036561566-b93a50208c3c?auto=format&fit=crop&q=80&w=800';
       case 'conflict':
-        // Crisis / security emergency scene
         return 'https://images.unsplash.com/photo-1599059813005-11265ba4b4ce?auto=format&fit=crop&q=80&w=800';
       case 'storm':
-        // Dark storm clouds / severe weather
         return 'https://images.unsplash.com/photo-1535350356005-fd52b3b524fb?auto=format&fit=crop&q=80&w=800';
       case 'earthquake':
-        // Collapsed building / earthquake damage
         return 'https://images.unsplash.com/photo-1548337138-e87d889cc369?auto=format&fit=crop&q=80&w=800';
       case 'extreme heat':
       case 'drought':
-        // Cracked dry earth / drought landscape
         return 'https://images.unsplash.com/photo-1504192010706-dd7f569ee2be?auto=format&fit=crop&q=80&w=800';
       default:
-        // Emergency preparedness / general safety
         return 'https://images.unsplash.com/photo-1496247749665-49cf5b1022e9?auto=format&fit=crop&q=80&w=800';
     }
   }

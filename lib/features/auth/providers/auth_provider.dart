@@ -3,10 +3,9 @@ import 'dart:convert';
 import 'dart:developer' as developer;
 import 'package:climate_app/core/utils/error_handler.dart';
 export 'package:climate_app/core/utils/error_handler.dart' show AuthException;
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:climate_app/core/services/firebase_service.dart';
+import 'package:climate_app/core/services/supabase_service.dart';
 import 'package:climate_app/core/services/secure_storage_service.dart';
 import 'package:climate_app/core/services/session_manager.dart';
 import 'package:climate_app/core/services/rate_limiter.dart';
@@ -14,27 +13,29 @@ import 'package:climate_app/core/services/biometric_service.dart';
 import 'package:climate_app/core/services/device_fingerprint_service.dart';
 import 'package:climate_app/core/services/fraud_detection_service.dart';
 import 'dart:math' as math;
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:climate_app/core/services/email_service.dart';
 import 'package:climate_app/core/services/sms_service.dart';
 import 'package:climate_app/core/constants/app_config.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' hide AuthException;
+import 'package:supabase_flutter/supabase_flutter.dart' as sp show AuthException;
+
+extension SupabaseUserCompat on User {
+  String get uid => id;
+  String? get displayName => userMetadata?['full_name'] as String?;
+}
 
 enum UserRole { user, ewm, ewv, ewr, admin, techSupport }
 
-/// Authentication state and operations — backed by Firebase Auth + Firestore.
-///
-/// Session management moved from Appwrite cookie sessions to Firebase's
-/// built-in [authStateChanges] stream. JWT refresh is automatic.
+/// Authentication state and operations — backed by Supabase Auth + PostgREST.
 class AuthProvider extends ChangeNotifier {
   AuthProvider() {
     _initializeSessionManager();
-    // Access _authSub here to force initialization of the late field,
-    // which starts listening to Firebase authStateChanges immediately.
+    // Start listening to Supabase auth state immediately.
     // ignore: unnecessary_statements
     _authSub;
   }
 
-  final FirebaseService _firebase = FirebaseService();
+  final SupabaseService _supabase = SupabaseService();
   bool _isAuthenticated = false;
   UserRole? _userRole;
   String? _phoneNumber;
@@ -55,19 +56,18 @@ class AuthProvider extends ChangeNotifier {
   bool _isInitialized = false;
   bool _hasCompletedOnboarding = false;
   bool _isLocked = false;
-  // Set to true during a fresh manual login to prevent _onAuthStateChanged
-  // from immediately re-locking the app via the biometric lock screen.
+  // Set true during a fresh manual login to prevent _onAuthStateChanged
+  // from immediately locking the app via the biometric lock screen.
   bool _justLoggedIn = false;
 
-  // Real-time listener on the user's Firestore document so admin role
-  // changes (approval, role, disabled) take effect immediately.
-  StreamSubscription<dynamic>? _userDocSub;
+  // Real-time listener on the user's profile row in Supabase.
+  StreamSubscription<List<Map<String, dynamic>>>? _userDocSub;
 
-  // Auth state subscription (initialized in constructor indirectly via late field).
-  // This is safe: late fields are initialized on first access, which happens
-  // immediately when the listener is needed.
+  // Auth state subscription (initialized lazily on first access).
   // ignore: cancel_subscriptions
-  late final _authSub = _firebase.authStateChanges.listen(_onAuthStateChanged);
+  late final _authSub = _supabase.authStateChanges.listen(
+    (AuthState state) => _onAuthStateChanged(state.session?.user),
+  );
 
   bool get isAuthenticated => _isAuthenticated;
   UserRole? get userRole => _userRole;
@@ -94,10 +94,9 @@ class AuthProvider extends ChangeNotifier {
     };
   }
 
-  /// React to Firebase auth state changes (replaces 2-min polling timer).
+  /// React to Supabase auth state changes.
   Future<void> _onAuthStateChanged(User? user) async {
     if (user == null) {
-      // Signed out — cancel real-time listener
       _userDocSub?.cancel();
       _userDocSub = null;
       _currentUser = null;
@@ -110,75 +109,52 @@ class AuthProvider extends ChangeNotifier {
 
     _currentUser = user;
 
-    // Force-refresh the token so any custom claims (role, admin) set via
-    // Firebase Admin SDK are immediately included. Without this, Firestore
-    // security rules see stale claims and deny reads for newly-promoted users.
-    try {
-      await user.getIdToken(true);
-      developer.log(
-        'Token refreshed — custom claims loaded',
-        name: 'AuthProvider',
-      );
-    } on Exception catch (e) {
-      developer.log(
-        'Token refresh failed (non-fatal): $e',
-        name: 'AuthProvider',
-      );
-    }
-
     // Load onboarding status
     final prefs = await SharedPreferences.getInstance();
     _hasCompletedOnboarding =
         prefs.getBool('has_completed_onboarding') ?? false;
 
-    // Check biometric lock — but only on cold-start/app-resume.
-    // If the user JUST logged in manually (_justLoggedIn == true), skip locking
-    // so they are taken directly to the dashboard.
+    // Check biometric lock
     final bioEnabled = await _storage.isBiometricEnabled();
     if (bioEnabled && !_justLoggedIn) {
       _isLocked = true;
-      _isAuthenticated =
-          true; // MUST remain true so GoRouter shows Lock Screen, not Main Login!
+      _isAuthenticated = true;
     } else {
       _isAuthenticated = true;
     }
-    _justLoggedIn = false; // Reset flag regardless
+    _justLoggedIn = false;
 
-    // Fetch Firestore user doc for role + approval/verification status.
-    // Always read from Firestore (source of truth) instead of relying
-    // solely on the secure-storage cache, which becomes stale when an
-    // admin changes a user's role remotely.
+    // Fetch Supabase profile row for role + approval/verification status.
     try {
-      final userDoc = await _firebase.getDocument(
+      final userDoc = await _supabase.getDocument(
         collectionId: AppConfig.usersCollection,
-        documentId: user.uid,
+        documentId: user.id,
       );
 
-      // ── Role: Firestore is authoritative ──
       final firestoreRole = userDoc['role'] as String?;
       if (firestoreRole != null) {
         _userRole = _parseUserRole(firestoreRole);
         await _storage.saveUserRole(firestoreRole);
       } else {
-        // Fallback to cached role if Firestore field is missing
         final cachedRole = await _storage.getUserRole();
         _userRole = _parseUserRole(cachedRole);
       }
 
-      _isApproved = userDoc['isApproved'] as bool? ?? false;
-      _isVerified = userDoc['isVerified'] as bool? ?? false;
+      _isApproved = userDoc['is_approved'] as bool? ?? false;
+      _isVerified = userDoc['is_verified'] as bool? ?? false;
 
-      // Self-heal: if Firebase email is verified but Firestore is not
-      if (user.emailVerified && !_isVerified) {
+      // Self-heal: if Supabase email is confirmed but profile row is not
+      final emailVerified = user.emailConfirmedAt != null;
+      if (emailVerified && !_isVerified) {
         developer.log(
-          'Auth verified but Firestore not. Syncing...',
+          'Auth verified but profile row not. Syncing...',
           name: 'AuthProvider',
         );
         try {
-          await _firebase.updateDocument(
+          await _supabase.updateDocument(
             collectionId: AppConfig.usersCollection,
-            documentId: user.uid,
-            data: {'isVerified': true},
+            documentId: user.id,
+            data: {'is_verified': true},
           );
           _isVerified = true;
         } on Exception catch (e) {
@@ -186,8 +162,7 @@ class AuthProvider extends ChangeNotifier {
         }
       }
     } on Exception catch (e) {
-      developer.log('Error fetching Firestore user doc: $e');
-      // Fallback to cached role if Firestore fetch fails
+      developer.log('Error fetching Supabase profile: $e');
       final cachedRole = await _storage.getUserRole();
       if (cachedRole != null) {
         _userRole = _parseUserRole(cachedRole);
@@ -195,34 +170,32 @@ class AuthProvider extends ChangeNotifier {
     }
 
     // Start real-time listener so admin role changes take effect immediately
-    _startUserDocListener(user.uid);
+    _startUserDocListener(user.id);
 
     _phoneNumber = await _storage.getPhoneNumber();
     _isInitialized = true;
     notifyListeners();
   }
 
-  /// Listen to the user's Firestore document in real-time.
-  /// When an admin changes the user's role, approval, or disabled status,
-  /// the change is picked up immediately without requiring re-login.
+  /// Listen to the user's profile row in real-time via Supabase Realtime.
   void _startUserDocListener(String uid) {
     _userDocSub?.cancel();
-    _userDocSub = FirebaseFirestore.instance
-        .collection(AppConfig.usersCollection)
-        .doc(uid)
-        .snapshots()
+    _userDocSub = _supabase
+        .subscribeToCollection(
+          collectionId: AppConfig.usersCollection,
+          queries: [SQuery.equal('id', uid)],
+        )
         .listen(
-          (snapshot) {
-            if (!snapshot.exists) return;
-            final data = snapshot.data()!;
+          (rows) {
+            if (rows.isEmpty) return;
+            final data = rows.first;
 
-            // Update role
             final newRoleStr = data['role'] as String?;
             if (newRoleStr != null) {
               final newRole = _parseUserRole(newRoleStr);
               if (newRole != _userRole) {
                 developer.log(
-                  'Role changed via Firestore listener: $_userRole → $newRole',
+                  'Role changed via Realtime: $_userRole → $newRole',
                   name: 'AuthProvider',
                 );
                 _userRole = newRole;
@@ -230,10 +203,9 @@ class AuthProvider extends ChangeNotifier {
               }
             }
 
-            // Update approval & verification
-            final newApproved = data['isApproved'] as bool? ?? false;
-            final newVerified = data['isVerified'] as bool? ?? false;
-            final newDisabled = data['isDisabled'] as bool? ?? false;
+            final newApproved = data['is_approved'] as bool? ?? false;
+            final newVerified = data['is_verified'] as bool? ?? false;
+            final newDisabled = data['is_disabled'] as bool? ?? false;
 
             bool changed = false;
             if (_isApproved != newApproved) {
@@ -245,7 +217,6 @@ class AuthProvider extends ChangeNotifier {
               changed = true;
             }
 
-            // If account was disabled, force logout
             if (newDisabled) {
               developer.log(
                 'Account disabled via admin — logging out',
@@ -267,8 +238,8 @@ class AuthProvider extends ChangeNotifier {
 
   /// Force reload of user data (e.g. after profile update).
   Future<void> reloadUserData() async {
-    await _firebase.reloadCurrentUser();
-    final user = _firebase.getCurrentUser();
+    await _supabase.reloadCurrentUser();
+    final user = _supabase.getCurrentUser();
     if (user != null) await _onAuthStateChanged(user);
   }
 
@@ -289,7 +260,6 @@ class AuthProvider extends ChangeNotifier {
       final authenticated = await _biometricService.authenticateForLogin();
 
       if (authenticated) {
-        // Validate server session
         final isValid = await _isServerSessionValid();
         if (!isValid) {
           _isLoading = false;
@@ -335,33 +305,31 @@ class AuthProvider extends ChangeNotifier {
 
       // Sign out any stale session
       try {
-        await _firebase.logout();
+        await _supabase.logout();
       } on Exception {
         developer.log('No existing session to clear', name: 'AuthProvider');
       }
 
-      // 1. Create Firebase Auth user
-      developer.log('Creating Firebase account...', name: 'AuthProvider');
-      final user = await _firebase.createAccount(
+      // 1. Create Supabase Auth user
+      developer.log('Creating Supabase account...', name: 'AuthProvider');
+      final user = await _supabase.createAccount(
         email: email,
         password: password,
         name: name ?? 'User',
       );
-      developer.log('Account created: ${user.uid}', name: 'AuthProvider');
+      developer.log('Account created: ${user.id}', name: 'AuthProvider');
       _currentUser = user;
 
       // 2. Determine role
       final userRole = role ?? UserRole.user;
 
-      // 3. Skip OTP Generation since email verification is handled via Action Links directly if needed
-
-      // 4. Create Firestore user document
+      // 3. Create profile row
       developer.log(
-        'Creating Firestore user document...',
+        'Creating Supabase profile row...',
         name: 'AuthProvider',
       );
       await _createUserDocument(
-        userId: user.uid,
+        userId: user.id,
         email: email,
         role: userRole,
         name: name,
@@ -372,15 +340,15 @@ class AuthProvider extends ChangeNotifier {
         isVerified: isVerified ?? false,
         phoneNumber: phoneNumber,
       );
-      developer.log('User document created', name: 'AuthProvider');
+      developer.log('User profile created', name: 'AuthProvider');
 
-      // 5. Start session
+      // 4. Start session
       await _startUserSession(user, userRole, isVerified: isVerified ?? false);
 
       // Save credentials for Biometric auto-login bypass
       await _storage.saveUserCredentials(email, password);
 
-      // 6. Send OTP email
+      // 5. Send OTP email
       if (isVerified != true) {
         await sendOtpForEmail(email, name: name);
       }
@@ -388,41 +356,33 @@ class AuthProvider extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
       return true;
-    } on FirebaseAuthException catch (e) {
+    } on AuthException {
+      _isLoading = false;
+      notifyListeners();
+      rethrow;
+    } on sp.AuthException catch (e) {
       _isLoading = false;
       notifyListeners();
       developer.log(
-        'SignUp FirebaseAuthException: ${e.code} – ${e.message}',
+        'SignUp AuthException: ${e.statusCode} – ${e.message}',
         name: 'AuthProvider',
       );
-      // Map known codes to user-friendly messages.
-      // IMPORTANT: never pass e.message raw — Firebase SDK internal strings
-      // like 'An internal error has occurred. [ Pin verification failed' must
-      // never reach the UI.
-      switch (e.code) {
-        case 'email-already-in-use':
-          throw AuthException('Email is already registered. Please login.');
-        case 'invalid-email':
-          throw AuthException('Please enter a valid email address.');
-        case 'weak-password':
-          throw AuthException(
-            'Password is too weak. Use at least 8 characters with letters, numbers and symbols.',
-          );
-        case 'operation-not-allowed':
-          throw AuthException(
-            'Email registration is currently disabled. Please contact support.',
-          );
-        case 'network-request-failed':
-          throw AuthException(
-            'Network error. Please check your connection and try again.',
-          );
-        case 'too-many-requests':
-          throw AuthException(
-            'Too many attempts. Please wait a few minutes before trying again.',
-          );
-        default:
-          throw AuthException('Registration failed. Please try again.');
+      if (e.message.toLowerCase().contains('already registered') ||
+          e.statusCode == '422') {
+        throw AuthException('Email is already registered. Please login.');
       }
+      if (e.message.toLowerCase().contains('weak') ||
+          e.message.toLowerCase().contains('password')) {
+        throw AuthException(
+          'Password is too weak. Use at least 8 characters with letters, numbers and symbols.',
+        );
+      }
+      if (e.statusCode == '429') {
+        throw AuthException(
+          'Too many attempts. Please wait a few minutes before trying again.',
+        );
+      }
+      throw AuthException('Registration failed. Please try again.');
     } on Exception catch (e) {
       _isLoading = false;
       notifyListeners();
@@ -439,11 +399,10 @@ class AuthProvider extends ChangeNotifier {
 
   // ─────────────────────────── Phone Sign-Up ───────────────────────────────
 
-  /// Creates a Firebase Auth account for a phone-registered user after OTP
-  /// verification. Since Firebase Auth requires email+password, we derive a
-  /// surrogate email (`{sanitised_phone}@ewer.phone`) and generate a secure
-  /// random password that is stored in SecureStorage so the user can log in
-  /// again without knowing it (transparent to them).
+  /// Creates a Supabase Auth account for a phone-registered user after OTP
+  /// verification. Since we use email+password Auth, we derive a surrogate
+  /// email (`{sanitised_phone}@ewer.phone`) and generate a secure
+  /// random password stored in SecureStorage (transparent to the user).
   Future<bool> signUpWithPhone({
     required String phone,
     String? name,
@@ -453,46 +412,41 @@ class AuthProvider extends ChangeNotifier {
     String? lga,
     String? ward,
   }) async {
-    // Derive a stable Firebase-safe email for the phone user
     final sanitisedPhone = phone.trim().replaceAll(RegExp(r'[^0-9]'), '');
     final derivedEmail = '$sanitisedPhone@ewer.phone';
 
-    // Generate a secure, deterministic password so the user can reinstall the app
-    // or log in on a new device using just their phone number OTP.
     const salt = 'cradi_ewer_2026_phone_auth_salt';
     final rawBytes = utf8.encode('${sanitisedPhone}_$salt');
     final generatedPassword = base64Encode(rawBytes).substring(0, 32);
 
-    // Store derived credentials so the user can re-authenticate later
     await _storage.write('phone_derived_email_$sanitisedPhone', derivedEmail);
     await _storage.write(
       'phone_derived_password_$sanitisedPhone',
       generatedPassword,
     );
 
-    // Clear any stale Firebase session
     try {
-      await _firebase.logout();
+      await _supabase.logout();
     } on Exception {
       /* ignore */
     }
 
-    // Create Firebase Auth account or fall back if exists
     User? user;
     bool isNewUser = true;
     try {
-      user = await _firebase.createAccount(
+      user = await _supabase.createAccount(
         email: derivedEmail,
         password: generatedPassword,
         name: name ?? 'User',
       );
-    } on FirebaseAuthException catch (e) {
-      if (e.code == 'email-already-in-use') {
+    } on sp.AuthException catch (e) {
+      if (e.message.toLowerCase().contains('already registered') ||
+          e.statusCode == '422') {
         developer.log(
           'Phone user exists. Falling back to login.',
           name: 'AuthProvider',
         );
-        user = await _firebase.createEmailPasswordSession(
+        user = await _supabase.createEmailPasswordSession(
           email: derivedEmail,
           password: generatedPassword,
         );
@@ -506,10 +460,9 @@ class AuthProvider extends ChangeNotifier {
 
     final userRole = role ?? UserRole.user;
 
-    // Create Firestore user document only if it's a new user
     if (isNewUser) {
       await _createUserDocument(
-        userId: user.uid,
+        userId: user.id,
         email: derivedEmail,
         role: userRole,
         name: name,
@@ -517,14 +470,14 @@ class AuthProvider extends ChangeNotifier {
         state: state,
         lga: lga,
         ward: ward,
-        isVerified: true, // OTP already verified before this call
+        isVerified: true,
         phoneNumber: phone,
       );
     }
 
     await _startUserSession(user, userRole, isVerified: true);
     developer.log(
-      'signUpWithPhone: account created/logged in uid=${user.uid}',
+      'signUpWithPhone: account created/logged in uid=${user.id}',
       name: 'AuthProvider',
     );
     return true;
@@ -540,9 +493,8 @@ class AuthProvider extends ChangeNotifier {
       _isLoading = true;
       notifyListeners();
 
-      // Clear stale state
       try {
-        await _firebase.logout();
+        await _supabase.logout();
       } on Exception {
         developer.log('No existing session to clear', name: 'AuthProvider');
       }
@@ -550,60 +502,50 @@ class AuthProvider extends ChangeNotifier {
       _isAuthenticated = false;
       _userRole = null;
 
-      // Note: rate-limit check is enforced inside firebase_service.createEmailPasswordSession
-      // to keep the logic co-located with the actual auth call. No need to duplicate here.
-
-      // Device fingerprint for fraud tracking
       deviceFingerprint = await _fingerprintService.generateFingerprint();
       final deviceName = await _fingerprintService.getDeviceName();
 
-      // Sign in with Firebase — flag prevents biometric lock from triggering
-      // in the _onAuthStateChanged callback for this fresh login.
       _justLoggedIn = true;
-      final user = await _firebase.createEmailPasswordSession(
+      final user = await _supabase.createEmailPasswordSession(
         email: email,
         password: password,
       );
       _currentUser = user;
 
-      // Fetch Firestore user document
+      // Fetch Supabase profile row
       Map<String, dynamic> userDoc;
       try {
-        userDoc = await _firebase.getDocument(
+        userDoc = await _supabase.getDocument(
           collectionId: AppConfig.usersCollection,
-          documentId: user.uid,
+          documentId: user.id,
         );
-      } on FirebaseException catch (e) {
-        if (e.code == 'not-found') {
-          developer.log(
-            'User document missing (Zombie User), recovering...',
-            name: 'AuthProvider',
-          );
-          await _createUserDocument(
-            userId: user.uid,
-            email: user.email ?? email,
-            name: user.displayName,
-            role: UserRole.user,
-          );
-          userDoc = await _firebase.getDocument(
-            collectionId: AppConfig.usersCollection,
-            documentId: user.uid,
-          );
-        } else {
-          rethrow;
-        }
+      } on PostgrestException catch (e) {
+        developer.log(
+          'User profile missing (zombie user), recovering: ${e.message}',
+          name: 'AuthProvider',
+        );
+        await _createUserDocument(
+          userId: user.id,
+          email: user.email ?? email,
+          name: user.userMetadata?['full_name'] as String?,
+          role: UserRole.user,
+        );
+        userDoc = await _supabase.getDocument(
+          collectionId: AppConfig.usersCollection,
+          documentId: user.id,
+        );
       }
 
       final roleStr = userDoc['role'] as String?;
       final role = _parseUserRole(roleStr) ?? UserRole.user;
       _userRole = role;
-      _isApproved = userDoc['isApproved'] as bool? ?? false;
-      _isVerified = userDoc['isVerified'] as bool? ?? false;
+      _isApproved = userDoc['is_approved'] as bool? ?? false;
+      _isVerified = userDoc['is_verified'] as bool? ?? false;
 
       // Fraud assessment (non-blocking)
       try {
         final fraudAssessment = await _fraudService.assessLoginRisk(
-          userId: user.uid,
+          userId: user.id,
           deviceFingerprint: deviceFingerprint,
         );
         developer.log(
@@ -612,7 +554,7 @@ class AuthProvider extends ChangeNotifier {
         );
 
         await _fraudService.recordLoginAttempt(
-          userId: user.uid,
+          userId: user.id,
           success: true,
           deviceFingerprint: deviceFingerprint,
           deviceName: deviceName,
@@ -620,7 +562,7 @@ class AuthProvider extends ChangeNotifier {
 
         if (fraudAssessment.flags.contains('new_device')) {
           await _fraudService.registerTrustedDevice(
-            userId: user.uid,
+            userId: user.id,
             deviceFingerprint: deviceFingerprint,
             deviceName: deviceName,
           );
@@ -635,57 +577,39 @@ class AuthProvider extends ChangeNotifier {
       await _startUserSession(user, role, rememberMe: rememberMe);
       await _rateLimiter.resetLoginAttempts();
 
-      // Save credentials to resurrect the session via Biometrics if it expires
       await _storage.saveUserCredentials(email, password);
 
       _isLoading = false;
       notifyListeners();
       return true;
-    } on FirebaseAuthException catch (e) {
+    } on sp.AuthException catch (e) {
       _isLoading = false;
       _justLoggedIn = false;
       notifyListeners();
       developer.log(
-        'Login FirebaseAuthException: ${e.code} – ${e.message}',
+        'Login AuthException: ${e.statusCode} – ${e.message}',
         name: 'AuthProvider',
       );
-      // Credential errors
-      if (e.code == 'invalid-credential' ||
-          e.code == 'wrong-password' ||
-          e.code == 'user-not-found') {
+      if (e.statusCode == '400') {
         throw AuthException('Invalid email or password');
       }
-      // Rate / brute-force
-      if (e.code == 'too-many-requests' || e.code == 'rate-limited') {
+      if (e.statusCode == '429') {
         throw AuthException(
           'Too many login attempts. Please wait a few minutes and try again.',
         );
       }
-      // Account disabled
-      if (e.code == 'user-disabled') {
-        throw AuthException(
-          'This account has been disabled. Please contact support.',
-        );
-      }
-      // Network / connectivity
-      if (e.code == 'network-request-failed') {
-        throw AuthException('Login failed. Please check your connection.');
-      }
-      // Default: log the raw code to Crashlytics, show generic message
       ErrorHandler.logError(
-        'Unhandled FirebaseAuthException: ${e.code} – ${e.message}',
+        'AuthException: ${e.statusCode} – ${e.message}',
         context: 'AuthProvider.signInWithEmail',
       );
       throw AuthException(
-        'Login failed (${e.code}): ${e.message ?? "No additional details"}',
+        'Login failed: ${e.message.length > 100 ? e.message.substring(0, 100) : e.message}',
       );
     } on Exception catch (e) {
       _isLoading = false;
       _justLoggedIn = false;
       notifyListeners();
       ErrorHandler.logError(e, context: 'AuthProvider.signInWithEmail');
-      // Surface the actual exception type+message in debug for field diagnosis.
-      // In release this is scrubbed by ErrorHandler and never shown raw.
       if (kDebugMode) {
         throw AuthException(
           'Login error: ${e.runtimeType} – ${e.toString().substring(0, e.toString().length.clamp(0, 200))}',
@@ -704,39 +628,36 @@ class AuthProvider extends ChangeNotifier {
       _isLoading = true;
       notifyListeners();
 
-      // Rate limiting
       final rateLimitResult = await _rateLimiter.checkOtpResend();
       if (!rateLimitResult.allowed) {
         throw AuthException(rateLimitResult.userMessage);
       }
 
-      // Normalise and validate
       final normalised = phone.trim().toLowerCase();
       if (normalised.isEmpty) {
         throw AuthException('Invalid phone number.');
       }
 
-      // Generate a cryptographically secure 6-digit OTP
       final secureRandom = math.Random.secure();
       final otp = (100000 + secureRandom.nextInt(900000)).toString();
 
-      // Doc ID = sanitised phone (e.g. +2348012345678 → _2348012345678)
       final docId = normalised.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '_');
       final expiryTime = DateTime.now().add(const Duration(minutes: 10));
 
-      await FirebaseFirestore.instance
-          .collection('otp_verifications')
-          .doc(docId)
-          .set({
-            'phone': normalised,
-            'code': otp,
-            'expiresAt': Timestamp.fromDate(expiryTime),
-            'createdAt': FieldValue.serverTimestamp(),
-            'used': false,
-            'attempts': 0,
-          });
+      await _supabase.createDocument(
+        collectionId: 'otp_verifications',
+        documentId: docId,
+        data: {
+          'id': docId,
+          'identifier': normalised,
+          'code': otp,
+          'expires_at': expiryTime.toUtc().toIso8601String(),
+          'created_at': DateTime.now().toUtc().toIso8601String(),
+          'used': false,
+          'attempts': 0,
+        },
+      );
 
-      // Send OTP via Termii SMS
       final smsService = SmsService();
       if (!smsService.isReady) {
         throw AuthException(
@@ -771,33 +692,32 @@ class AuthProvider extends ChangeNotifier {
       _isLoading = true;
       notifyListeners();
 
-      // Implement rate limiting
       final rateLimitResult = await _rateLimiter.checkOtpResend();
       if (!rateLimitResult.allowed) {
         throw AuthException(rateLimitResult.userMessage);
       }
 
-      // Generate a cryptographically secure 6-digit OTP
       final secureRandom = math.Random.secure();
       final otp = (100000 + secureRandom.nextInt(900000)).toString();
 
-      // Normalise email to lowercase to prevent case-mismatch on doc ID
       final normalisedEmail = email.trim().toLowerCase();
       final docId = normalisedEmail.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '_');
       final expiryTime = DateTime.now().add(const Duration(minutes: 10));
-      await FirebaseFirestore.instance
-          .collection('otp_verifications')
-          .doc(docId)
-          .set({
-            'email': normalisedEmail,
-            'code': otp,
-            'expiresAt': Timestamp.fromDate(expiryTime),
-            'createdAt': FieldValue.serverTimestamp(),
-            'used': false,
-            'attempts': 0,
-          });
 
-      // Send the OTP via EmailService (Resend)
+      await _supabase.createDocument(
+        collectionId: 'otp_verifications',
+        documentId: docId,
+        data: {
+          'id': docId,
+          'identifier': normalisedEmail,
+          'code': otp,
+          'expires_at': expiryTime.toUtc().toIso8601String(),
+          'created_at': DateTime.now().toUtc().toIso8601String(),
+          'used': false,
+          'attempts': 0,
+        },
+      );
+
       final emailService = EmailService();
       final success = await emailService.sendVerificationCode(
         email,
@@ -839,9 +759,9 @@ class AuthProvider extends ChangeNotifier {
       if (registrationData == null ||
           (!registrationData.containsKey('email') &&
               !registrationData.containsKey('phone'))) {
-        // Fallback: use current Firebase user email
+        // Fallback: use current Supabase user email
         final userEmail =
-            _currentUser?.email ?? _firebase.getCurrentUser()?.email;
+            _currentUser?.email ?? _supabase.getCurrentUser()?.email;
         if (userEmail == null || userEmail.isEmpty) {
           throw AuthException(
             'No user context for verification. Please login again.',
@@ -850,24 +770,28 @@ class AuthProvider extends ChangeNotifier {
         registrationData = {'email': userEmail};
       }
 
-      // Resolve doc ID — prefer phone key (phone flow) over email key
       final rawKey =
           ((registrationData['phone'] ?? registrationData['email']) as String)
               .trim()
               .toLowerCase();
       final docId = rawKey.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '_');
 
-      // 1. READ the stored OTP document (no write required — avoids permission-denied)
-      final docRef = FirebaseFirestore.instance
-          .collection('otp_verifications')
-          .doc(docId);
-
-      final docSnap = await docRef.get();
-      if (!docSnap.exists) {
+      // 1. READ the stored OTP document
+      Map<String, dynamic> data;
+      try {
+        data = await _supabase.getDocument(
+          collectionId: 'otp_verifications',
+          documentId: docId,
+        );
+      } on PostgrestException catch (_) {
         throw AuthException('Invalid or expired verification code.');
+      } on Exception catch (e) {
+        if (e.toString().contains('not found') ||
+            e.toString().contains('0 rows')) {
+          throw AuthException('Invalid or expired verification code.');
+        }
+        rethrow;
       }
-
-      final data = docSnap.data()!;
 
       // 2. Check if already used
       final alreadyUsed = data['used'] as bool? ?? false;
@@ -878,9 +802,10 @@ class AuthProvider extends ChangeNotifier {
       }
 
       // 3. Check expiry
-      final expiresAt = data['expiresAt'];
-      if (expiresAt != null && expiresAt is Timestamp) {
-        if (expiresAt.toDate().isBefore(DateTime.now())) {
+      final expiresAtStr = data['expires_at'] as String?;
+      if (expiresAtStr != null) {
+        final expiresAt = DateTime.tryParse(expiresAtStr);
+        if (expiresAt != null && expiresAt.isBefore(DateTime.now())) {
           throw AuthException(
             'Verification code has expired. Please request a new one.',
           );
@@ -899,9 +824,13 @@ class AuthProvider extends ChangeNotifier {
       final storedCode = (data['code'] as String? ?? '').trim();
       final submittedCode = otp.trim();
       if (storedCode.isEmpty || storedCode != submittedCode) {
-        // Increment attempt counter (best-effort, non-blocking)
+        // Increment attempt counter (best-effort)
         try {
-          await docRef.update({'attempts': FieldValue.increment(1)});
+          await _supabase.updateDocument(
+            collectionId: 'otp_verifications',
+            documentId: docId,
+            data: {'attempts': attempts + 1},
+          );
         } on Exception catch (_) {}
         final remaining = 4 - attempts;
         if (remaining <= 0) {
@@ -915,7 +844,11 @@ class AuthProvider extends ChangeNotifier {
       }
 
       // 6. Mark the OTP as used
-      await docRef.update({'used': true});
+      await _supabase.updateDocument(
+        collectionId: 'otp_verifications',
+        documentId: docId,
+        data: {'used': true},
+      );
 
       // 7. Complete account creation / mark verified
       final isPhoneFlow =
@@ -923,7 +856,6 @@ class AuthProvider extends ChangeNotifier {
           !registrationData.containsKey('email');
 
       if (isPhoneFlow) {
-        // Phone registration: Firebase account doesn't exist yet — create it now.
         await signUpWithPhone(
           phone: registrationData['phone'] as String,
           name: registrationData['name'] as String?,
@@ -934,13 +866,12 @@ class AuthProvider extends ChangeNotifier {
           ward: registrationData['ward'] as String?,
         );
       } else {
-        // Email registration: account already exists — just mark as verified.
-        final user = _firebase.getCurrentUser();
+        final user = _supabase.getCurrentUser();
         if (user != null) {
-          await _firebase.updateDocument(
+          await _supabase.updateDocument(
             collectionId: AppConfig.usersCollection,
-            documentId: user.uid,
-            data: {'isVerified': true},
+            documentId: user.id,
+            data: {'is_verified': true},
           );
           _isVerified = true;
         }
@@ -953,16 +884,13 @@ class AuthProvider extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
       rethrow;
-    } on FirebaseException catch (e) {
+    } on PostgrestException catch (e) {
       _isLoading = false;
       notifyListeners();
       developer.log(
-        'FirebaseException in verifyOtpAndLogin: ${e.code} – ${e.message}',
+        'PostgrestException in verifyOtpAndLogin: ${e.code} – ${e.message}',
         name: 'AuthProvider',
       );
-      if (e.code == 'not-found') {
-        throw AuthException('Invalid or expired verification code.');
-      }
       throw AuthException('Verification failed. Please try again.');
     } on Exception catch (e) {
       _isLoading = false;
@@ -975,7 +903,7 @@ class AuthProvider extends ChangeNotifier {
   Future<void> resendVerificationLink() async {
     try {
       if (_currentUser == null) {
-        final user = _firebase.getCurrentUser();
+        final user = _supabase.getCurrentUser();
         if (user != null) {
           _currentUser = user;
         } else {
@@ -985,7 +913,7 @@ class AuthProvider extends ChangeNotifier {
 
       await sendOtpForEmail(
         _currentUser!.email!,
-        name: _currentUser!.displayName,
+        name: _currentUser!.userMetadata?['full_name'] as String?,
       );
     } on AuthException {
       rethrow;
@@ -1002,7 +930,7 @@ class AuthProvider extends ChangeNotifier {
     try {
       _isLoading = true;
       notifyListeners();
-      await _firebase.createRecovery(email: email);
+      await _supabase.createPasswordRecovery(email: email);
       _isLoading = false;
       notifyListeners();
     } on Exception catch (e) {
@@ -1025,7 +953,6 @@ class AuthProvider extends ChangeNotifier {
         bool isValid = await _isServerSessionValid();
 
         if (!isValid) {
-          // Attempt to resurrect the session using securely stored credentials
           final creds = await _storage.getUserCredentials();
           if (creds != null) {
             try {
@@ -1049,18 +976,17 @@ class AuthProvider extends ChangeNotifier {
         _userRole = _parseUserRole(userRoleStr);
         _phoneNumber = await _storage.getPhoneNumber();
 
-        // Ensure isVerified and isApproved are accurate
-        final user = _firebase.getCurrentUser();
+        final user = _supabase.getCurrentUser();
         if (user != null) {
           try {
-            final userDoc = await _firebase.getDocument(
+            final userDoc = await _supabase.getDocument(
               collectionId: AppConfig.usersCollection,
-              documentId: user.uid,
+              documentId: user.id,
             );
-            _isApproved = userDoc['isApproved'] as bool? ?? false;
-            _isVerified = userDoc['isVerified'] as bool? ?? false;
+            _isApproved = userDoc['is_approved'] as bool? ?? false;
+            _isVerified = userDoc['is_verified'] as bool? ?? false;
           } on Exception catch (e) {
-            developer.log('Biometric unlock failed to fetch user doc: $e');
+            developer.log('Biometric unlock failed to fetch profile: $e');
           }
         }
 
@@ -1084,16 +1010,16 @@ class AuthProvider extends ChangeNotifier {
       );
       if (canAuth) {
         await _storage.setBiometricEnabled(true);
-        final user = _firebase.getCurrentUser();
+        final user = _supabase.getCurrentUser();
         if (user != null) {
           try {
-            await _firebase.updateDocument(
+            await _supabase.updateDocument(
               collectionId: AppConfig.usersCollection,
-              documentId: user.uid,
-              data: {'biometricsEnabled': true},
+              documentId: user.id,
+              data: {'biometrics_enabled': true},
             );
           } on Exception catch (e) {
-            developer.log('Error syncing biometric to Firestore: $e');
+            developer.log('Error syncing biometric to Supabase: $e');
           }
         }
       } else {
@@ -1101,16 +1027,16 @@ class AuthProvider extends ChangeNotifier {
       }
     } else {
       await _storage.setBiometricEnabled(false);
-      final user = _firebase.getCurrentUser();
+      final user = _supabase.getCurrentUser();
       if (user != null) {
         try {
-          await _firebase.updateDocument(
+          await _supabase.updateDocument(
             collectionId: AppConfig.usersCollection,
-            documentId: user.uid,
-            data: {'biometricsEnabled': false},
+            documentId: user.id,
+            data: {'biometrics_enabled': false},
           );
         } on Exception catch (e) {
-          developer.log('Error syncing biometric to Firestore: $e');
+          developer.log('Error syncing biometric to Supabase: $e');
         }
       }
     }
@@ -1131,30 +1057,26 @@ class AuthProvider extends ChangeNotifier {
 
   Future<bool> _isServerSessionValid() async {
     try {
-      final user = _firebase.getCurrentUser();
+      final user = _supabase.getCurrentUser();
       if (user == null) {
         developer.log(
-          'No active Firebase user found in session check.',
+          'No active Supabase user found in session check.',
           name: 'AuthProvider',
         );
         return false;
       }
 
-      // Firebase tokens auto-refresh; a reload confirms validity
-      await _firebase.reloadCurrentUser();
+      // Supabase tokens auto-refresh; a reload confirms validity
+      await _supabase.reloadCurrentUser();
       await _sessionManager.extendSession();
       return true;
-    } on FirebaseAuthException catch (e) {
-      if (e.code == 'user-token-expired' || e.code == 'user-not-found') {
-        developer.log('Session expired: ${e.code}', name: 'AuthProvider');
-        await logout();
-        return false;
-      }
-      // Network issues — allow offline access
-      return true;
+    } on sp.AuthException catch (e) {
+      developer.log('Session expired: ${e.statusCode}', name: 'AuthProvider');
+      await logout();
+      return false;
     } on Exception catch (e) {
       developer.log('Session network error: $e', name: 'AuthProvider');
-      return true;
+      return true; // Allow offline access
     }
   }
 
@@ -1168,7 +1090,6 @@ class AuthProvider extends ChangeNotifier {
       _isLoading = true;
       notifyListeners();
 
-      // Cancel real-time Firestore listener
       _userDocSub?.cancel();
       _userDocSub = null;
 
@@ -1179,9 +1100,9 @@ class AuthProvider extends ChangeNotifier {
       }
 
       try {
-        await _firebase.logout();
+        await _supabase.logout();
       } on Exception catch (e) {
-        developer.log('Firebase logout error: $e', name: 'AuthProvider');
+        developer.log('Supabase logout error: $e', name: 'AuthProvider');
       }
 
       await _storage.clearAll(keepPreferences: true);
@@ -1219,64 +1140,49 @@ class AuthProvider extends ChangeNotifier {
     bool isVerified = false,
     String? phoneNumber,
   }) async {
-    // Map the enum explicitly to strings that Firestore rules expect
-    final roleString = role == UserRole.user
-        ? 'user'
-        : role == UserRole.ewm
-        ? 'ewm'
-        : role == UserRole.ewv
-        ? 'ewv'
-        : role == UserRole.ewr
-        ? 'ewr'
-        : role == UserRole.admin
-        ? 'admin'
-        : role == UserRole.techSupport
-        ? 'techSupport'
-        : 'user';
+    final roleString = _roleToString(role);
 
     final payload = {
+      'id': userId,
       'email': email,
-      'name': name ?? 'User',
+      'full_name': name ?? 'User',
       'role': roleString,
       'address': address ?? '',
       'state': state ?? '',
       'lga': lga ?? '',
       'ward': ward ?? '',
-      'isVerified': isVerified,
-      'isApproved': false,
-      'biometricsEnabled': false,
-      'createdAt': DateTime.now().toIso8601String(),
-      'lastLoginAt': DateTime.now().toIso8601String(),
+      'is_verified': isVerified,
+      'is_approved': false,
+      'biometrics_enabled': false,
+      'created_at': DateTime.now().toUtc().toIso8601String(),
+      'last_login_at': DateTime.now().toUtc().toIso8601String(),
       'phone': phoneNumber ?? '',
-      'profileImageUrl': '',
+      'avatar_url': '',
     };
 
     developer.log(
-      'Creating Firestore document for $userId with payload: $payload',
+      'Creating Supabase profile for $userId',
       name: 'AuthProvider',
     );
 
-    // Structural retry loop to handle Firebase Auth token propagation delays
-    // causing immediate PERMISSION_DENIED errors on initial account creation
     int retryCount = 0;
     const maxRetries = 3;
 
     while (retryCount < maxRetries) {
       try {
-        await _firebase.createDocument(
+        await _supabase.createDocument(
           collectionId: AppConfig.usersCollection,
           documentId: userId,
           data: payload,
         );
-        return; // Success
+        return;
       } on Exception catch (e) {
         retryCount++;
         developer.log(
-          'Error creating user document (attempt $retryCount): $e',
+          'Error creating profile (attempt $retryCount): $e',
           name: 'AuthProvider',
         );
         if (retryCount >= maxRetries) rethrow;
-        // Wait 1.5s for the Auth JWT to fully propagate to the Firestore client SDK
         await Future.delayed(const Duration(milliseconds: 1500));
       }
     }
@@ -1290,11 +1196,28 @@ class AuthProvider extends ChangeNotifier {
   }) async {
     await _storage.saveUserRole(role.name);
     await _sessionManager.startSession(
-      authToken: user.uid,
+      authToken: user.id,
       userRole: role.name,
       rememberMe: rememberMe,
     );
     _isAuthenticated = true;
+  }
+
+  String _roleToString(UserRole role) {
+    switch (role) {
+      case UserRole.ewm:
+        return 'ewm';
+      case UserRole.ewv:
+        return 'ewv';
+      case UserRole.ewr:
+        return 'ewr';
+      case UserRole.admin:
+        return 'admin';
+      case UserRole.techSupport:
+        return 'techSupport';
+      default:
+        return 'user';
+    }
   }
 
   UserRole? _parseUserRole(String? roleStr) {

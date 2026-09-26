@@ -1,10 +1,11 @@
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:climate_app/core/services/hive_encryption_service.dart';
+import 'package:climate_app/core/services/supabase_service.dart';
+import 'package:climate_app/core/constants/app_config.dart';
 import 'dart:developer' as developer;
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as path;
-import 'package:cloud_firestore/cloud_firestore.dart';
 
 /// Service for storing draft reports offline using Hive
 /// Allows users to create reports without internet and sync later
@@ -280,7 +281,7 @@ class OfflineStorageService {
     }
   }
 
-  /// Sync all pending queue items to Firestore.
+  /// Sync all pending queue items to Supabase.
   ///
   /// Called automatically by [ConnectivityProvider.onReconnect] when the
   /// device transitions from offline → online. Items that have failed
@@ -315,7 +316,7 @@ class OfflineStorageService {
       name: 'OfflineStorageService',
     );
 
-    final firestore = FirebaseFirestore.instance;
+    final supabase = SupabaseService();
     int successCount = 0;
 
     for (final rawItem in pending) {
@@ -326,8 +327,10 @@ class OfflineStorageService {
       try {
         final data = Map<String, dynamic>.from(item['data'] as Map? ?? item);
         final collection =
-            (item['collection'] ?? item['collectionId'] ?? 'reports') as String;
-        // Remove queue-meta keys to avoid writing them into Firestore
+            (item['collection'] ?? item['collectionId'] ?? AppConfig.reportsCollection)
+                as String;
+
+        // Remove queue-meta keys to avoid writing them to Supabase
         data.removeWhere(
           (k, _) => const {
             'queueId',
@@ -343,19 +346,20 @@ class OfflineStorageService {
           }.contains(k),
         );
 
-        // If there's an existing doc ID, update; otherwise create a new doc.
+        data['synced_at'] = DateTime.now().toUtc().toIso8601String();
+
         final docId = item['docId'] as String?;
         if (docId != null && docId.isNotEmpty) {
-          await firestore
-              .collection(collection)
-              .doc(docId)
-              .set(
-                data..['syncedAt'] = FieldValue.serverTimestamp(),
-                SetOptions(merge: true),
-              );
+          await supabase.updateDocument(
+            collectionId: collection,
+            documentId: docId,
+            data: data,
+          );
         } else {
-          data['syncedAt'] = FieldValue.serverTimestamp();
-          await firestore.collection(collection).add(data);
+          await supabase.createDocument(
+            collectionId: collection,
+            data: data,
+          );
         }
 
         await markAsSynced(queueId);
@@ -377,6 +381,7 @@ class OfflineStorageService {
       name: 'OfflineStorageService',
     );
   }
+
 
   /// Clear synced items from queue (cleanup)
   Future<void> clearSyncedItems() async {
@@ -646,33 +651,22 @@ class OfflineStorageService {
     developer.log('Offline storage disposed', name: 'OfflineStorageService');
   }
 
-  /// Sanitizes maps before sending them to hive
+  /// Sanitizes maps before storing them in Hive.
+  /// Converts DateTime values to ISO-8601 strings (Supabase returns standard
+  /// Dart types; no Firestore-specific types needed).
   Map<String, dynamic> _sanitizeForHive(Map<String, dynamic> data) {
     final Map<String, dynamic> sanitized = {};
     data.forEach((key, value) {
-      if (value is Timestamp) {
-        sanitized[key] = value.toDate().toIso8601String();
-      } else if (value is GeoPoint) {
-        sanitized[key] = {
-          'latitude': value.latitude,
-          'longitude': value.longitude,
-        };
-      } else if (value is DocumentReference) {
-        sanitized[key] = value.path;
+      if (value is DateTime) {
+        sanitized[key] = value.toIso8601String();
       } else if (value is Map<String, dynamic>) {
         sanitized[key] = _sanitizeForHive(value);
       } else if (value is List) {
         sanitized[key] = value.map((e) {
           if (e is Map<String, dynamic>) return _sanitizeForHive(e);
-          if (e is Timestamp) return e.toDate().toIso8601String();
-          if (e is GeoPoint) {
-            return {'latitude': e.latitude, 'longitude': e.longitude};
-          }
-          if (e is DocumentReference) return e.path;
+          if (e is DateTime) return e.toIso8601String();
           return e;
         }).toList();
-      } else if (value is DateTime) {
-        sanitized[key] = value.toIso8601String();
       } else {
         sanitized[key] = value;
       }
