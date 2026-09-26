@@ -196,9 +196,11 @@ class AuthProvider extends ChangeNotifier {
     return true;
   }
 
+  // Exact match, like the database policy (values come from the same
+  // location lists), so the button never shows for a vote the DB refuses.
   static bool _sameArea(String? mine, String? theirs) {
-    final a = (mine ?? '').trim().toLowerCase();
-    return a.isNotEmpty && a == (theirs ?? '').trim().toLowerCase();
+    final a = mine ?? '';
+    return a.isNotEmpty && a == theirs;
   }
 
   /// Whether the user may approve / reject / reopen a report (mirrors the
