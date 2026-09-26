@@ -77,6 +77,8 @@
 	<string>This app needs microphone access to listen to your voice input for hazard reports.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>This app requires access to the photo library to upload hazard evidence.</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>Face ID is used to unlock the app and protect your account.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>This app requires access to the camera to take hazard evidence photos.</string>
 </dict>

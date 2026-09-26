@@ -26,6 +26,17 @@ void main() {
       );
     });
 
+    test('escalation routes to the report', () {
+      expect(route({'type': 'escalation', 'report_id': 'r4'}), '/report/r4');
+    });
+
+    test('validated_alert with report_id routes to the report', () {
+      expect(
+        route({'type': 'validated_alert', 'report_id': 'r5'}),
+        '/report/r5',
+      );
+    });
+
     test('validated_alert / admin_alert route to the alert', () {
       expect(route({'type': 'validated_alert', 'alert_id': 'a1'}), '/alert/a1');
       expect(route({'type': 'admin_alert', 'alert_id': 'a2'}), '/alert/a2');

@@ -122,6 +122,14 @@ class MockReportsStatusProvider extends _i1.Mock
           as int);
 
   @override
+  bool hasVotedOn(String? reportId) =>
+      (super.noSuchMethod(
+            Invocation.method(#hasVotedOn, [reportId]),
+            returnValue: false,
+          )
+          as bool);
+
+  @override
   _i5.Future<void> submitVerificationRequest({
     required String? hazardType,
     required String? severity,
@@ -165,6 +173,43 @@ class MockReportsStatusProvider extends _i1.Mock
           as _i5.Future<void>);
 
   @override
+  _i5.Future<void> refreshLoadedLists() =>
+      (super.noSuchMethod(
+            Invocation.method(#refreshLoadedLists, []),
+            returnValue: _i5.Future<void>.value(),
+            returnValueForMissingStub: _i5.Future<void>.value(),
+          )
+          as _i5.Future<void>);
+
+  @override
+  _i5.Future<void> loadMyVotes({bool? force = false}) =>
+      (super.noSuchMethod(
+            Invocation.method(#loadMyVotes, [], {#force: force}),
+            returnValue: _i5.Future<void>.value(),
+            returnValueForMissingStub: _i5.Future<void>.value(),
+          )
+          as _i5.Future<void>);
+
+  @override
+  _i5.Future<void> fetchAllPages({
+    _i4.ReportStatus? status,
+    String? userId,
+    String? excludeUserId,
+    int? maxRows = 1000,
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(#fetchAllPages, [], {
+              #status: status,
+              #userId: userId,
+              #excludeUserId: excludeUserId,
+              #maxRows: maxRows,
+            }),
+            returnValue: _i5.Future<void>.value(),
+            returnValueForMissingStub: _i5.Future<void>.value(),
+          )
+          as _i5.Future<void>);
+
+  @override
   _i5.Future<void> fetchReports({
     bool? loadMore = false,
     _i4.ReportStatus? status,
@@ -184,6 +229,30 @@ class MockReportsStatusProvider extends _i1.Mock
           as _i5.Future<void>);
 
   @override
+  _i5.Future<_i4.VerificationReport?> fetchReportById(String? reportId) =>
+      (super.noSuchMethod(
+            Invocation.method(#fetchReportById, [reportId]),
+            returnValue: _i5.Future<_i4.VerificationReport?>.value(),
+          )
+          as _i5.Future<_i4.VerificationReport?>);
+
+  @override
+  _i5.Future<List<Map<String, dynamic>>> fetchAllReportRows({
+    _i4.ReportStatus? status,
+    int? maxRows = 10000,
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(#fetchAllReportRows, [], {
+              #status: status,
+              #maxRows: maxRows,
+            }),
+            returnValue: _i5.Future<List<Map<String, dynamic>>>.value(
+              <Map<String, dynamic>>[],
+            ),
+          )
+          as _i5.Future<List<Map<String, dynamic>>>);
+
+  @override
   _i5.Future<List<_i4.VerificationReport>> getAllReports() =>
       (super.noSuchMethod(
             Invocation.method(#getAllReports, []),
@@ -194,9 +263,43 @@ class MockReportsStatusProvider extends _i1.Mock
           as _i5.Future<List<_i4.VerificationReport>>);
 
   @override
-  _i5.Future<void> verifyReport(String? reportId, {String? userId}) =>
+  _i5.Future<void> verifyReport(
+    String? reportId, {
+    String? userId,
+    String? comment,
+  }) =>
       (super.noSuchMethod(
-            Invocation.method(#verifyReport, [reportId], {#userId: userId}),
+            Invocation.method(
+              #verifyReport,
+              [reportId],
+              {#userId: userId, #comment: comment},
+            ),
+            returnValue: _i5.Future<void>.value(),
+            returnValueForMissingStub: _i5.Future<void>.value(),
+          )
+          as _i5.Future<void>);
+
+  @override
+  _i5.Future<void> disputeReport(
+    String? reportId, {
+    String? userId,
+    String? comment,
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(
+              #disputeReport,
+              [reportId],
+              {#userId: userId, #comment: comment},
+            ),
+            returnValue: _i5.Future<void>.value(),
+            returnValueForMissingStub: _i5.Future<void>.value(),
+          )
+          as _i5.Future<void>);
+
+  @override
+  _i5.Future<void> rejectReport(String? reportId, {String? userId}) =>
+      (super.noSuchMethod(
+            Invocation.method(#rejectReport, [reportId], {#userId: userId}),
             returnValue: _i5.Future<void>.value(),
             returnValueForMissingStub: _i5.Future<void>.value(),
           )
@@ -212,9 +315,16 @@ class MockReportsStatusProvider extends _i1.Mock
           as _i5.Future<void>);
 
   @override
-  _i5.Future<void> rejectReport(String? reportId, {String? userId}) =>
+  _i5.Future<void> staffRejectReport(
+    String? reportId, {
+    required String? reason,
+  }) =>
       (super.noSuchMethod(
-            Invocation.method(#rejectReport, [reportId], {#userId: userId}),
+            Invocation.method(
+              #staffRejectReport,
+              [reportId],
+              {#reason: reason},
+            ),
             returnValue: _i5.Future<void>.value(),
             returnValueForMissingStub: _i5.Future<void>.value(),
           )
@@ -312,16 +422,25 @@ class MockAuthProvider extends _i1.Mock implements _i8.AuthProvider {
           as bool);
 
   @override
+  bool get hasStoredSession =>
+      (super.noSuchMethod(
+            Invocation.getter(#hasStoredSession),
+            returnValue: false,
+          )
+          as bool);
+
+  @override
   bool get hasListeners =>
       (super.noSuchMethod(Invocation.getter(#hasListeners), returnValue: false)
           as bool);
 
   @override
-  bool canVoteOn({String? reporterId, String? reportWard}) =>
+  bool canVoteOn({String? reporterId, String? reportWard, String? reportLga}) =>
       (super.noSuchMethod(
             Invocation.method(#canVoteOn, [], {
               #reporterId: reporterId,
               #reportWard: reportWard,
+              #reportLga: reportLga,
             }),
             returnValue: false,
           )
@@ -336,6 +455,18 @@ class MockAuthProvider extends _i1.Mock implements _i8.AuthProvider {
             returnValue: false,
           )
           as bool);
+
+  @override
+  void addSignInListener(_i7.VoidCallback? listener) => super.noSuchMethod(
+    Invocation.method(#addSignInListener, [listener]),
+    returnValueForMissingStub: null,
+  );
+
+  @override
+  void removeSignInListener(_i7.VoidCallback? listener) => super.noSuchMethod(
+    Invocation.method(#removeSignInListener, [listener]),
+    returnValueForMissingStub: null,
+  );
 
   @override
   _i5.Future<void> reloadUserData() =>
@@ -413,12 +544,13 @@ class MockAuthProvider extends _i1.Mock implements _i8.AuthProvider {
   _i5.Future<bool> sendOtpForPhone(
     String? phone, {
     Map<String, dynamic>? registrationData,
+    bool? loginOnly = false,
   }) =>
       (super.noSuchMethod(
             Invocation.method(
               #sendOtpForPhone,
               [phone],
-              {#registrationData: registrationData},
+              {#registrationData: registrationData, #loginOnly: loginOnly},
             ),
             returnValue: _i5.Future<bool>.value(false),
           )

@@ -2,6 +2,7 @@ import 'package:climate_app/core/services/supabase_service.dart';
 import 'package:climate_app/core/services/emergency_guides_service.dart';
 import 'package:climate_app/core/services/offline_storage_service.dart';
 import 'package:climate_app/core/constants/app_config.dart';
+import 'package:climate_app/features/knowledge_base/knowledge_categories.dart';
 import 'package:flutter/material.dart';
 import 'dart:developer' as developer;
 
@@ -10,25 +11,53 @@ class KnowledgeProvider extends ChangeNotifier {
   final EmergencyGuidesService _fallbackService = EmergencyGuidesService();
   final OfflineStorageService _offlineStorage = OfflineStorageService();
 
-  List<Map<String, dynamic>> _guides = [];
-  bool _isLoading = false;
-  String? _error;
+  /// Guides per category key ('All' = unfiltered). Kept separately so opening
+  /// a category tab never replaces the featured (unfiltered) list.
+  final Map<String, List<Map<String, dynamic>>> _guidesByCategory = {};
+  final Set<String> _loading = {};
+  final Map<String, String?> _errors = {};
 
-  List<Map<String, dynamic>> get guides => _guides;
-  bool get isLoading => _isLoading;
-  String? get error => _error;
+  static String _key(String? category) {
+    if (category == null || category == allKnowledgeCategories) {
+      return allKnowledgeCategories;
+    }
+    return knowledgeCategoryFor(category)?.label ?? category;
+  }
+
+  /// All (unfiltered) guides.
+  List<Map<String, dynamic>> get guides =>
+      _guidesByCategory[allKnowledgeCategories] ?? const [];
+
+  /// Guides loaded for [category] (label or hazard type).
+  List<Map<String, dynamic>> guidesFor(String? category) =>
+      _guidesByCategory[_key(category)] ?? const [];
+
+  /// Whether the unfiltered list is loading.
+  bool get isLoading => _loading.contains(allKnowledgeCategories);
+
+  bool isLoadingCategory(String? category) => _loading.contains(_key(category));
+
+  String? get error => _errors[allKnowledgeCategories];
+
+  String? errorFor(String? category) => _errors[_key(category)];
 
   Future<void> fetchGuides({String? category}) async {
-    try {
-      _isLoading = true;
-      _error = null;
-      notifyListeners();
+    final key = _key(category);
+    final cat = key == allKnowledgeCategories
+        ? null
+        : knowledgeCategoryFor(key);
+    _loading.add(key);
+    _errors[key] = null;
+    notifyListeners();
 
+    try {
+      List<Map<String, dynamic>> result;
       try {
-        final queries = <QueryFilter>[];
-        if (category != null && category != 'All') {
-          queries.add(FQuery.equal('hazardType', category.toLowerCase()));
-        }
+        final queries = <QueryFilter>[
+          if (key != allKnowledgeCategories)
+            FQuery.equal('hazardType', cat?.hazardType ?? key.toLowerCase()),
+          FQuery.orderDesc('updatedAt'),
+        ];
 
         final docs = await _db.listDocuments(
           collectionId: AppConfig.knowledgeBaseCollection,
@@ -37,100 +66,97 @@ class KnowledgeProvider extends ChangeNotifier {
         );
 
         if (docs.isNotEmpty) {
-          _guides = docs.map((data) {
-            final rawUrl = data['imageUrl']?.toString() ?? '';
-            final imageUrl = (rawUrl.isNotEmpty && rawUrl.startsWith('http'))
-                ? rawUrl
-                : _getImageForType(data['hazardType'] ?? data['category']);
-            return <String, dynamic>{
-              'id': data['\$id'],
-              'title': data['title'] ?? '',
-              'subtitle': data['category'] ?? 'Manual',
-              'content': data['content'] ?? '',
-              'category': data['category'] ?? 'General',
-              'hazardType': data['hazardType'],
-              'tag': (data['hazardType'] as String?)?.toUpperCase() ?? 'GUIDE',
-              'imageUrl': imageUrl,
-              'source': data['source'] ?? 'EWER Admin',
-              'updatedAt': data['updatedAt'],
-              'isOffline': false,
-            };
-          }).toList();
-
-          await _offlineStorage.cacheGuides(_guides);
+          result = docs.map(_fromRow).toList();
+          // Only the unfiltered list is cached, so the offline fallback can
+          // serve every category from it.
+          if (key == allKnowledgeCategories) {
+            try {
+              await _offlineStorage.cacheGuides(result);
+            } on Object catch (e) {
+              developer.log(
+                'Guide cache failed: $e',
+                name: 'KnowledgeProvider',
+              );
+            }
+          }
           developer.log(
-            'Fetched ${_guides.length} guides from Supabase',
+            'Fetched ${result.length} guides ($key) from Supabase',
             name: 'KnowledgeProvider',
           );
         } else {
-          final fallbackData = await _fallbackService.fetchGuides(
-            hazardType: category,
-          );
-          _guides = fallbackData
-              .map(
-                (doc) => <String, dynamic>{
-                  ...doc,
-                  'imageUrl':
-                      doc['imageUrl'] ??
-                      _getImageForType(doc['hazardType'] ?? doc['category']),
-                  'isOffline': true,
-                },
-              )
-              .toList();
+          result = await _bundledGuides(key);
         }
       } on Exception catch (e) {
         developer.log(
           'Guide fetch failed, using fallback: $e',
           name: 'KnowledgeProvider',
         );
-        final cached = _offlineStorage.getCachedGuides();
-        if (cached.isNotEmpty) {
-          _guides = cached;
-          developer.log(
-            'Loaded ${_guides.length} guides from cache',
-            name: 'KnowledgeProvider',
-          );
-        } else {
-          final fallbackData = await _fallbackService.fetchGuides(
-            hazardType: category,
-          );
-          _guides = fallbackData
-              .map(
-                (doc) => <String, dynamic>{
-                  ...doc,
-                  'imageUrl':
-                      doc['imageUrl'] ??
-                      _getImageForType(doc['hazardType'] ?? doc['category']),
-                  'isOffline': true,
-                },
-              )
+        List<Map<String, dynamic>> cached = const [];
+        try {
+          cached = _offlineStorage
+              .getCachedGuides()
+              .where((g) => guideMatchesCategory(g, key))
               .toList();
+        } on Object catch (_) {
+          // Cache unavailable; use the bundled guides.
         }
+        result = cached.isNotEmpty ? cached : await _bundledGuides(key);
       }
-
-      _isLoading = false;
-      notifyListeners();
+      _guidesByCategory[key] = result;
     } on Exception catch (e) {
-      _error = 'Failed to fetch guides: $e';
-      _isLoading = false;
+      _errors[key] = 'Failed to fetch guides: $e';
+    } finally {
+      _loading.remove(key);
       notifyListeners();
     }
   }
 
-  /// Search guides by title, content, tag, or seeded searchKeywords.
-  /// Pass [language] to restrict to 'en' or 'ha' guides.
-  List<Map<String, dynamic>> searchGuides(String query, {String? language}) {
-    var results = _guides;
+  Map<String, dynamic> _fromRow(Map<String, dynamic> data) {
+    final rawUrl = data['imageUrl']?.toString() ?? '';
+    final imageUrl = (rawUrl.isNotEmpty && rawUrl.startsWith('http'))
+        ? rawUrl
+        : _getImageForType(data['hazardType'] ?? data['category']);
+    final category = knowledgeCategoryFor(data['hazardType']);
+    return <String, dynamic>{
+      'id': data[r'$id'],
+      'title': data['title'] ?? '',
+      'subtitle': data['category'] ?? 'Manual',
+      'content': data['content'] ?? '',
+      'category': data['category'] ?? category?.label ?? 'General',
+      'hazardType': data['hazardType'],
+      'tag':
+          (category?.label ?? data['hazardType'] as String?)?.toUpperCase() ??
+          'GUIDE',
+      'imageUrl': imageUrl,
+      'source': data['source'] ?? 'EWER Admin',
+      'updatedAt': data['updatedAt'],
+      'isOffline': false,
+    };
+  }
 
-    // Filter by language if specified
-    if (language != null && language.isNotEmpty) {
-      results = results
-          .where((g) => (g['language'] as String?)?.toLowerCase() == language)
-          .toList();
-    }
+  /// Curated guides bundled with the app, filtered to [key].
+  Future<List<Map<String, dynamic>>> _bundledGuides(String key) async {
+    final fallbackData = await _fallbackService.fetchGuides(limit: 100);
+    return fallbackData
+        .where((doc) => guideMatchesCategory(doc, key))
+        .map(
+          (doc) => <String, dynamic>{
+            ...doc,
+            'imageUrl':
+                doc['imageUrl'] ??
+                _getImageForType(doc['hazardType'] ?? doc['category']),
+            'isOffline': true,
+          },
+        )
+        .toList();
+  }
 
-    if (query.isEmpty) return results;
-    final lowerQuery = query.toLowerCase();
+  /// Search guides (of [category], default all) by title, content, tag, or
+  /// seeded searchKeywords.
+  List<Map<String, dynamic>> searchGuides(String query, {String? category}) {
+    final results = guidesFor(category);
+    if (query.trim().isEmpty) return results;
+    final lowerQuery = query.trim().toLowerCase();
 
     return results.where((guide) {
       final title = (guide['title'] as String?)?.toLowerCase() ?? '';
@@ -148,19 +174,7 @@ class KnowledgeProvider extends ChangeNotifier {
     }).toList();
   }
 
-  /// Fetch guides for a specific language ('en' or 'ha').
-  Future<void> fetchGuidesByLanguage(
-    String language, {
-    String? category,
-  }) async {
-    await fetchGuides(category: category);
-    _guides = _guides
-        .where((g) => (g['language'] as String?)?.toLowerCase() == language)
-        .toList();
-    notifyListeners();
-  }
-
-  List<String> getDisasterTypes() => _fallbackService.getDisasterTypes();
+  List<String> getDisasterTypes() => knowledgeCategoryFilters;
 
   String _getImageForType(String? type) {
     switch (type?.toLowerCase()) {
@@ -191,6 +205,7 @@ class KnowledgeProvider extends ChangeNotifier {
         // Collapsed building / earthquake damage
         return 'https://images.unsplash.com/photo-1548337138-e87d889cc369?auto=format&fit=crop&q=80&w=800';
       case 'extreme heat':
+      case 'extreme_heat':
       case 'drought':
         // Cracked dry earth / drought landscape
         return 'https://images.unsplash.com/photo-1504192010706-dd7f569ee2be?auto=format&fit=crop&q=80&w=800';

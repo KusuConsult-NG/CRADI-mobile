@@ -15,6 +15,10 @@ jobs:
   analyze-and-test:
     name: Flutter Analyze & Test
     runs-on: ubuntu-latest
+    # Secrets are exposed as job-level env so step `if:` conditions can test
+    # them (a step's own `env:` is not visible to its `if:`).
+    env:
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
     steps:
       - name: Checkout repository
@@ -43,7 +47,7 @@ jobs:
         if: env.CODECOV_TOKEN != ''
         uses: codecov/codecov-action@v4
         with:
-          token: ${{ secrets.CODECOV_TOKEN }}
+          token: ${{ env.CODECOV_TOKEN }}
           file: coverage/lcov.info
           fail_ci_if_error: false   # Non-blocking — coverage is advisory
 
@@ -88,6 +92,11 @@ jobs:
     runs-on: ubuntu-latest
     needs: analyze-and-test
     if: startsWith(github.ref, 'refs/tags/v')
+    env:
+      RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+      KEY_STORE_PASSWORD: ${{ secrets.KEY_STORE_PASSWORD }}
+      KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+      KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
 
     steps:
       - name: Checkout repository
@@ -109,10 +118,31 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
-      - name: Decode release keystore
-        if: env.RELEASE_KEYSTORE_BASE64 != ''
+      # Without these the Gradle build silently falls back to debug signing;
+      # a release must never ship like that.
+      - name: Require signing secrets
         run: |
-          echo "${{ secrets.RELEASE_KEYSTORE_BASE64 }}" | base64 --decode > android/app/lumivolt-release.jks
+          missing=""
+          for name in RELEASE_KEYSTORE_BASE64 KEY_STORE_PASSWORD KEY_PASSWORD KEY_ALIAS; do
+            if [ -z "${!name}" ]; then missing="$missing $name"; fi
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Missing release signing secrets:$missing"
+            exit 1
+          fi
+
+      - name: Decode release keystore
+        run: echo "$RELEASE_KEYSTORE_BASE64" | base64 --decode > android/app/lumivolt-release.jks
+
+      # storeFile is resolved relative to android/app (build.gradle.kts).
+      - name: Write android/key.properties
+        run: |
+          {
+            echo "storeFile=lumivolt-release.jks"
+            echo "storePassword=$KEY_STORE_PASSWORD"
+            echo "keyPassword=$KEY_PASSWORD"
+            echo "keyAlias=$KEY_ALIAS"
+          } > android/key.properties
 
       - name: Write env.json (runtime config)
         env:
@@ -127,12 +157,15 @@ jobs:
                   SENTRY_DSN: env.SENTRY_DSN}' > env.json
 
       - name: Build release APK
-        if: env.KEY_STORE_PASSWORD != '' && env.KEY_PASSWORD != '' && env.KEY_ALIAS != ''
-        env:
-          KEY_STORE_PASSWORD: ${{ secrets.KEY_STORE_PASSWORD }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
         run: flutter build apk --release --dart-define-from-file=env.json
+
+      - name: Verify release signature
+        run: |
+          apksigner=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)
+          if "$apksigner" verify --print-certs build/app/outputs/flutter-apk/app-release.apk | grep -q "CN=Android Debug"; then
+            echo "::error::Release APK is debug-signed"
+            exit 1
+          fi
 
       - name: Upload release APK
         uses: actions/upload-artifact@v4

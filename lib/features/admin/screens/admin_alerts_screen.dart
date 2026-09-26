@@ -1,4 +1,9 @@
+import 'dart:async';
+
 import 'package:climate_app/core/constants/app_config.dart';
+import 'package:climate_app/core/data/mvp_locations_data.dart';
+import 'package:climate_app/features/alerts/providers/alerts_provider.dart';
+import 'package:provider/provider.dart';
 import 'package:climate_app/core/services/supabase_service.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -23,15 +28,17 @@ class _AdminAlertsScreenState extends State<AdminAlertsScreen> {
   @override
   void initState() {
     super.initState();
+    // is_active is mutable, so it must not be a realtime server filter (a
+    // dismissed row would never leave the filtered stream). Subscribe to the
+    // newest rows and filter on the client instead.
     _alertsStream = SupabaseService().subscribeToCollection(
       collectionId: AppConfig.alertsCollection,
-      queries: [
-        FQuery.equal('isActive', true),
-        FQuery.orderDesc('createdAt'),
-        FQuery.limit(20),
-      ],
+      queries: [FQuery.orderDesc('createdAt'), FQuery.limit(100)],
     );
   }
+
+  /// Alerts dismissed in this session (hidden before the stream catches up).
+  final Set<String> _dismissedIds = {};
 
   String _severity = 'warning';
   String _targetLga = 'All';
@@ -49,17 +56,11 @@ class _AdminAlertsScreenState extends State<AdminAlertsScreen> {
     'critical': Icons.crisis_alert,
   };
 
-  // Benue/CRADI LGAs — expand as needed
-  static const _lgas = [
+  /// 'All' plus every LGA in the location data (names must match the
+  /// profile LGA values alerts are matched against).
+  static final List<String> _lgas = [
     'All',
-    'Makurdi',
-    'Otukpo',
-    'Gboko',
-    'Katsina-Ala',
-    'Lafia',
-    'Nasarawa',
-    'Akwanga',
-    'Keffi',
+    ...MVPLocationsData.getAllLGAs().toSet().toList()..sort(),
   ];
 
   @override
@@ -93,6 +94,7 @@ class _AdminAlertsScreenState extends State<AdminAlertsScreen> {
       );
 
       if (mounted) {
+        unawaited(context.read<AlertsProvider>().fetchAlerts());
         _titleCtrl.clear();
         _messageCtrl.clear();
         setState(() {
@@ -128,6 +130,9 @@ class _AdminAlertsScreenState extends State<AdminAlertsScreen> {
         documentId: id,
         data: {'isActive': false},
       );
+      if (!mounted) return;
+      setState(() => _dismissedIds.add(id));
+      unawaited(context.read<AlertsProvider>().fetchAlerts());
     } on Exception catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -400,7 +405,14 @@ class _AdminAlertsScreenState extends State<AdminAlertsScreen> {
                   ),
                 );
               }
-              final docs = snap.data ?? const <Map<String, dynamic>>[];
+              final docs = (snap.data ?? const <Map<String, dynamic>>[])
+                  .where(
+                    (d) =>
+                        d['isActive'] != false &&
+                        !_dismissedIds.contains(d[r'$id']?.toString()),
+                  )
+                  .take(20)
+                  .toList();
               if (docs.isEmpty) {
                 return Center(
                   child: Padding(

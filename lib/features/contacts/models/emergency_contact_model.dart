@@ -33,19 +33,6 @@ class EmergencyContact {
     );
   }
 
-  factory EmergencyContact.fromAppwrite(Map<String, dynamic> data, String id) {
-    return EmergencyContact(
-      id: id,
-      name: data['name'] as String? ?? '',
-      role: data['relationship'] as String? ?? '',
-      phone: data['phone'] as String? ?? '',
-      organization: null,
-      lga: null,
-      category: 'other',
-      isAvailable: true,
-    );
-  }
-
   Map<String, dynamic> toMap() {
     return {
       'name': name,
@@ -58,7 +45,27 @@ class EmergencyContact {
     };
   }
 
-  Map<String, dynamic> toAppwrite() {
-    return {'name': name, 'phone': phone, 'relationship': role};
+  /// Validates a contact name (required, at most 100 characters).
+  static String? validateName(String? value) {
+    final v = value?.trim() ?? '';
+    if (v.isEmpty) return 'Name is required';
+    if (v.length > 100) return 'Name is too long';
+    return null;
+  }
+
+  /// Validates a contact phone number: required; digits with an optional
+  /// leading '+', spaces, dashes and brackets allowed. Short codes (e.g.
+  /// 112) are accepted, as are local and international numbers.
+  static String? validatePhone(String? value) {
+    final v = value?.trim() ?? '';
+    if (v.isEmpty) return 'Phone number is required';
+    if (!RegExp(r'^\+?[\d\s\-()]+$').hasMatch(v)) {
+      return 'Use digits only (optionally starting with +)';
+    }
+    final digits = v.replaceAll(RegExp(r'\D'), '');
+    if (digits.length < 3 || digits.length > 15) {
+      return 'Enter a valid phone number';
+    }
+    return null;
   }
 }

@@ -1,6 +1,8 @@
 import 'package:climate_app/core/services/supabase_service.dart';
 import 'package:climate_app/core/constants/app_config.dart';
 import 'package:climate_app/core/services/remote_config_service.dart';
+import 'package:climate_app/features/auth/providers/auth_provider.dart'
+    show AuthProvider, UserRole;
 import 'dart:developer' as developer;
 import 'dart:math' as math;
 
@@ -93,7 +95,8 @@ class PeerVerificationService {
       if (SupabaseService.isUniqueViolation(e)) {
         return {
           'success': false,
-          'message': 'You have already verified this report.',
+          'alreadyVoted': true,
+          'message': 'You have already voted on this report.',
         };
       }
       if (SupabaseService.isPermissionDenied(e)) {
@@ -112,20 +115,17 @@ class PeerVerificationService {
     }
   }
 
-  /// Manual approve / reject by coordinator or staff: records the override
-  /// and updates the report status (the backend notifies the reporter and
-  /// broadcasts from the resulting status-change event).
+  /// Manual approve / reject by senior staff (ewv, ewr, ldp_coordinator,
+  /// project_staff, admin; never one's own report — enforced by the
+  /// `guard_report_update` trigger). The decision is audited into
+  /// `verification_overrides` by the `reports_audit_decision` trigger, and
+  /// the backend notifies from the resulting status-change event.
   Future<Map<String, dynamic>> manualValidation({
     required String reportId,
     required bool isApproved,
-    required String reason,
+    String reason = '',
   }) async {
-    final action = isApproved ? 'approved' : 'rejected';
-    await _db.createDocument(
-      collectionId: AppConfig.verificationsOverrideCollection,
-      data: {'reportId': reportId, 'action': action, 'reason': reason},
-    );
-    final now = DateTime.now();
+    final now = DateTime.now().toUtc();
     await _db.updateDocument(
       collectionId: AppConfig.reportsCollection,
       documentId: reportId,
@@ -144,7 +144,17 @@ class PeerVerificationService {
   }
 
   /// Get verification statistics for a report.
-  Future<Map<String, dynamic>> getVerificationStats(String reportId) async {
+  ///
+  /// Verifications are readable by every verifier role and by
+  /// ldp_coordinator / project_staff (`verifications_select`). Pass the
+  /// caller's *effective* role (`AuthProvider.userRole`, which is `user`
+  /// until the account is approved) as [role]: `canValidate` is then only
+  /// true for roles allowed to approve / reject. `readable` is false when
+  /// the votes could not be read (so zero counts are not trusted).
+  Future<Map<String, dynamic>> getVerificationStats(
+    String reportId, {
+    UserRole? role,
+  }) async {
     try {
       final verifications = await _db.listDocuments(
         collectionId: AppConfig.verificationsCollection,
@@ -159,12 +169,16 @@ class PeerVerificationService {
           .where((v) => v['isConfirmed'] == false)
           .length;
 
+      final roleMayValidate =
+          role == null || AuthProvider.statusManagerRoles.contains(role);
       return {
+        'readable': true,
         'totalVerifications': verifications.length,
         'confirmations': confirmations,
         'disputes': disputes,
         'requiresEscalation': disputes > 0 && confirmations == 0,
         'canValidate':
+            roleMayValidate &&
             confirmations >= RemoteConfigService().minimumPeerConfirmations,
       };
     } on Exception catch (e) {
@@ -173,6 +187,7 @@ class PeerVerificationService {
         name: 'PeerVerificationService',
       );
       return {
+        'readable': false,
         'totalVerifications': 0,
         'confirmations': 0,
         'disputes': 0,

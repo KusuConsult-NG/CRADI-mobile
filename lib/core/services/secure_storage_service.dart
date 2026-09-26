@@ -185,41 +185,44 @@ class SecureStorageService {
     return json.decode(jsonStr) as Map<String, dynamic>;
   }
 
-  // Clear all secure data (logout)
-  /// [keepAuth] if true, preserves auth token and user info for biometric login
-  /// [keepPreferences] if true, preserves user preferences like biometric enabled status
+  /// Keys holding the signed-in user's session / identity data.
+  static const List<String> _sessionKeys = [
+    _keyAuthToken,
+    _keyRefreshToken,
+    _keyUserRole,
+    _keySessionExpiry,
+    _keyRememberMe,
+    _legacyKeyUserEmail,
+    _legacyKeyUserPassword,
+  ];
+
+  /// Clears secure data on logout.
+  ///
+  /// Only this service's own keys are deleted — never `deleteAll()`: the
+  /// keystore also holds the Hive encryption key (`hive_encryption_key`,
+  /// see HiveEncryptionService), which must survive a logout or every
+  /// encrypted Hive box becomes unreadable on the next launch. Login-attempt
+  /// / lockout counters are kept too, so logging out cannot reset them.
+  ///
+  /// [keepAuth] preserves the auth token and user info (biometric login).
+  /// [keepPreferences] preserves the biometric preference (and, when it is
+  /// enabled, the phone number).
   Future<void> clearAll({
     bool keepAuth = false,
     bool keepPreferences = false,
   }) async {
-    if (keepAuth && keepPreferences) {
-      // Only clear temporary session data
-      await _storage.delete(key: _keySessionExpiry);
-      await _storage.delete(key: _keyLoginAttempts);
-      await _storage.delete(key: _keyLastLoginAttempt);
-      await _storage.delete(key: _keyAccountLockedUntil);
-      return;
+    final keys = <String>[
+      _keySessionExpiry,
+      if (!keepAuth) ..._sessionKeys.where((k) => k != _keySessionExpiry),
+    ];
+
+    final keepPhone = keepPreferences && await isBiometricEnabled();
+    if (!keepAuth && !keepPhone) keys.add(_keyPhoneNumber);
+    if (!keepPreferences) keys.add(_keyBiometricEnabled);
+
+    for (final key in keys) {
+      await _storage.delete(key: key);
     }
-
-    if (keepPreferences) {
-      // Keep preferences like biometric enabled, but clear auth and user data
-      final biometricEnabled = await isBiometricEnabled();
-      final phoneNumber = await getPhoneNumber();
-
-      await _storage.deleteAll();
-
-      // Restore selected preferences
-      if (biometricEnabled) {
-        await setBiometricEnabled(true);
-        if (phoneNumber != null) {
-          await savePhoneNumber(phoneNumber);
-        }
-      }
-      return;
-    }
-
-    // Default: Clear absolutely everything
-    await _storage.deleteAll();
   }
 
   // Clear only authentication data

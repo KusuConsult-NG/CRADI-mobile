@@ -23,8 +23,40 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
     'Coordinators': 'coordinator',
     'Emergency': 'emergency',
     'Agri-Extension': 'agri-extension',
+    'Other': 'other',
   };
   String _selectedCategory = 'all';
+  String _query = '';
+
+  /// The realtime stream is created once (and again on pull-to-refresh), not
+  /// in build, so typing in the search box or switching categories does not
+  /// resubscribe. Category and search filters are applied to its rows.
+  late Stream<List<EmergencyContact>> _contactsStream;
+
+  @override
+  void initState() {
+    super.initState();
+    _contactsStream = _createStream();
+    _searchController.addListener(() {
+      final q = _searchController.text.trim().toLowerCase();
+      if (q != _query) setState(() => _query = q);
+    });
+  }
+
+  Stream<List<EmergencyContact>> _createStream() => context
+      .read<EmergencyContactsProvider>()
+      .getContactsStream()
+      .asBroadcastStream();
+
+  Future<void> _refresh() async {
+    final stream = _createStream();
+    setState(() => _contactsStream = stream);
+    try {
+      await stream.first.timeout(const Duration(seconds: 10));
+    } on Object catch (_) {
+      // Errors are rendered by the StreamBuilder.
+    }
+  }
 
   @override
   void dispose() {
@@ -58,116 +90,92 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
     }
   }
 
-  void _showAddContactDialog() {
-    final nameController = TextEditingController();
-    final roleController = TextEditingController();
-    final phoneController = TextEditingController();
-    final orgController = TextEditingController();
-    final lgaController = TextEditingController();
-    String selectedCategory = 'coordinator';
-
-    showDialog(
+  Future<void> _showContactDialog({EmergencyContact? existing}) async {
+    final saved = await showDialog<bool>(
       context: context,
-      builder: (c) => AlertDialog(
-        title: Text(
-          'Add Emergency Contact',
-          style: GoogleFonts.lexend(fontWeight: FontWeight.bold),
-        ),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: nameController,
-                decoration: const InputDecoration(labelText: 'Name'),
-              ),
-              TextField(
-                controller: roleController,
-                decoration: const InputDecoration(labelText: 'Role'),
-              ),
-              TextField(
-                controller: phoneController,
-                keyboardType: TextInputType.phone,
-                decoration: const InputDecoration(labelText: 'Phone'),
-              ),
-              TextField(
-                controller: orgController,
-                decoration: const InputDecoration(
-                  labelText: 'Organization (Optional)',
-                ),
-              ),
-              TextField(
-                controller: lgaController,
-                decoration: const InputDecoration(labelText: 'LGA (Optional)'),
-              ),
-              const SizedBox(height: 16),
-              DropdownButtonFormField<String>(
-                initialValue: selectedCategory,
-                decoration: const InputDecoration(labelText: 'Category'),
-                items: const [
-                  DropdownMenuItem(
-                    value: 'coordinator',
-                    child: Text('Coordinator'),
-                  ),
-                  DropdownMenuItem(
-                    value: 'emergency',
-                    child: Text('Emergency'),
-                  ),
-                  DropdownMenuItem(
-                    value: 'agri-extension',
-                    child: Text('Agri-Extension'),
-                  ),
-                  DropdownMenuItem(value: 'other', child: Text('Other')),
-                ],
-                onChanged: (v) => selectedCategory = v ?? 'coordinator',
-              ),
-            ],
+      builder: (_) => ContactFormDialog(existing: existing),
+    );
+    if (saved == true && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            existing == null
+                ? 'Contact added successfully'
+                : 'Contact updated successfully',
           ),
         ),
+      );
+    }
+  }
+
+  Future<void> _confirmDelete(EmergencyContact contact) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('Delete contact?'),
+        content: Text('Remove ${contact.name} from your emergency contacts?'),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(c),
+            onPressed: () => Navigator.pop(c, false),
             child: const Text('Cancel'),
           ),
           ElevatedButton(
-            onPressed: () async {
-              final provider = context.read<EmergencyContactsProvider>();
-              final contact = EmergencyContact(
-                id: '',
-                name: nameController.text,
-                role: roleController.text,
-                phone: phoneController.text,
-                organization: orgController.text.isEmpty
-                    ? null
-                    : orgController.text,
-                lga: lgaController.text.isEmpty ? null : lgaController.text,
-                category: selectedCategory,
-              );
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.pop(c, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    try {
+      await context.read<EmergencyContactsProvider>().deleteContact(contact.id);
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Contact deleted')));
+      }
+    } on Exception catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              ErrorHandler.handleError(e, context: 'Emergency Contact'),
+            ),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
 
-              try {
-                await provider.addContact(contact);
-                if (c.mounted) Navigator.pop(c);
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Contact added successfully')),
-                  );
-                }
-              } on Exception catch (e) {
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        ErrorHandler.handleError(
-                          e,
-                          context: 'Emergency Contact',
-                        ),
-                      ),
-                    ),
-                  );
-                }
-              }
-            },
-            child: const Text('Add'),
+  List<EmergencyContact> _filter(List<EmergencyContact> all) {
+    return all.where((c) {
+      if (_selectedCategory != 'all') {
+        final known = _categoryMap.values.contains(c.category);
+        final category = known ? c.category : 'other';
+        if (category != _selectedCategory) return false;
+      }
+      if (_query.isEmpty) return true;
+      return c.name.toLowerCase().contains(_query) ||
+          c.role.toLowerCase().contains(_query) ||
+          c.phone.toLowerCase().contains(_query) ||
+          (c.organization?.toLowerCase().contains(_query) ?? false) ||
+          (c.lga?.toLowerCase().contains(_query) ?? false);
+    }).toList();
+  }
+
+  Widget _scrollableMessage(Widget child) {
+    return LayoutBuilder(
+      builder: (context, constraints) => ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        children: [
+          ConstrainedBox(
+            constraints: BoxConstraints(minHeight: constraints.maxHeight),
+            child: Center(child: child),
           ),
         ],
       ),
@@ -176,11 +184,6 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final provider = Provider.of<EmergencyContactsProvider>(
-      context,
-      listen: false,
-    );
-
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
@@ -208,8 +211,9 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
         centerTitle: true,
         actions: [
           IconButton(
+            tooltip: 'Add contact',
             icon: const Icon(Icons.add, color: AppColors.primaryRed),
-            onPressed: _showAddContactDialog,
+            onPressed: () => _showContactDialog(),
           ),
         ],
         backgroundColor: AppColors.background.withValues(alpha: 0.95),
@@ -238,7 +242,6 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
                 ),
                 contentPadding: const EdgeInsets.symmetric(vertical: 0),
               ),
-              onChanged: (v) => setState(() {}),
             ),
           ),
 
@@ -283,43 +286,33 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
           // Contacts List
           Expanded(
             child: RefreshIndicator(
-              onRefresh: () async {
-                await provider.getContacts();
-              },
+              onRefresh: _refresh,
               child: StreamBuilder<List<EmergencyContact>>(
-                stream: _selectedCategory == 'all'
-                    ? provider.getContactsStream()
-                    : provider.getContactsByCategory(_selectedCategory),
+                stream: _contactsStream,
                 builder: (context, snapshot) {
                   if (snapshot.hasError) {
-                    return Center(
-                      child: Text(ErrorHandler.getUserMessage(snapshot.error)),
+                    return _scrollableMessage(
+                      Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Text(
+                          ErrorHandler.getUserMessage(snapshot.error),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
                     );
                   }
 
-                  if (snapshot.connectionState == ConnectionState.waiting) {
+                  if (snapshot.connectionState == ConnectionState.waiting &&
+                      !snapshot.hasData) {
                     return const Center(child: CircularProgressIndicator());
                   }
 
-                  var contacts = snapshot.data ?? [];
-
-                  // Apply search filter
-                  if (_searchController.text.isNotEmpty) {
-                    final query = _searchController.text.toLowerCase();
-                    contacts = contacts
-                        .where(
-                          (c) =>
-                              c.name.toLowerCase().contains(query) ||
-                              c.role.toLowerCase().contains(query) ||
-                              (c.lga?.toLowerCase().contains(query) ?? false),
-                        )
-                        .toList();
-                  }
+                  final contacts = _filter(snapshot.data ?? const []);
 
                   if (contacts.isEmpty) {
-                    return Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
+                    return _scrollableMessage(
+                      Column(
+                        mainAxisSize: MainAxisSize.min,
                         children: [
                           Icon(
                             Icons.contacts_outlined,
@@ -348,10 +341,8 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
                     ),
                     itemCount: contacts.length,
                     separatorBuilder: (c, i) => const SizedBox(height: 12),
-                    itemBuilder: (context, index) {
-                      final contact = contacts[index];
-                      return _buildContactCard(contact, provider);
-                    },
+                    itemBuilder: (context, index) =>
+                        _buildContactCard(contacts[index]),
                   );
                 },
               ),
@@ -375,10 +366,7 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
     );
   }
 
-  Widget _buildContactCard(
-    EmergencyContact contact,
-    EmergencyContactsProvider provider,
-  ) {
+  Widget _buildContactCard(EmergencyContact contact) {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -445,6 +433,32 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
             Colors.white,
             () => _makePhoneCall(contact.phone),
           ),
+          PopupMenuButton<String>(
+            tooltip: 'More actions',
+            icon: Icon(Icons.more_vert, color: Colors.grey.shade600),
+            onSelected: (action) {
+              if (action == 'edit') _showContactDialog(existing: contact);
+              if (action == 'delete') _confirmDelete(contact);
+            },
+            itemBuilder: (_) => const [
+              PopupMenuItem(
+                value: 'edit',
+                child: ListTile(
+                  leading: Icon(Icons.edit_outlined),
+                  title: Text('Edit'),
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+              PopupMenuItem(
+                value: 'delete',
+                child: ListTile(
+                  leading: Icon(Icons.delete_outline, color: Colors.red),
+                  title: Text('Delete', style: TextStyle(color: Colors.red)),
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+            ],
+          ),
         ],
       ),
     );
@@ -492,5 +506,172 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
       default:
         return Icons.contact_mail;
     }
+  }
+}
+
+/// Add / edit dialog for an emergency contact. Pops `true` once saved.
+class ContactFormDialog extends StatefulWidget {
+  const ContactFormDialog({super.key, this.existing});
+
+  /// The contact to edit; null to add a new one.
+  final EmergencyContact? existing;
+
+  @override
+  State<ContactFormDialog> createState() => _ContactFormDialogState();
+}
+
+class _ContactFormDialogState extends State<ContactFormDialog> {
+  static const _categories = {
+    'coordinator': 'Coordinator',
+    'emergency': 'Emergency',
+    'agri-extension': 'Agri-Extension',
+    'other': 'Other',
+  };
+
+  final _formKey = GlobalKey<FormState>();
+  late final TextEditingController _nameController;
+  late final TextEditingController _roleController;
+  late final TextEditingController _phoneController;
+  late final TextEditingController _orgController;
+  late final TextEditingController _lgaController;
+  late String _category;
+  bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final e = widget.existing;
+    _nameController = TextEditingController(text: e?.name ?? '');
+    _roleController = TextEditingController(text: e?.role ?? '');
+    _phoneController = TextEditingController(text: e?.phone ?? '');
+    _orgController = TextEditingController(text: e?.organization ?? '');
+    _lgaController = TextEditingController(text: e?.lga ?? '');
+    _category = _categories.containsKey(e?.category)
+        ? e!.category
+        : (e == null ? 'coordinator' : 'other');
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _roleController.dispose();
+    _phoneController.dispose();
+    _orgController.dispose();
+    _lgaController.dispose();
+    super.dispose();
+  }
+
+  String? _optional(TextEditingController c) {
+    final v = c.text.trim();
+    return v.isEmpty ? null : v;
+  }
+
+  Future<void> _save() async {
+    if (_saving || !(_formKey.currentState?.validate() ?? false)) return;
+    setState(() => _saving = true);
+    final provider = context.read<EmergencyContactsProvider>();
+    final existing = widget.existing;
+    final contact = EmergencyContact(
+      id: existing?.id ?? '',
+      name: _nameController.text.trim(),
+      role: _roleController.text.trim(),
+      phone: _phoneController.text.trim(),
+      organization: _optional(_orgController),
+      lga: _optional(_lgaController),
+      category: _category,
+      isAvailable: existing?.isAvailable ?? true,
+    );
+    try {
+      if (existing == null) {
+        await provider.addContact(contact);
+      } else {
+        await provider.updateContact(existing.id, contact);
+      }
+      if (mounted) Navigator.pop(context, true);
+    } on Exception catch (e) {
+      if (!mounted) return;
+      setState(() => _saving = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            ErrorHandler.handleError(e, context: 'Emergency Contact'),
+          ),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isEdit = widget.existing != null;
+    return AlertDialog(
+      title: Text(
+        isEdit ? 'Edit Emergency Contact' : 'Add Emergency Contact',
+        style: GoogleFonts.lexend(fontWeight: FontWeight.bold),
+      ),
+      content: Form(
+        key: _formKey,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextFormField(
+                controller: _nameController,
+                textCapitalization: TextCapitalization.words,
+                decoration: const InputDecoration(labelText: 'Name *'),
+                validator: EmergencyContact.validateName,
+              ),
+              TextFormField(
+                controller: _roleController,
+                decoration: const InputDecoration(labelText: 'Role'),
+              ),
+              TextFormField(
+                controller: _phoneController,
+                keyboardType: TextInputType.phone,
+                decoration: const InputDecoration(labelText: 'Phone *'),
+                validator: EmergencyContact.validatePhone,
+              ),
+              TextFormField(
+                controller: _orgController,
+                decoration: const InputDecoration(
+                  labelText: 'Organization (Optional)',
+                ),
+              ),
+              TextFormField(
+                controller: _lgaController,
+                decoration: const InputDecoration(labelText: 'LGA (Optional)'),
+              ),
+              const SizedBox(height: 16),
+              DropdownButtonFormField<String>(
+                initialValue: _category,
+                decoration: const InputDecoration(labelText: 'Category'),
+                items: [
+                  for (final e in _categories.entries)
+                    DropdownMenuItem(value: e.key, child: Text(e.value)),
+                ],
+                onChanged: (v) => setState(() => _category = v ?? 'other'),
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _saving ? null : () => Navigator.pop(context, false),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: _saving ? null : _save,
+          child: _saving
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : Text(isEdit ? 'Save' : 'Add'),
+        ),
+      ],
+    );
   }
 }

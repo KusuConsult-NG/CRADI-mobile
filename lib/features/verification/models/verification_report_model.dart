@@ -1,3 +1,7 @@
+import 'package:climate_app/core/constants/hazards.dart';
+import 'package:climate_app/features/reporting/providers/reporting_provider.dart'
+    show normalizeSeverity;
+
 class VerificationReport {
   final String id;
   final String title;
@@ -109,11 +113,14 @@ class VerificationReport {
       reporter: data['reporterName'] ?? data['reporter'] ?? 'Anonymous',
       reporterId: data['userId'] ?? data['reporterId'],
       location: data['locationDetails'] ?? data['location'] ?? 'Unknown',
-      time: _formatTime(data['createdAt'] ?? data['time']),
+      time: _formatTime(
+        data['submittedAt'] ?? data['createdAt'] ?? data['time'],
+      ),
       status: _parseStatus(data['status']),
-      iconName: _iconForHazard(data['hazardType'] ?? ''),
-      iconColor: _colorForHazard(data['hazardType'] ?? ''),
-      bgIconColor: _colorForHazard(data['hazardType'] ?? ''),
+      iconName: Hazard.iconKeyFor(data['hazardType']),
+      iconColor: SeverityColors.nameFor(normalizeSeverity(data['severity'])),
+      bgIconColor:
+          '${SeverityColors.nameFor(normalizeSeverity(data['severity']))}_50',
       latitude: (data['latitude'] as num?)?.toDouble(),
       longitude: (data['longitude'] as num?)?.toDouble(),
       description: data['description'],
@@ -190,50 +197,6 @@ class VerificationReport {
       return '${date.day}/${date.month}/${date.year}';
     } on Exception catch (_) {
       return raw.toString();
-    }
-  }
-
-  static String _iconForHazard(String type) {
-    switch (type.toLowerCase()) {
-      case 'flooding':
-      case 'flood':
-        return 'water';
-      case 'drought':
-        return 'wb_sunny';
-      case 'pest/disease':
-      case 'pest':
-        return 'pest_control';
-      case 'conflict':
-        return 'shield';
-      case 'erosion':
-        return 'landscape';
-      case 'fire':
-      case 'wildfire':
-        return 'local_fire_department';
-      default:
-        return 'warning';
-    }
-  }
-
-  static String _colorForHazard(String type) {
-    switch (type.toLowerCase()) {
-      case 'flooding':
-      case 'flood':
-        return 'blue';
-      case 'drought':
-        return 'orange';
-      case 'pest/disease':
-      case 'pest':
-        return 'green';
-      case 'conflict':
-        return 'red';
-      case 'erosion':
-        return 'brown';
-      case 'fire':
-      case 'wildfire':
-        return 'red';
-      default:
-        return 'orange';
     }
   }
 }

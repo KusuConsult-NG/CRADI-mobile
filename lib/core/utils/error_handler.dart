@@ -16,8 +16,11 @@ class ErrorHandler {
   /// IMPORTANT: SDK-internal messages must NEVER be surfaced raw to the user —
   /// they leak implementation detail and confuse end users.
   static String _getGenericMessage(dynamic error) {
-    if (error.runtimeType.toString() == 'AuthException') {
-      return error.toString();
+    // Only the app's own exceptions carry a curated, user-facing message.
+    // (A runtimeType name check would also match Supabase's AuthException,
+    // whose raw server message must not be shown.)
+    if (error is SecureException) {
+      return error.userMessage;
     }
 
     final msg = error.toString().toLowerCase();

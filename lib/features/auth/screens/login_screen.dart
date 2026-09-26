@@ -29,6 +29,8 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _isLoading = false;
   bool _isPasswordVisible = false;
   bool _rememberMe = false;
+  // Phone accounts have no password: they sign in with an SMS code.
+  bool _usePhone = false;
   String? _errorMessage;
   int _remainingAttempts = 5;
 
@@ -61,7 +63,83 @@ class _LoginScreenState extends State<LoginScreen> {
     return sanitizeRedirectTarget(from) ?? '/dashboard';
   }
 
+  /// Phone sign-in: sends an SMS code to an existing account and opens the
+  /// code entry screen (which verifies it as an `sms` OTP).
+  Future<void> _submitPhone() async {
+    setState(() => _errorMessage = null);
+    if (!_formKey.currentState!.validate()) return;
+
+    final authProvider = context.read<AuthProvider>();
+    final phone = Validators.normalizePhoneNumber(
+      _identifierController.text.trim(),
+    );
+    setState(() => _isLoading = true);
+    try {
+      await authProvider.sendOtpForPhone(phone, loginOnly: true);
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      await context.push('/verify-otp?phone=${Uri.encodeComponent(phone)}');
+    } on AuthException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _errorMessage = e.userMessage;
+        _isLoading = false;
+      });
+    } on Exception catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _errorMessage = ErrorHandler.getUserMessage(e);
+        _isLoading = false;
+      });
+      ErrorHandler.logError(e, context: 'LoginScreen._submitPhone');
+    }
+  }
+
+  Widget _buildMethodToggle() {
+    Widget option(String label, bool phone) {
+      final selected = _usePhone == phone;
+      return Expanded(
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: _isLoading || selected
+              ? null
+              : () => setState(() {
+                  _usePhone = phone;
+                  _errorMessage = null;
+                  _identifierController.clear();
+                }),
+          child: Container(
+            decoration: BoxDecoration(
+              color: selected ? AppColors.primaryRed : Colors.transparent,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            alignment: Alignment.center,
+            child: Text(
+              label,
+              style: TextStyle(
+                color: selected ? Colors.white : AppColors.textSecondary,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      height: 44,
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: Colors.grey.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(children: [option('Email', false), option('Phone', true)]),
+    );
+  }
+
   Future<void> _submit() async {
+    if (_usePhone) return _submitPhone();
+
     // Clear previous error
     setState(() => _errorMessage = null);
 
@@ -302,91 +380,109 @@ class _LoginScreenState extends State<LoginScreen> {
                               ),
                             ),
 
-                          // Email field
-                          CustomTextField(
-                            label: 'Email Address',
-                            controller: _identifierController,
-                            keyboardType: TextInputType.emailAddress,
-                            prefixIcon: const Icon(Icons.email_outlined),
-                            hint: 'email@example.com',
-                            validator: Validators.validateEmail,
-                            enabled: !_isLoading,
-                          ),
+                          if (AuthProvider.phoneAuthEnabled)
+                            _buildMethodToggle(),
+
+                          if (_usePhone)
+                            CustomTextField(
+                              key: const ValueKey('login-phone'),
+                              label: 'Phone Number',
+                              controller: _identifierController,
+                              keyboardType: TextInputType.phone,
+                              prefixIcon: const Icon(Icons.phone_outlined),
+                              hint: '+234 801 234 5678',
+                              validator: Validators.validatePhoneNumber,
+                              enabled: !_isLoading,
+                            )
+                          else
+                            // Email field
+                            CustomTextField(
+                              key: const ValueKey('login-email'),
+                              label: 'Email Address',
+                              controller: _identifierController,
+                              keyboardType: TextInputType.emailAddress,
+                              prefixIcon: const Icon(Icons.email_outlined),
+                              hint: 'email@example.com',
+                              validator: Validators.validateEmail,
+                              enabled: !_isLoading,
+                            ),
 
                           // Password field
-                          CustomTextField(
-                            label: 'Password',
-                            controller: _passwordController,
-                            obscureText: !_isPasswordVisible,
-                            prefixIcon: const Icon(Icons.lock_outline),
-                            suffixIcon: IconButton(
-                              icon: Icon(
-                                _isPasswordVisible
-                                    ? Icons.visibility
-                                    : Icons.visibility_off,
+                          if (!_usePhone)
+                            CustomTextField(
+                              label: 'Password',
+                              controller: _passwordController,
+                              obscureText: !_isPasswordVisible,
+                              prefixIcon: const Icon(Icons.lock_outline),
+                              suffixIcon: IconButton(
+                                icon: Icon(
+                                  _isPasswordVisible
+                                      ? Icons.visibility
+                                      : Icons.visibility_off,
+                                ),
+                                onPressed: () {
+                                  setState(() {
+                                    _isPasswordVisible = !_isPasswordVisible;
+                                  });
+                                },
                               ),
-                              onPressed: () {
-                                setState(() {
-                                  _isPasswordVisible = !_isPasswordVisible;
-                                });
+                              validator: (value) {
+                                if (value == null || value.isEmpty) {
+                                  return 'Password is required';
+                                }
+                                return null;
                               },
+                              enabled: !_isLoading,
                             ),
-                            validator: (value) {
-                              if (value == null || value.isEmpty) {
-                                return 'Password is required';
-                              }
-                              return null;
-                            },
-                            enabled: !_isLoading,
-                          ),
                           const SizedBox(height: 16),
 
                           // Remember me and Forgot Password
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Row(
-                                children: [
-                                  Checkbox(
-                                    value: _rememberMe,
-                                    activeColor: AppColors.primaryRed,
-                                    onChanged: _isLoading
-                                        ? null
-                                        : (value) {
-                                            setState(() {
-                                              _rememberMe = value ?? false;
-                                            });
-                                          },
-                                  ),
-                                  const Text(
-                                    'Remember Me',
+                          if (!_usePhone)
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Row(
+                                  children: [
+                                    Checkbox(
+                                      value: _rememberMe,
+                                      activeColor: AppColors.primaryRed,
+                                      onChanged: _isLoading
+                                          ? null
+                                          : (value) {
+                                              setState(() {
+                                                _rememberMe = value ?? false;
+                                              });
+                                            },
+                                    ),
+                                    const Text(
+                                      'Remember Me',
+                                      style: TextStyle(
+                                        fontSize:
+                                            15, // Matched somewhat with other texts
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                TextButton(
+                                  onPressed: _isLoading
+                                      ? null
+                                      : () => context.push('/forgot-password'),
+                                  child: const Text(
+                                    'Forgot Password?',
                                     style: TextStyle(
-                                      fontSize:
-                                          15, // Matched somewhat with other texts
-                                      fontWeight: FontWeight.w500,
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w600,
                                     ),
                                   ),
-                                ],
-                              ),
-                              TextButton(
-                                onPressed: _isLoading
-                                    ? null
-                                    : () => context.push('/forgot-password'),
-                                child: const Text(
-                                  'Forgot Password?',
-                                  style: TextStyle(
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.w600,
-                                  ),
                                 ),
-                              ),
-                            ],
-                          ),
+                              ],
+                            ),
                           const SizedBox(height: 24),
 
                           // Login button
                           CustomButton(
-                            text: 'Login',
+                            text: _usePhone ? 'Send Code' : 'Login',
                             onPressed: _isLoading ? null : _submit,
                             isLoading: _isLoading,
                           ),
@@ -424,11 +520,11 @@ class _LoginScreenState extends State<LoginScreen> {
 
                   const SizedBox(height: 24),
 
-                  // Biometric login option
+                  // Biometric login option: it re-uses the persisted
+                  // session, so it is only offered while one exists (a
+                  // logout revokes it).
                   FutureBuilder<bool>(
-                    future: Future.wait([
-                      authProvider.isBiometricAvailable(),
-                    ]).then((results) => results[0]),
+                    future: _canOfferBiometricLogin(authProvider),
                     builder: (context, snapshot) {
                       if (snapshot.data == true) {
                         return Column(
@@ -540,6 +636,12 @@ class _LoginScreenState extends State<LoginScreen> {
         );
       },
     );
+  }
+
+  Future<bool> _canOfferBiometricLogin(AuthProvider authProvider) async {
+    if (!authProvider.hasStoredSession) return false;
+    return await authProvider.isBiometricEnabled() &&
+        await authProvider.isBiometricAvailable();
   }
 
   Widget _buildLockScreen(AuthProvider authProvider) {

@@ -23,15 +23,96 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
   String _searchQuery = '';
   final TextEditingController _searchCtrl = TextEditingController();
 
-  late final Stream<List<Map<String, dynamic>>> _usersStream;
+  static const int _pageSize = 50;
+
+  final List<Map<String, dynamic>> _users = [];
+  bool _loading = false;
+  bool _hasMore = true;
+  String? _error;
+
+  /// Bumped on every reload so responses for a stale filter are dropped.
+  int _generation = 0;
 
   @override
   void initState() {
     super.initState();
     _pendingOnly = widget.pendingOnly;
-    _usersStream = SupabaseService().subscribeToCollection(
-      collectionId: AppConfig.usersCollection,
-    );
+    _reload();
+  }
+
+  Future<void> _reload() {
+    _generation++;
+    setState(() {
+      _users.clear();
+      _hasMore = true;
+      _error = null;
+      _loading = false;
+    });
+    return _loadMore();
+  }
+
+  /// Loads the next page, newest first. Role and approval filters are
+  /// applied by the server; the name/email search filters loaded rows.
+  Future<void> _loadMore() async {
+    if (_loading || !_hasMore) return;
+    final generation = _generation;
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final page = await SupabaseService().listDocuments(
+        collectionId: AppConfig.usersCollection,
+        queries: [
+          if (_roleFilter != 'all') FQuery.equal('role', _roleFilter),
+          FQuery.equal('isApproved', !_pendingOnly),
+          FQuery.orderDesc('createdAt'),
+        ],
+        limitCount: _pageSize,
+        offset: _users.length,
+      );
+      if (!mounted || generation != _generation) return;
+      setState(() {
+        final known = _users.map((u) => u[r'$id']).toSet();
+        _users.addAll(page.where((u) => !known.contains(u[r'$id'])));
+        _hasMore = page.length == _pageSize;
+      });
+    } on Exception catch (e) {
+      developer.log('Users load failed: $e', name: 'AdminUsersScreen');
+      if (mounted && generation == _generation) {
+        setState(
+          () => _error =
+              'Could not load users. You may not have permission to view them.',
+        );
+      }
+    } finally {
+      if (mounted && generation == _generation) {
+        setState(() => _loading = false);
+      }
+    }
+  }
+
+  bool _matchesFilters(Map<String, dynamic> data) {
+    if (_roleFilter != 'all' && (data['role'] ?? 'user') != _roleFilter) {
+      return false;
+    }
+    final isApproved = data['isApproved'] as bool? ?? false;
+    return _pendingOnly ? !isApproved : isApproved;
+  }
+
+  /// Replaces [uid] with the updated row, dropping it when it no longer
+  /// matches the active filters.
+  void _applyUpdate(String uid, Map<String, dynamic> updated) {
+    if (!mounted) return;
+    setState(() {
+      final i = _users.indexWhere((u) => u[r'$id'] == uid);
+      if (i == -1) return;
+      if (_matchesFilters(updated)) {
+        _users[i] = updated;
+      } else {
+        _users.removeAt(i);
+      }
+    });
   }
 
   @override
@@ -62,8 +143,6 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
     'techSupport': 'Tech Support',
   };
 
-  // The stream is initialized once in initState because query doesn't depend on local filters
-
   void _showWriteError(Object e) {
     developer.log('User update failed: $e', name: 'AdminUsersScreen');
     if (!mounted) return;
@@ -80,12 +159,14 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
     );
   }
 
-  Future<void> _update(String uid, Map<String, dynamic> data) =>
-      SupabaseService().updateDocument(
-        collectionId: AppConfig.usersCollection,
-        documentId: uid,
-        data: data,
-      );
+  Future<void> _update(String uid, Map<String, dynamic> data) async {
+    final updated = await SupabaseService().updateDocument(
+      collectionId: AppConfig.usersCollection,
+      documentId: uid,
+      data: data,
+    );
+    _applyUpdate(uid, updated);
+  }
 
   Future<void> _setApproval(String uid, bool approved) async {
     try {
@@ -270,8 +351,11 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
                               labelStyle: TextStyle(
                                 color: _roleFilter == r ? Colors.white : null,
                               ),
-                              onSelected: (_) =>
-                                  setState(() => _roleFilter = r),
+                              onSelected: (_) {
+                                if (_roleFilter == r) return;
+                                setState(() => _roleFilter = r);
+                                _reload();
+                              },
                             ),
                           ),
                         )
@@ -289,194 +373,218 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
                   ),
                   value: _pendingOnly,
                   activeThumbColor: AppColors.primaryRed,
-                  onChanged: (v) => setState(() => _pendingOnly = v),
+                  onChanged: (v) {
+                    setState(() => _pendingOnly = v);
+                    _reload();
+                  },
                 ),
               ],
             ),
           ),
           // ── List ──
           Expanded(
-            child: StreamBuilder<List<Map<String, dynamic>>>(
-              stream: _usersStream,
-              builder: (context, snap) {
-                if (snap.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                if (snap.hasError) {
-                  return Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(24),
-                      child: Text(
-                        'Could not load users. You may not have permission to view them.',
-                        textAlign: TextAlign.center,
-                        style: GoogleFonts.lexend(color: Colors.red),
-                      ),
-                    ),
-                  );
-                }
-                final allDocs = snap.data ?? const <Map<String, dynamic>>[];
-                final docs = allDocs.where((data) {
-                  // Apply role filter
-                  if (_roleFilter != 'all') {
-                    final role = data['role'] as String? ?? 'user';
-                    if (role != _roleFilter) return false;
-                  }
-                  // Apply pending only filter
-                  final isApproved = data['isApproved'] as bool? ?? false;
-                  if (_pendingOnly) {
-                    if (isApproved) return false;
-                  } else {
-                    if (!isApproved) return false;
-                  }
-
-                  // Apply search filter
-                  if (_searchQuery.isNotEmpty) {
-                    final name = (data['name'] as String? ?? '').toLowerCase();
-                    final email = (data['email'] as String? ?? '')
-                        .toLowerCase();
-                    if (!name.contains(_searchQuery) &&
-                        !email.contains(_searchQuery)) {
-                      return false;
-                    }
-                  }
-
-                  return true;
+            child: Builder(
+              builder: (context) {
+                final docs = _users.where((data) {
+                  if (_searchQuery.isEmpty) return true;
+                  final name = (data['name'] as String? ?? '').toLowerCase();
+                  final email = (data['email'] as String? ?? '').toLowerCase();
+                  return name.contains(_searchQuery) ||
+                      email.contains(_searchQuery);
                 }).toList();
 
-                docs.sort((a, b) {
-                  final aCreatedAt = a['createdAt'];
-                  final bCreatedAt = b['createdAt'];
-
-                  DateTime parseDate(dynamic date) =>
-                      parseTimestamp(date) ??
-                      DateTime.fromMillisecondsSinceEpoch(0);
-
-                  return parseDate(bCreatedAt).compareTo(parseDate(aCreatedAt));
-                });
-
+                if (docs.isEmpty && _loading) {
+                  return const Center(child: CircularProgressIndicator());
+                }
                 if (docs.isEmpty) {
-                  return Center(
-                    child: Text(
-                      'No users found',
-                      style: GoogleFonts.lexend(color: AppColors.textSecondary),
+                  return RefreshIndicator(
+                    onRefresh: _reload,
+                    child: ListView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: const EdgeInsets.all(48),
+                      children: [
+                        Text(
+                          _error ?? 'No users found',
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.lexend(
+                            color: _error != null
+                                ? Colors.red
+                                : AppColors.textSecondary,
+                          ),
+                        ),
+                        if (_error == null && _hasMore) ...[
+                          const SizedBox(height: 12),
+                          Center(
+                            child: OutlinedButton(
+                              onPressed: _loadMore,
+                              child: const Text('Load more'),
+                            ),
+                          ),
+                        ],
+                        if (_error != null) ...[
+                          const SizedBox(height: 12),
+                          Center(
+                            child: OutlinedButton(
+                              onPressed: _reload,
+                              child: const Text('Retry'),
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                   );
                 }
-                return ListView.builder(
-                  itemCount: docs.length,
-                  itemBuilder: (_, i) {
-                    final d = docs[i];
-                    final uid = d['\$id'] as String;
-                    final name = d['name'] as String? ?? 'Unknown';
-                    final email = d['email'] as String? ?? '';
-                    final role = d['role'] as String? ?? 'user';
-                    final approved = d['isApproved'] as bool? ?? false;
-                    final verified = d['isVerified'] as bool? ?? false;
+                return RefreshIndicator(
+                  onRefresh: _reload,
+                  child: ListView.builder(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    itemCount: docs.length + 1,
+                    itemBuilder: (_, i) {
+                      if (i == docs.length) return _buildFooter();
+                      final d = docs[i];
+                      final uid = d['\$id'] as String;
+                      final name = d['name'] as String? ?? 'Unknown';
+                      final email = d['email'] as String? ?? '';
+                      final role = d['role'] as String? ?? 'user';
+                      final approved = d['isApproved'] as bool? ?? false;
+                      final verified = d['isVerified'] as bool? ?? false;
 
-                    return Card(
-                      margin: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 4,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: ListTile(
-                        leading: CircleAvatar(
-                          backgroundColor: approved
-                              ? AppColors.primaryRed.withValues(alpha: 0.15)
-                              : Colors.orange.withValues(alpha: 0.15),
-                          child: Text(
-                            name.isNotEmpty ? name[0].toUpperCase() : '?',
-                            style: TextStyle(
-                              color: approved
-                                  ? AppColors.primaryRed
-                                  : Colors.orange,
-                              fontWeight: FontWeight.bold,
+                      return Card(
+                        margin: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 4,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: ListTile(
+                          leading: CircleAvatar(
+                            backgroundColor: approved
+                                ? AppColors.primaryRed.withValues(alpha: 0.15)
+                                : Colors.orange.withValues(alpha: 0.15),
+                            child: Text(
+                              name.isNotEmpty ? name[0].toUpperCase() : '?',
+                              style: TextStyle(
+                                color: approved
+                                    ? AppColors.primaryRed
+                                    : Colors.orange,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
                           ),
-                        ),
-                        title: Text(
-                          name,
-                          style: GoogleFonts.lexend(
-                            fontWeight: FontWeight.w600,
+                          title: Text(
+                            name,
+                            style: GoogleFonts.lexend(
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
-                        ),
-                        subtitle: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              email,
-                              style: GoogleFonts.lexend(
-                                fontSize: 11,
-                                color: AppColors.textSecondary,
-                              ),
-                            ),
-                            const SizedBox(height: 2),
-                            Row(
-                              children: [
-                                _Chip(_roleLabels[role] ?? role, Colors.blue),
-                                const SizedBox(width: 4),
-                                if (!approved)
-                                  const _Chip('Pending', Colors.orange),
-                                if (approved && !verified)
-                                  const _Chip('Unverified', Colors.grey),
-                                if (approved && verified)
-                                  const _Chip('Active', Colors.green),
-                              ],
-                            ),
-                          ],
-                        ),
-                        trailing: PopupMenuButton<String>(
-                          onSelected: (action) {
-                            if (action == 'approve') _setApproval(uid, true);
-                            if (action == 'reject') _setApproval(uid, false);
-                            if (action == 'role') _changeRole(uid, role);
-                            if (action == 'disable') _setDisabled(uid, true);
-                            if (action == 'enable') _setDisabled(uid, false);
-                          },
-                          itemBuilder: (_) => [
-                            if (!approved)
-                              const PopupMenuItem(
-                                value: 'approve',
-                                child: Text('✅ Approve'),
-                              ),
-                            if (approved)
-                              const PopupMenuItem(
-                                value: 'reject',
-                                child: Text('❌ Revoke access'),
-                              ),
-                            const PopupMenuItem(
-                              value: 'role',
-                              child: Text('🔄 Change role'),
-                            ),
-                            const PopupMenuDivider(),
-                            PopupMenuItem(
-                              value: d['isDisabled'] == true
-                                  ? 'enable'
-                                  : 'disable',
-                              child: Text(
-                                d['isDisabled'] == true
-                                    ? '🔓 Re-enable user'
-                                    : '🚫 Disable user',
-                                style: TextStyle(
-                                  color: d['isDisabled'] == true
-                                      ? Colors.green
-                                      : Colors.red,
+                          subtitle: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                email,
+                                style: GoogleFonts.lexend(
+                                  fontSize: 11,
+                                  color: AppColors.textSecondary,
                                 ),
                               ),
-                            ),
-                          ],
+                              const SizedBox(height: 2),
+                              Row(
+                                children: [
+                                  _Chip(_roleLabels[role] ?? role, Colors.blue),
+                                  const SizedBox(width: 4),
+                                  if (!approved)
+                                    const _Chip('Pending', Colors.orange),
+                                  if (approved && !verified)
+                                    const _Chip('Unverified', Colors.grey),
+                                  if (approved && verified)
+                                    const _Chip('Active', Colors.green),
+                                ],
+                              ),
+                            ],
+                          ),
+                          trailing: PopupMenuButton<String>(
+                            onSelected: (action) {
+                              if (action == 'approve') _setApproval(uid, true);
+                              if (action == 'reject') _setApproval(uid, false);
+                              if (action == 'role') _changeRole(uid, role);
+                              if (action == 'disable') _setDisabled(uid, true);
+                              if (action == 'enable') _setDisabled(uid, false);
+                            },
+                            itemBuilder: (_) => [
+                              if (!approved)
+                                const PopupMenuItem(
+                                  value: 'approve',
+                                  child: Text('✅ Approve'),
+                                ),
+                              if (approved)
+                                const PopupMenuItem(
+                                  value: 'reject',
+                                  child: Text('❌ Revoke access'),
+                                ),
+                              const PopupMenuItem(
+                                value: 'role',
+                                child: Text('🔄 Change role'),
+                              ),
+                              const PopupMenuDivider(),
+                              PopupMenuItem(
+                                value: d['isDisabled'] == true
+                                    ? 'enable'
+                                    : 'disable',
+                                child: Text(
+                                  d['isDisabled'] == true
+                                      ? '🔓 Re-enable user'
+                                      : '🚫 Disable user',
+                                  style: TextStyle(
+                                    color: d['isDisabled'] == true
+                                        ? Colors.green
+                                        : Colors.red,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          isThreeLine: true,
                         ),
-                        isThreeLine: true,
-                      ),
-                    );
-                  },
+                      );
+                    },
+                  ),
                 );
               },
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildFooter() {
+    if (_loading) {
+      return const Padding(
+        padding: EdgeInsets.all(16),
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+    if (_error != null) {
+      return Padding(
+        padding: const EdgeInsets.all(16),
+        child: Center(
+          child: TextButton(
+            onPressed: _loadMore,
+            child: const Text('Could not load more. Tap to retry.'),
+          ),
+        ),
+      );
+    }
+    if (!_hasMore) return const SizedBox(height: 24);
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Center(
+        child: OutlinedButton.icon(
+          onPressed: _loadMore,
+          icon: const Icon(Icons.expand_more),
+          label: const Text('Load more'),
+        ),
       ),
     );
   }

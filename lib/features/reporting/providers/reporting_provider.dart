@@ -52,6 +52,7 @@ class ReportingProvider extends ChangeNotifier {
   String? _description;
   String? _ward;
   String? _lga;
+  String? _state;
   DateTime _reportDateTime = DateTime.now();
   List<XFile> _photos = [];
   double? _latitude;
@@ -65,6 +66,11 @@ class ReportingProvider extends ChangeNotifier {
   String? get description => _description;
   String? get ward => _ward;
   String? get lga => _lga;
+
+  /// State chosen in the location picker. LGA names are not unique across
+  /// states ('Obi'), so the state is never inferred from the LGA when the
+  /// user picked one.
+  String? get state => _state;
   DateTime get reportDateTime => _reportDateTime;
   List<XFile> get photos => _photos;
   bool get isLoading => _isLoading;
@@ -112,6 +118,20 @@ class ReportingProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  void setReportState(String state) {
+    _state = state;
+    notifyListeners();
+  }
+
+  /// The report's state: the picked one, else inferred from an unambiguous
+  /// LGA. Null when it cannot be determined.
+  String? get resolvedState {
+    final picked = _state?.trim();
+    if (picked != null && picked.isNotEmpty) return picked;
+    final lga = _lga;
+    return lga == null ? null : MVPLocationsData.resolveStateForLGA(lga);
+  }
+
   Future<void> pickImage(ImageSource source) async {
     try {
       final XFile? image = await _picker.pickImage(
@@ -144,6 +164,7 @@ class ReportingProvider extends ChangeNotifier {
     _description = null;
     _ward = null;
     _lga = null;
+    _state = null;
     _reportDateTime = DateTime.now();
     _photos = [];
     _latitude = null;
@@ -166,6 +187,8 @@ class ReportingProvider extends ChangeNotifier {
       }
       if (_ward == null) throw Exception('Ward is missing');
       if (_lga == null) throw Exception('LGA is missing');
+      final state = resolvedState;
+      if (state == null) throw Exception('State is missing');
       if (_latitude == null || _longitude == null) {
         throw Exception(
           'GPS coordinates are missing. Please refresh location or enable GPS.',
@@ -186,6 +209,7 @@ class ReportingProvider extends ChangeNotifier {
           imagePaths: _photos.map((p) => p.path).toList(),
           ward: _ward,
           lga: _lga,
+          state: state,
         );
         reset();
         _isLoading = false;
@@ -231,9 +255,10 @@ class ReportingProvider extends ChangeNotifier {
         'address': _locationDetails,
         'ward': _ward,
         'lga': _lga,
-        'state': MVPLocationsData.getStateForLGA(_lga!),
+        'state': state,
         'description': _description ?? '',
-        'submittedAt': DateTime.now().toUtc().toIso8601String(),
+        // The incident time the user picked (not the upload time).
+        'submittedAt': _reportDateTime.toUtc().toIso8601String(),
         'imageUrls': imageUrls,
         'status': 'pending',
       };
@@ -262,7 +287,10 @@ class ReportingProvider extends ChangeNotifier {
           'reportId': reportId,
         };
       } on Exception catch (e) {
-        // Submission failed or timed out — add to sync queue
+        // Only connectivity failures are queued; a refusal by the server
+        // (RLS, constraint violation, bad value) would fail again on every
+        // retry, so it is reported to the user instead.
+        if (!isTransientNetworkError(e)) rethrow;
         await OfflineStorageService().addToSyncQueue({
           ...reportData,
           'docId': docId,
@@ -315,11 +343,14 @@ class ReportingProvider extends ChangeNotifier {
       // failed items up to a cap).
       final queueResult = await offlineService.syncPendingReports();
       successCount += queueResult['synced'] ?? 0;
-      failCount += queueResult['failed'] ?? 0;
+      failCount +=
+          (queueResult['failed'] ?? 0) + (queueResult['rejected'] ?? 0);
 
       // Process drafts
       final drafts = offlineService.getAllDrafts();
       for (final draft in drafts) {
+        // Refused permanently by the server; kept for the user to review.
+        if (draft['status'] == OfflineStorageService.statusRejected) continue;
         try {
           final draftId = draft['id'] as String;
           // Drafts have millisecond ids; derive a stable UUID so a retried
@@ -359,11 +390,14 @@ class ReportingProvider extends ChangeNotifier {
               'locationDetails': draft['locationDetails'] ?? '',
               'location': draft['locationDetails'] ?? '',
               'address': draft['locationDetails'] ?? '',
-              'ward': draft['ward'] ?? 'Unknown',
-              'lga': draft['lga'] ?? 'Makurdi',
-              'state': MVPLocationsData.getStateForLGA(
-                (draft['lga'] ?? 'Makurdi').toString(),
-              ),
+              'ward': draft['ward'] ?? '',
+              'lga': draft['lga'] ?? '',
+              'state':
+                  draft['state'] ??
+                  MVPLocationsData.resolveStateForLGA(
+                    (draft['lga'] ?? '').toString(),
+                  ) ??
+                  '',
               'description': draft['description'] ?? '',
               'submittedAt':
                   (parseTimestamp(draft['reportDateTime']) ?? DateTime.now())
@@ -377,6 +411,12 @@ class ReportingProvider extends ChangeNotifier {
           successCount++;
         } on Exception catch (e) {
           developer.log('Failed to sync draft ${draft['id']}: $e');
+          if (isPermanentSyncError(e)) {
+            await offlineService.updateDraft(draft['id'] as String, {
+              'status': OfflineStorageService.statusRejected,
+              'lastError': e.toString(),
+            });
+          }
           failCount++;
         }
       }

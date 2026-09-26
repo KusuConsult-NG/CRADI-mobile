@@ -70,8 +70,29 @@ class AuthProvider extends ChangeNotifier {
     if (!SupabaseService.isReady) {
       // No backend configured: behave as signed out.
       unawaited(_handleSignedOut());
+    } else {
+      // The auth stream only replays its latest event: when the session
+      // restored at startup was already refreshed, only `tokenRefreshed`
+      // arrives. Seed the state from the restored session instead of
+      // waiting for `initialSession`.
+      final session = _db.auth.currentSession;
+      if (session != null) {
+        unawaited(_ensureSignedIn(session.user));
+      } else {
+        unawaited(_handleSignedOut());
+      }
     }
+    // Safety net: never leave the app stuck on the splash screen.
+    _initTimer = Timer(initTimeout, _onInitTimeout);
   }
+
+  /// How long the splash screen may wait for the initial auth state.
+  static const Duration initTimeout = Duration(seconds: 12);
+
+  /// Phone (SMS OTP) sign-up and sign-in. Keep false until an SMS provider
+  /// is configured in the Supabase dashboard (Auth → Providers → Phone);
+  /// the registration and login screens hide the phone option meanwhile.
+  static const bool phoneAuthEnabled = false;
 
   final SupabaseService _db = SupabaseService();
   bool _isAuthenticated = false;
@@ -82,6 +103,8 @@ class AuthProvider extends ChangeNotifier {
   bool? _isApproved;
   bool _isVerified = false;
   String? _ward;
+  String? _lga;
+  Timer? _initTimer;
 
   // Services
   final SecureStorageService _storage = SecureStorageService();
@@ -155,17 +178,27 @@ class AuthProvider extends ChangeNotifier {
   /// The signed-in user's ward (from the profile row).
   String? get ward => _ward;
 
+  /// The signed-in user's LGA (from the profile row).
+  String? get lga => _lga;
+
   /// Whether the user may cast a peer-verification vote on a report (mirrors
-  /// the `verifications_insert` policy).
-  bool canVoteOn({String? reporterId, String? reportWard}) {
+  /// the `verifications_insert` policy): never on one's own report, and an
+  /// EWM only within their own LGA *and* ward (ward names repeat across
+  /// LGAs, so the ward alone is not enough).
+  bool canVoteOn({String? reporterId, String? reportWard, String? reportLga}) {
     final role = userRole;
     if (role == null || !verifierRoles.contains(role)) return false;
-    if (reporterId != null && reporterId == _currentUser?.id) return false;
+    final uid = _currentUser?.id;
+    if (reporterId != null && uid != null && reporterId == uid) return false;
     if (role == UserRole.ewm) {
-      final mine = (_ward ?? '').trim().toLowerCase();
-      return mine.isNotEmpty && mine == (reportWard ?? '').trim().toLowerCase();
+      return _sameArea(_ward, reportWard) && _sameArea(_lga, reportLga);
     }
     return true;
+  }
+
+  static bool _sameArea(String? mine, String? theirs) {
+    final a = (mine ?? '').trim().toLowerCase();
+    return a.isNotEmpty && a == (theirs ?? '').trim().toLowerCase();
   }
 
   /// Whether the user may approve / reject / reopen a report (mirrors the
@@ -193,10 +226,36 @@ class AuthProvider extends ChangeNotifier {
   /// Email of the account waiting for OTP confirmation, if any.
   String? get pendingEmail => _pendingEmail ?? _currentUser?.email;
 
+  /// Whether a persisted Supabase session exists on this device (the
+  /// biometric sign-in re-uses it; after a logout there is none).
+  bool get hasStoredSession =>
+      SupabaseService.isReady && _db.auth.currentSession != null;
+
+  /// Called after every completed sign-in (new user id) — e.g. to refetch
+  /// data that was loaded before the session existed.
+  final List<VoidCallback> _signInListeners = [];
+  void addSignInListener(VoidCallback listener) =>
+      _signInListeners.add(listener);
+  void removeSignInListener(VoidCallback listener) =>
+      _signInListeners.remove(listener);
+
   // ─────────────────────────── Initialization ───────────────────────────────
 
+  void _onInitTimeout() {
+    if (_isInitialized) return;
+    developer.log(
+      'Auth initialization timed out — leaving the splash screen',
+      name: 'AuthProvider',
+    );
+    _isInitialized = true;
+    notifyListeners();
+  }
+
   void _initializeSessionManager() {
+    // Inactivity timeout: lock (keeping the session) when biometrics are
+    // enabled, otherwise sign out.
     _sessionManager.onSessionExpired = () async {
+      if (!_isAuthenticated) return;
       final bioEnabled = await _storage.isBiometricEnabled();
       if (bioEnabled) {
         _isLocked = true;
@@ -226,13 +285,20 @@ class AuthProvider extends ChangeNotifier {
         await _ensureSignedIn(session.user);
         return;
       default:
-        // tokenRefreshed / userUpdated / mfa: keep the user object fresh
-        // without re-running the sign-in flow (which would re-lock the app).
-        if (session != null && !_recovering) {
-          _currentUser = session.user;
-          if (state.event == sb.AuthChangeEvent.userUpdated) {
-            notifyListeners();
-          }
+        // tokenRefreshed / userUpdated / mfa.
+        if (session == null || _recovering) return;
+        if (_signInUid != session.user.id) {
+          // Not signed in for this user yet: the stream only replays its
+          // latest event, so a refresh that completed before we subscribed
+          // is the only event we get. Treat it as a sign-in.
+          await _ensureSignedIn(session.user);
+          return;
+        }
+        // Keep the user object fresh without re-running the sign-in flow
+        // (which would re-lock the app).
+        _currentUser = session.user;
+        if (state.event == sb.AuthChangeEvent.userUpdated) {
+          notifyListeners();
         }
     }
   }
@@ -245,27 +311,67 @@ class AuthProvider extends ChangeNotifier {
   }
 
   Future<void> _handleSignedOut() async {
-    await _profileSub?.cancel();
+    // Sign-in paths sign out a stale session first; that `signedOut` event
+    // can be delivered after the new sign-in completed. Ignore it while a
+    // session exists.
+    if (SupabaseService.isReady && _db.auth.currentSession != null) {
+      developer.log('Ignoring stale signedOut event', name: 'AuthProvider');
+      return;
+    }
+    final profileSub = _profileSub;
     _profileSub = null;
-    _signInFuture = null;
-    _signInUid = null;
-    _currentUser = null;
-    _isAuthenticated = false;
-    _userRole = null;
-    _isApproved = null;
-    _ward = null;
+    _resetUserState();
+    _sessionManager.cancelTimers();
+    // Before any await, so a sign-in that follows is queued after it.
+    unawaited(NotificationService().onUserSignedOut());
+    await profileSub?.cancel();
     // Load onboarding status here too, otherwise logged-out users are sent
     // back to /onboarding on every cold start.
     await _loadOnboardingStatus();
-    unawaited(NotificationService().onUserSignedOut());
     _isInitialized = true;
     notifyListeners();
   }
 
+  /// Clears everything tied to the signed-in user (logout / sign-out).
+  /// Pending registration data (email / phone OTP in progress) is kept.
+  void _resetUserState() {
+    _signInFuture = null;
+    _signInUid = null;
+    _currentUser = null;
+    _isAuthenticated = false;
+    _isLocked = false;
+    _userRole = null;
+    _phoneNumber = null;
+    _isApproved = null;
+    _isVerified = false;
+    _ward = null;
+    _lga = null;
+    _accountDisabled = false;
+  }
+
+  static bool _authConfirmed(sb.User? user) =>
+      user != null &&
+      (user.emailConfirmedAt != null || user.phoneConfirmedAt != null);
+
   Future<void> _handleSignedIn(sb.User user) async {
+    final isNewUser = _currentUser?.id != user.id || !_isAuthenticated;
+    if (_currentUser != null && _currentUser!.id != user.id) {
+      // A different account without an intervening sign-out: drop the
+      // previous user's profile-derived state.
+      _userRole = null;
+      _isApproved = null;
+      _isVerified = false;
+      _ward = null;
+      _lga = null;
+      _phoneNumber = null;
+    }
     _currentUser = user;
     _pendingEmail = null;
     _accountDisabled = false;
+    // Supabase Auth already knows whether the email / phone is confirmed;
+    // do not send confirmed users to the verify screen when the profile
+    // row cannot be fetched.
+    if (_authConfirmed(user)) _isVerified = true;
 
     await _loadOnboardingStatus();
 
@@ -288,16 +394,13 @@ class AuthProvider extends ChangeNotifier {
       await _applyProfile(profile);
 
       // Self-heal: Auth confirmed the email/phone but the row lags behind.
-      final authConfirmed =
-          user.emailConfirmedAt != null || user.phoneConfirmedAt != null;
-      if (authConfirmed && !_isVerified) {
+      if (_authConfirmed(user) && profile['isVerified'] != true) {
         try {
           await _db.updateDocument(
             collectionId: AppConfig.usersCollection,
             documentId: user.id,
             data: {'isVerified': true},
           );
-          _isVerified = true;
         } on Exception catch (e) {
           developer.log('Failed to sync verification: $e');
         }
@@ -322,12 +425,25 @@ class AuthProvider extends ChangeNotifier {
     _syncPushIdentity(user.id, profile);
 
     _phoneNumber = await _storage.getPhoneNumber();
+    // (Re)start the inactivity timeout for this session.
+    await _sessionManager.extendSession();
     _isInitialized = true;
     notifyListeners();
+    if (isNewUser) {
+      for (final listener in List.of(_signInListeners)) {
+        try {
+          listener();
+        } on Exception catch (e) {
+          developer.log('Sign-in listener error: $e', name: 'AuthProvider');
+        }
+      }
+    }
   }
 
   /// Identifies this device to OneSignal with the user id and targeting
   /// tags. The role tag is the effective role (what the database grants).
+  /// Without a profile row (fetch failed) only the identity is synced: the
+  /// role is unknown, and tagging it as `user` would drop staff targeting.
   void _syncPushIdentity(String uid, Map<String, dynamic>? profile) {
     unawaited(
       NotificationService().onUserSignedIn(
@@ -337,6 +453,7 @@ class AuthProvider extends ChangeNotifier {
         state: profile?['state'] as String?,
         ward: profile?['ward'] as String?,
         monitoringZone: profile?['monitoringZone'] as String?,
+        updateTags: profile != null,
       ),
     );
   }
@@ -355,7 +472,8 @@ class AuthProvider extends ChangeNotifier {
       await _storage.saveUserRole(roleStr);
     }
     final approved = data['isApproved'] as bool? ?? false;
-    final verified = data['isVerified'] as bool? ?? false;
+    final verified =
+        (data['isVerified'] as bool? ?? false) || _authConfirmed(_currentUser);
     if (_isApproved != approved) {
       _isApproved = approved;
       changed = true;
@@ -372,6 +490,11 @@ class AuthProvider extends ChangeNotifier {
     final ward = data['ward'] as String?;
     if (_ward != ward) {
       _ward = ward;
+      changed = true;
+    }
+    final lga = data['lga'] as String?;
+    if (_lga != lga) {
+      _lga = lga;
       changed = true;
     }
     return changed;
@@ -503,7 +626,10 @@ class AuthProvider extends ChangeNotifier {
       notifyListeners();
 
       // Sign out any stale session
-      if (_db.getCurrentUser() != null) await _db.logout();
+      if (_db.getCurrentUser() != null) {
+        await _db.logout();
+        _resetUserState();
+      }
 
       final normalisedEmail = email.trim().toLowerCase();
       if (ndpaPolicyVersion != null) {
@@ -642,11 +768,11 @@ class AuthProvider extends ChangeNotifier {
         throw AuthException(rateLimitResult.userMessage);
       }
 
-      // Clear stale state
+      // Clear stale state. The `signedOut` event of this logout may arrive
+      // after the new session exists (and is then ignored), so reset the
+      // previous user's state here.
       if (_db.getCurrentUser() != null) await _db.logout();
-      _currentUser = null;
-      _isAuthenticated = false;
-      _userRole = null;
+      _resetUserState();
 
       final deviceFingerprint = await _fingerprintService.generateFingerprint();
       final deviceName = await _fingerprintService.getDeviceName();
@@ -787,9 +913,13 @@ class AuthProvider extends ChangeNotifier {
   /// registering: it becomes the new user's metadata, from which the
   /// database creates the profile. Without it only existing accounts (or a
   /// registration started earlier in this session) can sign in.
+  ///
+  /// With [loginOnly] (sign-in from the login screen) no account is ever
+  /// created: an unknown number is rejected.
   Future<bool> sendOtpForPhone(
     String phone, {
     Map<String, dynamic>? registrationData,
+    bool loginOnly = false,
   }) async {
     try {
       _isLoading = true;
@@ -805,7 +935,9 @@ class AuthProvider extends ChangeNotifier {
         throw AuthException('Invalid phone number.');
       }
 
-      if (registrationData != null) {
+      if (loginOnly) {
+        _pendingPhoneMetadata = null;
+      } else if (registrationData != null) {
         _pendingPhoneMetadata = _signUpMetadata(
           name: registrationData['name'] as String?,
           role: registrationData['role'] as UserRole?,
@@ -1177,8 +1309,10 @@ class AuthProvider extends ChangeNotifier {
 
   // ─────────────────────────── Session ─────────────────────────────────────
 
+  /// Pushes the inactivity timeout forward (called on pointer events and
+  /// route changes from the app root).
   void recordActivity() {
-    if (_isAuthenticated) _sessionManager.recordActivity();
+    if (_isAuthenticated && !_isLocked) _sessionManager.recordActivity();
   }
 
   Future<bool> validateSession() => _isServerSessionValid();
@@ -1236,23 +1370,11 @@ class AuthProvider extends ChangeNotifier {
 
       await _storage.clearAll(keepPreferences: true);
 
-      _signInFuture = null;
-      _signInUid = null;
-      _isAuthenticated = false;
-      _isLocked = false;
-      _userRole = null;
-      _currentUser = null;
-      _phoneNumber = null;
-      _isApproved = null;
-      _isVerified = false;
-      _ward = null;
-      _accountDisabled = false;
+      _resetUserState();
       _isLoading = false;
       notifyListeners();
     } on Exception catch (e) {
-      _isAuthenticated = false;
-      _isLocked = false;
-      _userRole = null;
+      _resetUserState();
       _isLoading = false;
       notifyListeners();
       ErrorHandler.logError(e, context: 'AuthProvider.logout');
@@ -1279,6 +1401,7 @@ class AuthProvider extends ChangeNotifier {
 
   @override
   void dispose() {
+    _initTimer?.cancel();
     _authSub.cancel();
     _profileSub?.cancel();
     _sessionManager.dispose();

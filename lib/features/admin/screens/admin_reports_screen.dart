@@ -33,30 +33,119 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
     'rejected': Colors.red,
   };
 
-  late final Stream<List<Map<String, dynamic>>> _reportsStream;
+  static const int _pageSize = 50;
+
+  final List<Map<String, dynamic>> _reports = [];
+  bool _loading = false;
+  bool _hasMore = true;
+  String? _error;
+
+  /// Bumped on every reload so responses for a stale filter are dropped.
+  int _generation = 0;
 
   @override
   void initState() {
     super.initState();
-    _reportsStream = SupabaseService().subscribeToCollection(
-      collectionId: AppConfig.reportsCollection,
-    );
+    _reload();
+  }
+
+  Future<void> _reload() {
+    _generation++;
+    setState(() {
+      _reports.clear();
+      _hasMore = true;
+      _error = null;
+      _loading = false;
+    });
+    return _loadMore();
+  }
+
+  /// Loads the next page, newest first. The status filter is applied by the
+  /// server.
+  Future<void> _loadMore() async {
+    if (_loading || !_hasMore) return;
+    final generation = _generation;
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final page = await SupabaseService().listDocuments(
+        collectionId: AppConfig.reportsCollection,
+        queries: [
+          if (_statusFilter != 'all') FQuery.equal('status', _statusFilter),
+          FQuery.orderDesc('submittedAt'),
+        ],
+        limitCount: _pageSize,
+        offset: _reports.length,
+      );
+      if (!mounted || generation != _generation) return;
+      setState(() {
+        final known = _reports.map((r) => r[r'$id']).toSet();
+        _reports.addAll(page.where((r) => !known.contains(r[r'$id'])));
+        _hasMore = page.length == _pageSize;
+      });
+    } on Exception catch (e) {
+      developer.log('Reports load failed: $e', name: 'AdminReportsScreen');
+      if (mounted && generation == _generation) {
+        setState(
+          () => _error =
+              'Could not load reports. You may not have permission to view them.',
+        );
+      }
+    } finally {
+      if (mounted && generation == _generation) {
+        setState(() => _loading = false);
+      }
+    }
+  }
+
+  bool _isAdmin(BuildContext context) =>
+      context.read<AuthProvider>().userRole == UserRole.admin;
+
+  /// Status actions the current user may apply to a report in [status]
+  /// (mirrors guard_report_update: only admins set 'verified' directly;
+  /// moving back to pending goes through the reopen_report RPC).
+  List<String> _allowedActions(
+    BuildContext context,
+    Map<String, dynamic> data,
+  ) {
+    final auth = context.read<AuthProvider>();
+    if (!auth.canManageReportStatus(reporterId: data['userId']?.toString())) {
+      return const [];
+    }
+    final status = data['status'] as String? ?? 'pending';
+    return [
+      if (status != 'approved') 'approved',
+      if (status != 'rejected') 'rejected',
+      if (status != 'verified' && _isAdmin(context)) 'verified',
+      if (status != 'pending') 'pending',
+    ];
   }
 
   Future<void> _updateStatus(String reportId, String newStatus) async {
+    Map<String, dynamic>? updated;
     try {
-      final now = DateTime.now();
-      await SupabaseService().updateDocument(
-        collectionId: AppConfig.reportsCollection,
-        documentId: reportId,
-        data: {
-          'status': newStatus,
-          'updatedBy': SupabaseService().currentUserId,
-          if (newStatus == 'verified') 'verifiedAt': now,
-          if (newStatus == 'approved') 'approvedAt': now,
-          if (newStatus == 'rejected') 'rejectedAt': now,
-        },
-      );
+      if (newStatus == 'pending') {
+        // Reopening clears peer votes; only the RPC may do it.
+        await SupabaseService().client.rpc(
+          'reopen_report',
+          params: {'p_report_id': reportId},
+        );
+      } else {
+        final now = DateTime.now();
+        updated = await SupabaseService().updateDocument(
+          collectionId: AppConfig.reportsCollection,
+          documentId: reportId,
+          data: {
+            'status': newStatus,
+            'updatedBy': SupabaseService().currentUserId,
+            if (newStatus == 'verified') 'verifiedAt': now,
+            if (newStatus == 'approved') 'approvedAt': now,
+            if (newStatus == 'rejected') 'rejectedAt': now,
+          },
+        );
+      }
     } on Exception catch (e) {
       developer.log('Status update failed: $e', name: 'AdminReportsScreen');
       if (mounted) {
@@ -70,11 +159,26 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
       return;
     }
     developer.log('Report $reportId → $newStatus', name: 'AdminReportsScreen');
-    if (mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Report marked as $newStatus')));
-    }
+    if (!mounted) return;
+    setState(() {
+      final i = _reports.indexWhere((r) => r[r'$id'] == reportId);
+      if (i != -1) {
+        if (_statusFilter != 'all' && _statusFilter != newStatus) {
+          _reports.removeAt(i);
+        } else {
+          _reports[i] = updated ?? {..._reports[i], 'status': newStatus};
+        }
+      }
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          newStatus == 'pending'
+              ? 'Report reopened for verification'
+              : 'Report marked as $newStatus',
+        ),
+      ),
+    );
   }
 
   void _showReportDetails(
@@ -94,10 +198,9 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
     final status = data['status'] as String? ?? 'pending';
     // Status changes are refused by the database for tech support (and for
     // staff on their own reports) — mirror guard_report_update.
-    final canChangeStatus = context.read<AuthProvider>().canManageReportStatus(
-      reporterId: data['userId'] as String?,
-    );
-    final createdAt = data['createdAt'];
+    final actions = _allowedActions(context, data);
+    final canChangeStatus = actions.isNotEmpty;
+    final createdAt = data['submittedAt'] ?? data['createdAt'];
     String timeStr = '';
     final dt = parseTimestamp(createdAt);
     if (dt != null) {
@@ -239,7 +342,7 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
                         runSpacing: 8,
                         alignment: WrapAlignment.center,
                         children: [
-                          if (status != 'approved')
+                          if (actions.contains('approved'))
                             ElevatedButton.icon(
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: Colors.green,
@@ -252,7 +355,7 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
                               icon: const Icon(Icons.check, size: 18),
                               label: const Text('Approve'),
                             ),
-                          if (status != 'rejected')
+                          if (actions.contains('rejected'))
                             ElevatedButton.icon(
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: Colors.red,
@@ -265,7 +368,7 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
                               icon: const Icon(Icons.close, size: 18),
                               label: const Text('Reject'),
                             ),
-                          if (status != 'verified')
+                          if (actions.contains('verified'))
                             ElevatedButton.icon(
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: Colors.orange,
@@ -278,14 +381,14 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
                               icon: const Icon(Icons.verified, size: 18),
                               label: const Text('Mark Verified'),
                             ),
-                          if (status != 'pending')
+                          if (actions.contains('pending'))
                             OutlinedButton.icon(
                               onPressed: () {
                                 _updateStatus(id, 'pending');
                                 Navigator.pop(context);
                               },
                               icon: const Icon(Icons.refresh, size: 18),
-                              label: const Text('Reset'),
+                              label: const Text('Reopen (pending)'),
                             ),
                         ],
                       ),
@@ -336,7 +439,11 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
                           labelStyle: TextStyle(
                             color: _statusFilter == s ? Colors.white : null,
                           ),
-                          onSelected: (_) => setState(() => _statusFilter = s),
+                          onSelected: (_) {
+                            if (_statusFilter == s) return;
+                            setState(() => _statusFilter = s);
+                            _reload();
+                          },
                         ),
                       ),
                     )
@@ -345,169 +452,186 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
             ),
           ),
           // ── List ──
-          Expanded(
-            child: StreamBuilder<List<Map<String, dynamic>>>(
-              stream: _reportsStream,
-              builder: (context, snap) {
-                if (snap.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                if (snap.hasError) {
-                  return Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(24),
-                      child: Text(
-                        'Could not load reports. You may not have permission to view them.',
-                        textAlign: TextAlign.center,
-                        style: GoogleFonts.lexend(color: Colors.red),
-                      ),
-                    ),
-                  );
-                }
-                final allDocs = snap.data ?? const <Map<String, dynamic>>[];
-
-                // Client-side filtering
-                final docs = allDocs.where((data) {
-                  if (_statusFilter != 'all') {
-                    final status = data['status'] as String? ?? 'pending';
-                    if (status != _statusFilter) return false;
-                  }
-                  return true;
-                }).toList();
-
-                docs.sort((a, b) {
-                  final aCreatedAt = a['createdAt'];
-                  final bCreatedAt = b['createdAt'];
-
-                  DateTime parseDate(dynamic date) =>
-                      parseTimestamp(date) ??
-                      DateTime.fromMillisecondsSinceEpoch(0);
-
-                  return parseDate(bCreatedAt).compareTo(parseDate(aCreatedAt));
-                });
-
-                if (docs.isEmpty) {
-                  return Center(
-                    child: Text(
-                      'No reports found',
-                      style: GoogleFonts.lexend(color: AppColors.textSecondary),
-                    ),
-                  );
-                }
-                return ListView.builder(
-                  itemCount: docs.length,
-                  itemBuilder: (_, i) {
-                    final d = docs[i];
-                    final id = d['\$id'] as String;
-                    final hazard = d['hazardType'] as String? ?? 'Unknown';
-                    final lga = d['lga'] as String? ?? '';
-                    final ward = d['ward'] as String? ?? '';
-                    final status = d['status'] as String? ?? 'pending';
-                    final severity = d['severity'] as String? ?? '';
-                    final createdAt = d['createdAt'];
-                    String timeStr = '';
-                    final dt = parseTimestamp(createdAt);
-                    if (dt != null) {
-                      timeStr = '${dt.day}/${dt.month}/${dt.year}';
-                    }
-
-                    final statusColor = _statusColors[status] ?? Colors.grey;
-
-                    return Card(
-                      margin: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 4,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: ListTile(
-                        onTap: () => _showReportDetails(context, id, d),
-                        leading: Container(
-                          width: 48,
-                          height: 48,
-                          decoration: BoxDecoration(
-                            color: statusColor.withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Icon(
-                            Icons.report_outlined,
-                            color: statusColor,
-                            size: 24,
-                          ),
-                        ),
-                        title: Text(
-                          hazard,
-                          style: GoogleFonts.lexend(
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        subtitle: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              '$ward, $lga',
-                              style: GoogleFonts.lexend(
-                                fontSize: 12,
-                                color: AppColors.textSecondary,
-                              ),
-                            ),
-                            const SizedBox(height: 2),
-                            Row(
-                              children: [
-                                _chip(status.capitalize(), statusColor),
-                                if (severity.isNotEmpty) ...[
-                                  const SizedBox(width: 4),
-                                  _chip(severity, Colors.purple),
-                                ],
-                                if (timeStr.isNotEmpty) ...[
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    timeStr,
-                                    style: GoogleFonts.lexend(
-                                      fontSize: 10,
-                                      color: AppColors.textSecondary,
-                                    ),
-                                  ),
-                                ],
-                              ],
-                            ),
-                          ],
-                        ),
-                        trailing: PopupMenuButton<String>(
-                          onSelected: (action) => _updateStatus(id, action),
-                          itemBuilder: (_) => [
-                            if (status != 'approved')
-                              const PopupMenuItem(
-                                value: 'approved',
-                                child: Text('✅ Approve'),
-                              ),
-                            if (status != 'rejected')
-                              const PopupMenuItem(
-                                value: 'rejected',
-                                child: Text('❌ Reject'),
-                              ),
-                            if (status != 'verified')
-                              const PopupMenuItem(
-                                value: 'verified',
-                                child: Text('✔️ Mark Verified'),
-                              ),
-                            if (status != 'pending')
-                              const PopupMenuItem(
-                                value: 'pending',
-                                child: Text('🔄 Reset to pending'),
-                              ),
-                          ],
-                        ),
-                        isThreeLine: true,
-                      ),
-                    );
-                  },
-                );
-              },
-            ),
-          ),
+          Expanded(child: _buildList()),
         ],
+      ),
+    );
+  }
+
+  Widget _buildList() {
+    if (_reports.isEmpty) {
+      if (_loading) return const Center(child: CircularProgressIndicator());
+      return RefreshIndicator(
+        onRefresh: _reload,
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(48),
+              child: Column(
+                children: [
+                  Text(
+                    _error ?? 'No reports found',
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.lexend(
+                      color: _error != null
+                          ? Colors.red
+                          : AppColors.textSecondary,
+                    ),
+                  ),
+                  if (_error != null) ...[
+                    const SizedBox(height: 12),
+                    OutlinedButton(
+                      onPressed: _reload,
+                      child: const Text('Retry'),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: _reload,
+      child: ListView.builder(
+        physics: const AlwaysScrollableScrollPhysics(),
+        itemCount: _reports.length + 1,
+        itemBuilder: (_, i) {
+          if (i == _reports.length) return _buildFooter();
+          return _buildReportTile(_reports[i]);
+        },
+      ),
+    );
+  }
+
+  Widget _buildFooter() {
+    if (_loading) {
+      return const Padding(
+        padding: EdgeInsets.all(16),
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+    if (_error != null) {
+      return Padding(
+        padding: const EdgeInsets.all(16),
+        child: Center(
+          child: TextButton(
+            onPressed: _loadMore,
+            child: const Text('Could not load more. Tap to retry.'),
+          ),
+        ),
+      );
+    }
+    if (!_hasMore) return const SizedBox(height: 24);
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Center(
+        child: OutlinedButton.icon(
+          onPressed: _loadMore,
+          icon: const Icon(Icons.expand_more),
+          label: const Text('Load more'),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildReportTile(Map<String, dynamic> d) {
+    final id = d[r'$id'] as String;
+    final hazard = d['hazardType'] as String? ?? 'Unknown';
+    final lga = d['lga'] as String? ?? '';
+    final ward = d['ward'] as String? ?? '';
+    final status = d['status'] as String? ?? 'pending';
+    final severity = d['severity'] as String? ?? '';
+    String timeStr = '';
+    final dt = parseTimestamp(d['submittedAt'] ?? d['createdAt']);
+    if (dt != null) {
+      timeStr = '${dt.day}/${dt.month}/${dt.year}';
+    }
+
+    final statusColor = _statusColors[status] ?? Colors.grey;
+    final actions = _allowedActions(context, d);
+
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      child: ListTile(
+        onTap: () => _showReportDetails(context, id, d),
+        leading: Container(
+          width: 48,
+          height: 48,
+          decoration: BoxDecoration(
+            color: statusColor.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Icon(Icons.report_outlined, color: statusColor, size: 24),
+        ),
+        title: Text(
+          hazard,
+          style: GoogleFonts.lexend(fontWeight: FontWeight.w600),
+        ),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              [ward, lga].where((s) => s.isNotEmpty).join(', '),
+              style: GoogleFonts.lexend(
+                fontSize: 12,
+                color: AppColors.textSecondary,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Row(
+              children: [
+                _chip(status.capitalize(), statusColor),
+                if (severity.isNotEmpty) ...[
+                  const SizedBox(width: 4),
+                  _chip(severity, Colors.purple),
+                ],
+                if (timeStr.isNotEmpty) ...[
+                  const SizedBox(width: 4),
+                  Text(
+                    timeStr,
+                    style: GoogleFonts.lexend(
+                      fontSize: 10,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ],
+        ),
+        trailing: actions.isEmpty
+            ? null
+            : PopupMenuButton<String>(
+                onSelected: (action) => _updateStatus(id, action),
+                itemBuilder: (_) => [
+                  if (actions.contains('approved'))
+                    const PopupMenuItem(
+                      value: 'approved',
+                      child: Text('Approve'),
+                    ),
+                  if (actions.contains('rejected'))
+                    const PopupMenuItem(
+                      value: 'rejected',
+                      child: Text('Reject'),
+                    ),
+                  if (actions.contains('verified'))
+                    const PopupMenuItem(
+                      value: 'verified',
+                      child: Text('Mark Verified'),
+                    ),
+                  if (actions.contains('pending'))
+                    const PopupMenuItem(
+                      value: 'pending',
+                      child: Text('Reopen (reset to pending)'),
+                    ),
+                ],
+              ),
+        isThreeLine: true,
       ),
     );
   }

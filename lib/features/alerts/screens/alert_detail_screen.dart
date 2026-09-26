@@ -3,9 +3,8 @@ import 'package:climate_app/core/utils/error_handler.dart';
 import 'package:climate_app/core/services/peer_verification_service.dart';
 import 'package:climate_app/core/services/supabase_service.dart';
 
+import 'package:climate_app/features/alerts/screens/alert_severity.dart';
 import 'package:climate_app/features/auth/providers/auth_provider.dart';
-import 'package:climate_app/features/reporting/providers/reporting_provider.dart'
-    show normalizeSeverity;
 
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -81,21 +80,12 @@ class _AlertDetailScreenState extends State<AlertDetailScreen> {
   Color get _severityColor {
     final c = widget.alert['color'];
     if (c is Color) return c;
-    switch (normalizeSeverity(_severity)) {
-      case 'low':
-        return AppColors.successGreen;
-      case 'medium':
-        return Colors.orange;
-      case 'high':
-        return Colors.deepOrange;
-      default:
-        return AppColors.primaryRed;
-    }
+    return alertSeverityColor(_severity);
   }
 
   IconData get _icon {
     final i = widget.alert['icon'];
-    return i is IconData ? i : Icons.warning;
+    return i is IconData ? i : alertSeverityIcon(_severity);
   }
 
   void _close() {
@@ -148,24 +138,36 @@ class _AlertDetailScreenState extends State<AlertDetailScreen> {
             : _commentController.text.trim(),
       );
 
-      if (mounted && result['success'] == true) {
-        setState(() => _hasVerified = true);
-
+      if (!mounted) return;
+      if (result['success'] != true) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              result['message'] ?? 'Verification submitted successfully',
+              result['message']?.toString() ??
+                  'Your verification could not be recorded.',
             ),
-            backgroundColor: isConfirmed ? Colors.green : Colors.orange,
-            duration: const Duration(seconds: 3),
+            backgroundColor: Colors.red,
           ),
         );
-
-        // Wait a bit then go back
-        Future.delayed(const Duration(seconds: 2), () {
-          if (mounted) _close();
-        });
+        return;
       }
+      setState(() => _hasVerified = true);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            result['message']?.toString() ??
+                'Verification submitted successfully',
+          ),
+          backgroundColor: isConfirmed ? Colors.green : Colors.orange,
+          duration: const Duration(seconds: 3),
+        ),
+      );
+
+      // Wait a bit then go back
+      Future.delayed(const Duration(seconds: 2), () {
+        if (mounted) _close();
+      });
     } on Exception catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -197,6 +199,7 @@ class _AlertDetailScreenState extends State<AlertDetailScreen> {
         auth.canVoteOn(
           reporterId: _str(['reporterId']),
           reportWard: _str(['ward']),
+          reportLga: _str(['lga']),
         );
     final description = _str(['description', 'message']);
 
@@ -262,7 +265,7 @@ class _AlertDetailScreenState extends State<AlertDetailScreen> {
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              _severity ?? 'Normal Severity',
+                              alertSeverityLabel(_severity),
                               style: GoogleFonts.lexend(
                                 fontSize: 14,
                                 color: severityColor,

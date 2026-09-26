@@ -1,4 +1,6 @@
+import 'package:climate_app/core/constants/hazards.dart';
 import 'package:climate_app/core/services/supabase_service.dart';
+import 'package:climate_app/features/verification/providers/reports_status_provider.dart';
 import 'package:climate_app/core/utils/error_handler.dart';
 import 'package:climate_app/core/constants/app_config.dart';
 import 'package:climate_app/core/theme/app_colors.dart';
@@ -37,23 +39,50 @@ class _VerificationListScreenState extends State<VerificationListScreen> {
     });
 
     try {
-      final currentUserId = context.read<AuthProvider>().currentUser?.id;
+      final auth = context.read<AuthProvider>();
+      final statusProvider = context.read<ReportsStatusProvider>();
+      final currentUserId = auth.currentUser?.id;
       final db = SupabaseService();
 
-      final queries = <QueryFilter>[FQuery.equal('status', 'pending')];
+      final queries = <QueryFilter>[
+        FQuery.equal('status', 'pending'),
+        FQuery.orderDesc('submittedAt'),
+      ];
       if (currentUserId != null) {
         queries.add(FQuery.notEqual('userId', currentUserId));
       }
 
-      final docs = await db.listDocuments(
-        collectionId: AppConfig.reportsCollection,
-        queries: queries,
-        limitCount: 50,
-      );
+      // Own votes (one query, cached) so already-voted reports are hidden.
+      final votesFuture = statusProvider.loadMyVotes(force: true);
+      final docs = <Map<String, dynamic>>[];
+      const page = 100;
+      while (docs.length < 1000) {
+        final batch = await db.listDocuments(
+          collectionId: AppConfig.reportsCollection,
+          queries: queries,
+          limitCount: page,
+          offset: docs.length,
+        );
+        docs.addAll(batch);
+        if (batch.length < page) break;
+      }
+      await votesFuture;
+
+      // Only reports this user may still vote on (mirrors the database:
+      // never one's own, EWMs only in their own LGA and ward).
+      final votable = docs.where((d) {
+        final id = (d['id'] ?? d['\$id'])?.toString() ?? '';
+        return !statusProvider.hasVotedOn(id) &&
+            auth.canVoteOn(
+              reporterId: d['userId'] as String?,
+              reportWard: d['ward'] as String?,
+              reportLga: d['lga'] as String?,
+            );
+      }).toList();
 
       if (mounted) {
         setState(() {
-          _reports = docs;
+          _reports = votable;
           _isLoading = false;
         });
       }
@@ -88,9 +117,9 @@ class _VerificationListScreenState extends State<VerificationListScreen> {
       case 'critical':
         return Colors.red;
       case 'high':
-        return Colors.orange;
+        return Colors.deepOrange;
       case 'medium':
-        return Colors.amber;
+        return Colors.amber.shade700;
       case 'low':
         return Colors.green;
       default:
@@ -177,7 +206,7 @@ class _VerificationListScreenState extends State<VerificationListScreen> {
                 separatorBuilder: (_, _) => const SizedBox(height: 8),
                 itemBuilder: (context, index) {
                   final report = _reports[index];
-                  final hazard = report['hazardType'] ?? 'Unknown Hazard';
+                  final hazard = Hazard.labelFor(report['hazardType']);
                   final severity = report['severity'] as String?;
                   final lga = report['lga'] ?? '';
                   final state = report['state'] ?? '';
@@ -207,7 +236,7 @@ class _VerificationListScreenState extends State<VerificationListScreen> {
                           borderRadius: BorderRadius.circular(10),
                         ),
                         child: Icon(
-                          Icons.warning_amber_rounded,
+                          Hazard.iconFor(report['hazardType']),
                           color: _severityColor(severity),
                         ),
                       ),

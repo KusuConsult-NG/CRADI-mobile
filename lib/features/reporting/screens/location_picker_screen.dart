@@ -88,37 +88,56 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
     });
   }
 
+  /// Pre-selects the dropdowns from the profile. Every pre-selected value
+  /// must be one of the dropdown's items (a DropdownButtonFormField asserts
+  /// otherwise), so values are validated against the MVP location data;
+  /// blank or unknown values are left unselected.
   void _loadProfileLocation() {
-    try {
-      final profile = context.read<ProfileProvider>();
-      // Prefer monitoring zone over profile state for report location
-      final preferredState = profile.monitoringZone ?? profile.state;
-      if (preferredState != null && profile.lga != null) {
-        setState(() {
-          _selectedState = preferredState;
-          _selectedLGA = profile.lga;
-        });
+    final profile = context.read<ProfileProvider>();
+    final reporting = context.read<ReportingProvider>();
 
-        // Also update reporting provider if it's empty
-        final reporting = context.read<ReportingProvider>();
-        if (reporting.lga == null) {
-          reporting.setLGA(profile.lga!);
-          // Set ward if it is available in profile (even if it normally isn't yet, keeping it safe)
-          if (profile.ward != null) {
-            reporting.setWard(profile.ward!);
-          } else {
-            reporting.setWard('Unknown');
-          }
-        }
-      } else if (preferredState != null) {
-        // Only state/zone known, no LGA
-        setState(() {
-          _selectedState = preferredState;
-        });
-      }
-    } on Exception {
-      // ignore
+    String? clean(String? v) {
+      final t = v?.trim();
+      return (t == null || t.isEmpty) ? null : t;
     }
+
+    String? match(String? value, List<String> options) {
+      final v = clean(value)?.toLowerCase();
+      if (v == null) return null;
+      for (final o in options) {
+        if (o.toLowerCase() == v) return o;
+      }
+      return null;
+    }
+
+    final states = MVPLocationsData.getAllStates();
+    // A report already in progress wins over the profile.
+    final zone = clean(profile.monitoringZone);
+    final state =
+        match(reporting.state, states) ??
+        match(profile.state, states) ??
+        // Monitoring zones look like "Benue State" or "Makurdi, Benue".
+        match(zone?.replaceAll(RegExp(r'\s+State$'), ''), states) ??
+        match(zone?.split(',').last, states);
+    final lga = state == null
+        ? null
+        : match(
+            reporting.lga ?? profile.lga,
+            MVPLocationsData.getLGAsForState(state),
+          );
+    final ward = lga == null
+        ? null
+        : match(
+            reporting.ward ?? profile.ward,
+            MVPLocationsData.getWardsForLGA(lga, state: state),
+          );
+
+    setState(() {
+      _selectedState = state;
+      _selectedLGA = lga;
+      _selectedWard = ward;
+    });
+    // The provider is only updated from explicit selections / Confirm.
   }
 
   Future<void> _fetchCurrentLocation() async {
@@ -309,14 +328,12 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
         point.longitude,
       );
       if (mounted) {
+        // Display only: the report's LGA / ward come from the dropdowns
+        // (reverse-geocoded names often do not match the INEC lists).
         setState(() {
           _lga = details['lga'] ?? 'Unknown LGA';
           _ward = details['ward'] ?? 'Unknown Ward';
         });
-
-        // Optionally update provider LGA/Ward if we want the map to drive the report data
-        context.read<ReportingProvider>().setLGA(_lga);
-        context.read<ReportingProvider>().setWard(_ward);
       }
     } on Exception {
       // ignore
@@ -864,6 +881,11 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                               _selectedLGA = null; // Reset LGA
                               _selectedWard = null; // Reset ward
                             });
+                            if (value != null) {
+                              context.read<ReportingProvider>().setReportState(
+                                value,
+                              );
+                            }
                             // Try to move map to State center if possible (or just wait for LGA)
                             if (value != null) {
                               _updateMapToSelectedLocation(
@@ -1013,7 +1035,10 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                           ),
                           items: _selectedLGA == null
                               ? []
-                              : MVPLocationsData.getWardsForLGA(_selectedLGA!)
+                              : MVPLocationsData.getWardsForLGA(
+                                      _selectedLGA!,
+                                      state: _selectedState,
+                                    )
                                     .map(
                                       (ward) => DropdownMenuItem(
                                         value: ward,
@@ -1044,6 +1069,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                                         MVPLocationsData.getLocationString(
                                           ward: value,
                                           lga: _selectedLGA!,
+                                          state: _selectedState,
                                         );
                                     context
                                         .read<ReportingProvider>()
@@ -1075,6 +1101,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                                     MVPLocationsData.getLocationString(
                                       ward: _selectedWard!,
                                       lga: _selectedLGA!,
+                                      state: _selectedState,
                                     ),
                                     style: GoogleFonts.lexend(
                                       fontSize: 13,
@@ -1139,6 +1166,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                               // Try to match ward if LGA found
                               final wards = MVPLocationsData.getWardsForLGA(
                                 matchedLGA,
+                                state: _selectedState,
                               );
                               String matchedWard = '';
                               if (_ward != 'Loading...' &&
@@ -1320,10 +1348,33 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                     return;
                   }
 
+                  final reporting = context.read<ReportingProvider>();
+
                   // Sync Severity
-                  context.read<ReportingProvider>().setSeverity(
+                  reporting.setSeverity(
                     _severityLevels[_severityValue.toInt()]!['value'] as String,
                   );
+
+                  // The dropdown selection is the report's location (never
+                  // the reverse-geocoded map position).
+                  reporting
+                    ..setReportState(_selectedState!)
+                    ..setLGA(_selectedLGA!)
+                    ..setWard(_selectedWard!);
+                  final details = reporting.locationDetails;
+                  if (details == null ||
+                      details.isEmpty ||
+                      RegExp(
+                        r'^-?\d+(\.\d+)?,\s*-?\d+(\.\d+)?$',
+                      ).hasMatch(details)) {
+                    reporting.setLocationDetails(
+                      MVPLocationsData.getLocationString(
+                        ward: _selectedWard!,
+                        lga: _selectedLGA!,
+                        state: _selectedState,
+                      ),
+                    );
+                  }
 
                   // Sync Location (already set via dropdowns)
                   // Also sync GPS coordinates if available

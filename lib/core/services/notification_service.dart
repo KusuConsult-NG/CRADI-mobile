@@ -98,20 +98,16 @@ class NotificationService {
         OneSignal.Notifications.addClickListener(_onNotificationClicked);
         _pushEnabled = true;
 
-        final granted = await OneSignal.Notifications.requestPermission(true);
-        if (!granted) {
-          developer.log(
-            'User declined notification permissions',
-            name: 'NotificationService',
-          );
-        }
+        // Not awaited: the permission dialog can stay open indefinitely and
+        // must not hold back initialization or identifying the user.
+        unawaited(_requestPermission());
       }
 
       _initialized = true;
       _updateUnreadCount();
 
       // A user signed in while we were initializing — identify them now.
-      if (_userId != null) await _syncSignedInUser();
+      if (_userId != null) await _serialized(_syncSignedInUser);
 
       developer.log(
         'Notifications initialized (push: $_pushEnabled)',
@@ -120,6 +116,23 @@ class NotificationService {
     } on Exception catch (e) {
       developer.log(
         'Notification initialization error: $e',
+        name: 'NotificationService',
+      );
+    }
+  }
+
+  Future<void> _requestPermission() async {
+    try {
+      final granted = await OneSignal.Notifications.requestPermission(true);
+      if (!granted) {
+        developer.log(
+          'User declined notification permissions',
+          name: 'NotificationService',
+        );
+      }
+    } on Exception catch (e) {
+      developer.log(
+        'Permission request error: $e',
         name: 'NotificationService',
       );
     }
@@ -170,9 +183,11 @@ class NotificationService {
 
   /// Maps a push payload (`additionalData`) to an app route.
   ///
-  /// Backend types: verification_request, report_status, validated_alert,
-  /// admin_alert, escalation_auto (ids arrive as `report_id` / `alert_id`).
-  /// Older camelCase keys and types are still understood.
+  /// Backend types: verification_request, report_status, escalation,
+  /// escalation_auto, validated_alert, admin_alert (ids arrive as
+  /// `report_id` / `alert_id`). `validated_alert` carries the validated
+  /// report's `report_id` and opens that report. Older camelCase keys and
+  /// types are still understood.
   @visibleForTesting
   static String routeForData(Map<String, dynamic> data) {
     String pick(List<String> keys) {
@@ -190,11 +205,15 @@ class NotificationService {
     switch (type) {
       case 'verification_request':
       case 'report_status':
+      case 'escalation':
       case 'escalation_auto':
       case 'report':
       case 'verification':
         return reportId.isNotEmpty ? '/report/$reportId' : '/reports-status';
       case 'validated_alert':
+        final validatedReport = pick(['report_id', 'reportId']);
+        if (validatedReport.isNotEmpty) return '/report/$validatedReport';
+        return alertId.isNotEmpty ? '/alert/$alertId' : '/alerts';
       case 'admin_alert':
       case 'alert':
         return alertId.isNotEmpty ? '/alert/$alertId' : '/alerts';
@@ -249,8 +268,24 @@ class NotificationService {
     };
   }
 
+  /// OneSignal login / logout / tag calls run one at a time, in call order,
+  /// so a logout for a previous user can never land after the login of the
+  /// next one.
+  Future<void> _opChain = Future<void>.value();
+
+  Future<void> _serialized(Future<void> Function() op) {
+    final next = _opChain.then((_) => op());
+    _opChain = next.catchError((Object _) {});
+    return next;
+  }
+
+  /// Whether [_baseTags] reflect the user's profile (false when the profile
+  /// could not be loaded: the existing tags are left untouched).
+  bool _tagsKnown = false;
+
   /// Call after a user signs in (from AuthProvider): identifies the device
-  /// with the Supabase user id and sets targeting tags.
+  /// with the Supabase user id and sets targeting tags. With [updateTags]
+  /// false (profile unavailable) only the identity is synced.
   Future<void> onUserSignedIn({
     required String userId,
     String? role,
@@ -258,16 +293,24 @@ class NotificationService {
     String? state,
     String? ward,
     String? monitoringZone,
+    bool updateTags = true,
   }) async {
+    final sameUser = _userId == userId;
     _userId = userId;
-    _baseTags = tagsFor(role: role, lga: lga, state: state, ward: ward);
+    if (updateTags) {
+      _baseTags = tagsFor(role: role, lga: lga, state: state, ward: ward);
+      _tagsKnown = true;
+    } else if (!sameUser) {
+      _baseTags = const {};
+      _tagsKnown = false;
+    }
     final profileZone = _profileProvider?.monitoringZone;
     _zone = (profileZone != null && profileZone.isNotEmpty)
         ? profileZone
         : monitoringZone;
     // If not yet initialized, initialize() will sync once it finishes.
     if (!_initialized) return;
-    await _syncSignedInUser();
+    await _serialized(_syncSignedInUser);
   }
 
   /// Call after the user signs out: detaches the device from the user so it
@@ -276,14 +319,23 @@ class NotificationService {
     final wasSignedIn = _userId != null;
     _userId = null;
     _baseTags = const {};
+    _tagsKnown = false;
     _zone = null;
-    _appliedTags = const {};
     if (!_pushEnabled || !wasSignedIn) return;
-    try {
-      await OneSignal.logout();
-    } on Exception catch (e) {
-      developer.log('OneSignal logout error: $e', name: 'NotificationService');
-    }
+    await _serialized(() async {
+      // A new user signed in meanwhile: their login replaces the identity;
+      // logging out now would detach them.
+      if (_userId != null) return;
+      _appliedTags = const {};
+      try {
+        await OneSignal.logout();
+      } on Exception catch (e) {
+        developer.log(
+          'OneSignal logout error: $e',
+          name: 'NotificationService',
+        );
+      }
+    });
   }
 
   Future<void> _syncSignedInUser() async {
@@ -291,7 +343,7 @@ class NotificationService {
     if (!_pushEnabled || userId == null) return;
     try {
       await OneSignal.login(userId);
-      await _applyTags();
+      if (_tagsKnown) await _applyTags();
     } on Exception catch (e) {
       developer.log(
         'OneSignal login/tag error: $e',
@@ -322,12 +374,15 @@ class NotificationService {
 
   /// Re-apply tags after the user changes their monitoring zone.
   Future<void> updateZoneSubscriptions() async {
-    if (!_pushEnabled || _userId == null) return;
-    try {
-      await _applyTags();
-    } on Exception catch (e) {
-      developer.log('OneSignal tag error: $e', name: 'NotificationService');
-    }
+    if (!_pushEnabled || _userId == null || !_tagsKnown) return;
+    await _serialized(() async {
+      if (_userId == null || !_tagsKnown) return;
+      try {
+        await _applyTags();
+      } on Exception catch (e) {
+        developer.log('OneSignal tag error: $e', name: 'NotificationService');
+      }
+    });
   }
 
   // ─────────────────────────── Local history ───────────────────────────────

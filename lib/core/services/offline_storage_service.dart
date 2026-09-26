@@ -1,10 +1,57 @@
-import 'package:hive_flutter/hive_flutter.dart';
-import 'package:climate_app/core/services/hive_encryption_service.dart';
+import 'dart:async';
 import 'dart:developer' as developer;
 import 'dart:io';
-import 'package:path_provider/path_provider.dart';
+
+import 'package:hive_flutter/hive_flutter.dart';
+import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as path;
+import 'package:path_provider/path_provider.dart';
+import 'package:supabase_flutter/supabase_flutter.dart'
+    show AuthRetryableFetchException, PostgrestException;
+
+import 'package:climate_app/core/services/hive_encryption_service.dart';
 import 'package:climate_app/core/services/supabase_service.dart';
+
+/// Thrown when an online submission could not reach the server and the
+/// payload was saved to the offline sync queue instead. The data is safe and
+/// will be uploaded automatically; UIs should treat this as "saved".
+class OfflineQueuedException implements Exception {
+  const OfflineQueuedException([
+    this.message = 'Saved offline. It will sync when you are back online.',
+  ]);
+  final String message;
+
+  @override
+  String toString() => message;
+}
+
+/// Postgres error codes that will fail the same way on every retry
+/// (permissions, constraint / type violations, unknown columns).
+const Set<String> _permanentPostgresCodes = {
+  '42501', // insufficient_privilege / RLS
+  '23502', // not_null_violation
+  '23503', // foreign_key_violation
+  '23514', // check_violation
+  '22P02', // invalid_text_representation
+  '22001', // string_data_right_truncation
+  '22007', // invalid_datetime_format
+  '42703', // undefined_column
+  'PGRST204', // unknown column in payload
+};
+
+/// True for connectivity failures worth retrying later (no network, DNS,
+/// timeouts, dropped connections, auth refresh that could not reach the
+/// server).
+bool isTransientNetworkError(Object error) =>
+    error is SocketException ||
+    error is TimeoutException ||
+    error is HandshakeException ||
+    error is http.ClientException ||
+    error is AuthRetryableFetchException;
+
+/// True when the server rejected the payload and retrying cannot succeed.
+bool isPermanentSyncError(Object error) =>
+    error is PostgrestException && _permanentPostgresCodes.contains(error.code);
 
 /// Service for storing draft reports offline using Hive
 /// Allows users to create reports without internet and sync later
@@ -63,6 +110,7 @@ class OfflineStorageService {
     required String locationDetails,
     String? ward,
     String? lga,
+    String? state,
     double? latitude,
     double? longitude,
     String? description,
@@ -84,11 +132,14 @@ class OfflineStorageService {
       'locationDetails': locationDetails,
       'ward': ward,
       'lga': lga,
-      'latitude': latitude ?? 0.0,
-      'longitude': longitude ?? 0.0,
+      'state': state,
+      // Unknown coordinates stay null (never 0,0 — that is in the ocean).
+      'latitude': latitude,
+      'longitude': longitude,
       'description': description ?? '',
-      'reportDateTime':
-          reportDateTime?.toIso8601String() ?? DateTime.now().toIso8601String(),
+      'reportDateTime': (reportDateTime ?? DateTime.now())
+          .toUtc()
+          .toIso8601String(),
       'imagePaths': await _persistImages(imagePaths),
       'createdAt': DateTime.now().toIso8601String(),
       'status': 'draft',
@@ -100,9 +151,9 @@ class OfflineStorageService {
     return draftId;
   }
 
-  /// Get all drafts
+  /// Get all drafts (empty before [initialize] has completed).
   List<Map<String, dynamic>> getAllDrafts() {
-    _ensureInitialized();
+    if (!isInitialized) return [];
 
     return _draftsBox!.values
         .map((draft) => Map<String, dynamic>.from(draft))
@@ -202,6 +253,51 @@ class OfflineStorageService {
     );
   }
 
+  /// Queue item status for a payload the server refused permanently (RLS,
+  /// constraint violations). Such items are never retried automatically;
+  /// the user can retry or discard them from the offline screen.
+  static const String statusRejected = 'rejected';
+
+  /// Owner (report author) of a queue item, when recorded.
+  static String? _itemOwner(Map item) {
+    final data = item['data'];
+    final owner = data is Map ? data['userId'] : item['userId'];
+    return owner is String && owner.isNotEmpty ? owner : null;
+  }
+
+  static bool _belongsTo(Map item, String? userId) {
+    final owner = _itemOwner(item);
+    return owner == null || userId == null || owner == userId;
+  }
+
+  /// Whether a queue item will not be retried automatically any more.
+  static bool isTerminalFailure(Map item) =>
+      item['status'] == statusRejected ||
+      (item['status'] == 'failed' &&
+          ((item['retryCount'] as int?) ?? 0) >= maxSyncAttempts);
+
+  /// Unsynced queue items (pending, failed or rejected) belonging to
+  /// [userId] (all users when null). Safe to call before [initialize].
+  List<Map<String, dynamic>> getUnsyncedItems({String? userId}) {
+    if (!isInitialized) return [];
+    return getSyncQueue()
+        .where((item) => item['status'] != 'synced')
+        .where((item) => _belongsTo(item, userId))
+        .toList();
+  }
+
+  /// Items that will not sync without user action (rejected by the server
+  /// or out of retries). Safe to call before [initialize].
+  List<Map<String, dynamic>> getFailedSyncItems({String? userId}) =>
+      getUnsyncedItems(userId: userId).where(isTerminalFailure).toList();
+
+  /// Removes a queue item (e.g. a permanently rejected submission the user
+  /// chose to discard).
+  Future<void> discardQueueItem(String queueId) async {
+    _ensureInitialized();
+    await _syncQueueBox!.delete(queueId);
+  }
+
   /// Get all items in sync queue
   List<Map<String, dynamic>> getSyncQueue() {
     _ensureInitialized();
@@ -264,13 +360,34 @@ class OfflineStorageService {
     }
   }
 
-  /// Retry failed queue item
+  /// Mark a queue item as permanently rejected by the server; it is kept
+  /// (visible on the offline screen) but no longer retried automatically.
+  Future<void> markAsRejected(String queueId, String error) async {
+    _ensureInitialized();
+
+    final item = _syncQueueBox!.get(queueId);
+    if (item != null) {
+      final updated = Map<String, dynamic>.from(item)
+        ..['status'] = statusRejected
+        ..['lastError'] = error
+        ..['lastAttemptAt'] = DateTime.now().toIso8601String();
+      await _syncQueueBox!.put(queueId, updated);
+      developer.log(
+        'Marked as rejected (permanent): $queueId',
+        name: 'OfflineStorageService',
+      );
+    }
+  }
+
+  /// Retry failed queue item (resets its attempt counter).
   Future<void> retryQueueItem(String queueId) async {
     _ensureInitialized();
 
     final item = _syncQueueBox!.get(queueId);
     if (item != null) {
-      final updated = Map<String, dynamic>.from(item)..['status'] = 'pending';
+      final updated = Map<String, dynamic>.from(item)
+        ..['status'] = 'pending'
+        ..['retryCount'] = 0;
 
       await _syncQueueBox!.put(queueId, updated);
       developer.log(
@@ -291,9 +408,10 @@ class OfflineStorageService {
   ///
   /// This is the single implementation of queue syncing. Concurrent calls
   /// share the same in-flight run. Items that have failed
-  /// [maxSyncAttempts] times are skipped.
+  /// [maxSyncAttempts] times, items the server rejected permanently and
+  /// items queued by another account are skipped.
   ///
-  /// Returns a map with `synced` and `failed` counts.
+  /// Returns a map with `synced`, `failed` and `rejected` counts.
   Future<Map<String, int>> syncPendingReports() {
     return _syncInFlight ??= _doSyncPendingReports().whenComplete(() {
       _syncInFlight = null;
@@ -301,19 +419,29 @@ class OfflineStorageService {
   }
 
   Future<Map<String, int>> _doSyncPendingReports() async {
+    final currentUserId = SupabaseService.isReady
+        ? SupabaseService().currentUserId
+        : null;
     if (!isInitialized) {
       developer.log(
         'syncPendingReports: not initialized, skipping',
         name: 'OfflineStorageService',
       );
-      return {'synced': 0, 'failed': 0};
+      return {'synced': 0, 'failed': 0, 'rejected': 0};
+    }
+    if (currentUserId == null) {
+      // RLS stamps rows with auth.uid(); nothing can sync signed out.
+      return {'synced': 0, 'failed': 0, 'rejected': 0};
     }
 
     final pending = _syncQueueBox!.values
         .where(
           (item) =>
               (item['status'] == 'pending' || item['status'] == 'failed') &&
-              ((item['retryCount'] as int?) ?? 0) < maxSyncAttempts,
+              ((item['retryCount'] as int?) ?? 0) < maxSyncAttempts &&
+              // Items queued by another account would be refused by RLS
+              // (and must never be attributed to this user).
+              _belongsTo(item, currentUserId),
         )
         .toList();
 
@@ -322,7 +450,7 @@ class OfflineStorageService {
         'syncPendingReports: no pending items',
         name: 'OfflineStorageService',
       );
-      return {'synced': 0, 'failed': 0};
+      return {'synced': 0, 'failed': 0, 'rejected': 0};
     }
 
     developer.log(
@@ -333,6 +461,7 @@ class OfflineStorageService {
     final db = SupabaseService();
     int successCount = 0;
     int failCount = 0;
+    int rejectedCount = 0;
 
     for (final rawItem in pending) {
       final item = Map<String, dynamic>.from(rawItem);
@@ -394,8 +523,22 @@ class OfflineStorageService {
         await markAsSynced(queueId);
         successCount++;
       } on Exception catch (e) {
-        await markAsFailed(queueId, e.toString());
-        failCount++;
+        if (SupabaseService.isUniqueViolation(e)) {
+          // Already inserted by an earlier attempt.
+          await markAsSynced(queueId);
+          successCount++;
+          continue;
+        }
+        if (isPermanentSyncError(e)) {
+          await markAsRejected(
+            queueId,
+            e is PostgrestException ? e.message : e.toString(),
+          );
+          rejectedCount++;
+        } else {
+          await markAsFailed(queueId, e.toString());
+          failCount++;
+        }
         developer.log(
           'syncPendingReports: failed item $queueId: $e',
           name: 'OfflineStorageService',
@@ -410,7 +553,11 @@ class OfflineStorageService {
       'syncPendingReports: $successCount/${pending.length} synced successfully',
       name: 'OfflineStorageService',
     );
-    return {'synced': successCount, 'failed': failCount};
+    return {
+      'synced': successCount,
+      'failed': failCount,
+      'rejected': rejectedCount,
+    };
   }
 
   /// Clear synced items from queue (cleanup)
@@ -662,12 +809,16 @@ class OfflineStorageService {
     final synced = _syncQueueBox!.values
         .where((item) => item['status'] == 'synced')
         .length;
+    final rejected = _syncQueueBox!.values
+        .where((item) => item['status'] == statusRejected)
+        .length;
 
     return {
       'totalDrafts': _draftsBox!.length,
       'maxDrafts': _maxDrafts,
       'pendingSync': pending,
       'failedSync': failed,
+      'rejectedSync': rejected,
       'syncedItems': synced,
       'totalQueue': _syncQueueBox!.length,
     };

@@ -129,7 +129,10 @@ class ProfileProvider extends ChangeNotifier {
               _monitoringZone = remoteZone;
               await _storage.write('monitoring_zone', remoteZone);
             } else {
-              _monitoringZone = await _storage.read('monitoring_zone');
+              final storedZone = await _storage.read('monitoring_zone');
+              _monitoringZone = (storedZone != null && storedZone.isNotEmpty)
+                  ? storedZone
+                  : null;
             }
 
             final imageUrl = doc['profileImageUrl'] as String?;
@@ -344,51 +347,71 @@ class ProfileProvider extends ChangeNotifier {
   }
 
   /// Updates the profile location. Returns a user-facing message when the
-  /// server refuses the change (approved staff accounts can only be moved
-  /// by an admin), otherwise null.
+  /// change was not saved, otherwise null.
+  ///
+  /// The columns are NOT NULL, so all three parts must be present. The
+  /// local state only changes once the server accepted the update (there is
+  /// no retry queue for profile edits, so an offline change is not kept).
   Future<String?> updateLocation(
     String? state,
     String? lga,
     String? ward,
   ) async {
-    if (state == _state && lga == _lga && ward == _ward) return null;
-
-    final user = _db.getCurrentUser();
-    if (user != null) {
-      try {
-        await _db.updateDocument(
-          collectionId: AppConfig.usersCollection,
-          documentId: user.id,
-          data: {'state': state, 'lga': lga, 'ward': ward},
-        );
-      } on Exception catch (e) {
-        if (SupabaseService.isPermissionDenied(e) ||
-            e is DocumentNotFoundException) {
-          return 'Your location is managed by an administrator. '
-              'Please ask an admin to change the location of a staff account.';
-        }
-        // Offline / transient: keep the change locally (as before).
-        developer.log('Location sync failed: $e', name: 'ProfileProvider');
-      }
+    final s = state?.trim() ?? '';
+    final l = lga?.trim() ?? '';
+    final w = ward?.trim() ?? '';
+    if (s == (_state ?? '') && l == (_lga ?? '') && w == (_ward ?? '')) {
+      return null;
+    }
+    if (s.isEmpty || l.isEmpty || w.isEmpty) {
+      return 'Please select your state, LGA and ward to update your location.';
     }
 
-    _state = state;
-    _lga = lga;
-    _ward = ward;
-    if (state != null) await _storage.write('profile_state', state);
-    if (lga != null) await _storage.write('profile_lga', lga);
-    if (ward != null) await _storage.write('profile_ward', ward);
-    await _updateLocalState({'state': state, 'lga': lga, 'ward': ward});
+    final user = _db.getCurrentUser();
+    if (user == null) return 'You must be signed in to change your location.';
+    try {
+      await _db.updateDocument(
+        collectionId: AppConfig.usersCollection,
+        documentId: user.id,
+        data: {'state': s, 'lga': l, 'ward': w},
+      );
+    } on Exception catch (e) {
+      if (SupabaseService.isPermissionDenied(e) ||
+          e is DocumentNotFoundException) {
+        return 'Your location is managed by an administrator. '
+            'Please ask an admin to change the location of a staff account.';
+      }
+      developer.log('Location sync failed: $e', name: 'ProfileProvider');
+      return 'Could not update your location. Please check your connection '
+          'and try again.';
+    }
+
+    _state = s;
+    _lga = l;
+    _ward = w;
+    await _storage.write('profile_state', s);
+    await _storage.write('profile_lga', l);
+    await _storage.write('profile_ward', w);
+    await _updateLocalState({'state': s, 'lga': l, 'ward': w});
     notifyListeners();
     return null;
   }
 
+  /// Called after the monitoring zone changed (e.g. to refresh zone-filtered
+  /// report lists). Wired in `main.dart`.
+  void Function(String? zone)? onMonitoringZoneChanged;
+
+  /// Sets the monitoring zone; an empty [zone] means "all zones" (null).
   Future<void> updateMonitoringZone(String zone) async {
-    final effectiveZone = zone.isEmpty ? null : zone;
+    final trimmed = zone.trim();
+    final String? effectiveZone = trimmed.isEmpty ? null : trimmed;
+    final changed = effectiveZone != _monitoringZone;
     _monitoringZone = effectiveZone;
     await _storage.write('monitoring_zone', effectiveZone ?? '');
+    // The column is NOT NULL (default ''): "all zones" is stored as ''.
     await _updateLocalState({'monitoringZone': effectiveZone ?? ''});
     notifyListeners();
+    if (changed) onMonitoringZoneChanged?.call(effectiveZone);
     await _syncToServer({'monitoringZone': effectiveZone ?? ''});
   }
 

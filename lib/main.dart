@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:go_router/go_router.dart';
 import 'package:climate_app/core/router/app_router.dart';
 import 'package:climate_app/core/theme/app_theme.dart';
@@ -27,6 +29,7 @@ import 'package:climate_app/core/services/remote_config_service.dart';
 import 'package:climate_app/core/services/security_service.dart';
 import 'package:climate_app/core/services/supabase_service.dart';
 import 'package:climate_app/core/constants/app_config.dart';
+import 'package:climate_app/core/utils/error_handler.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 
 Future<void> main() async {
@@ -71,8 +74,19 @@ Future<void> _bootstrap() async {
   // Initialize Hive for local data storage
   await Hive.initFlutter();
 
-  // Initialize offline storage service for drafts and sync queue
-  await OfflineStorageService().initialize();
+  // Initialize offline storage service for drafts and sync queue. A failure
+  // (e.g. a corrupted box) must not keep the app from starting; offline
+  // features degrade instead. HiveError is an Error, hence `Object`.
+  try {
+    await OfflineStorageService().initialize();
+  } on Object catch (e, st) {
+    debugPrint('Offline storage initialization failed: $e');
+    ErrorHandler.logError(
+      e,
+      stackTrace: st,
+      context: 'main.OfflineStorageService.initialize',
+    );
+  }
 
   // Set preferred orientations
   SystemChrome.setPreferredOrientations([
@@ -116,6 +130,8 @@ class ClimateApp extends StatefulWidget {
 
 class _ClimateAppState extends State<ClimateApp> {
   GoRouter? _router;
+  AuthProvider? _auth;
+  VoidCallback? _onSignedIn;
 
   @override
   void initState() {
@@ -124,6 +140,31 @@ class _ClimateAppState extends State<ClimateApp> {
     _initializeNotifications();
     // Wire auto-sync: when connectivity is restored, flush the offline queue
     _wireAutoSync();
+    _wireDataRefresh();
+  }
+
+  @override
+  void dispose() {
+    _router?.routerDelegate.removeListener(_recordActivity);
+    final onSignedIn = _onSignedIn;
+    if (onSignedIn != null) _auth?.removeSignInListener(onSignedIn);
+    super.dispose();
+  }
+
+  /// Any interaction or navigation pushes the inactivity timeout forward.
+  void _recordActivity() => _auth?.recordActivity();
+
+  /// Refreshes data that providers loaded before it could be seen:
+  /// alerts fetched before sign-in (RLS returned nothing) and zone-filtered
+  /// report lists after the monitoring zone changes.
+  void _wireDataRefresh() {
+    _auth = context.read<AuthProvider>();
+    final alerts = context.read<AlertsProvider>();
+    final reports = context.read<ReportsStatusProvider>();
+    _onSignedIn = () => unawaited(alerts.fetchAlerts());
+    _auth!.addSignInListener(_onSignedIn!);
+    context.read<ProfileProvider>().onMonitoringZoneChanged = (_) =>
+        unawaited(reports.refreshReports());
   }
 
   void _wireAutoSync() {
@@ -179,10 +220,21 @@ class _ClimateAppState extends State<ClimateApp> {
 
   @override
   Widget build(BuildContext context) {
-    _router ??= createRouter(context);
+    if (_router == null) {
+      _router = createRouter(context);
+      _router!.routerDelegate.addListener(_recordActivity);
+    }
     // Keep NotificationService in sync if router was created after init
     NotificationService().router ??= _router;
 
+    return Listener(
+      behavior: HitTestBehavior.translucent,
+      onPointerDown: (_) => _recordActivity(),
+      child: _buildApp(),
+    );
+  }
+
+  Widget _buildApp() {
     return MaterialApp.router(
       title: 'EWER Mobile - Early Warning System',
       theme: AppTheme.lightTheme,

@@ -1,3 +1,4 @@
+import 'package:climate_app/core/constants/hazards.dart';
 import 'package:climate_app/core/theme/app_colors.dart';
 import 'package:climate_app/core/design/animated_card.dart';
 import 'package:climate_app/core/design/typography.dart';
@@ -388,7 +389,12 @@ class _HomeScreenState extends State<HomeScreen> {
                               2,
                               AppLocalizations.of(context)!.myReports,
                             ),
-                            _buildFilterTab(3, 'Nearby'),
+                            // Plain users can only read their own reports
+                            // (RLS), so a "nearby" feed would always be
+                            // empty for them.
+                            if (context.watch<AuthProvider>().userRole !=
+                                UserRole.user)
+                              _buildFilterTab(3, 'Nearby'),
                           ],
                         ),
                       ),
@@ -734,23 +740,46 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildFeedContent() {
     final statusProvider = context.watch<ReportsStatusProvider>();
+    final auth = context.watch<AuthProvider>();
+    final selected =
+        (_selectedFilterIndex == 3 && auth.userRole == UserRole.user)
+        ? 0
+        : _selectedFilterIndex;
 
-    if (_selectedFilterIndex == 0) {
-      // To Verify
+    if (selected == 0) {
+      // To Verify: pending reports this user may still vote on (never
+      // their own, EWMs only in their LGA + ward, not already voted).
+      final toVerify = statusProvider
+          .getReports(ReportStatus.pending)
+          .where(
+            (r) =>
+                !statusProvider.hasVotedOn(r.id) &&
+                auth.canVoteOn(
+                  reporterId: r.reporterId,
+                  reportWard: r.ward,
+                  reportLga: r.lga,
+                ),
+          )
+          .toList();
       return _buildListFeed(
-        statusProvider.getReports(ReportStatus.pending),
+        toVerify,
         statusProvider.isLoading(ReportStatus.pending),
         'No reports to verify',
+        error: statusProvider.errorFor(ReportStatus.pending),
+        onRetry: () =>
+            statusProvider.fetchReports(status: ReportStatus.pending),
       );
-    } else if (_selectedFilterIndex == 2) {
+    } else if (selected == 2) {
       // My Reports
-      final userId = context.read<AuthProvider>().currentUser?.id;
+      final userId = auth.currentUser?.id;
       return _buildListFeed(
         statusProvider.getReports(null, userId: userId),
         statusProvider.isLoading(null, userId: userId),
         'You haven\'t submitted any reports yet',
+        error: statusProvider.errorFor(null, userId: userId),
+        onRetry: () => statusProvider.fetchReports(userId: userId),
       );
-    } else if (_selectedFilterIndex == 3) {
+    } else if (selected == 3) {
       // Nearby — use same feed but prompt to see full screen
       return Column(
         children: [
@@ -789,6 +818,8 @@ class _HomeScreenState extends State<HomeScreen> {
             statusProvider.getReports(null),
             statusProvider.isLoading(null),
             'No nearby reports',
+            error: statusProvider.errorFor(null),
+            onRetry: () => statusProvider.fetchReports(),
           ),
         ],
       );
@@ -798,6 +829,8 @@ class _HomeScreenState extends State<HomeScreen> {
         statusProvider.getReports(null),
         statusProvider.isLoading(null),
         'No recent alerts',
+        error: statusProvider.errorFor(null),
+        onRetry: () => statusProvider.fetchReports(),
       );
     }
   }
@@ -805,8 +838,10 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildListFeed(
     List<VerificationReport> reports,
     bool isLoading,
-    String emptyMessage,
-  ) {
+    String emptyMessage, {
+    String? error,
+    VoidCallback? onRetry,
+  }) {
     if (isLoading && reports.isEmpty) {
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 20),
@@ -816,6 +851,37 @@ class _HomeScreenState extends State<HomeScreen> {
             ShimmerSkeletons.listTile(),
             ShimmerSkeletons.listTile(),
           ],
+        ),
+      );
+    }
+
+    if (reports.isEmpty && error != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.cloud_off, size: 48, color: Colors.red.shade200),
+              const SizedBox(height: 12),
+              Text(
+                error,
+                style: GoogleFonts.lexend(
+                  fontSize: 14,
+                  color: AppColors.textSecondary,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              if (onRetry != null) ...[
+                const SizedBox(height: 12),
+                TextButton.icon(
+                  onPressed: onRetry,
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('Retry'),
+                ),
+              ],
+            ],
+          ),
         ),
       );
     }
@@ -883,7 +949,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Icon(
-                _getIconData(report.iconName),
+                Hazard.iconFor(report.type),
                 color: _getIconColor(report.iconColor),
                 size: 20,
               ),
@@ -975,38 +1041,10 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  Color _getIconColor(String colorName) {
-    switch (colorName) {
-      case 'orange':
-        return Colors.orange;
-      case 'blue':
-        return Colors.blue;
-      case 'red':
-        return AppColors.errorRed;
-      case 'green':
-        return AppColors.successGreen;
-      default:
-        return Colors.grey;
-    }
-  }
+  Color _getIconColor(String colorName) => SeverityColors.fromName(colorName);
 
   Color _getIconBgColor(String colorName) {
     return _getIconColor(colorName).withValues(alpha: 0.1);
-  }
-
-  IconData _getIconData(String iconName) {
-    switch (iconName) {
-      case 'pest_control':
-        return Icons.pest_control;
-      case 'water_drop':
-        return Icons.water_drop;
-      case 'water':
-        return Icons.water;
-      case 'local_fire_department':
-        return Icons.local_fire_department;
-      default:
-        return Icons.warning;
-    }
   }
 
   Widget _buildSectionHeader(String title, VoidCallback onViewAll) {

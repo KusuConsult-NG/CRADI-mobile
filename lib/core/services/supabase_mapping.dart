@@ -322,6 +322,49 @@ class QueryPlan {
   bool matches(Map<String, dynamic> row) =>
       filters.every((f) => f.matches(row));
 
+  /// Columns that never change once a row exists. Only these may be used as
+  /// the (single) server-side filter of a realtime stream: when a row stops
+  /// matching a filter on a mutable column (e.g. `status`, `is_active`),
+  /// Realtime no longer delivers its updates and the client would keep the
+  /// stale row. Mutable columns are filtered on the client instead.
+  static const Set<String> immutableStreamColumns = {
+    'id',
+    'user_id',
+    'chat_id',
+    'report_id',
+    'verifier_id',
+    'sender_id',
+  };
+
+  /// The filter a realtime stream can apply on the server, if any: an
+  /// equality on an immutable column (or the primary key).
+  ColumnFilter? get streamServerFilter {
+    final pk = SupabaseSchema.primaryKey(table);
+    for (final f in filters) {
+      if (f.op == FilterOp.eq &&
+          f.value != null &&
+          (f.column == pk || immutableStreamColumns.contains(f.column))) {
+        return f;
+      }
+    }
+    return null;
+  }
+
+  /// The ordering a realtime stream can apply on the server (streams take a
+  /// single order column; further orders are applied on the client).
+  ColumnOrder? get streamServerOrder => orders.isEmpty ? null : orders.first;
+
+  /// The limit a realtime stream can apply on the server: only when every
+  /// filter runs on the server and the order is fully server-side —
+  /// otherwise client-side filtering after a server limit would drop rows.
+  int? get streamServerLimit {
+    if (limit == null || orders.length > 1) return null;
+    final server = streamServerFilter;
+    final allServerSide =
+        filters.isEmpty || (filters.length == 1 && filters.first == server);
+    return allServerSide ? limit : null;
+  }
+
   /// Sorts raw rows in place according to [orders].
   void sort(List<Map<String, dynamic>> rows) {
     if (orders.isEmpty) return;

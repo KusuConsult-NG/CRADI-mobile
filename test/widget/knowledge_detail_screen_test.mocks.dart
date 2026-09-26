@@ -52,6 +52,22 @@ class MockKnowledgeProvider extends _i1.Mock implements _i2.KnowledgeProvider {
           as bool);
 
   @override
+  List<Map<String, dynamic>> guidesFor(String? category) =>
+      (super.noSuchMethod(
+            Invocation.method(#guidesFor, [category]),
+            returnValue: <Map<String, dynamic>>[],
+          )
+          as List<Map<String, dynamic>>);
+
+  @override
+  bool isLoadingCategory(String? category) =>
+      (super.noSuchMethod(
+            Invocation.method(#isLoadingCategory, [category]),
+            returnValue: false,
+          )
+          as bool);
+
+  @override
   _i3.Future<void> fetchGuides({String? category}) =>
       (super.noSuchMethod(
             Invocation.method(#fetchGuides, [], {#category: category}),
@@ -61,28 +77,12 @@ class MockKnowledgeProvider extends _i1.Mock implements _i2.KnowledgeProvider {
           as _i3.Future<void>);
 
   @override
-  List<Map<String, dynamic>> searchGuides(String? query, {String? language}) =>
+  List<Map<String, dynamic>> searchGuides(String? query, {String? category}) =>
       (super.noSuchMethod(
-            Invocation.method(#searchGuides, [query], {#language: language}),
+            Invocation.method(#searchGuides, [query], {#category: category}),
             returnValue: <Map<String, dynamic>>[],
           )
           as List<Map<String, dynamic>>);
-
-  @override
-  _i3.Future<void> fetchGuidesByLanguage(
-    String? language, {
-    String? category,
-  }) =>
-      (super.noSuchMethod(
-            Invocation.method(
-              #fetchGuidesByLanguage,
-              [language],
-              {#category: category},
-            ),
-            returnValue: _i3.Future<void>.value(),
-            returnValueForMissingStub: _i3.Future<void>.value(),
-          )
-          as _i3.Future<void>);
 
   @override
   List<String> getDisasterTypes() =>

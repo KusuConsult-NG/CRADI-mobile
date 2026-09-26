@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:climate_app/core/constants/hazards.dart';
 import 'package:climate_app/core/theme/app_colors.dart';
 import 'package:climate_app/features/verification/models/verification_report_model.dart';
 
@@ -202,7 +203,7 @@ class ReportViewScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  report.type,
+                  Hazard.labelFor(report.type),
                   style: GoogleFonts.lexend(
                     fontSize: 13,
                     color: AppColors.textSecondary,
@@ -317,47 +318,7 @@ class ReportViewScreen extends StatelessWidget {
     }
   }
 
-  Color _getHazardColor(String type) {
-    switch (type.toLowerCase()) {
-      case 'flooding':
-      case 'flood':
-        return AppColors.hazardFlood;
-      case 'drought':
-        return AppColors.hazardDrought;
-      case 'fire':
-      case 'wildfire':
-        return AppColors.hazardFire;
-      case 'pest/disease':
-      case 'pest':
-        return AppColors.hazardPest;
-      case 'erosion':
-        return AppColors.hazardErosion;
-      case 'conflict':
-        return Colors.red;
-      default:
-        return Colors.orange;
-    }
-  }
+  Color _getHazardColor(String type) => Hazard.colorFor(type);
 
-  IconData _getHazardIcon(String type) {
-    switch (type.toLowerCase()) {
-      case 'flooding':
-      case 'flood':
-        return Icons.flood;
-      case 'drought':
-        return Icons.wb_sunny;
-      case 'fire':
-      case 'wildfire':
-        return Icons.local_fire_department;
-      case 'pest/disease':
-      case 'pest':
-        return Icons.bug_report;
-      case 'erosion':
-        return Icons.landscape;
-      case 'conflict':
-        return Icons.shield;
-      default:
-        return Icons.warning;
-    }
-  }
+  IconData _getHazardIcon(String type) => Hazard.iconFor(type);
 }

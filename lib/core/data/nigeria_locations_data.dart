@@ -1002,7 +1002,7 @@ class NigeriaLocationsData {
   /// Returns a list of wards for a given state and LGA.
   static List<String> getWardsForLGA(String state, String lga) {
     if (focalStates.contains(state)) {
-      return MVPLocationsData.getWardsForLGASafe(lga);
+      return MVPLocationsData.getWardsForLGASafe(lga, state: state);
     }
     // Fallback for non-focal states if any are required later
     return [];

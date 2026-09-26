@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:go_router/go_router.dart';
+import 'package:climate_app/core/constants/hazards.dart';
 import 'package:climate_app/core/theme/app_colors.dart';
 import 'package:climate_app/features/auth/providers/auth_provider.dart';
 import 'package:climate_app/features/verification/providers/reports_status_provider.dart';
@@ -22,6 +23,12 @@ class NearbyReportsScreen extends StatefulWidget {
 class _NearbyReportsScreenState extends State<NearbyReportsScreen> {
   List<_NearbyEntry> _nearbyReports = [];
   bool _isLoading = true;
+  String? _error;
+
+  /// Plain users may only read their own reports (RLS), so a feed of
+  /// other people's reports is not available to them.
+  bool get _isPlainUser =>
+      context.read<AuthProvider>().userRole == UserRole.user;
 
   @override
   void initState() {
@@ -33,17 +40,26 @@ class _NearbyReportsScreenState extends State<NearbyReportsScreen> {
   static const double _nearbyRadiusKm = 25;
 
   Future<void> _loadNearby() async {
-    setState(() => _isLoading = true);
+    if (_isPlainUser) {
+      setState(() => _isLoading = false);
+      return;
+    }
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
 
     final profile = context.read<ProfileProvider>();
     final uid = context.read<AuthProvider>().currentUser?.id;
 
-    // Fetch all reports
+    // Load every page (the area filter below is client-side, so the first
+    // page alone would miss older nearby reports).
     final provider = context.read<ReportsStatusProvider>();
-    await provider.fetchReports(status: null);
+    await provider.fetchAllPages(status: null, maxRows: 2000);
     final userPosition = await _tryGetUserPosition();
     if (!mounted) return;
     final allReports = provider.getReports(null);
+    final fetchError = provider.errorFor(null);
 
     // Resolve the user's area. Monitoring zones look like
     // "Makurdi, Benue" (LGA, State) or "Benue State".
@@ -111,7 +127,12 @@ class _NearbyReportsScreenState extends State<NearbyReportsScreen> {
       ...withDistance,
       ...entries.where((e) => e.distanceKm == null),
     ];
-    if (mounted) setState(() => _isLoading = false);
+    if (mounted) {
+      setState(() {
+        _isLoading = false;
+        _error = fetchError;
+      });
+    }
   }
 
   /// Best-effort user position without prompting for permission.
@@ -163,6 +184,15 @@ class _NearbyReportsScreenState extends State<NearbyReportsScreen> {
   }
 
   Widget _buildBody() {
+    if (_isPlainUser) {
+      return _buildMessage(
+        icon: Icons.lock_outline,
+        title: 'Not available for your account',
+        message:
+            'Nearby reports are visible to approved monitors and staff. '
+            'You can follow your own reports under My Reports.',
+      );
+    }
     if (_isLoading) {
       return Padding(
         padding: const EdgeInsets.all(16),
@@ -220,6 +250,15 @@ class _NearbyReportsScreenState extends State<NearbyReportsScreen> {
             ],
           ),
         ),
+      );
+    }
+
+    if (_nearbyReports.isEmpty && _error != null) {
+      return _buildMessage(
+        icon: Icons.cloud_off,
+        title: 'Could not load reports',
+        message: _error!,
+        onRetry: _loadNearby,
       );
     }
 
@@ -434,48 +473,55 @@ class _NearbyReportsScreenState extends State<NearbyReportsScreen> {
     }
   }
 
-  Color _getHazardColor(String type) {
-    switch (type.toLowerCase()) {
-      case 'flooding':
-      case 'flood':
-        return AppColors.hazardFlood;
-      case 'drought':
-        return AppColors.hazardDrought;
-      case 'fire':
-      case 'wildfire':
-        return AppColors.hazardFire;
-      case 'pest/disease':
-      case 'pest':
-        return AppColors.hazardPest;
-      case 'erosion':
-        return AppColors.hazardErosion;
-      case 'conflict':
-        return Colors.red;
-      default:
-        return Colors.orange;
-    }
-  }
+  Color _getHazardColor(String type) => Hazard.colorFor(type);
 
-  IconData _getHazardIcon(String type) {
-    switch (type.toLowerCase()) {
-      case 'flooding':
-      case 'flood':
-        return Icons.flood;
-      case 'drought':
-        return Icons.wb_sunny;
-      case 'fire':
-      case 'wildfire':
-        return Icons.local_fire_department;
-      case 'pest/disease':
-      case 'pest':
-        return Icons.bug_report;
-      case 'erosion':
-        return Icons.landscape;
-      case 'conflict':
-        return Icons.shield;
-      default:
-        return Icons.warning;
-    }
+  IconData _getHazardIcon(String type) => Hazard.iconFor(type);
+
+  Widget _buildMessage({
+    required IconData icon,
+    required String title,
+    required String message,
+    VoidCallback? onRetry,
+  }) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(40),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 56, color: Colors.grey.shade400),
+            const SizedBox(height: 20),
+            Text(
+              title,
+              textAlign: TextAlign.center,
+              style: GoogleFonts.lexend(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: AppColors.textPrimary,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: GoogleFonts.lexend(
+                fontSize: 14,
+                color: AppColors.textSecondary,
+                height: 1.5,
+              ),
+            ),
+            if (onRetry != null) ...[
+              const SizedBox(height: 16),
+              ElevatedButton.icon(
+                onPressed: onRetry,
+                icon: const Icon(Icons.refresh),
+                label: const Text('Retry'),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
   }
 }
 

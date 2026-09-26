@@ -291,22 +291,27 @@ class SupabaseService {
     return fromRow(table, result);
   }
 
+  /// Delete a row. Throws [DocumentNotFoundException] when nothing was
+  /// deleted (missing, or refused by RLS — which reports no error).
   Future<void> deleteDocument({
     required String collectionId,
     required String documentId,
   }) async {
     final table = _table(collectionId);
-    await client
+    final deleted = await client
         .from(table)
         .delete()
-        .eq(SupabaseSchema.primaryKey(table), documentId);
+        .eq(SupabaseSchema.primaryKey(table), documentId)
+        .select();
+    if (deleted.isEmpty) throw DocumentNotFoundException(table, documentId);
   }
 
   /// Realtime list of rows matching [queries].
   ///
-  /// Supabase streams accept a single server-side filter, so the first
-  /// filter is applied by the server and the rest (plus ordering and limit)
-  /// are applied on the client.
+  /// Supabase streams accept a single server-side filter, one order and a
+  /// limit. The server filter is only ever an equality on an immutable
+  /// column (see [QueryPlan.streamServerFilter]); every filter, the full
+  /// ordering and the limit are (re)applied on the client.
   Stream<List<Map<String, dynamic>>> subscribeToCollection({
     required String collectionId,
     List<QueryFilter>? queries,
@@ -316,27 +321,16 @@ class SupabaseService {
     final pk = SupabaseSchema.primaryKey(plan.table);
     final base = client.from(plan.table).stream(primaryKey: [pk]);
 
-    final serverFilter = plan.filters
-        .where((f) => f.value != null && f.op != FilterOp.contains)
-        .firstOrNull;
-    final Stream<List<Map<String, dynamic>>> source;
-    if (serverFilter == null) {
-      source = base;
-    } else {
-      final v = serverFilter.value!;
-      switch (serverFilter.op) {
-        case FilterOp.eq:
-          source = base.eq(serverFilter.column, v);
-        case FilterOp.neq:
-          source = base.neq(serverFilter.column, v);
-        case FilterOp.gt:
-          source = base.gt(serverFilter.column, v);
-        case FilterOp.lt:
-          source = base.lt(serverFilter.column, v);
-        case FilterOp.contains:
-          source = base;
-      }
+    final serverFilter = plan.streamServerFilter;
+    SupabaseStreamBuilder source = serverFilter == null
+        ? base
+        : base.eq(serverFilter.column, serverFilter.value!);
+    final order = plan.streamServerOrder;
+    if (order != null) {
+      source = source.order(order.column, ascending: order.ascending);
     }
+    final serverLimit = plan.streamServerLimit;
+    if (serverLimit != null) source = source.limit(serverLimit);
 
     return source.map((rows) {
       final filtered = rows.where(plan.matches).toList();
@@ -414,8 +408,22 @@ class SupabaseService {
       bucketId,
       storagePath,
       bytes,
-      contentType ?? 'application/octet-stream',
+      contentType ?? imageMimeTypeForPath(file.path),
     );
+  }
+
+  /// Image MIME type from a file extension (the buckets only accept
+  /// images); unknown extensions default to `image/jpeg`.
+  static String imageMimeTypeForPath(String path) {
+    final dot = path.lastIndexOf('.');
+    final ext = dot < 0 ? '' : path.substring(dot + 1).toLowerCase();
+    return switch (ext) {
+      'png' => 'image/png',
+      'webp' => 'image/webp',
+      'heic' => 'image/heic',
+      'heif' => 'image/heif',
+      _ => 'image/jpeg',
+    };
   }
 
   Future<String> _uploadBytes(

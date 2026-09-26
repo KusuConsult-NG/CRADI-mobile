@@ -1,5 +1,5 @@
+import 'package:climate_app/core/constants/hazards.dart';
 import 'package:climate_app/core/services/supabase_service.dart';
-
 import 'package:climate_app/core/utils/error_handler.dart';
 import 'package:climate_app/core/utils/validators.dart';
 import 'package:flutter/material.dart';
@@ -21,22 +21,14 @@ class VerificationRequestScreen extends StatefulWidget {
 class _VerificationRequestScreenState extends State<VerificationRequestScreen> {
   final _formKey = GlobalKey<FormState>();
   final _descriptionController = TextEditingController();
-  String _selectedHazard = 'Flooding';
+  String _selectedHazard = Hazard.flooding.storedName;
   String _selectedSeverity = 'medium';
   String? _selectedState;
   String? _selectedLGA;
   String? _selectedWard;
 
-  final List<String> _hazards = [
-    'Flooding',
-    'Extreme Heat',
-    'Drought',
-    'Windstorms',
-    'Wildfires',
-    'Erosion',
-    'Pest Outbreak',
-    'Crop Disease',
-  ];
+  /// Stored hazard names (same values as the reporting flow).
+  final List<String> _hazards = [for (final h in Hazard.values) h.storedName];
 
   final List<Map<String, String>> _severities = [
     {'value': 'low', 'label': 'Low'},
@@ -80,56 +72,37 @@ class _VerificationRequestScreenState extends State<VerificationRequestScreen> {
         return;
       }
 
-      if (mounted) {
-        context
-            .read<ReportsStatusProvider>()
-            .submitVerificationRequest(
-              userId: user.id,
-              hazardType: _selectedHazard,
-              severity: _selectedSeverity,
-              description: _descriptionController.text,
-              state: _selectedState!,
-              lga: _selectedLGA!,
-              ward: _selectedWard!,
-              locationDetails: 'Verification Request',
-            )
-            .then((_) {
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text(
-                      'Verification request submitted successfully',
-                    ),
-                  ),
-                );
-                Navigator.of(context).pop();
-              }
-            })
-            .catchError((e) {
-              if (mounted) {
-                String message = 'Submission failed';
-                if (e.toString().contains('offline_queued')) {
-                  message = 'Offline: Request saved to sync queue';
-                  // Still pop as it is "saved"
-                  Navigator.of(context).pop();
-                } else {
-                  message = ErrorHandler.handleError(
-                    e,
-                    context: 'Verification',
-                  );
-                }
-
-                ScaffoldMessenger.of(
-                  context,
-                ).showSnackBar(SnackBar(content: Text(message)));
-              }
-            });
+      if (!mounted) return;
+      final messenger = ScaffoldMessenger.of(context);
+      final navigator = Navigator.of(context);
+      try {
+        await context.read<ReportsStatusProvider>().submitVerificationRequest(
+          userId: user.id,
+          hazardType: _selectedHazard,
+          severity: _selectedSeverity,
+          description: _descriptionController.text,
+          state: _selectedState!,
+          lga: _selectedLGA!,
+          ward: _selectedWard!,
+          locationDetails: 'Verification Request',
+        );
+        messenger.showSnackBar(
+          const SnackBar(
+            content: Text('Verification request submitted successfully'),
+          ),
+        );
+        if (mounted) navigator.pop();
+      } on OfflineQueuedException catch (e) {
+        // Saved to the sync queue: it will be uploaded automatically.
+        messenger.showSnackBar(SnackBar(content: Text(e.message)));
+        if (mounted) navigator.pop();
       }
     } on Exception catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(ErrorHandler.handleError(e, context: 'Verification')),
+            backgroundColor: Colors.red,
           ),
         );
       }
@@ -170,7 +143,12 @@ class _VerificationRequestScreenState extends State<VerificationRequestScreen> {
                 border: OutlineInputBorder(),
               ),
               items: _hazards
-                  .map((h) => DropdownMenuItem(value: h, child: Text(h)))
+                  .map(
+                    (h) => DropdownMenuItem(
+                      value: h,
+                      child: Text(Hazard.labelFor(h)),
+                    ),
+                  )
                   .toList(),
               onChanged: (val) => setState(() => _selectedHazard = val!),
             ),

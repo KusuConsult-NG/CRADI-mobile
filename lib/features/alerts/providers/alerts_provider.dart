@@ -21,6 +21,26 @@ class AlertsProvider extends ChangeNotifier {
     fetchAlerts();
   }
 
+  static bool _isActive(Map<String, dynamic> a) {
+    final v = a['isActive'] ?? a['is_active'];
+    return v != false;
+  }
+
+  /// Whether [alert] targets [lga] (alerts for 'All' reach everyone).
+  static bool targetsLga(Map<String, dynamic> alert, String? lga) {
+    final target = (alert['targetLga'] ?? alert['target_lga'] ?? 'All')
+        .toString()
+        .trim()
+        .toLowerCase();
+    if (target.isEmpty || target == 'all') return true;
+    final mine = (lga ?? '').trim().toLowerCase();
+    return mine.isNotEmpty && mine == target;
+  }
+
+  /// Active alerts addressed to [lga] or to everyone.
+  List<Map<String, dynamic>> alertsForLga(String? lga) =>
+      _alerts.where((a) => targetsLga(a, lga)).toList();
+
   Future<void> fetchAlerts() async {
     _isLoading = true;
     _error = null;
@@ -29,16 +49,19 @@ class AlertsProvider extends ChangeNotifier {
     try {
       final documents = await _db.listDocuments(
         collectionId: AppConfig.alertsCollection,
-        queries: [FQuery.orderDesc('createdAt')],
-        limitCount: 20,
+        queries: [
+          FQuery.equal('isActive', true),
+          FQuery.orderDesc('createdAt'),
+        ],
+        limitCount: 50,
       );
 
-      _alerts = documents;
+      _alerts = documents.where(_isActive).toList();
 
       // Caching is best-effort: a cache failure (e.g. HiveError, which is an
       // Error rather than an Exception) must never prevent alerts loading.
       try {
-        await _offlineStorage.cacheAlerts(documents);
+        await _offlineStorage.cacheAlerts(_alerts);
       } on Object catch (e) {
         ErrorHandler.logError(e, context: 'AlertsProvider.cacheAlerts');
       }
@@ -53,7 +76,7 @@ class AlertsProvider extends ChangeNotifier {
 
       List<Map<String, dynamic>> cached = const [];
       try {
-        cached = _offlineStorage.getCachedAlerts();
+        cached = _offlineStorage.getCachedAlerts().where(_isActive).toList();
       } on Object catch (_) {
         // Cache unavailable (not initialized or unreadable); ignore.
       }

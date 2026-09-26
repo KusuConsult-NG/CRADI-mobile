@@ -54,9 +54,9 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
 
   static const String _ndpaPolicyVersion = kNdpaPolicyVersion;
 
-  /// Set to false to hide Phone Auth until an SMS provider is configured
-  /// for phone OTP in the Supabase dashboard (Auth → Providers → Phone).
-  static const bool _phoneAuthEnabled = false;
+  /// Phone Auth stays hidden until an SMS provider is configured for phone
+  /// OTP in the Supabase dashboard (shared with the login screen).
+  static const bool _phoneAuthEnabled = AuthProvider.phoneAuthEnabled;
   static const String _ndpaPolicyText = kNdpaPolicyText;
 
   @override

@@ -1,5 +1,6 @@
 import 'package:climate_app/core/services/supabase_service.dart';
 import 'package:climate_app/core/utils/error_handler.dart';
+import 'package:climate_app/features/knowledge_base/knowledge_categories.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:climate_app/core/constants/app_config.dart';
@@ -18,17 +19,8 @@ class AdminKnowledgeScreen extends StatefulWidget {
 class _AdminKnowledgeScreenState extends State<AdminKnowledgeScreen> {
   String _categoryFilter = 'All';
 
-  static const _categories = [
-    'All',
-    'Flood',
-    'Fire',
-    'Erosion',
-    'Storm',
-    'Earthquake',
-    'Disease',
-    'Conflict',
-    'General',
-  ];
+  /// Shared with the reader screens so what is written is what they filter.
+  static final List<String> _categories = knowledgeCategoryFilters;
 
   late final Stream<List<Map<String, dynamic>>> _knowledgeStream;
 
@@ -75,9 +67,18 @@ class _AdminKnowledgeScreenState extends State<AdminKnowledgeScreen> {
       } on Exception catch (e) {
         developer.log('Guide delete failed: $e', name: 'AdminKnowledgeScreen');
         if (mounted) {
+          final denied =
+              SupabaseService.isPermissionDenied(e) ||
+              e is DocumentNotFoundException;
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Could not delete guide.'),
+            SnackBar(
+              content: Text(
+                denied
+                    ? 'You do not have permission to delete this guide, '
+                          'or it was already removed.'
+                    : 'Could not delete guide. Check your connection and '
+                          'try again.',
+              ),
               backgroundColor: Colors.red,
             ),
           );
@@ -177,13 +178,11 @@ class _AdminKnowledgeScreenState extends State<AdminKnowledgeScreen> {
                 final allDocs = snap.data ?? const <Map<String, dynamic>>[];
 
                 // Client-side filtering
-                final docs = allDocs.where((data) {
-                  if (_categoryFilter != 'All') {
-                    final hazard = data['hazardType'] as String? ?? '';
-                    if (hazard != _categoryFilter.toLowerCase()) return false;
-                  }
-                  return true;
-                }).toList();
+                final docs = allDocs
+                    .where(
+                      (data) => guideMatchesCategory(data, _categoryFilter),
+                    )
+                    .toList();
 
                 if (docs.isEmpty) {
                   return Center(
@@ -319,51 +318,11 @@ class _AdminKnowledgeScreenState extends State<AdminKnowledgeScreen> {
     );
   }
 
-  Color _categoryColor(String hazardType) {
-    switch (hazardType.toLowerCase()) {
-      case 'flood':
-        return Colors.blue;
-      case 'fire':
-      case 'wildfires':
-        return Colors.red;
-      case 'erosion':
-        return Colors.brown;
-      case 'storm':
-        return Colors.indigo;
-      case 'earthquake':
-        return Colors.deepOrange;
-      case 'disease':
-      case 'epidemic':
-        return Colors.green;
-      case 'conflict':
-        return Colors.red.shade900;
-      default:
-        return Colors.teal;
-    }
-  }
+  Color _categoryColor(String hazardType) =>
+      knowledgeCategoryFor(hazardType)?.color ?? Colors.teal;
 
-  IconData _categoryIcon(String hazardType) {
-    switch (hazardType.toLowerCase()) {
-      case 'flood':
-        return Icons.water;
-      case 'fire':
-      case 'wildfires':
-        return Icons.local_fire_department;
-      case 'erosion':
-        return Icons.terrain;
-      case 'storm':
-        return Icons.thunderstorm;
-      case 'earthquake':
-        return Icons.vibration;
-      case 'disease':
-      case 'epidemic':
-        return Icons.coronavirus_outlined;
-      case 'conflict':
-        return Icons.shield_outlined;
-      default:
-        return Icons.menu_book_outlined;
-    }
-  }
+  IconData _categoryIcon(String hazardType) =>
+      knowledgeCategoryFor(hazardType)?.icon ?? Icons.menu_book_outlined;
 }
 
 class _GuideFormSheet extends StatefulWidget {
@@ -392,11 +351,10 @@ class _GuideFormSheetState extends State<_GuideFormSheet> {
     _titleCtrl = TextEditingController(text: e?['title'] as String? ?? '');
     _contentCtrl = TextEditingController(text: e?['content'] as String? ?? '');
     _sourceCtrl = TextEditingController(text: e?['source'] as String? ?? '');
-    final hazardType = e?['hazardType'] as String? ?? '';
-    _selectedCategory = widget.categories.firstWhere(
-      (c) => c.toLowerCase() == hazardType.toLowerCase(),
-      orElse: () => widget.categories.first,
-    );
+    final existingCategory =
+        knowledgeCategoryFor(e?['hazardType']) ??
+        knowledgeCategoryFor(e?['category']);
+    _selectedCategory = existingCategory?.label ?? widget.categories.first;
   }
 
   @override
@@ -416,7 +374,9 @@ class _GuideFormSheetState extends State<_GuideFormSheet> {
       'content': _contentCtrl.text.trim(),
       'source': _sourceCtrl.text.trim(),
       'category': _selectedCategory,
-      'hazardType': _selectedCategory.toLowerCase(),
+      'hazardType':
+          knowledgeCategoryFor(_selectedCategory)?.hazardType ??
+          _selectedCategory.toLowerCase(),
     };
 
     try {

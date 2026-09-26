@@ -30,6 +30,15 @@ class UserProfileScreen extends StatefulWidget {
 class _UserProfileScreenState extends State<UserProfileScreen> {
   final ImagePicker _picker = ImagePicker();
 
+  /// Created once so profile rebuilds do not resubscribe the realtime stream.
+  late final Stream<List<Map<String, dynamic>>> _reportsStream;
+
+  @override
+  void initState() {
+    super.initState();
+    _reportsStream = context.read<ProfileProvider>().getUserReportsStream();
+  }
+
   Future<void> _pickImage(ImageSource source) async {
     try {
       final XFile? pickedFile = await _picker.pickImage(
@@ -671,7 +680,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
             Consumer<ProfileProvider>(
               builder: (context, profile, _) =>
                   StreamBuilder<List<Map<String, dynamic>>>(
-                    stream: profile.getUserReportsStream(),
+                    stream: _reportsStream,
                     builder: (context, snapshot) {
                       int totalReports = 0;
                       int verifiedCount = 0;

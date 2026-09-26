@@ -1,4 +1,7 @@
-import 'package:climate_app/core/services/peer_verification_service.dart';
+import 'package:climate_app/core/constants/hazards.dart';
+import 'package:climate_app/core/services/supabase_service.dart'
+    show parseTimestamp;
+import 'package:climate_app/features/verification/providers/reports_status_provider.dart';
 import 'package:climate_app/core/theme/app_colors.dart';
 import 'package:climate_app/core/utils/error_handler.dart';
 import 'package:climate_app/shared/widgets/custom_button.dart';
@@ -9,7 +12,6 @@ import 'package:intl/intl.dart';
 import 'package:climate_app/features/reporting/widgets/osm_location_picker.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
-import 'package:climate_app/features/auth/providers/auth_provider.dart';
 
 class VerificationDetailScreen extends StatefulWidget {
   final Map<String, dynamic> report;
@@ -33,60 +35,59 @@ class _VerificationDetailScreenState extends State<VerificationDetailScreen> {
 
   Future<void> _submitVerification(bool isConfirmed) async {
     setState(() => _isLoading = true);
+    final messenger = ScaffoldMessenger.of(context);
+    final provider = context.read<ReportsStatusProvider>();
+    final reportId = (widget.report['\$id'] ?? widget.report['id'])?.toString();
+    if (reportId == null || reportId.isEmpty) {
+      setState(() => _isLoading = false);
+      return;
+    }
+    final comment = _commentController.text.trim();
 
     try {
-      // In a real app, we'd get the current user ID globally
-      // For MVP, we'll assume a user ID or fetch it
-      final userId =
-          context.read<AuthProvider>().currentUser?.id ?? 'unknown_user';
-
-      final result = await PeerVerificationService().submitVerification(
-        reportId: widget.report['\$id'] ?? widget.report['id'] ?? 'unknown',
-        userId: userId,
-        isConfirmed: isConfirmed,
-        comment: _commentController.text,
-      );
-
-      if (mounted) {
-        setState(() => _isLoading = false);
-
-        if (result['success'] == true) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(result['message']),
-              backgroundColor: isConfirmed ? Colors.green : Colors.orange,
-            ),
-          );
-          context.pop(); // Go back to list
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                'Verification failed: '
-                '${result['message'] ?? result['error'] ?? 'Unknown error'}',
-              ),
-            ),
-          );
-        }
+      // Goes through the provider so the "already voted" cache and the
+      // loaded lists are updated.
+      if (isConfirmed) {
+        await provider.verifyReport(reportId, comment: comment);
+      } else {
+        await provider.disputeReport(reportId, comment: comment);
       }
-    } on Exception catch (e) {
-      if (mounted) {
-        setState(() => _isLoading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(ErrorHandler.handleError(e, context: 'Verification')),
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            isConfirmed
+                ? 'Report confirmed. Thank you!'
+                : 'Dispute recorded. Staff will review the report.',
           ),
-        );
-      }
+          backgroundColor: isConfirmed ? Colors.green : Colors.orange,
+        ),
+      );
+      context.pop(); // Go back to list
+    } on VerificationRefusedException catch (e) {
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+    } on Exception catch (e) {
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(ErrorHandler.handleError(e, context: 'Verification')),
+        ),
+      );
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final report = widget.report;
-    final date =
-        DateTime.tryParse(report['submittedAt'] ?? '') ?? DateTime.now();
-    final formattedDate = DateFormat('MMM d, y • h:mm a').format(date);
+    // Stored in UTC; show the device's local time.
+    final date = parseTimestamp(report['submittedAt']);
+    final formattedDate = date == null
+        ? 'Unknown time'
+        : DateFormat('MMM d, y • h:mm a').format(date);
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -123,7 +124,7 @@ class _VerificationDetailScreenState extends State<VerificationDetailScreen> {
 
             // Header Info
             Text(
-              report['hazardType'] ?? 'Unknown Hazard',
+              Hazard.labelFor(report['hazardType']),
               style: GoogleFonts.lexend(
                 fontSize: 24,
                 fontWeight: FontWeight.bold,
@@ -271,7 +272,7 @@ class _VerificationDetailScreenState extends State<VerificationDetailScreen> {
               children: [
                 Expanded(
                   child: CustomButton(
-                    text: 'I Cannot Confirm',
+                    text: 'Dispute',
                     onPressed: _isLoading
                         ? null
                         : () => _submitVerification(false),

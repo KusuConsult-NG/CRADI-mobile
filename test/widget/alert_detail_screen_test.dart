@@ -56,6 +56,15 @@ void main() {
     expect(find.text('Peer Verification Required'), findsNothing);
   });
 
+  testWidgets('shows the staff alert severity as its label', (tester) async {
+    await tester.pumpWidget(
+      buildScreen({'title': 'Storm', 'severity': 'critical'}),
+    );
+    await tester.pump();
+    expect(find.text('Critical'), findsOneWidget);
+    expect(find.text('Normal Severity'), findsNothing);
+  });
+
   testWidgets('tolerates an empty map', (tester) async {
     await tester.pumpWidget(buildScreen(const {}));
     await tester.pump();

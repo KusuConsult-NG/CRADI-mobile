@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
+import 'package:climate_app/core/constants/hazards.dart';
 import 'package:climate_app/core/theme/app_colors.dart';
 import 'package:climate_app/features/auth/providers/auth_provider.dart';
 import 'package:climate_app/features/verification/providers/reports_status_provider.dart';
@@ -31,10 +32,12 @@ class _MyReportsScreenState extends State<MyReportsScreen>
     });
   }
 
-  void _refreshMyReports() {
+  /// Loads every page of the user's reports (the Active / History split
+  /// is done client-side, so a single page would hide older reports).
+  Future<void> _refreshMyReports() async {
     final uid = context.read<AuthProvider>().currentUser?.id;
     if (uid != null) {
-      context.read<ReportsStatusProvider>().refreshReports(userId: uid);
+      await context.read<ReportsStatusProvider>().fetchAllPages(userId: uid);
     }
   }
 
@@ -89,6 +92,7 @@ class _MyReportsScreenState extends State<MyReportsScreen>
           // Get ALL user reports (status: null means all)
           final allReports = provider.getReports(null, userId: uid);
           final isLoading = provider.isLoading(null, userId: uid);
+          final error = provider.errorFor(null, userId: uid);
 
           final activeReports = allReports.where((r) => r.isActive).toList();
           final historyReports = allReports.where((r) => r.isHistory).toList();
@@ -101,12 +105,14 @@ class _MyReportsScreenState extends State<MyReportsScreen>
                 isLoading,
                 'No active reports',
                 'Reports you submit will appear here while being verified.',
+                error,
               ),
               _buildReportList(
                 historyReports,
                 isLoading,
                 'No report history',
                 'Your approved and rejected reports will appear here.',
+                error,
               ),
             ],
           );
@@ -133,6 +139,7 @@ class _MyReportsScreenState extends State<MyReportsScreen>
     bool isLoading,
     String emptyTitle,
     String emptySubtitle,
+    String? error,
   ) {
     if (isLoading && reports.isEmpty) {
       return Padding(
@@ -143,6 +150,32 @@ class _MyReportsScreenState extends State<MyReportsScreen>
             ShimmerSkeletons.card(height: 90),
             ShimmerSkeletons.card(height: 90),
           ],
+        ),
+      );
+    }
+
+    if (reports.isEmpty && error != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.cloud_off, size: 56, color: Colors.red.shade200),
+              const SizedBox(height: 12),
+              Text(
+                error,
+                textAlign: TextAlign.center,
+                style: GoogleFonts.lexend(color: AppColors.textSecondary),
+              ),
+              const SizedBox(height: 16),
+              ElevatedButton.icon(
+                onPressed: _refreshMyReports,
+                icon: const Icon(Icons.refresh),
+                label: const Text('Retry'),
+              ),
+            ],
+          ),
         ),
       );
     }
@@ -192,12 +225,34 @@ class _MyReportsScreenState extends State<MyReportsScreen>
     }
 
     return RefreshIndicator(
-      onRefresh: () async => _refreshMyReports(),
+      onRefresh: _refreshMyReports,
       child: ListView.separated(
         padding: const EdgeInsets.all(16),
-        itemCount: reports.length,
+        physics: const AlwaysScrollableScrollPhysics(),
+        itemCount: reports.length + (error != null ? 1 : 0),
         separatorBuilder: (_, index) => const SizedBox(height: 12),
         itemBuilder: (context, index) {
+          if (index == reports.length) {
+            return Row(
+              children: [
+                Icon(Icons.error_outline, color: Colors.red.shade300),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    error!,
+                    style: GoogleFonts.lexend(
+                      fontSize: 12,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ),
+                TextButton(
+                  onPressed: _refreshMyReports,
+                  child: const Text('Retry'),
+                ),
+              ],
+            );
+          }
           final report = reports[index];
           return _buildReportCard(report);
         },
@@ -344,47 +399,7 @@ class _MyReportsScreenState extends State<MyReportsScreen>
     }
   }
 
-  Color _getHazardColor(String type) {
-    switch (type.toLowerCase()) {
-      case 'flooding':
-      case 'flood':
-        return AppColors.hazardFlood;
-      case 'drought':
-        return AppColors.hazardDrought;
-      case 'fire':
-      case 'wildfire':
-        return AppColors.hazardFire;
-      case 'pest/disease':
-      case 'pest':
-        return AppColors.hazardPest;
-      case 'erosion':
-        return AppColors.hazardErosion;
-      case 'conflict':
-        return Colors.red;
-      default:
-        return Colors.orange;
-    }
-  }
+  Color _getHazardColor(String type) => Hazard.colorFor(type);
 
-  IconData _getHazardIcon(String type) {
-    switch (type.toLowerCase()) {
-      case 'flooding':
-      case 'flood':
-        return Icons.flood;
-      case 'drought':
-        return Icons.wb_sunny;
-      case 'fire':
-      case 'wildfire':
-        return Icons.local_fire_department;
-      case 'pest/disease':
-      case 'pest':
-        return Icons.bug_report;
-      case 'erosion':
-        return Icons.landscape;
-      case 'conflict':
-        return Icons.shield;
-      default:
-        return Icons.warning;
-    }
-  }
+  IconData _getHazardIcon(String type) => Hazard.iconFor(type);
 }

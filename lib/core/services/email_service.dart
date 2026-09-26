@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:developer' as developer;
 import 'dart:convert';
 import 'package:climate_app/core/constants/app_config.dart';
@@ -21,6 +22,34 @@ class EmailService {
   EmailService._internal();
 
   static Uri get _endpoint => Uri.parse('${AppConfig.backendUrl}/email');
+
+  /// Upper bound for the backend call; without it a stalled connection
+  /// leaves the caller waiting forever.
+  static const Duration requestTimeout = Duration(seconds: 20);
+
+  /// A valid access token, refreshing an expired session first. Null when
+  /// signed out or the refresh fails.
+  Future<String?> _freshAccessToken() async {
+    final db = SupabaseService();
+    if (!SupabaseService.isReady) return null;
+    final session = db.auth.currentSession;
+    if (session == null) return null;
+    if (session.isExpired) {
+      try {
+        final refreshed = await db.auth.refreshSession().timeout(
+          requestTimeout,
+        );
+        return refreshed.session?.accessToken;
+      } on Exception catch (e) {
+        developer.log(
+          '[EmailService] Session refresh failed: $e',
+          name: 'EmailService',
+        );
+        return null;
+      }
+    }
+    return session.accessToken;
+  }
 
   // ── Public send methods ────────────────────────────────────────────────────
 
@@ -80,7 +109,7 @@ class EmailService {
     }
 
     try {
-      final token = SupabaseService().accessToken;
+      final token = await _freshAccessToken();
       if (token == null || token.isEmpty) {
         developer.log(
           '[EmailService] Not signed in; cannot send "$type" email',
@@ -94,11 +123,13 @@ class EmailService {
         'Authorization': 'Bearer $token',
       };
 
-      final response = await http.post(
-        _endpoint,
-        headers: headers,
-        body: jsonEncode({'type': type, 'to': to, 'data': data}),
-      );
+      final response = await http
+          .post(
+            _endpoint,
+            headers: headers,
+            body: jsonEncode({'type': type, 'to': to, 'data': data}),
+          )
+          .timeout(requestTimeout);
 
       final success = response.statusCode >= 200 && response.statusCode < 300;
       developer.log(
