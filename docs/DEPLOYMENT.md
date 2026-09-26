@@ -98,14 +98,9 @@ types, functions, triggers and policies outright, so a second run fails with
    `image/jpeg, image/png, image/webp, image/heic`. Object paths must start with
    the uploader's user id — that is what the storage policies enforce.
 
-5. **Auth settings** (Supabase dashboard → **Authentication**):
-   * **Providers → Email**: enabled, *Confirm email* **on**. Accounts cannot be
-     approved or promoted to admin until their email or phone is confirmed —
-     the `profiles_guard_approval` trigger refuses it.
-   * **Email Templates**: the app verifies accounts and resets passwords with
-     **6-digit codes**, not links. *Confirm signup* and *Reset password* must
-     contain `{{ .Token }}`.
-   * Phone sign-up is optional; see the repo `README.md` section 1.
+5. **Auth settings** — every one of them is listed in **section 1a** below.
+   Work through that checklist now; auth does not work with the dashboard
+   defaults.
 
 6. **Collect the keys** — dashboard → **Project Settings → API**:
    * **Project URL** → `https://<project-ref>.supabase.co`. Used by everything.
@@ -118,6 +113,145 @@ types, functions, triggers and policies outright, so a second run fails with
 
 > `supabase/tests/local_stubs.sql` is **for local Postgres testing only**. Never
 > run it against a Supabase project.
+
+---
+
+## 1a. Auth configuration — the complete checklist
+
+Supabase ships with defaults that **do not work for this app**: the Site URL is
+`http://localhost:3000` and every email template sends a *link*, while the
+mobile app asks the user to type a **6-digit code**. That mismatch is why a
+recovery mail can arrive perfectly (SMTP fine) and still be useless.
+
+### What each flow actually needs
+
+| Flow | App entry point | Sends to Supabase | Needs | Email template | Required variable |
+| --- | --- | --- | --- | --- | --- |
+| Registration (email) | `/register` → `AuthProvider.signUpWithEmail` | `auth.signUp(email, password, data: {name, role, phone, state, lga, ward, address})` | — | — | — |
+| Email confirmation | `/verify-otp` → `verifyOtpAndLogin` | `auth.verifyOTP(type: signup, email, token)` | **code** | **Confirm signup** | `{{ .Token }}` |
+| Resend confirmation | `/verify-otp`, and automatically after an `email_not_confirmed` login | `auth.resend(type: signup, email)` | **code** | **Confirm signup** | `{{ .Token }}` |
+| Sign-in | `/login` | `auth.signInWithPassword(email, password)` | — | — | — |
+| Password reset — send | `/forgot-password` | `auth.resetPasswordForEmail(email)` | **code** | **Reset Password** | `{{ .Token }}` |
+| Password reset — confirm | `/reset-password` | `auth.verifyOTP(type: recovery, email, token)` then `auth.updateUser(password:)` | **code** | **Reset Password** | `{{ .Token }}` |
+| Change sign-in email | Profile → email → `ProfileProvider.updateEmail` | `auth.updateUser(email:)` | **link** | **Change Email Address** (plus **Confirm Email Change** while *Secure email change* is on) | `{{ .ConfirmationURL }}` (the default) |
+| Session restore / refresh | automatic (`supabase_flutter` secure storage) | `POST /token?grant_type=refresh_token` | — | — | — |
+| Biometric unlock | lock screen | re-uses the persisted session, refreshes it if expired | — | — | — |
+| Sign-out | anywhere | `auth.signOut()` | — | — | — |
+| Admin panel sign-in | `https://cradi-mobile-admin-production.up.railway.app/login` | `auth.signInWithPassword` | — | — | — |
+| Phone / SMS OTP | **disabled in code** (`AuthProvider.phoneAuthEnabled = false`) | — | — | — | — |
+
+Everything except the email change is code-based. **Only the email change
+follows a link**, and that link is built from the Site URL — the one place
+where the Site URL is not cosmetic.
+
+Neither app ever passes `redirectTo` / `emailRedirectTo`, and the admin panel
+sets `detectSessionInUrl: false`. No OAuth provider and no PKCE landing page is
+involved anywhere.
+
+### a. URL Configuration — **Authentication → URL Configuration**
+
+* **Site URL**: `https://cradi-mobile-admin-production.up.railway.app`
+  The default `http://localhost:3000` is what makes a password-reset mail point
+  at a dead address. GoTrue applies an email change *server-side* when the link
+  is opened and only then redirects the browser here, so the admin login page is
+  a fine landing spot even though it ignores the URL fragment.
+* **Redirect URLs** (allow list) — defence in depth; nothing requests them
+  today:
+  * `https://cradi-mobile-admin-production.up.railway.app/**`
+  * `https://cradi.ng/**` (the app-link host in `AndroidManifest.xml` / `Info.plist`)
+  * `cradi://**` (the custom scheme the app registers)
+
+### b. Providers — **Authentication → Providers**
+
+* **Email**: *Enabled*.
+  * **Confirm email: ON.** Required, not optional: the admin panel and the
+    `profiles_guard` trigger refuse to approve an account whose email (or phone)
+    is unconfirmed, so with confirmations off nobody could ever be approved.
+  * **Secure email change**: leave ON. The user then gets a confirmation link at
+    *both* the old and the new address and must open both.
+  * **Email OTP length: 6**, **Email OTP expiry: 3600 s**. The reset screen
+    rejects anything shorter than 6 characters.
+* **Phone**: *Disabled*. `AuthProvider.phoneAuthEnabled` is `false`, and the
+  login and registration screens hide every phone control behind it. Enabling
+  the provider in the dashboard alone changes nothing — the constant has to be
+  flipped and the app rebuilt.
+
+### c. Sign-ups — **Authentication → Sign In / Providers**
+
+* **Allow new users to sign up: ON.** The registration screen calls `signUp`;
+  with sign-ups disabled Supabase answers `signup_disabled` and the app shows
+  "Registration is currently disabled".
+* **Allow anonymous sign-ins: OFF** (unused).
+
+### d. Email templates — **Authentication → Emails → Templates**
+
+Two templates must be changed from their shipped, link-based defaults. Paste
+these as-is.
+
+**Confirm signup** — subject `Your CRADI verification code`
+
+```html
+<h2>Confirm your CRADI / EWER account</h2>
+<p>Enter this code in the app to finish creating your account:</p>
+<p style="font-size:28px;font-weight:700;letter-spacing:6px;margin:24px 0">{{ .Token }}</p>
+<p>The code expires in one hour. If you did not create an account, ignore this email.</p>
+```
+
+**Reset Password** — subject `Your CRADI password reset code`
+
+```html
+<h2>Reset your CRADI / EWER password</h2>
+<p>Enter this code on the "Create New Password" screen in the app:</p>
+<p style="font-size:28px;font-weight:700;letter-spacing:6px;margin:24px 0">{{ .Token }}</p>
+<p>The code expires in one hour. If you did not ask for a password reset, ignore
+this email — your password has not changed.</p>
+```
+
+**Change Email Address** and **Confirm Email Change**: leave the defaults
+(`{{ .ConfirmationURL }}`). This is the only flow that needs a working link, so
+it is also the only one that depends on the Site URL above.
+
+**Magic Link**, **Invite user**, **Reauthentication**: unused. The app never
+sends a magic link or an invite. `reauthentication_needed` is mapped to a
+message in `ProfileProvider.updateEmail`, but no screen collects a reauth code.
+
+> After editing a template, send yourself a real reset from the app and read the
+> mail. If it still contains a `.../auth/v1/verify?...` link, the template was
+> not saved.
+
+### e. SMTP — **Project Settings → Authentication → SMTP Settings**
+
+* Custom SMTP **enabled**, pointed at Resend. The sender domain must be verified
+  in Resend or every message is silently dropped.
+* **Sender email / name** must match a verified Resend identity.
+
+### f. Rate limits — **Authentication → Rate Limits**
+
+* **Emails sent per hour**: the default is `2` while the built-in SMTP is in
+  use. With custom SMTP raise it to at least `30`, otherwise a user who
+  registers, mistypes the code and asks for a resend hits
+  `over_email_send_rate_limit` and the app says "Too many attempts".
+* **Token verifications** and **sign-ins**: the defaults are fine.
+
+### g. What the code additionally assumes
+
+* The `on_auth_user_created` trigger reads the `raw_user_meta_data` keys `name`,
+  `role`, `phone`, `state`, `lga`, `ward`, `address` and creates the `profiles`
+  row. The client never inserts it, so a failure here leaves a user who can sign
+  in but has no profile.
+* A requested `role` outside the six self-service values is silently demoted to
+  `user`, and `is_approved` always starts `false` — every new account lands on
+  `/pending-approval` until an admin approves it.
+* The app subscribes to its own `profiles` row over Realtime, so **Realtime must
+  be enabled for `public.profiles`**: that is what makes an approval, a role
+  change or a disable take effect without a restart.
+* The admin panel has **no password-reset screen**. An admin who forgets their
+  password resets it from the mobile app, or from Supabase → Authentication →
+  Users → *Send password recovery*.
+* Login throttling is **per device**, in the app's own `RateLimiter` (5 attempts
+  / 15 min, then an exponentially growing lock). It is independent of Supabase's
+  limits and clears itself when the lock expires or on the next successful
+  sign-in.
 
 ---
 

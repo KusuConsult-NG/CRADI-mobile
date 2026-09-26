@@ -150,10 +150,18 @@ async function signedOutPass(browser) {
     }));
     screens.push(await visit(pass, page, rec, shots, 'reset-password', `#/reset-password?email=${encodeURIComponent(ACCOUNTS.user)}`, {
         after: async (p) => {
-            await typeNth(p, 0, '123456');
-            await typeNth(p, 1, 'NewPassword123!');
+            // Field 0 is the email (pre-filled from the query), 1 the code,
+            // 2 / 3 the new password and its confirmation.
+            await typeNth(p, 1, '000000');
             await typeNth(p, 2, 'NewPassword123!');
+            await typeNth(p, 3, 'NewPassword123!');
             await shots.take(p, 'reset-password-filled');
+            // A wrong code must be refused without leaving the form.
+            await tap(p, 'Reset Password', { settle: 2500 });
+            await shots.take(p, 'reset-password-wrong-code');
+            await typeNth(p, 1, '123456');
+            await tap(p, 'Reset Password', { settle: 3000 });
+            await shots.take(p, 'reset-password-done');
         },
     }));
     screens.push(await visit(pass, page, rec, shots, 'registration', '#/register', {
