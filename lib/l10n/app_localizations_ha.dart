@@ -2718,7 +2718,7 @@ class AppLocalizationsHa extends AppLocalizations {
 
   @override
   String get helpFaqReportA =>
-      'Je shafin \"Rahoto\" ko danna maɓallin \"+\" a babban shafi. Zaɓi nau\'in haɗari, ƙara hotuna/bidiyo, sannan ka aika rahotonka.';
+      'Je shafin \"Rahoto\" ko danna maɓallin \"+\" a babban shafi. Zaɓi nau\'in haɗari, ƙara hotuna, sannan ka aika rahotonka. Za ka iya faɗar bayanin da maɓallin makirufo maimakon rubutawa.';
 
   @override
   String get helpFaqColorsQ => 'Mene ne ma\'anar launukan faɗakarwa?';

@@ -2687,7 +2687,7 @@ class AppLocalizationsIg extends AppLocalizations {
 
   @override
   String get helpFaqReportA =>
-      'Gaa na taabụ \"Kọọ\" ma ọ bụ pịa bọtịnụ \"+\" na ihuenyo isi. Họrọ ụdị ihe egwu, tinye foto/vidiyo, ma zipu akụkọ gị.';
+      'Gaa na taabụ \"Kọọ\" ma ọ bụ pịa bọtịnụ \"+\" na ihuenyo isi. Họrọ ụdị ihe egwu, tinye foto, ma zipu akụkọ gị. Ị nwere ike ikwu nkọwa ahụ site na bọtịnụ maikrofonu kama ịpị ya.';
 
   @override
   String get helpFaqColorsQ => 'Gịnị ka agba ọkwa pụtara?';

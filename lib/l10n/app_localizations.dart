@@ -4757,7 +4757,7 @@ abstract class AppLocalizations {
   /// FAQ answer; "Report" is the bottom tab name (navReport).
   ///
   /// In en, this message translates to:
-  /// **'Navigate to the \"Report\" tab or tap the \"+\" button on the dashboard. Select the hazard type, add photos/videos, and submit your report.'**
+  /// **'Navigate to the \"Report\" tab or tap the \"+\" button on the dashboard. Select the hazard type, add photos, and submit your report. You can dictate the description with the microphone button instead of typing.'**
   String get helpFaqReportA;
 
   /// FAQ question.

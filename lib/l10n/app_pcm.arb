@@ -775,7 +775,7 @@
   "helpNoEmailApp": "No email app dey. Contact {email}",
   "helpFaqTitle": "Questions Wey Pipo Dey Ask",
   "helpFaqReportQ": "How I go report hazard?",
-  "helpFaqReportA": "Go \"Report\" tab or tap di \"+\" button for dashboard. Choose di hazard type, add photos/videos, and send your report.",
+  "helpFaqReportA": "Go \"Report\" tab or tap di \"+\" button for dashboard. Choose di hazard type, add photos, and send your report. You fit talk di description with di microphone button instead of typing am.",
   "helpFaqColorsQ": "Wetin di alert colors mean?",
   "helpFaqColorsA": "Red mean say e bad well well (danger dey now-now), Orange na medium, and Yellow na low. Blue usually mean hazard wey concern water like flood.",
   "helpFaqOfflineQ": "I fit report without internet?",

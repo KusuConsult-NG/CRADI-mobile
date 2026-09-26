@@ -2701,7 +2701,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get helpFaqReportA =>
-      'Navigate to the \"Report\" tab or tap the \"+\" button on the dashboard. Select the hazard type, add photos/videos, and submit your report.';
+      'Navigate to the \"Report\" tab or tap the \"+\" button on the dashboard. Select the hazard type, add photos, and submit your report. You can dictate the description with the microphone button instead of typing.';
 
   @override
   String get helpFaqColorsQ => 'What do the alert colors mean?';

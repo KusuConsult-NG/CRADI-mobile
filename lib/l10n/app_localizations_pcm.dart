@@ -2695,7 +2695,7 @@ class AppLocalizationsPcm extends AppLocalizations {
 
   @override
   String get helpFaqReportA =>
-      'Go \"Report\" tab or tap di \"+\" button for dashboard. Choose di hazard type, add photos/videos, and send your report.';
+      'Go \"Report\" tab or tap di \"+\" button for dashboard. Choose di hazard type, add photos, and send your report. You fit talk di description with di microphone button instead of typing am.';
 
   @override
   String get helpFaqColorsQ => 'Wetin di alert colors mean?';

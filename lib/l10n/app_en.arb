@@ -3484,7 +3484,7 @@
   "@helpFaqReportQ": {
     "description": "FAQ question."
   },
-  "helpFaqReportA": "Navigate to the \"Report\" tab or tap the \"+\" button on the dashboard. Select the hazard type, add photos/videos, and submit your report.",
+  "helpFaqReportA": "Navigate to the \"Report\" tab or tap the \"+\" button on the dashboard. Select the hazard type, add photos, and submit your report. You can dictate the description with the microphone button instead of typing.",
   "@helpFaqReportA": {
     "description": "FAQ answer; \"Report\" is the bottom tab name (navReport)."
   },

@@ -2702,7 +2702,7 @@ class AppLocalizationsYo extends AppLocalizations {
 
   @override
   String get helpFaqReportA =>
-      'Lọ sí táàbù \"Ròyìn\" tàbí tẹ bọ́tìnnì \"+\" lórí pátákó àkóso. Yan irú ewu, fi fọ́tò/fídíò kún un, kí o sì fi ìròyìn rẹ ránṣẹ́.';
+      'Lọ sí táàbù \"Ròyìn\" tàbí tẹ bọ́tìnnì \"+\" lórí pátákó àkóso. Yan irú ewu, fi fọ́tò kún un, kí o sì fi ìròyìn rẹ ránṣẹ́. O lè sọ àlàyé náà pẹ̀lú bọ́tìnnì gbohùngbohùn dípò títẹ̀ ẹ́.';
 
   @override
   String get helpFaqColorsQ => 'Kí ni àwọn àwọ̀ ìkìlọ̀ túmọ̀ sí?';
