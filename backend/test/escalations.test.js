@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { MAX_ESCALATION_ATTEMPTS, failedAttempts, retryDelayMs, runEscalations } from '../src/escalations.js';
+import { ESCALATION_REASON } from '../src/notifications.js';
 import { fakePush, fakeRepo, logger, profile } from './helpers.js';
 
 const base = { id: 'r1', user_id: 'reporter', ward: 'Ward 1', lga: 'Ikeja', hazard_type: 'Flood', severity: 'high', status: 'pending', escalated: false };
@@ -51,6 +52,69 @@ test('report already verified or missing -> escalation skipped with reason', asy
   assert.equal(repo.state.escalations[0].reason, 'Status: verified');
   assert.equal(repo.state.escalations[1].reason, 'Report not found');
   assert.equal(push.calls.length, 0);
+});
+
+test('lost race: report escalated by a dispute between read and update -> skipped, no push', async () => {
+  const repo = fakeRepo({
+    reports: [{ ...base }],
+    escalations: [{ id: 'e1', report_id: 'r1', status: 'pending' }],
+    profiles: [profile('coord', 'ldp_coordinator')],
+  });
+  // Another path escalates the report right after the cron read it.
+  const getReport = repo.getReport;
+  let first = true;
+  repo.getReport = async (id) => {
+    const r = await getReport(id);
+    if (first && r) {
+      first = false;
+      const snapshot = { ...r };
+      Object.assign(r, { escalated: true, escalation_reason: 'Disputed by peers', escalation_status: 'escalated' });
+      return snapshot;
+    }
+    return r;
+  };
+  const push = fakePush();
+  assert.deepEqual(await runEscalations({ repo, push, logger }), { processed: 0, skipped: 1, failed: 0 });
+  assert.equal(push.calls.length, 0);
+  assert.equal(repo.state.escalations[0].status, 'skipped');
+  assert.equal(repo.state.escalations[0].reason, 'Already escalated: Disputed by peers');
+  assert.equal(repo.state.reports[0].escalation_reason, 'Disputed by peers');
+});
+
+test('lost race: report approved between read and update -> skipped, no push', async () => {
+  const repo = fakeRepo({
+    reports: [{ ...base }],
+    escalations: [{ id: 'e1', report_id: 'r1', status: 'pending' }],
+    profiles: [profile('coord', 'ldp_coordinator')],
+  });
+  const getReport = repo.getReport;
+  let first = true;
+  repo.getReport = async (id) => {
+    const r = await getReport(id);
+    if (first && r) {
+      first = false;
+      const snapshot = { ...r };
+      r.status = 'approved';
+      return snapshot;
+    }
+    return r;
+  };
+  const push = fakePush();
+  assert.deepEqual(await runEscalations({ repo, push, logger }), { processed: 0, skipped: 1, failed: 0 });
+  assert.equal(push.calls.length, 0);
+  assert.equal(repo.state.escalations[0].reason, 'Status: approved');
+});
+
+test('retry after an earlier attempt marked the report (own reason) still notifies', async () => {
+  const repo = fakeRepo({
+    reports: [{ ...base, escalated: true, escalation_reason: ESCALATION_REASON, escalation_status: 'escalated' }],
+    escalations: [{ id: 'e1', report_id: 'r1', status: 'pending' }],
+    profiles: [profile('coord', 'ldp_coordinator')],
+  });
+  const push = fakePush();
+  assert.deepEqual(await runEscalations({ repo, push, logger }), { processed: 1, skipped: 0, failed: 0 });
+  assert.equal(push.calls.length, 1);
+  assert.deepEqual(push.calls[0].ids, ['coord']);
 });
 
 test('push failure keeps escalation pending for retry and records the error', async () => {

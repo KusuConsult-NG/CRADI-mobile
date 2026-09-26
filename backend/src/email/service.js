@@ -3,7 +3,8 @@ import { HTTP_TIMEOUT_MS } from '../http.js';
 import { errMessage, log as defaultLog } from '../log.js';
 import { templates, validateTemplateData } from './templates.js';
 
-export const STAFF_ROLES = new Set(['ewm', 'ewv', 'ewr', 'ldp_coordinator', 'project_staff', 'admin', 'techSupport']);
+/** Roles allowed to email addresses other than their own (coordination staff only). */
+export const ANY_RECIPIENT_ROLES = new Set(['admin', 'ldp_coordinator', 'project_staff']);
 export const RECIPIENT_WINDOW_MS = 60_000; // 1 email per recipient per minute
 export const CALLER_WINDOW_MS = 60 * 60_000;
 export const CALLER_MAX_PER_WINDOW = 20; // per caller per hour
@@ -18,13 +19,15 @@ export function isValidEmail(value) {
   return typeof value === 'string' && value.length <= 254 && EMAIL_RE.test(value);
 }
 
+/** Approved, enabled admin / LDP coordinator / project staff. */
 export function isPrivilegedProfile(profile) {
-  return Boolean(profile && profile.is_approved && !profile.is_disabled && STAFF_ROLES.has(profile.role));
+  return Boolean(profile && profile.is_approved && !profile.is_disabled && ANY_RECIPIENT_ROLES.has(profile.role));
 }
 
 /**
  * Anti-abuse policy. Returns { ok: true } or { ok: false, status, error }.
- * Non-staff callers may only email their own address.
+ * Only approved admin / ldp_coordinator / project_staff may email any address;
+ * everyone else (including ewm, ewv, ewr and techSupport) only their own.
  */
 export function authorizeRecipient({ user, profile, to }) {
   if (profile?.is_disabled) return { ok: false, status: 403, error: 'Forbidden' };

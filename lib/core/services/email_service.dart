@@ -53,10 +53,6 @@ class EmailService {
 
   // ── Public send methods ────────────────────────────────────────────────────
 
-  /// [resetLink] must be an https URL (rejected by the backend otherwise).
-  Future<bool> sendPasswordReset(String email, String resetLink) =>
-      _send(type: 'passwordReset', to: email, data: {'resetLink': resetLink});
-
   Future<bool> sendWelcomeEmail(String email, String name) =>
       _send(type: 'welcome', to: email, data: {'name': name, 'email': email});
 

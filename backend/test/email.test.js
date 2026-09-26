@@ -14,12 +14,16 @@ const users = {
   'tok-staff': { id: 's1', email: 'staff@example.com' },
   'tok-disabled': { id: 'd1', email: 'd@example.com' },
   'tok-pending-staff': { id: 'p1', email: 'p@example.com' },
+  'tok-ewm': { id: 'm1', email: 'monitor@example.com' },
+  'tok-tech': { id: 't1', email: 'tech@example.com' },
 };
 const profiles = {
   u1: { id: 'u1', role: 'user', is_approved: false, is_disabled: false },
   s1: { id: 's1', role: 'ldp_coordinator', is_approved: true, is_disabled: false },
   d1: { id: 'd1', role: 'admin', is_approved: true, is_disabled: true },
   p1: { id: 'p1', role: 'ewm', is_approved: false, is_disabled: false },
+  m1: { id: 'm1', role: 'ewm', is_approved: true, is_disabled: false },
+  t1: { id: 't1', role: 'techSupport', is_approved: true, is_disabled: false },
 };
 
 function setup({ sendEmail, now } = {}) {
@@ -44,8 +48,14 @@ function setup({ sendEmail, now } = {}) {
 
 const welcome = (to) => ({ type: 'welcome', to, data: { name: 'Alice', email: to } });
 
-test('isPrivilegedProfile requires approved, enabled staff role', () => {
+test('isPrivilegedProfile requires approved, enabled admin / ldp_coordinator / project_staff', () => {
   assert.equal(isPrivilegedProfile(profiles.s1), true);
+  for (const role of ['admin', 'ldp_coordinator', 'project_staff']) {
+    assert.equal(isPrivilegedProfile({ role, is_approved: true, is_disabled: false }), true, role);
+  }
+  for (const role of ['user', 'ewm', 'ewv', 'ewr', 'techSupport']) {
+    assert.equal(isPrivilegedProfile({ role, is_approved: true, is_disabled: false }), false, role);
+  }
   assert.equal(isPrivilegedProfile(profiles.u1), false);
   assert.equal(isPrivilegedProfile(profiles.d1), false);
   assert.equal(isPrivilegedProfile(profiles.p1), false);
@@ -64,16 +74,19 @@ test('missing or invalid bearer token -> 401', async () => {
   assert.equal((await handle({ authorization: 'Bearer nope', body: welcome('a@b.co') })).status, 401);
 });
 
-test('validation: unknown type, verification dropped, bad to, bad reset link', async () => {
+test('validation: unknown type, verification and passwordReset dropped, bad to', async () => {
   const { handle } = setup();
   const auth = 'Bearer tok-staff';
   assert.equal((await handle({ authorization: auth, body: { type: 'verification', to: 'a@b.co', data: {} } })).status, 400);
   assert.equal((await handle({ authorization: auth, body: { type: 'welcome', to: ['a@b.co'], data: {} } })).status, 400);
   assert.equal((await handle({ authorization: auth, body: { type: 'welcome', to: 'a@b.co, c@d.co', data: {} } })).status, 400);
-  assert.equal(
-    (await handle({ authorization: auth, body: { type: 'passwordReset', to: 'a@b.co', data: { resetLink: 'javascript:alert(1)' } } })).status,
-    400,
-  );
+  const reset = await handle({
+    authorization: auth,
+    body: { type: 'passwordReset', to: 'a@b.co', data: { resetLink: 'https://example.com/reset' } },
+  });
+  assert.equal(reset.status, 400);
+  assert.ok(!reset.body.error.includes('passwordReset'));
+  assert.equal(Object.hasOwn(templates, 'passwordReset'), false);
 });
 
 test('non-staff can email only themselves', async () => {
@@ -85,6 +98,21 @@ test('non-staff can email only themselves', async () => {
   assert.equal(own.body.success, true);
   assert.equal(sent.length, 1);
   assert.equal(sent[0].to, 'alice@example.com');
+});
+
+test('ewm and techSupport (approved) can email only themselves', async () => {
+  const { handle, sent } = setup();
+  for (const [tok, own] of [
+    ['tok-ewm', 'monitor@example.com'],
+    ['tok-tech', 'tech@example.com'],
+  ]) {
+    assert.equal((await handle({ authorization: `Bearer ${tok}`, body: welcome('someone@example.com') })).status, 403, tok);
+    assert.equal((await handle({ authorization: `Bearer ${tok}`, body: welcome(own) })).status, 200, tok);
+  }
+  assert.deepEqual(
+    sent.map((m) => m.to),
+    ['monitor@example.com', 'tech@example.com'],
+  );
 });
 
 test('per-recipient limit 1/min and per-caller limit 20/hour', async () => {

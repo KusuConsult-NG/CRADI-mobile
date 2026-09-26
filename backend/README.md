@@ -129,8 +129,8 @@ curl localhost:8080/health
 3. `FROM_EMAIL` must be an address on the verified domain.
 
 Supabase Auth sends its own emails (confirmation, OTP, password recovery).
-Configure custom SMTP in Supabase (Resend offers SMTP) for those; this service no
-longer sends `verification` emails.
+Configure custom SMTP in Supabase (Resend offers SMTP) for those; this service
+does not send `verification` or `passwordReset` emails.
 
 ## How the outbox works
 
@@ -247,7 +247,7 @@ than 5× its poll interval.
 Authorization: Bearer <Supabase access token>
 Content-Type: application/json
 
-{ "type": "welcome" | "hazardAlert" | "reportUpdate" | "passwordReset",
+{ "type": "welcome" | "hazardAlert" | "reportUpdate",
   "to": "user@example.com",
   "data": { ... } }
 ```
@@ -257,7 +257,6 @@ Content-Type: application/json
 | `welcome` | `name`, `email`, `role?` |
 | `hazardAlert` | `hazardType`, `severity`, `location?`, `description`, `lga?`, `ward?`, `state?`, `timestamp?` |
 | `reportUpdate` | `reportId`, `status`, `message?`, `reporterName?` |
-| `passwordReset` | `resetLink` (must be `https://`) |
 
 Responses: `{success: true, messageId}` or `{success: false, error}`
 (`400` bad input, `401` bad token, `403` recipient not allowed, `429` rate limited,
@@ -267,8 +266,9 @@ Anti-abuse rules:
 
 - The token is checked with `supabase.auth.getUser(token)`.
 - `to` must be the caller's own email, unless the caller's profile is approved,
-  not disabled and has a staff role (`ewm`, `ewv`, `ewr`, `ldp_coordinator`,
-  `project_staff`, `admin`, `techSupport`). Disabled accounts are refused.
+  not disabled and has the role `admin`, `ldp_coordinator` or `project_staff`.
+  Other roles (including `ewm`, `ewv`, `ewr`, `techSupport`) may only email
+  themselves. Disabled accounts are refused.
 - One email per recipient per minute, 20 emails per caller per hour
   (in memory, per instance).
 - All template values are HTML-escaped.

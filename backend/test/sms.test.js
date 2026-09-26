@@ -163,15 +163,55 @@ test('authority SMS: dedupe per report; retry after partial failure sends only t
   // All fail -> throws so the outbox retries.
   await assert.rejects(svc.notifyApproved(report), /SMS to authorities failed/);
 
-  // Partial failure -> no throw, report completed; the failed number is not retried.
+  // Partial failure -> still throws (outbox retries); the delivered number is remembered.
+  let failA2 = true;
+  const attempts = [];
   sms.send = async (to, text) => {
-    if (to === '+2348030000002') throw new Error('boom');
+    attempts.push(to);
+    if (to === '+2348030000002' && failA2) throw new Error('boom');
     sms.sent.push({ to, text });
   };
-  const partial = await svc.notifyApproved(report);
-  assert.deepEqual({ sent: partial.sent, failed: partial.failed }, { sent: 1, failed: 1 });
+  await assert.rejects(svc.notifyApproved(report), /failed for 1 of 2 recipients/);
+  assert.deepEqual(sms.sent.map((m) => m.to), ['+2348030000001']);
+
+  // Still failing: only the missing phone is attempted, still not complete.
+  attempts.length = 0;
+  await assert.rejects(svc.notifyApproved(report), /failed for 1 of 1 recipients/);
+  assert.deepEqual(attempts, ['+2348030000002']);
+
+  // Provider recovers: only the missing phone is sent, then the report is complete.
+  failA2 = false;
+  attempts.length = 0;
+  const done = await svc.notifyApproved(report);
+  assert.deepEqual(attempts, ['+2348030000002']);
+  assert.deepEqual({ sent: done.sent, failed: done.failed }, { sent: 1, failed: 0 });
   assert.deepEqual(await svc.notifyApproved(report), { sent: 0, note: 'sms already sent for report' });
+  assert.deepEqual(sms.sent.map((m) => m.to), ['+2348030000001', '+2348030000002']);
+});
+
+test('outbox: partial SMS failure leaves the event unprocessed; retry texts only the missing authority', async () => {
+  const repo = fakeRepo({
+    reports: [{ ...report }],
+    authorities: [authority('a1', '08030000001'), authority('a2', '08030000002')],
+    events: [
+      { id: 1, event_type: 'report_status_changed', payload: { report_id: 'r1', old_status: 'verified', new_status: 'approved' } },
+    ],
+  });
+  const sms = fakeSms();
+  let failA2 = true;
+  sms.send = async (to, text) => {
+    if (to === '+2348030000002' && failA2) throw new Error('boom');
+    sms.sent.push({ to, text });
+  };
+  const handlers = createHandlers({ repo, push: fakePush(), authoritySms: createAuthoritySms({ repo, sms, logger }), logger });
+  await runOutboxBatch({ repo, handlers, logger });
+  assert.equal(repo.state.events[0].processed_at, undefined);
   assert.equal(sms.sent.length, 1);
+
+  failA2 = false;
+  await runOutboxBatch({ repo, handlers, logger });
+  assert.equal(repo.state.events[0].processed_at, 'now');
+  assert.deepEqual(sms.sent.map((m) => m.to), ['+2348030000001', '+2348030000002']);
 });
 
 test('authority SMS: provider not configured -> skipped, no DB lookups', async () => {

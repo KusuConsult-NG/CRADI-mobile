@@ -103,10 +103,14 @@ export function createAuthoritySms({ repo, sms, logger = defaultLog, now = Date.
     }
 
     logger.info('sms.authorities', { report_id: report.id, lga: report.lga, authorities: authorities.length, ...summary });
-    // Nothing got through (likely a provider outage): throw so the outbox retries.
-    // Already-delivered phones are remembered and will not be texted again.
-    if (summary.failed > 0 && summary.sent === 0 && done.size === 0) {
-      throw new Error(`SMS to authorities failed (${summary.failed} attempts)`);
+    // Any failed send: throw so the outbox retries the event. Phones already
+    // texted in this round are remembered in `done` and skipped on the retry,
+    // so only the failed ones are attempted again. The report is marked
+    // complete only once a round finishes with no failures.
+    if (summary.failed > 0) {
+      throw new Error(
+        `SMS to authorities failed for ${summary.failed} of ${summary.failed + summary.sent} recipients (report ${report.id})`,
+      );
     }
     completed.set(report.id, t);
     delivered.delete(report.id);

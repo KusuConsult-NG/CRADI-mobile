@@ -1,6 +1,7 @@
 // Transactional email templates (ported from firebase-functions/email_templates.js).
 // Each template is (data) => { subject, html }. All caller-supplied values are
-// HTML-escaped. 'verification' was dropped: Supabase Auth sends those emails.
+// HTML-escaped. 'verification' and 'passwordReset' were dropped: Supabase Auth
+// sends confirmation and password-recovery emails itself.
 
 const BRAND_RED = '#C62828';
 const BRAND_DARK_RED = '#B71C1C';
@@ -17,14 +18,6 @@ export function escapeHtml(value) {
 // Subjects are plain text; just strip control characters / newlines.
 function plain(value, max = 150) {
   return String(value ?? '').replace(/[\u0000-\u001f\u007f]/g, ' ').slice(0, max);
-}
-
-export function isSafeHttpsUrl(value) {
-  try {
-    return new URL(String(value)).protocol === 'https:';
-  } catch {
-    return false;
-  }
 }
 
 const e = escapeHtml;
@@ -151,34 +144,10 @@ export const templates = {
       ),
     };
   },
-
-  /** data: { resetLink } — must be an https URL. */
-  passwordReset: (data) => ({
-    subject: 'Reset Your CRADI Password',
-    html: shell(
-      header('Password Reset', 'CRADI Mobile'),
-      `<div style="padding: 40px 30px;">
-        <h2 style="color: #333; margin-top: 0;">Reset Your Password</h2>
-        <p style="color: #666; line-height: 1.6;">
-          We received a request to reset the password for your CRADI account. Click the button below to set a new password:
-        </p>
-        <div style="text-align: center; margin: 30px 0;">
-          <a href="${e(data.resetLink)}" style="background-color: ${BRAND_RED}; color: white; padding: 14px 32px; text-decoration: none; border-radius: 6px; font-weight: bold; font-size: 16px; display: inline-block;">
-            Reset Password
-          </a>
-        </div>
-        <p style="color: #999; font-size: 14px; line-height: 1.6;">
-          This link expires in <strong>1 hour</strong>. If you did not request a password reset, please ignore this email — your account is safe.
-        </p>
-      </div>`,
-      footer(),
-    ),
-  }),
 };
 
 /** Returns an error string when `data` is unusable for `type`, else null. */
 export function validateTemplateData(type, data) {
-  if (type === 'passwordReset' && !isSafeHttpsUrl(data?.resetLink)) return 'resetLink must be an https URL';
   if (type === 'reportUpdate' && (!data?.reportId || !data?.status)) return 'reportId and status are required';
   if (type === 'hazardAlert' && !data?.hazardType) return 'hazardType is required';
   return null;

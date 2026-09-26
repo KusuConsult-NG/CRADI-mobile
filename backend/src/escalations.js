@@ -79,7 +79,25 @@ export async function processEscalation(esc, { repo, push, logger = defaultLog }
     return 'skipped';
   }
 
-  await repo.markReportEscalated(report.id, ESCALATION_REASON);
+  // The conditional update only matches a pending, not-yet-escalated report.
+  // If it matched nothing, something changed since the read above (e.g. a
+  // dispute escalated it and notified): re-read and only continue when the
+  // report carries this cron's own reason (an earlier attempt that failed
+  // after marking, whose push is retried idempotently).
+  if (!(await repo.markReportEscalated(report.id, ESCALATION_REASON))) {
+    const fresh = await repo.getReport(report.id);
+    let skipReason = null;
+    if (!fresh) skipReason = 'Report not found';
+    else if (fresh.status !== 'pending') skipReason = `Status: ${fresh.status}`;
+    else if (!fresh.escalated || fresh.escalation_reason !== ESCALATION_REASON) {
+      skipReason = `Already escalated: ${fresh.escalation_reason || 'unknown reason'}`;
+    }
+    if (skipReason) {
+      await repo.finishEscalation(esc.id, 'skipped', skipReason.slice(0, 500));
+      logger.info('escalation.skipped_race', { escalation_id: esc.id, report_id: report.id, reason: skipReason });
+      return 'skipped';
+    }
+  }
 
   const recipients = await notifyEscalationRecipients(report, escalationNotification(report), {
     repo,
