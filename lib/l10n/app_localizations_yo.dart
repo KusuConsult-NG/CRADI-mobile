@@ -2127,6 +2127,11 @@ class AppLocalizationsYo extends AppLocalizations {
   }
 
   @override
+  String aboutVersionOnly(String version) {
+    return 'Ẹ̀dà $version';
+  }
+
+  @override
   String get aboutPrivacyPolicy => 'Ìlànà Ìpamọ́';
 
   @override
@@ -2330,6 +2335,9 @@ class AppLocalizationsYo extends AppLocalizations {
 
   @override
   String get profileStatReports => 'Ìròyìn';
+
+  @override
+  String get profileDaysActive => 'Ọjọ́ Ìṣiṣẹ́';
 
   @override
   String get profileAccountSettings => 'Ètò Àkáǹtì';

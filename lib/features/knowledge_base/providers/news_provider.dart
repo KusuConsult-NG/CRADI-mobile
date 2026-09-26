@@ -4,7 +4,10 @@ import 'dart:developer' as developer;
 import 'package:climate_app/core/l10n/l10n.dart';
 
 class NewsProvider extends ChangeNotifier {
-  final NewsService _newsService = NewsService();
+  NewsProvider({NewsService? newsService})
+    : _newsService = newsService ?? NewsService();
+
+  final NewsService _newsService;
 
   List<Map<String, dynamic>> _newsItems = [];
   bool _isLoading = false;
@@ -26,10 +29,12 @@ class NewsProvider extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
     } on Exception catch (e) {
+      // Live feed, curated links and the device cache all failed.
+      _newsItems = [];
       _error = (l) => l.knowledgeNewsLoadError;
       _isLoading = false;
       notifyListeners();
-      developer.log('NewsProvider Error: $e');
+      developer.log('NewsProvider Error: $e', name: 'NewsProvider');
     }
   }
 

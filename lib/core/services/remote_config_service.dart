@@ -37,6 +37,7 @@ class RemoteConfigService {
     'app_min_version': '1.0.0',
     // Empty: the app shows its own (translated) default message.
     'app_min_version_message': '',
+    'support_email': 'support@cradi.org',
   };
 
   final Map<String, Object?> _values = {};
@@ -210,4 +211,13 @@ class RemoteConfigService {
 
   String get appMinVersion => _getString('app_min_version');
   String get appMinVersionMessage => _getString('app_min_version_message');
+
+  // ── Support ──────────────────────────────────────────────────────────────
+
+  /// Address shown on the Help & Support screen (admin-managed; a blank
+  /// value falls back to the in-app default).
+  String get supportEmail {
+    final v = _getString('support_email').trim();
+    return v.isEmpty ? _defaults['support_email'] as String : v;
+  }
 }

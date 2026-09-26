@@ -22,6 +22,12 @@ void main() {
       },
     );
 
+    test('header counts match the data (53 LGAs, 584 wards)', () {
+      const lgas = MVPLocationsData.allLGAs;
+      expect(lgas.length, 53);
+      expect(lgas.fold<int>(0, (n, l) => n + l.wards.length), 584);
+    });
+
     test('Benue state should have LGAs', () {
       final lgas = MVPLocationsData.getLGAsForState('Benue');
       expect(lgas, isNotEmpty);

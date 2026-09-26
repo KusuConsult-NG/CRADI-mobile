@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:climate_app/core/constants/emergency.dart';
 import 'package:climate_app/core/theme/app_colors.dart';
 import 'package:climate_app/core/utils/error_handler.dart';
 import 'package:climate_app/features/contacts/models/emergency_contact_model.dart';
@@ -411,7 +412,7 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
       ),
       floatingActionButton: FloatingActionButton.extended(
         heroTag: 'emergency_contacts_fab',
-        onPressed: () => _makePhoneCall('112'),
+        onPressed: () => _makePhoneCall(kNationalEmergencyNumber),
         backgroundColor: AppColors.errorRed,
         icon: const Icon(Icons.sos, color: Colors.white),
         label: Text(

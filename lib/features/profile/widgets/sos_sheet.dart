@@ -1,3 +1,4 @@
+import 'package:climate_app/core/constants/emergency.dart';
 import 'package:climate_app/core/theme/app_colors.dart';
 import 'package:climate_app/features/contacts/models/emergency_contact_model.dart';
 import 'package:climate_app/features/contacts/providers/emergency_contacts_provider.dart';
@@ -6,9 +7,6 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:climate_app/core/l10n/l10n.dart';
-
-/// Nigeria's national emergency number.
-const String kNationalEmergencyNumber = '112';
 
 /// `tel:` link for [phone], with spaces, dashes and brackets removed.
 Uri telUri(String phone) =>

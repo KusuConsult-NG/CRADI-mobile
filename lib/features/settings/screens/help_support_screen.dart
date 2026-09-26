@@ -1,3 +1,4 @@
+import 'package:climate_app/core/services/remote_config_service.dart';
 import 'package:climate_app/core/theme/app_colors.dart';
 import 'package:climate_app/shared/widgets/custom_button.dart';
 import 'package:flutter/material.dart';
@@ -9,13 +10,11 @@ import 'package:climate_app/core/l10n/l10n.dart';
 class HelpSupportScreen extends StatelessWidget {
   const HelpSupportScreen({super.key});
 
-  static const String supportEmail = 'support@cradi.org';
-
   /// Builds the support mailto link. The query is encoded with
   /// [Uri.encodeComponent] (spaces as %20): `Uri(queryParameters:)` encodes
   /// spaces as '+', which mail apps show literally.
   static Uri supportMailUri({
-    String address = supportEmail,
+    required String address,
     required String subject,
     required String body,
   }) {
@@ -27,7 +26,10 @@ class HelpSupportScreen extends StatelessWidget {
 
   Future<void> _contactSupport(BuildContext context) async {
     final l10n = context.l10n;
+    // Admin-managed (app_settings.support_email).
+    final supportEmail = RemoteConfigService().supportEmail;
     final uri = supportMailUri(
+      address: supportEmail,
       subject: l10n.helpSupportEmailSubject,
       body: l10n.helpSupportEmailBody,
     );

@@ -115,6 +115,9 @@ class _VerificationDetailScreenState extends State<VerificationDetailScreen> {
   @override
   Widget build(BuildContext context) {
     final report = widget.report;
+    final lat = double.tryParse('${report['latitude']}');
+    final lng = double.tryParse('${report['longitude']}');
+    final reportLatLng = (lat != null && lng != null) ? LatLng(lat, lng) : null;
     // Stored in UTC; show the device's local time.
     final date = parseTimestamp(report['submittedAt']);
     final formattedDate = date == null
@@ -232,18 +235,14 @@ class _VerificationDetailScreenState extends State<VerificationDetailScreen> {
 
             const SizedBox(height: 24),
 
-            // Map Placeholder (In real app, show map)
-            // Map View
-            if (report['latitude'] != null && report['longitude'] != null)
+            // Report location on a (read-only) map, when it has coordinates.
+            if (reportLatLng != null)
               SizedBox(
                 height: 200,
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(12),
                   child: OSMLocationPicker(
-                    initialPosition: LatLng(
-                      double.tryParse(report['latitude'].toString()) ?? 0,
-                      double.tryParse(report['longitude'].toString()) ?? 0,
-                    ),
+                    initialPosition: reportLatLng,
                     isInteractive: false,
                   ),
                 ),

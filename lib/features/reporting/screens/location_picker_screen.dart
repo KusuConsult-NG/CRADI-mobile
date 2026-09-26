@@ -382,7 +382,8 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
   }
 
   Future<void> _onMapPositionChanged(LatLng point) async {
-    // Determine new position mock
+    // The user picked this point on the map: it becomes the report position
+    // (accuracy/altitude/etc. are unknown for a manual pick).
     final position = Position(
       latitude: point.latitude,
       longitude: point.longitude,

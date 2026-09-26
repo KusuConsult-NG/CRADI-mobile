@@ -57,42 +57,11 @@ class AppConfig {
   static const String authoritiesCollection = 'authorities';
   static const String ndpaConsentsCollection = 'ndpa_consents';
   static const String appSettingsCollection = 'app_settings';
+  static const String newsLinksCollection = 'news_links';
 
   // ─────────────────────── Storage buckets ─────────────────────────────────
   // Object paths must start with the uploader's user id (storage RLS).
 
   static const String profileImagesBucket = 'profile-images';
   static const String reportImagesBucket = 'report-images';
-
-  // ─────────────────────── Feature flags ───────────────────────────────────
-
-  /// Enable development bypass for OTP verification.
-  /// IMPORTANT: Must be false in production!
-  static const bool enableOtpBypass = false;
-
-  /// Development bypass OTP code.
-  static const String devBypassOtp = '1111';
-
-  /// Enable verbose logging (automatically disabled in release builds).
-  static const bool verboseLogging =
-      bool.fromEnvironment('dart.vm.product') == false;
-
-  // ─────────────────────── App constants ───────────────────────────────────
-
-  /// Session timeout in minutes.
-  static const int sessionTimeoutMinutes = 30;
-
-  /// Maximum login attempts before account lock.
-  static const int maxLoginAttempts = 5;
-
-  // ─────────────────────── Alert validation ────────────────────────────────
-
-  /// Minimum peer confirmations before auto-validating a report.
-  /// 2 prevents a single actor from triggering a system-wide alert alone.
-  static const int minimumPeerConfirmations = 2;
-
-  // ─────────────────────── Branding ────────────────────────────────────────
-
-  static const String appName = 'EWER';
-  static const String appVersion = '1.0.5+8';
 }

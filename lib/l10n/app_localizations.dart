@@ -3710,7 +3710,7 @@ abstract class AppLocalizations {
   /// **'Early Warning System'**
   String get aboutTagline;
 
-  /// App version line on the About screen; {version} like 2.4.1, {build} like 204.
+  /// App version line on the About screen; {version} like 1.0.14, {build} like 22.
   ///
   /// In en, this message translates to:
   /// **'Version {version} (Build {build})'**
@@ -3721,6 +3721,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'© {year} EWER. All rights reserved.'**
   String aboutCopyright(String year);
+
+  /// App version line on the About screen when the platform reports no build number; {version} like 1.0.14.
+  ///
+  /// In en, this message translates to:
+  /// **'Version {version}'**
+  String aboutVersionOnly(String version);
 
   /// Button and dialog title for the privacy notice on the About screen.
   ///
@@ -4099,6 +4105,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Reports'**
   String get profileStatReports;
+
+  /// Profile statistic label: number of days since the user registered (max ~12 chars).
+  ///
+  /// In en, this message translates to:
+  /// **'Days Active'**
+  String get profileDaysActive;
 
   /// Section header on the profile.
   ///

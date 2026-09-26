@@ -210,3 +210,14 @@ String? formatKnowledgeDate(Object? raw, [String? locale]) {
   if (date == null) return null;
   return DateFormat('d MMM yyyy', locale).format(date.toLocal());
 }
+
+/// Estimated reading time of [text] in whole minutes (about 200 words a
+/// minute, at least 1).
+int readingMinutes(String? text) {
+  final words = (text ?? '')
+      .split(RegExp(r'\s+'))
+      .where((w) => w.isNotEmpty)
+      .length;
+  final minutes = (words / 200).ceil();
+  return minutes < 1 ? 1 : minutes;
+}

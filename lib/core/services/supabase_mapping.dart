@@ -117,6 +117,10 @@ class SupabaseSchema {
       'platform', 'method',
     },
     'app_settings': {'key', 'value', 'updated_at'},
+    'news_links': {
+      'id', 'title', 'url', 'source', 'sort_order', 'is_active', //
+      'created_at', 'updated_at',
+    },
   };
 
   /// Primary key column per table (default `id`).

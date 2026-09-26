@@ -2,10 +2,14 @@ import 'package:climate_app/core/theme/app_colors.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:climate_app/core/l10n/l10n.dart';
 
 class AboutAppScreen extends StatelessWidget {
   const AboutAppScreen({super.key});
+
+  /// This build's version, read once from the platform.
+  static final Future<PackageInfo> _packageInfo = PackageInfo.fromPlatform();
 
   @override
   Widget build(BuildContext context) {
@@ -75,27 +79,54 @@ class AboutAppScreen extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 32),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 8,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade200,
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text(
-                  context.l10n.aboutVersion('2.4.1', '204'),
-                  style: GoogleFonts.lexend(
-                    fontSize: 14,
-                    color: Colors.grey.shade700,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
+              FutureBuilder<PackageInfo>(
+                future: _packageInfo,
+                builder: (context, snapshot) {
+                  final info = snapshot.data;
+                  if (info == null) {
+                    // Loading, or unavailable on this platform: show no
+                    // version rather than a made-up one.
+                    return SizedBox(
+                      height: 36,
+                      child: snapshot.connectionState == ConnectionState.waiting
+                          ? const Center(
+                              child: SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              ),
+                            )
+                          : null,
+                    );
+                  }
+                  final build = info.buildNumber.trim();
+                  return Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade200,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      build.isEmpty
+                          ? context.l10n.aboutVersionOnly(info.version)
+                          : context.l10n.aboutVersion(info.version, build),
+                      style: GoogleFonts.lexend(
+                        fontSize: 14,
+                        color: Colors.grey.shade700,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  );
+                },
               ),
               const SizedBox(height: 48),
               Text(
-                context.l10n.aboutCopyright('2024'),
+                context.l10n.aboutCopyright(DateTime.now().year.toString()),
                 style: GoogleFonts.lexend(
                   fontSize: 12,
                   color: Colors.grey.shade500,

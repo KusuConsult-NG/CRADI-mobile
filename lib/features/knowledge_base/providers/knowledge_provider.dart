@@ -1,5 +1,4 @@
 import 'package:climate_app/core/services/supabase_service.dart';
-import 'package:climate_app/core/services/emergency_guides_service.dart';
 import 'package:climate_app/core/services/offline_storage_service.dart';
 import 'package:climate_app/core/constants/app_config.dart';
 import 'package:climate_app/features/knowledge_base/knowledge_categories.dart';
@@ -7,10 +6,39 @@ import 'package:flutter/material.dart';
 import 'dart:developer' as developer;
 import 'package:climate_app/core/l10n/l10n.dart';
 
+/// Loads knowledge_base rows (app-shaped maps) for a hazard type, or all rows
+/// when [hazardType] is null.
+typedef GuideRowsFetcher =
+    Future<List<Map<String, dynamic>>> Function(String? hazardType);
+
+/// Guides are admin-managed in the `knowledge_base` table. The last
+/// successful unfiltered list is cached on the device (Hive) and served,
+/// marked `isOffline`, when the server cannot be reached.
 class KnowledgeProvider extends ChangeNotifier {
-  final SupabaseService _db = SupabaseService();
-  final EmergencyGuidesService _fallbackService = EmergencyGuidesService();
-  final OfflineStorageService _offlineStorage = OfflineStorageService();
+  KnowledgeProvider({
+    GuideRowsFetcher? fetchRows,
+    Future<void> Function(List<Map<String, dynamic>> guides)? writeCache,
+    List<Map<String, dynamic>>? Function()? readCache,
+  }) : _fetchRows = fetchRows ?? _fetchFromSupabase,
+       _writeCache = writeCache ?? OfflineStorageService().cacheGuides,
+       _readCache = readCache ?? OfflineStorageService().getCachedGuides;
+
+  final GuideRowsFetcher _fetchRows;
+  final Future<void> Function(List<Map<String, dynamic>> guides) _writeCache;
+  final List<Map<String, dynamic>>? Function() _readCache;
+
+  static Future<List<Map<String, dynamic>>> _fetchFromSupabase(
+    String? hazardType,
+  ) {
+    return SupabaseService().listDocuments(
+      collectionId: AppConfig.knowledgeBaseCollection,
+      queries: <QueryFilter>[
+        if (hazardType != null) FQuery.equal('hazardType', hazardType),
+        FQuery.orderDesc('updatedAt'),
+      ],
+      limitCount: 100,
+    );
+  }
 
   /// Guides per category key ('All' = unfiltered). Kept separately so opening
   /// a category tab never replaces the featured (unfiltered) list.
@@ -55,61 +83,46 @@ class KnowledgeProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      List<Map<String, dynamic>> result;
-      try {
-        final queries = <QueryFilter>[
-          if (key != allKnowledgeCategories)
-            FQuery.equal('hazardType', cat?.hazardType ?? key.toLowerCase()),
-          FQuery.orderDesc('updatedAt'),
-        ];
-
-        final docs = await _db.listDocuments(
-          collectionId: AppConfig.knowledgeBaseCollection,
-          queries: queries,
-          limitCount: 100,
-        );
-
-        if (docs.isNotEmpty) {
-          result = docs.map(_fromRow).toList();
-          // Only the unfiltered list is cached, so the offline fallback can
-          // serve every category from it.
-          if (key == allKnowledgeCategories) {
-            try {
-              await _offlineStorage.cacheGuides(result);
-            } on Object catch (e) {
-              developer.log(
-                'Guide cache failed: $e',
-                name: 'KnowledgeProvider',
-              );
-            }
-          }
-          developer.log(
-            'Fetched ${result.length} guides ($key) from Supabase',
-            name: 'KnowledgeProvider',
-          );
-        } else {
-          result = await _bundledGuides(key);
-        }
-      } on Exception catch (e) {
-        developer.log(
-          'Guide fetch failed, using fallback: $e',
-          name: 'KnowledgeProvider',
-        );
-        List<Map<String, dynamic>> cached = const [];
+      final docs = await _fetchRows(
+        key == allKnowledgeCategories
+            ? null
+            : (cat?.hazardType ?? key.toLowerCase()),
+      );
+      final result = docs.map(_fromRow).toList();
+      // Only the unfiltered list is cached (so the offline fallback can
+      // serve every category from it). An empty result is cached too, so
+      // guides an admin deleted also disappear offline.
+      if (key == allKnowledgeCategories) {
         try {
-          cached = _offlineStorage
-              .getCachedGuides()
-              .where((g) => guideMatchesCategory(g, key))
-              .toList();
-        } on Object catch (_) {
-          // Cache unavailable; use the bundled guides.
+          await _writeCache(result);
+        } on Object catch (e) {
+          developer.log('Guide cache failed: $e', name: 'KnowledgeProvider');
         }
-        result = cached.isNotEmpty ? cached : await _bundledGuides(key);
       }
+      developer.log(
+        'Fetched ${result.length} guides ($key) from Supabase',
+        name: 'KnowledgeProvider',
+      );
       _guidesByCategory[key] = result;
     } on Exception catch (e) {
-      developer.log('Failed to fetch guides: $e', name: 'KnowledgeProvider');
-      _errors[key] = (l) => l.knowledgeLoadError;
+      developer.log(
+        'Guide fetch failed, trying the offline cache: $e',
+        name: 'KnowledgeProvider',
+      );
+      List<Map<String, dynamic>>? cached;
+      try {
+        cached = _readCache();
+      } on Object catch (e) {
+        developer.log('Guide cache unavailable: $e', name: 'KnowledgeProvider');
+      }
+      if (cached != null) {
+        _guidesByCategory[key] = cached
+            .where((g) => guideMatchesCategory(g, key))
+            .map((g) => <String, dynamic>{...g, 'isOffline': true})
+            .toList();
+      } else {
+        _errors[key] = (l) => l.knowledgeLoadError;
+      }
     } finally {
       _loading.remove(key);
       notifyListeners();
@@ -117,10 +130,9 @@ class KnowledgeProvider extends ChangeNotifier {
   }
 
   Map<String, dynamic> _fromRow(Map<String, dynamic> data) {
-    final rawUrl = data['imageUrl']?.toString() ?? '';
-    final imageUrl = (rawUrl.isNotEmpty && rawUrl.startsWith('http'))
-        ? rawUrl
-        : _getImageForType(data['hazardType'] ?? data['category']);
+    final rawUrl = data['imageUrl']?.toString().trim() ?? '';
+    // No image: the UI shows a placeholder with the category icon.
+    final imageUrl = rawUrl.startsWith('http') ? rawUrl : null;
     final category = knowledgeCategoryFor(data['hazardType']);
     return <String, dynamic>{
       'id': data[r'$id'],
@@ -134,27 +146,10 @@ class KnowledgeProvider extends ChangeNotifier {
           (category?.label ?? data['hazardType'] as String?)?.toUpperCase() ??
           'GUIDE',
       'imageUrl': imageUrl,
-      'source': data['source'] ?? 'EWER Admin',
+      'source': data['source'] ?? '',
       'updatedAt': data['updatedAt'],
       'isOffline': false,
     };
-  }
-
-  /// Curated guides bundled with the app, filtered to [key].
-  Future<List<Map<String, dynamic>>> _bundledGuides(String key) async {
-    final fallbackData = await _fallbackService.fetchGuides(limit: 100);
-    return fallbackData
-        .where((doc) => guideMatchesCategory(doc, key))
-        .map(
-          (doc) => <String, dynamic>{
-            ...doc,
-            'imageUrl':
-                doc['imageUrl'] ??
-                _getImageForType(doc['hazardType'] ?? doc['category']),
-            'isOffline': true,
-          },
-        )
-        .toList();
   }
 
   /// Search guides (of [category], default all) by title, content, tag, or
@@ -178,46 +173,5 @@ class KnowledgeProvider extends ChangeNotifier {
           tag.contains(lowerQuery) ||
           keywords.contains(lowerQuery);
     }).toList();
-  }
-
-  List<String> getDisasterTypes() => knowledgeCategoryFilters;
-
-  String _getImageForType(String? type) {
-    switch (type?.toLowerCase()) {
-      case 'flood':
-        // Flooded street / submerged homes
-        return 'https://images.unsplash.com/photo-1504701954957-2010ec3bcec1?auto=format&fit=crop&q=80&w=800';
-      case 'fire':
-      case 'wildfires':
-        // Active wildfire / burning landscape
-        return 'https://images.unsplash.com/photo-1516912481808-3406841bd33c?auto=format&fit=crop&q=80&w=800';
-      case 'accident':
-        // Road accident / emergency response scene
-        return 'https://images.unsplash.com/photo-1544636331-e26879cd4d9b?auto=format&fit=crop&q=80&w=800';
-      case 'erosion':
-        // Severe soil erosion / cracked ground
-        return 'https://images.unsplash.com/photo-1591700608620-4cdcf1d47898?auto=format&fit=crop&q=80&w=800';
-      case 'disease':
-      case 'epidemic':
-        // Healthcare / disease response
-        return 'https://images.unsplash.com/photo-1584036561566-b93a50208c3c?auto=format&fit=crop&q=80&w=800';
-      case 'conflict':
-        // Crisis / security emergency scene
-        return 'https://images.unsplash.com/photo-1599059813005-11265ba4b4ce?auto=format&fit=crop&q=80&w=800';
-      case 'storm':
-        // Dark storm clouds / severe weather
-        return 'https://images.unsplash.com/photo-1535350356005-fd52b3b524fb?auto=format&fit=crop&q=80&w=800';
-      case 'earthquake':
-        // Collapsed building / earthquake damage
-        return 'https://images.unsplash.com/photo-1548337138-e87d889cc369?auto=format&fit=crop&q=80&w=800';
-      case 'extreme heat':
-      case 'extreme_heat':
-      case 'drought':
-        // Cracked dry earth / drought landscape
-        return 'https://images.unsplash.com/photo-1504192010706-dd7f569ee2be?auto=format&fit=crop&q=80&w=800';
-      default:
-        // Emergency preparedness / general safety
-        return 'https://images.unsplash.com/photo-1496247749665-49cf5b1022e9?auto=format&fit=crop&q=80&w=800';
-    }
   }
 }

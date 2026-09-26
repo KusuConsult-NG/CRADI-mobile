@@ -1,7 +1,8 @@
 /// MVP Location Data for CRADI Mobile
 ///
 /// Covers 3 target states: Benue, Nasarawa, and Plateau
-/// Total: 53 LGAs across 3 states, 613 wards
+/// Total: 53 LGAs across 3 states (Benue 23, Nasarawa 13, Plateau 17),
+/// 584 wards
 ///
 /// Data Source: Independent National Electoral Commission (INEC) Nigeria
 /// Last Updated: 2025-12-30

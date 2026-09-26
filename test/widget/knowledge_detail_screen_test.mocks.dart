@@ -85,14 +85,6 @@ class MockKnowledgeProvider extends _i1.Mock implements _i2.KnowledgeProvider {
           as List<Map<String, dynamic>>);
 
   @override
-  List<String> getDisasterTypes() =>
-      (super.noSuchMethod(
-            Invocation.method(#getDisasterTypes, []),
-            returnValue: <String>[],
-          )
-          as List<String>);
-
-  @override
   void addListener(_i4.VoidCallback? listener) => super.noSuchMethod(
     Invocation.method(#addListener, [listener]),
     returnValueForMissingStub: null,

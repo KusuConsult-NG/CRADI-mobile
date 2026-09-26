@@ -2141,6 +2141,11 @@ class AppLocalizationsHa extends AppLocalizations {
   }
 
   @override
+  String aboutVersionOnly(String version) {
+    return 'Sigar $version';
+  }
+
+  @override
   String get aboutPrivacyPolicy => 'Manufar Sirri';
 
   @override
@@ -2344,6 +2349,9 @@ class AppLocalizationsHa extends AppLocalizations {
 
   @override
   String get profileStatReports => 'Rahotanni';
+
+  @override
+  String get profileDaysActive => 'Kwanakin Aiki';
 
   @override
   String get profileAccountSettings => 'Saitunan Asusu';

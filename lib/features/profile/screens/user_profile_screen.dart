@@ -1004,19 +1004,16 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     );
   }
 
-  // Calculate days active from user creation
+  // Days since registration; '–' while the registration date is unknown.
   Widget _buildDaysActiveCard(ProfileProvider profile) {
-    int daysActive = 0;
-
-    if (profile.registrationDate != null) {
-      daysActive = DateTime.now().difference(profile.registrationDate!).inDays;
-      // Ensure at least 1 day is shown if they registered today
-      if (daysActive <= 0) daysActive = 1;
-    } else {
-      daysActive = 1; // Default fallback
+    final registered = profile.registrationDate;
+    String value = '–';
+    if (registered != null) {
+      final days = DateTime.now().difference(registered).inDays;
+      // Registered today counts as the first day.
+      value = '${days <= 0 ? 1 : days}';
     }
-
-    return _buildStatCard('$daysActive', 'Days Active');
+    return _buildStatCard(value, context.l10n.profileDaysActive);
   }
 
   Widget _buildSectionHeader(IconData? icon, String title) {

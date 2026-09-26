@@ -119,11 +119,11 @@ class _MainShellScreenState extends State<MainShellScreen> {
                           ? profileProvider.name
                           : context.l10n.shellDrawerDefaultName,
                     ),
-                    accountEmail: Text(
-                      profileProvider.email.isNotEmpty
-                          ? profileProvider.email
-                          : "user@cradi.org",
-                    ),
+                    // No placeholder address: the line is left out until
+                    // the profile's email is known.
+                    accountEmail: profileProvider.email.isNotEmpty
+                        ? Text(profileProvider.email)
+                        : null,
                     currentAccountPicture: CircleAvatar(
                       backgroundColor: Colors.white,
                       child: Text(

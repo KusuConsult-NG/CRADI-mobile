@@ -4,11 +4,11 @@ import 'package:climate_app/features/knowledge_base/providers/news_provider.dart
 import 'package:climate_app/features/knowledge_base/providers/knowledge_provider.dart';
 import 'package:climate_app/core/theme/app_colors.dart';
 import 'package:climate_app/features/knowledge_base/knowledge_categories.dart';
+import 'package:climate_app/features/knowledge_base/widgets/guide_image.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:climate_app/core/l10n/l10n.dart';
 
@@ -261,10 +261,37 @@ class _KnowledgeBaseScreenState extends State<KnowledgeBaseScreen> {
                     _searchQuery,
                   );
 
+                  final error = knowledgeProvider.error;
+                  if (allGuides.isEmpty && error != null) {
+                    return Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            error(context.l10n),
+                            textAlign: TextAlign.center,
+                            style: GoogleFonts.lexend(color: Colors.red),
+                          ),
+                          TextButton(
+                            onPressed: () => knowledgeProvider.fetchGuides(
+                              category: allKnowledgeCategories,
+                            ),
+                            child: Text(context.l10n.retry),
+                          ),
+                        ],
+                      ),
+                    );
+                  }
+
                   if (allGuides.isEmpty) {
                     return Center(
                       child: Text(
-                        context.l10n.knowledgeNoGuides,
+                        _searchQuery.trim().isEmpty
+                            ? context.l10n.knowledgeNoGuides
+                            : context.l10n.knowledgeNoGuidesMatch(
+                                _searchQuery.trim(),
+                              ),
+                        textAlign: TextAlign.center,
                         style: GoogleFonts.lexend(color: Colors.grey),
                       ),
                     );
@@ -295,7 +322,6 @@ class _KnowledgeBaseScreenState extends State<KnowledgeBaseScreen> {
                         guide['title'] ?? context.l10n.knowledgeNoTitle,
                         knowledgeTagDisplay(context.l10n, guide['tag']),
                         tagColor,
-                        _resolveGuideImage(guide),
                         context,
                         guideData: guide,
                       );
@@ -429,7 +455,7 @@ class _KnowledgeBaseScreenState extends State<KnowledgeBaseScreen> {
                         child: GestureDetector(
                           onTap: () async {
                             final url = item['url'];
-                            if (url != null) {
+                            if (url is String && url.startsWith('http')) {
                               try {
                                 final uri = Uri.parse(url);
                                 if (await canLaunchUrl(uri)) {
@@ -471,45 +497,10 @@ class _KnowledgeBaseScreenState extends State<KnowledgeBaseScreen> {
     );
   }
 
-  /// Returns a guaranteed non-null, topic-matched network image URL.
-  String _resolveGuideImage(Map<String, dynamic> guide) {
-    final url = guide['imageUrl']?.toString() ?? '';
-    if (url.isNotEmpty && url.startsWith('http')) return url;
-    final cat = (guide['category'] ?? guide['hazardType'] ?? '')
-        .toString()
-        .toLowerCase();
-    switch (cat) {
-      case 'flood':
-        return 'https://images.unsplash.com/photo-1504701954957-2010ec3bcec1?auto=format&fit=crop&q=80&w=800';
-      case 'fire':
-      case 'wildfires':
-        return 'https://images.unsplash.com/photo-1516912481808-3406841bd33c?auto=format&fit=crop&q=80&w=800';
-      case 'accident':
-        return 'https://images.unsplash.com/photo-1544636331-e26879cd4d9b?auto=format&fit=crop&q=80&w=800';
-      case 'erosion':
-        return 'https://images.unsplash.com/photo-1591700608620-4cdcf1d47898?auto=format&fit=crop&q=80&w=800';
-      case 'disease':
-      case 'epidemic':
-        return 'https://images.unsplash.com/photo-1584036561566-b93a50208c3c?auto=format&fit=crop&q=80&w=800';
-      case 'conflict':
-        return 'https://images.unsplash.com/photo-1599059813005-11265ba4b4ce?auto=format&fit=crop&q=80&w=800';
-      case 'storm':
-        return 'https://images.unsplash.com/photo-1535350356005-fd52b3b524fb?auto=format&fit=crop&q=80&w=800';
-      case 'earthquake':
-        return 'https://images.unsplash.com/photo-1548337138-e87d889cc369?auto=format&fit=crop&q=80&w=800';
-      case 'extreme heat':
-      case 'drought':
-        return 'https://images.unsplash.com/photo-1504192010706-dd7f569ee2be?auto=format&fit=crop&q=80&w=800';
-      default:
-        return 'https://images.unsplash.com/photo-1496247749665-49cf5b1022e9?auto=format&fit=crop&q=80&w=800';
-    }
-  }
-
   Widget _buildFavoriteCard(
     String title,
     String tag,
     Color tagColor,
-    String imageUrl,
     BuildContext context, {
     Map<String, dynamic>? guideData,
   }) {
@@ -533,26 +524,7 @@ class _KnowledgeBaseScreenState extends State<KnowledgeBaseScreen> {
             // Background Image
             ClipRRect(
               borderRadius: BorderRadius.circular(12),
-              child: CachedNetworkImage(
-                imageUrl: imageUrl,
-                fit: BoxFit.cover,
-                placeholder: (context, url) => Container(
-                  color: Colors.grey.shade200,
-                  child: const Center(
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  ),
-                ),
-                errorWidget: (context, url, error) => Container(
-                  color: Colors.grey.shade800,
-                  child: const Center(
-                    child: Icon(
-                      Icons.cloud_off,
-                      color: Colors.white54,
-                      size: 32,
-                    ),
-                  ),
-                ),
-              ),
+              child: GuideImage(guide: guideData ?? const {}),
             ),
             // Gradient Overlay
             Container(

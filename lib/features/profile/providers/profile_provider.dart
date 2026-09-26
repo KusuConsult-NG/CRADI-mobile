@@ -151,6 +151,14 @@ class ProfileProvider extends ChangeNotifier {
             _lga = doc['lga'];
             _ward = doc['ward'];
             _registrationCode = doc['registrationCode'];
+            // Registration date: the earlier of the auth account and the
+            // profiles row (either can be missing).
+            final rowCreated = parseTimestamp(doc['createdAt']);
+            final authCreated = _registrationDate;
+            if (rowCreated != null &&
+                (authCreated == null || rowCreated.isBefore(authCreated))) {
+              _registrationDate = rowCreated;
+            }
             // The row's biometricsEnabled is informational only: the
             // device lock is per device and is read from local storage,
             // never overwritten from the server (a device without

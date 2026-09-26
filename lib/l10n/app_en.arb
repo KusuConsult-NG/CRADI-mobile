@@ -2680,7 +2680,7 @@
   },
   "aboutVersion": "Version {version} (Build {build})",
   "@aboutVersion": {
-    "description": "App version line on the About screen; {version} like 2.4.1, {build} like 204.",
+    "description": "App version line on the About screen; {version} like 1.0.14, {build} like 22.",
     "placeholders": {
       "version": {
         "type": "String"
@@ -2695,6 +2695,15 @@
     "description": "Copyright line on the About screen; {year} is the year.",
     "placeholders": {
       "year": {
+        "type": "String"
+      }
+    }
+  },
+  "aboutVersionOnly": "Version {version}",
+  "@aboutVersionOnly": {
+    "description": "App version line on the About screen when the platform reports no build number; {version} like 1.0.14.",
+    "placeholders": {
+      "version": {
         "type": "String"
       }
     }
@@ -2971,6 +2980,10 @@
   "profileStatReports": "Reports",
   "@profileStatReports": {
     "description": "Profile statistic label: number of reports (max ~12 chars)."
+  },
+  "profileDaysActive": "Days Active",
+  "@profileDaysActive": {
+    "description": "Profile statistic label: number of days since the user registered (max ~12 chars)."
   },
   "profileAccountSettings": "Account Settings",
   "@profileAccountSettings": {

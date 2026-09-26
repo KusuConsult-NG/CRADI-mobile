@@ -2113,6 +2113,11 @@ class AppLocalizationsIg extends AppLocalizations {
   }
 
   @override
+  String aboutVersionOnly(String version) {
+    return 'Ụdị $version';
+  }
+
+  @override
   String get aboutPrivacyPolicy => 'Iwu Nzuzo';
 
   @override
@@ -2314,6 +2319,9 @@ class AppLocalizationsIg extends AppLocalizations {
 
   @override
   String get profileStatReports => 'Akụkọ';
+
+  @override
+  String get profileDaysActive => 'Ụbọchị Ọrụ';
 
   @override
   String get profileAccountSettings => 'Ntọala Akaụntụ';

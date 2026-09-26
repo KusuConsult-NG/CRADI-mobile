@@ -1,5 +1,6 @@
 import 'package:climate_app/core/theme/app_colors.dart';
 import 'package:climate_app/features/knowledge_base/knowledge_categories.dart';
+import 'package:climate_app/features/knowledge_base/widgets/guide_image.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
@@ -103,24 +104,12 @@ class _KnowledgeDetailScreenState extends State<KnowledgeDetailScreen> {
   @override
   Widget build(BuildContext context) {
     final guide = widget.guide;
-    // Determine category icon and color
-    IconData categoryIcon = Icons.info_outline;
-    Color categoryColor = AppColors.primaryRed;
-
-    switch (guide['category']) {
-      case 'Safety':
-        categoryIcon = Icons.security;
-        categoryColor = Colors.blue;
-        break;
-      case 'Emergency':
-        categoryIcon = Icons.warning_amber_rounded;
-        categoryColor = Colors.orange;
-        break;
-      case 'Tech':
-        categoryIcon = Icons.smartphone;
-        categoryColor = Colors.purple;
-        break;
-    }
+    // Category icon and color (shared with the list screens).
+    final category =
+        knowledgeCategoryFor(guide['hazardType']) ??
+        knowledgeCategoryFor(guide['category']);
+    final IconData categoryIcon = category?.icon ?? Icons.info_outline;
+    final Color categoryColor = category?.color ?? AppColors.primaryRed;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -246,21 +235,24 @@ class _KnowledgeDetailScreenState extends State<KnowledgeDetailScreen> {
                 const Icon(Icons.menu_book, size: 14, color: Colors.grey),
                 const SizedBox(width: 4),
                 Text(
-                  context.l10n.knowledgeReadTime(5),
+                  context.l10n.knowledgeReadTime(
+                    readingMinutes(
+                      (guide['content'] ?? guide['description'])?.toString(),
+                    ),
+                  ),
                   style: GoogleFonts.lexend(fontSize: 12, color: Colors.grey),
                 ),
               ],
             ),
             const SizedBox(height: 24),
-            // Featured Image Placeholder
-            if (guide['imageUrl'] != null &&
-                guide['imageUrl'].toString().isNotEmpty)
+            // Featured image, or a category placeholder when there is none.
+            if (guideImageUrl(guide) != null)
               ClipRRect(
                 borderRadius: BorderRadius.circular(16),
                 child: AspectRatio(
                   aspectRatio: 16 / 9,
                   child: Image.network(
-                    guide['imageUrl'],
+                    guideImageUrl(guide)!,
                     fit: BoxFit.cover,
                     errorBuilder: (context, error, stackTrace) {
                       return _buildFallbackImage(categoryIcon, categoryColor);

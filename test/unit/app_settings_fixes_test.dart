@@ -125,6 +125,7 @@ void main() {
   group('Help & Support mailto', () {
     test('encodes spaces as %20, not +', () {
       final uri = HelpSupportScreen.supportMailUri(
+        address: 'support@cradi.org',
         subject: englishL10n.helpSupportEmailSubject,
         body: englishL10n.helpSupportEmailBody,
       );
@@ -133,6 +134,16 @@ void main() {
       expect(s, isNot(contains('+')));
       expect(s, contains('subject=CRADI%20App%20Support%20Request'));
       expect(s, contains('%0A'));
+    });
+
+    test('support address comes from app_settings, default when unset', () {
+      final cfg = RemoteConfigService()..debugSetValues({});
+      expect(cfg.supportEmail, 'support@cradi.org');
+      cfg.debugSetValues({'support_email': 'help@example.org'});
+      expect(cfg.supportEmail, 'help@example.org');
+      cfg.debugSetValues({'support_email': '  '});
+      expect(cfg.supportEmail, 'support@cradi.org');
+      cfg.debugSetValues({});
     });
   });
 

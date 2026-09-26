@@ -796,7 +796,10 @@ class OfflineStorageService {
   /// offline fallback, and guides rarely change, so an old copy is far
   /// better than none. The cache is refreshed whenever the guides are
   /// fetched online (see KnowledgeProvider.fetchGuides).
-  List<Map<String, dynamic>> getCachedGuides() {
+  ///
+  /// Returns null when nothing was ever cached. An empty list means the
+  /// server had no guides at the last successful fetch.
+  List<Map<String, dynamic>>? getCachedGuides() {
     _ensureInitialized();
     final cached = _contentCacheBox!.get('guides');
     if (cached != null && cached['data'] is List) {
@@ -804,7 +807,7 @@ class OfflineStorageService {
           .map((e) => Map<String, dynamic>.from(e))
           .toList();
     }
-    return [];
+    return null;
   }
 
   /// Cache alerts
