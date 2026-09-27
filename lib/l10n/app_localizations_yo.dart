@@ -205,7 +205,7 @@ class AppLocalizationsYo extends AppLocalizations {
   String get onlineJustNow => 'Lórí ayélujára • Nísinsìnyí';
 
   @override
-  String get active => 'ń ṣiṣẹ́';
+  String get active => 'Ń ṣiṣẹ́';
 
   @override
   String get pending => 'Ń Dúró';
@@ -2952,7 +2952,7 @@ class AppLocalizationsYo extends AppLocalizations {
   }
 
   @override
-  String get adminAlertBroadcastSuccess => '✅ A ti kéde ìkìlọ̀ ní àṣeyọrí';
+  String get adminAlertBroadcastSuccess => 'A ti kéde ìkìlọ̀ ní àṣeyọrí';
 
   @override
   String adminAlertSendFailed(String error) {
@@ -2969,7 +2969,7 @@ class AppLocalizationsYo extends AppLocalizations {
   String get adminAlertTargetArea => 'Agbègbè Àfojúsùn';
 
   @override
-  String get adminAlertAllAreas => '🌍 Gbogbo Agbègbè';
+  String get adminAlertAllAreas => 'Gbogbo Agbègbè';
 
   @override
   String get adminAlertTitleLabel => 'Àkọlé Ìkìlọ̀';
@@ -3021,10 +3021,10 @@ class AppLocalizationsYo extends AppLocalizations {
   String get adminGuideAddFirst => 'Fi ìtọ́sọ́nà àkọ́kọ́ kún un';
 
   @override
-  String get adminGuideEditMenu => '✏️ Ṣàtúnṣe';
+  String get adminGuideEditMenu => 'Ṣàtúnṣe';
 
   @override
-  String get adminGuideDeleteMenu => '🗑️ Pa Rẹ́';
+  String get adminGuideDeleteMenu => 'Pa Rẹ́';
 
   @override
   String get adminGuideUpdated => 'A ti ṣe àtúnṣe ìtọ́sọ́nà';
@@ -3176,22 +3176,22 @@ class AppLocalizationsYo extends AppLocalizations {
   String get adminUsersPendingChip => 'Ń Dúró';
 
   @override
-  String get adminUsersApproveMenu => '✅ Fọwọ́ sí';
+  String get adminUsersApproveMenu => 'Fọwọ́ sí';
 
   @override
-  String get adminUsersRevokeMenu => '❌ Gba àṣẹ padà';
+  String get adminUsersRevokeMenu => 'Gba àṣẹ padà';
 
   @override
-  String get adminUsersChangeRoleMenu => '🔄 Yí ipa padà';
+  String get adminUsersChangeRoleMenu => 'Yí ipa padà';
 
   @override
-  String get adminUsersChangeLocationMenu => '📍 Yí ibi padà';
+  String get adminUsersChangeLocationMenu => 'Yí ibi padà';
 
   @override
-  String get adminUsersReenableMenu => '🔓 Tún olùlò ṣí sílẹ̀';
+  String get adminUsersReenableMenu => 'Tún olùlò ṣí sílẹ̀';
 
   @override
-  String get adminUsersDisableMenu => '🚫 Dá olùlò dúró';
+  String get adminUsersDisableMenu => 'Dá olùlò dúró';
 
   @override
   String get onboardingWelcomeBody =>
@@ -3398,4 +3398,38 @@ class AppLocalizationsYo extends AppLocalizations {
   String reportRemovePhoto(int number) {
     return 'Yọ àwòrán $number kúrò';
   }
+
+  @override
+  String get notificationReportStatusTitle => 'Ìmúdójúìwọ̀n ìròyìn';
+
+  @override
+  String notificationReportApproved(String hazard) {
+    return 'A ti fọwọ́ sí ìròyìn rẹ ($hazard), a sì ti gbé ìkìlọ̀ jáde.';
+  }
+
+  @override
+  String notificationReportVerified(String hazard) {
+    return 'Àwọn ẹlẹgbẹ́ ti jẹ́rìí sí ìròyìn rẹ ($hazard); ó ń dúró de ìfọwọ́sí ìkẹyìn.';
+  }
+
+  @override
+  String notificationReportRejected(String hazard) {
+    return 'A kọ ìròyìn rẹ ($hazard) sílẹ̀. Ṣí i láti rí àlàyé.';
+  }
+
+  @override
+  String notificationReportPending(String hazard) {
+    return 'Ìròyìn rẹ ($hazard) ń dúró de ìjẹ́rìí àwọn ẹlẹgbẹ́.';
+  }
+
+  @override
+  String get notificationAlertBody =>
+      'A gbé ìkìlọ̀ tuntun jáde fún agbègbè rẹ.';
+
+  @override
+  String get knowledgeSavedFilter => 'Tí a fipamọ́';
+
+  @override
+  String get knowledgeNoSavedGuides =>
+      'Kò sí ìwé ìtọ́nisọ́nà tí a fipamọ́ síbẹ̀. Tẹ àmì ìfipamọ́ lórí ìwé ìtọ́nisọ́nà láti fipamọ́ ọ.';
 }

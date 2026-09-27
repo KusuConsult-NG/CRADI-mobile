@@ -38,20 +38,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _checkBiometric() async {
     try {
       final authProvider = context.read<AuthProvider>();
-      final available = await authProvider.isBiometricAvailable();
+      // Hardware present *and* a fingerprint/face enrolled — the shared
+      // check Profile uses too.
+      final available = await authProvider.isBiometricUsable();
       final enabled = await authProvider.isBiometricEnabled();
-
-      // Also check that the user has actually enrolled credentials
-      // (hardware can be present but have no fingerprints/face enrolled).
-      bool hasEnrolled = false;
-      if (available) {
-        final biometrics = await BiometricService().getAvailableBiometrics();
-        hasEnrolled = biometrics.isNotEmpty;
-      }
 
       if (mounted) {
         setState(() {
-          _biometricAvailable = available && hasEnrolled;
+          _biometricAvailable = available;
           _biometricEnabled = enabled;
           _checkingBiometric = false;
         });

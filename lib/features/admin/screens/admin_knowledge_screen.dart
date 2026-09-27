@@ -1,3 +1,4 @@
+import 'package:climate_app/core/widgets/admin_menu_entry.dart';
 import 'package:climate_app/core/services/supabase_service.dart';
 import 'package:climate_app/core/utils/error_handler.dart';
 import 'package:climate_app/features/knowledge_base/knowledge_categories.dart';
@@ -303,13 +304,17 @@ class _AdminKnowledgeScreenState extends State<AdminKnowledgeScreen> {
                           itemBuilder: (_) => [
                             PopupMenuItem(
                               value: 'edit',
-                              child: Text(context.l10n.adminGuideEditMenu),
+                              child: AdminMenuEntry(
+                                icon: Icons.edit_outlined,
+                                label: context.l10n.adminGuideEditMenu,
+                              ),
                             ),
                             PopupMenuItem(
                               value: 'delete',
-                              child: Text(
-                                context.l10n.adminGuideDeleteMenu,
-                                style: const TextStyle(color: Colors.red),
+                              child: AdminMenuEntry(
+                                icon: Icons.delete_outline,
+                                label: context.l10n.adminGuideDeleteMenu,
+                                color: Colors.red,
                               ),
                             ),
                           ],

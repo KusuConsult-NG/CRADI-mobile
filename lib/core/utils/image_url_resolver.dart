@@ -76,9 +76,7 @@ class ImageUrlResolver {
       if (width != null && width > 0) 'w-$width',
       if (quality != null && quality > 0) 'q-$quality',
     ];
-    final root = base.endsWith('/')
-        ? base.substring(0, base.length - 1)
-        : base;
+    final root = base.endsWith('/') ? base.substring(0, base.length - 1) : base;
     final rewritten = '$root/$path';
     if (transformations.isEmpty) return rewritten;
     return '$rewritten?tr=${transformations.join(',')}';

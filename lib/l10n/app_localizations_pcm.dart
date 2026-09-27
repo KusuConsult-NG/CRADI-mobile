@@ -205,7 +205,7 @@ class AppLocalizationsPcm extends AppLocalizations {
   String get onlineJustNow => 'Online • Just now';
 
   @override
-  String get active => 'active';
+  String get active => 'Active';
 
   @override
   String get pending => 'Pending';
@@ -2946,7 +2946,7 @@ class AppLocalizationsPcm extends AppLocalizations {
   }
 
   @override
-  String get adminAlertBroadcastSuccess => '✅ Alert don broadcast well well';
+  String get adminAlertBroadcastSuccess => 'Alert don broadcast well well';
 
   @override
   String adminAlertSendFailed(String error) {
@@ -2963,7 +2963,7 @@ class AppLocalizationsPcm extends AppLocalizations {
   String get adminAlertTargetArea => 'Area Wey E Go';
 
   @override
-  String get adminAlertAllAreas => '🌍 All Areas';
+  String get adminAlertAllAreas => 'All Areas';
 
   @override
   String get adminAlertTitleLabel => 'Alert Title';
@@ -3015,10 +3015,10 @@ class AppLocalizationsPcm extends AppLocalizations {
   String get adminGuideAddFirst => 'Add di first guide';
 
   @override
-  String get adminGuideEditMenu => '✏️ Change';
+  String get adminGuideEditMenu => 'Change';
 
   @override
-  String get adminGuideDeleteMenu => '🗑️ Delete';
+  String get adminGuideDeleteMenu => 'Delete';
 
   @override
   String get adminGuideUpdated => 'Guide don update';
@@ -3172,22 +3172,22 @@ class AppLocalizationsPcm extends AppLocalizations {
   String get adminUsersPendingChip => 'Pending';
 
   @override
-  String get adminUsersApproveMenu => '✅ Approve';
+  String get adminUsersApproveMenu => 'Approve';
 
   @override
-  String get adminUsersRevokeMenu => '❌ Collect access back';
+  String get adminUsersRevokeMenu => 'Collect access back';
 
   @override
-  String get adminUsersChangeRoleMenu => '🔄 Change role';
+  String get adminUsersChangeRoleMenu => 'Change role';
 
   @override
-  String get adminUsersChangeLocationMenu => '📍 Change location';
+  String get adminUsersChangeLocationMenu => 'Change location';
 
   @override
-  String get adminUsersReenableMenu => '🔓 On user again';
+  String get adminUsersReenableMenu => 'On user again';
 
   @override
-  String get adminUsersDisableMenu => '🚫 Off user';
+  String get adminUsersDisableMenu => 'Off user';
 
   @override
   String get onboardingWelcomeBody =>
@@ -3393,4 +3393,37 @@ class AppLocalizationsPcm extends AppLocalizations {
   String reportRemovePhoto(int number) {
     return 'Remove photo $number';
   }
+
+  @override
+  String get notificationReportStatusTitle => 'Report update';
+
+  @override
+  String notificationReportApproved(String hazard) {
+    return 'Dem don approve your report ($hazard) and dem don send alert.';
+  }
+
+  @override
+  String notificationReportVerified(String hazard) {
+    return 'Peers don verify your report ($hazard); e dey wait final approval.';
+  }
+
+  @override
+  String notificationReportRejected(String hazard) {
+    return 'Dem reject your report ($hazard). Open am make you see wetin happen.';
+  }
+
+  @override
+  String notificationReportPending(String hazard) {
+    return 'Your report ($hazard) dey wait make peers verify am.';
+  }
+
+  @override
+  String get notificationAlertBody => 'Dem don send new alert for your area.';
+
+  @override
+  String get knowledgeSavedFilter => 'Saved';
+
+  @override
+  String get knowledgeNoSavedGuides =>
+      'You never save any guide. Tap di bookmark for one guide make you save am.';
 }

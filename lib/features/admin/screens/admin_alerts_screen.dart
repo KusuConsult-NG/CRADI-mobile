@@ -13,6 +13,28 @@ import 'package:climate_app/core/l10n/l10n.dart';
 import 'package:climate_app/core/utils/error_handler.dart';
 import 'package:climate_app/features/alerts/screens/alert_severity.dart';
 
+/// The `targetLga` / `targetState` an alert is published with, for a form that
+/// has chosen [state] (null = no state) and [lga].
+///
+/// An LGA never travels without its state. LGA names repeat across states —
+/// there is an Obi in Benue and an Obi in Nasarawa, and five more such names —
+/// so an LGA on its own does not identify a place. The database refuses that
+/// shape outright (`alerts_target_lga_needs_state`, migration
+/// 20260927080000), the picker below only offers LGAs once a state is chosen,
+/// and this function is the last place the rule is applied: with no state the
+/// target is always 'All' (everyone), never a stale LGA left over from a state
+/// the admin has since cleared.
+@visibleForTesting
+Map<String, String> alertTargetFields(String? state, String lga) {
+  final targetState = state?.trim() ?? '';
+  final targetLga = lga.trim();
+  if (targetState.isEmpty) return const {'targetLga': 'All'};
+  return {
+    'targetLga': targetLga.isEmpty ? 'All' : targetLga,
+    'targetState': targetState,
+  };
+}
+
 /// Admin Alerts & Broadcast screen.
 /// Allows admins to send emergency alerts to all users or specific LGAs.
 class AdminAlertsScreen extends StatefulWidget {
@@ -107,8 +129,7 @@ class _AdminAlertsScreenState extends State<AdminAlertsScreen> {
           'title': _titleCtrl.text.trim(),
           'message': _messageCtrl.text.trim(),
           'severity': _severity,
-          'targetLga': _targetLga,
-          if (_targetState != null) 'targetState': _targetState,
+          ...alertTargetFields(_targetState, _targetLga),
           'isActive': true,
         },
       );
@@ -302,9 +323,25 @@ class _AdminAlertsScreenState extends State<AdminAlertsScreen> {
                     ),
                     items: [
                       DropdownMenuItem<String?>(
-                        child: Text(
-                          context.l10n.adminAlertAllAreas,
-                          style: GoogleFonts.lexend(fontSize: 14),
+                        // A drawn globe, not a typed one: the emoji this
+                        // replaces is a tofu box without an emoji font.
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              Icons.public,
+                              size: 16,
+                              color: AppColors.textSecondary,
+                            ),
+                            const SizedBox(width: 6),
+                            Flexible(
+                              child: Text(
+                                context.l10n.adminAlertAllAreas,
+                                style: GoogleFonts.lexend(fontSize: 14),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                       for (final st in _states)

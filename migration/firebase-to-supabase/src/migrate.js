@@ -25,7 +25,7 @@ import {
   isUuid, isPhoneEmail, rewriteUrl, storageTargetFor, storageUploadPlan, FIREBASE_STORAGE_PREFIXES,
   transformUser, transformReport, transformVerification, transformVerificationOverride,
   transformAlert, transformMessage, transformContact, transformKnowledge, transformAuthority,
-  transformTrustedDevice, transformLoginHistory, transformNdpaConsent,
+  transformTrustedDevice, transformLoginHistory, transformNdpaConsent, normalizeNigerianState,
 } from './transform.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -278,6 +278,9 @@ async function main() {
     // rewritten; --skip-storage only skips copying, so uncopied objects keep
     // their Firebase URLs.
     url: (u) => rewriteUrl(u, urlMap),
+    // A user's own state, canonicalised. transformAlert uses it (and only it)
+    // to decide which 'Obi' an alert that names no state meant.
+    userState: (uid) => (uid ? normalizeNigerianState(docByUid.get(uid)?.state) : null),
   };
   const planUser = (uid) => transformUser(uid, authByUid.get(uid), docByUid.get(uid), ctx);
   const plans = new Map(allUids.map((uid) => [uid, planUser(uid)]));

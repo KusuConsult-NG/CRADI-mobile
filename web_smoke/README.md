@@ -35,21 +35,49 @@ Pass names:
 | Pass | What it walks |
 | --- | --- |
 | `signed-out` | splash, onboarding, landing, login (incl. validation and bad credentials), forgot/reset password, registration, OTP, help, 404 |
-| `roles` | one full tour per role — `role-user`, `role-ewm`, `role-ewv`, `role-ewr`, `role-admin` — through every screen the shell can reach, plus the report wizard |
+| `roles` | one full tour per role — `role-user`, `role-ewm`, `role-ewv`, `role-ewr`, `role-admin` — through every screen the shell can reach, plus the report wizard. The admin tour also opens the per-row overflow menus on the admin users and knowledge screens, whose icons only exist while the menu is open. |
 | `edge` | the pending-approval and unverified accounts, and the routes they are bounced from |
 | `offline` | every offline-allowed screen with the browser offline, then back online |
 | `wizard` | the report wizard across five hazard categories |
 | `focus` | the interactions the broad tour cannot reach cleanly: settings toggles, peer verification vote, report view with peer votes, the severity slider, search fields |
 | `languages` | English, then Hausa, Yoruba, Igbo and Pidgin across 16 screens each, comparing every label against the English baseline |
 | `small` | the whole tour at 320×640 |
+| `controls` | the dead-control sweep — `controls-user`, `controls-ewv`, `controls-admin`. On each screen it enumerates every interactive semantics node, clicks it, and records whether anything observable happened (see below). |
+| `chat` | two live sessions in the same room: send from one, assert the row is persisted and that the other session receives it over realtime without reloading |
+
+### The `controls` pass
+
+`web_smoke/controls.mjs` answers one question: *is every control wired to
+something?* For each control it snapshots the route, every semantics label,
+every widget's checked / selected / value state and the request count, clicks
+the control, and compares. The result is one of:
+
+| Result | Meaning |
+| --- | --- |
+| `navigation` | the route changed |
+| `content-change` | labels appeared or disappeared (a dialog, a sheet, a snackbar, a re-filtered list) |
+| `state-change` | a widget's checked / selected / value changed |
+| `network` | the app called the backend |
+| `already-selected` | the chip / tab was already active, so re-picking it is a no-op by design |
+| `disabled` | `aria-disabled` — a deliberate disabled state |
+| `plugin` | nothing happened, but the control is plugin-backed (share sheet, TTS, `tel:` / `mailto:`, camera) and cannot do anything in a browser |
+| `skipped` | destructive (would end the session) or a locale switch (covered by the `languages` pass) |
+| `unreachable` | the control could not be scrolled into the viewport |
+| `dead` | **a finding** — nothing observable happened |
+
+Every `dead` and `plugin` result keeps a before/after screenshot next to it in
+`web_smoke/screenshots/controls-*/`, and the rows land in `report.json` under
+`controls`.
 
 Two quirks the driver works around, both from Flutter's semantics tree and
 neither an app defect:
 
 * a widget below the fold must be scrolled into view before it is clicked —
   its rect is outside the viewport but not clipped;
-* a `Slider` is published as `<input type=range>`; that element swallows
-  pointer events, so `setRange()` dispatches a `change` on it instead.
+* a `Slider` is published as `<input type=range>`, but the engine never reads
+  that element's value as a position — each `change` becomes one `increase` /
+  `decrease` action, so `setRange()` dispatches one change per step instead
+  of assigning the target value once.
 
 The navigation Drawer is a route overlay that neither Escape nor a URL change
 closes, so it is always opened as the last step of a pass.
@@ -57,6 +85,8 @@ closes, so it is always opened as the last step of a pass.
 Outputs:
 
 * `web_smoke/screenshots/<pass>/NNN-<screen>.png`
+* `web_smoke/highlights/NN-<screen>.png` — a hand-picked set copied out of the
+  passes above, to look at without reading the whole report
 * `web_smoke/report.json` — per-screen record plus every console/page error
 * `web_smoke/language-texts.json` — every visible label per screen per language
 

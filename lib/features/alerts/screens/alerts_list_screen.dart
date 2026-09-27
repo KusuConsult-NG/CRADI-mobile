@@ -209,6 +209,10 @@ class _AlertsListScreenState extends State<AlertsListScreen>
         elevation: 0,
         bottom: TabBar(
           controller: _tabController,
+          // Scrollable for the same reason as the other tab bars: a longer
+          // translation or a large system font must not be clipped.
+          isScrollable: true,
+          tabAlignment: TabAlignment.start,
           labelColor: AppColors.primaryRed,
           unselectedLabelColor: AppColors.textSecondary,
           indicatorColor: AppColors.primaryRed,

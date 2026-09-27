@@ -232,6 +232,21 @@ insert into alerts(title, target_lga, target_state, created_by) values ('Obi flo
 select target_lga, target_state from alerts where title='Obi flood';
 \echo '--- blank target_state (expect ERROR check)'
 insert into alerts(title, target_lga, target_state, created_by) values ('x','Obi',' ',auth.uid());
+\echo '--- an LGA with no state at all (expect ERROR check alerts_target_lga_needs_state)'
+insert into alerts(title, target_lga, created_by) values ('x','Obi',auth.uid());
+\echo '--- Obi is not an LGA of Plateau (expect ERROR fk alerts_target_lga_fkey)'
+insert into alerts(title, target_lga, target_state, created_by) values ('x','Obi','Plateau',auth.uid());
+\echo '--- an invented state (expect ERROR fk alerts_target_state_fkey)'
+insert into alerts(title, target_lga, target_state, created_by) values ('x','All','Atlantis',auth.uid());
+\echo '--- every LGA of a state (expect INSERT)'
+insert into alerts(title, target_lga, target_state, created_by) values ('Benue-wide','All','Benue',auth.uid());
+\echo '--- everyone, everywhere: no LGA, no state (expect INSERT)'
+insert into alerts(title, created_by) values ('Everywhere',auth.uid());
+select title, target_lga, target_state from alerts where title in ('Benue-wide','Everywhere') order by title;
+\echo '--- the canonical location tables are readable...'
+select (select count(*) from nigeria_states) as states, (select count(*) from nigeria_lgas) as lgas;
+\echo '--- ...but not writable by a client (expect ERROR permission denied)'
+insert into nigeria_lgas(state, lga) values ('Plateau','Obi');
 \echo '--- plain user cannot publish a state-targeted alert (expect ERROR rls)'
 select as_user('00000000-0000-0000-0000-00000000000a');
 insert into alerts(title, target_lga, target_state, created_by) values ('y','Obi','Benue',auth.uid());
@@ -293,3 +308,36 @@ select prosrc like '%pg_advisory_xact_lock%' as insert_locks from pg_proc where 
 set role authenticated; select as_user('00000000-0000-0000-0000-00000000000d');
 select count(*) from sms_deliveries;
 reset role;
+
+
+\echo '=== round 12: authorities cover one (state, LGA) ==='
+set role authenticated;
+select as_user('00000000-0000-0000-0000-00000000000d');
+\echo '--- admin adds a contact for Obi, Benue (expect INSERT)'
+insert into authorities(name, phone, coverage_lga, coverage_state) values ('Obi Benue Desk','+2348031110001','Obi','Benue');
+select name, coverage_lga, coverage_state from authorities where name='Obi Benue Desk';
+\echo '--- the same number may also cover Obi, Nasarawa (expect INSERT; a different place)'
+insert into authorities(name, phone, coverage_lga, coverage_state) values ('Obi Nasarawa Desk','+2348031110001','Obi','Nasarawa');
+\echo '--- an LGA with no state at all (expect ERROR not-null coverage_state)'
+insert into authorities(name, phone, coverage_lga) values ('x','+2348031110002','Bassa');
+\echo '--- an explicit NULL state (expect ERROR not-null coverage_state)'
+insert into authorities(name, phone, coverage_lga, coverage_state) values ('x','+2348031110002','Bassa',null);
+\echo '--- Obi is not an LGA of Plateau (expect ERROR fk authorities_coverage_lga_fkey)'
+insert into authorities(name, phone, coverage_lga, coverage_state) values ('x','+2348031110002','Obi','Plateau');
+\echo '--- an invented state (expect ERROR fk authorities_coverage_state_fkey)'
+insert into authorities(name, phone, coverage_lga, coverage_state) values ('x','+2348031110002','Obi','Atlantis');
+\echo '--- an invented LGA (expect ERROR fk authorities_coverage_lga_fkey)'
+insert into authorities(name, phone, coverage_lga, coverage_state) values ('x','+2348031110002','Atlantis City','Benue');
+\echo '--- a padded LGA name is not the canonical spelling (expect ERROR fk authorities_coverage_lga_fkey)'
+insert into authorities(name, phone, coverage_lga, coverage_state) values ('x','+2348031110002',' Obi ','Benue');
+\echo '--- the state cannot be blanked on an existing row either (expect ERROR not-null)'
+update authorities set coverage_state = null where name='Obi Benue Desk';
+\echo '--- nor moved to a state its LGA is not in (expect ERROR fk authorities_coverage_lga_fkey)'
+update authorities set coverage_state = 'Plateau' where name='Obi Benue Desk';
+\echo '--- the quarantine table is invisible to clients (expect ERROR permission denied)'
+select count(*) from authorities_unresolved_coverage;
+\echo '--- a plain user cannot add a contact at all (expect ERROR rls)'
+select as_user('00000000-0000-0000-0000-00000000000a');
+insert into authorities(name, phone, coverage_lga, coverage_state) values ('y','+2348031110003','Obi','Benue');
+reset role;
+select count(*) as obi_contacts from authorities where coverage_lga='Obi';

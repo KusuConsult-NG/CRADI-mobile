@@ -1,6 +1,8 @@
 import 'package:climate_app/core/theme/app_colors.dart';
+import 'package:climate_app/features/knowledge_base/guide_bookmarks.dart';
 import 'package:climate_app/features/knowledge_base/knowledge_categories.dart';
 import 'package:climate_app/features/knowledge_base/providers/knowledge_provider.dart';
+import 'package:climate_app/features/knowledge_base/widgets/guide_bookmark_button.dart';
 import 'package:climate_app/features/knowledge_base/widgets/guide_image.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
@@ -17,13 +19,29 @@ class HazardGuidesScreen extends StatefulWidget {
   State<HazardGuidesScreen> createState() => _HazardGuidesScreenState();
 }
 
+/// Pseudo-filter listing the guides the user saved, whatever their
+/// category. It is not a `knowledge_base.category` value, so it is only
+/// ever used as a chip label and never sent to the server.
+const String savedGuidesFilter = 'Saved';
+
 class _HazardGuidesScreenState extends State<HazardGuidesScreen> {
   int _selectedFilterIndex = 0;
-  final List<String> _filters = knowledgeCategoryFilters;
+
+  /// 'All', every category, then the saved-guides pseudo-filter.
+  final List<String> _filters = [
+    ...knowledgeCategoryFilters,
+    savedGuidesFilter,
+  ];
   final TextEditingController _searchController = TextEditingController();
+  final GuideBookmarks _bookmarks = GuideBookmarks();
   String _query = '';
 
-  String get _category => _filters[_selectedFilterIndex];
+  bool get _showingSaved => _filters[_selectedFilterIndex] == savedGuidesFilter;
+
+  /// The category to load and search. Saved guides are picked out of the
+  /// unfiltered list, so that tab loads 'All'.
+  String get _category =>
+      _showingSaved ? allKnowledgeCategories : _filters[_selectedFilterIndex];
 
   @override
   void initState() {
@@ -45,28 +63,31 @@ class _HazardGuidesScreenState extends State<HazardGuidesScreen> {
 
     Future.microtask(() {
       if (!mounted) return;
-      context.read<KnowledgeProvider>().fetchGuides(
-        category: _filters[_selectedFilterIndex],
-      );
+      context.read<KnowledgeProvider>().fetchGuides(category: _category);
     });
   }
 
   @override
   void dispose() {
+    _bookmarks.ids.removeListener(_onBookmarksChanged);
     _searchController.dispose();
     super.dispose();
   }
 
+  void _onBookmarksChanged() {
+    if (mounted && _showingSaved) setState(() {});
+  }
+
   void _onFilterSelected(int index) {
     setState(() => _selectedFilterIndex = index);
-    final category = _filters[index];
-    context.read<KnowledgeProvider>().fetchGuides(category: category);
+    context.read<KnowledgeProvider>().fetchGuides(category: _category);
   }
 
   @override
   Widget build(BuildContext context) {
     final knowledgeProvider = context.watch<KnowledgeProvider>();
-    final guides = knowledgeProvider.searchGuides(_query, category: _category);
+    final matches = knowledgeProvider.searchGuides(_query, category: _category);
+    final guides = _showingSaved ? _bookmarks.filter(matches) : matches;
     final isLoading = knowledgeProvider.isLoadingCategory(_category);
     final error = knowledgeProvider.errorFor(_category);
 
@@ -109,9 +130,7 @@ class _HazardGuidesScreenState extends State<HazardGuidesScreen> {
           IconButton(
             tooltip: context.l10n.refresh,
             icon: const Icon(Icons.refresh, color: AppColors.textPrimary),
-            onPressed: () => knowledgeProvider.fetchGuides(
-              category: _filters[_selectedFilterIndex],
-            ),
+            onPressed: () => knowledgeProvider.fetchGuides(category: _category),
           ),
         ],
         backgroundColor: AppColors.background.withValues(alpha: 0.95),
@@ -124,9 +143,7 @@ class _HazardGuidesScreenState extends State<HazardGuidesScreen> {
       body: Stack(
         children: [
           RefreshIndicator(
-            onRefresh: () => knowledgeProvider.fetchGuides(
-              category: _filters[_selectedFilterIndex],
-            ),
+            onRefresh: () => knowledgeProvider.fetchGuides(category: _category),
             child: SingleChildScrollView(
               physics: const AlwaysScrollableScrollPhysics(),
               padding: const EdgeInsets.only(bottom: 100),
@@ -182,11 +199,22 @@ class _HazardGuidesScreenState extends State<HazardGuidesScreen> {
                         final isSelected = _selectedFilterIndex == index;
                         return ChoiceChip(
                           label: Text(
-                            knowledgeCategoryDisplay(
-                              context.l10n,
-                              _filters[index],
-                            ),
+                            _filters[index] == savedGuidesFilter
+                                ? context.l10n.knowledgeSavedFilter
+                                : knowledgeCategoryDisplay(
+                                    context.l10n,
+                                    _filters[index],
+                                  ),
                           ),
+                          avatar: _filters[index] == savedGuidesFilter
+                              ? Icon(
+                                  Icons.bookmark,
+                                  size: 16,
+                                  color: isSelected
+                                      ? Colors.white
+                                      : Colors.grey.shade700,
+                                )
+                              : null,
                           selected: isSelected,
                           onSelected: (v) => _onFilterSelected(index),
                           labelStyle: GoogleFonts.lexend(
@@ -244,7 +272,7 @@ class _HazardGuidesScreenState extends State<HazardGuidesScreen> {
                             ),
                             TextButton(
                               onPressed: () => knowledgeProvider.fetchGuides(
-                                category: _filters[_selectedFilterIndex],
+                                category: _category,
                               ),
                               child: Text(context.l10n.retry),
                             ),
@@ -265,7 +293,9 @@ class _HazardGuidesScreenState extends State<HazardGuidesScreen> {
                             ),
                             const SizedBox(height: 16),
                             Text(
-                              _query.isNotEmpty
+                              _showingSaved && _query.isEmpty
+                                  ? context.l10n.knowledgeNoSavedGuides
+                                  : _query.isNotEmpty
                                   ? context.l10n.knowledgeNoGuidesMatch(_query)
                                   : _category == allKnowledgeCategories
                                   ? context.l10n.knowledgeNoGuides
@@ -393,6 +423,11 @@ class _HazardGuidesScreenState extends State<HazardGuidesScreen> {
                   size: 16,
                 ),
               ),
+            ),
+            Positioned(
+              top: 4,
+              left: 4,
+              child: GuideBookmarkButton(guide: guide),
             ),
             Positioned(
               bottom: 12,

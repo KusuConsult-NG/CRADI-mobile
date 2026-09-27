@@ -399,11 +399,13 @@ test('outbox: a failing reporter push does not stop the broadcast or the authori
 });
 
 test('authority SMS: same-named LGA in another state is not texted (Obi, Benue vs Nasarawa)', async () => {
+  // Every authority carries a coverage_state: since migration 20260927090000
+  // the column is NOT NULL and (coverage_state, coverage_lga) is a foreign key
+  // into public.nigeria_lgas, so a state-less contact cannot exist.
   const obi = { ...report, id: 'obi-benue', lga: 'Obi', state: 'Benue' };
   const repo = fakeRepo({
     authorities: [
       { id: 'benue', name: 'benue', phone: '08031110001', coverage_lga: 'Obi', coverage_state: 'Benue' },
-      { id: 'legacy', name: 'legacy', phone: '08031110002', coverage_lga: 'Obi', coverage_state: null },
       { id: 'nasarawa', name: 'nasarawa', phone: '08031110003', coverage_lga: 'Obi', coverage_state: 'Nasarawa' },
       { id: 'other-lga', name: 'other', phone: '08031110004', coverage_lga: 'Makurdi', coverage_state: 'Benue' },
     ],
@@ -411,20 +413,51 @@ test('authority SMS: same-named LGA in another state is not texted (Obi, Benue v
   const sms = fakeSms();
   const summary = await createAuthoritySms({ repo, sms, logger }).notifyApproved(obi);
   assert.deepEqual(repo.state.authorityQueries, [{ lga: 'Obi', state: 'Benue', limit: 20 }]);
-  assert.deepEqual(sms.sent.map((s) => s.to).sort(), ['+2348031110001', '+2348031110002']);
-  assert.equal(summary.sent, 2);
+  assert.deepEqual(sms.sent.map((s) => s.to), ['+2348031110001']);
+  assert.equal(summary.sent, 1);
 
-  // A report without a state can't tell Benue's Obi from Nasarawa's: only
-  // authorities without a coverage_state match, and it is logged.
-  const sms2 = fakeSms();
-  const warnings = [];
-  const capture = { ...logger, warn: (msg, fields) => warnings.push({ msg, fields }) };
-  await createAuthoritySms({ repo, sms: sms2, logger: capture }).notifyApproved({ ...obi, id: 'obi-nostate', state: '' });
-  assert.deepEqual(sms2.sent.map((s) => s.to), ['+2348031110002']);
-  assert.ok(warnings.some((w) => w.msg === 'sms.report_without_state' && w.fields.report_id === 'obi-nostate'));
-
-  // Nasarawa's Obi gets its own authorities plus the legacy row, not Benue's.
+  // Nasarawa's Obi gets its own authorities, not Benue's.
   const sms3 = fakeSms();
   await createAuthoritySms({ repo, sms: sms3, logger }).notifyApproved({ ...obi, id: 'obi-nasarawa', state: 'Nasarawa' });
-  assert.deepEqual(sms3.sent.map((s) => s.to).sort(), ['+2348031110002', '+2348031110003']);
+  assert.deepEqual(sms3.sent.map((s) => s.to), ['+2348031110003']);
+});
+
+test('authority SMS: a report with no state texts nobody, loudly', async () => {
+  // An LGA name alone can mean two states (Obi: Benue and Nasarawa). With no
+  // state on the report there is nothing to match against, and since
+  // 20260927090000 there are no state-less contacts left to fall back to — so
+  // the correct outcome is zero SMS, not a guess. It must still be logged.
+  const repo = fakeRepo({
+    authorities: [
+      { id: 'benue', name: 'benue', phone: '08031110001', coverage_lga: 'Obi', coverage_state: 'Benue' },
+      { id: 'nasarawa', name: 'nasarawa', phone: '08031110003', coverage_lga: 'Obi', coverage_state: 'Nasarawa' },
+    ],
+  });
+  const sms = fakeSms();
+  const warnings = [];
+  const capture = { ...logger, warn: (msg, fields) => warnings.push({ msg, fields }) };
+  const summary = await createAuthoritySms({ repo, sms, logger: capture }).notifyApproved({
+    ...report, id: 'obi-nostate', lga: 'Obi', state: '',
+  });
+  assert.deepEqual(sms.sent, []);
+  assert.equal(summary.sent, 0);
+  const warned = warnings.find((w) => w.msg === 'sms.report_without_state');
+  assert.ok(warned, 'sms.report_without_state must be logged');
+  assert.equal(warned.fields.report_id, 'obi-nostate');
+  assert.equal(warned.fields.lga, 'Obi');
+  assert.match(warned.fields.hint, /No SMS is sent/);
+});
+
+test('authority SMS: a hand-inserted contact with no coverage_state still matches (defensive only)', async () => {
+  // The database cannot produce such a row any more (20260927090000). The
+  // `coverage_state is null` half of repo.findAuthorities() is kept, like
+  // alertTarget()'s state-less branch, so a row inserted by hand or read from
+  // a stale replica degrades to the old LGA-name-only match instead of being
+  // dropped without a trace.
+  const repo = fakeRepo({
+    authorities: [{ id: 'handmade', name: 'handmade', phone: '08031110002', coverage_lga: 'Obi', coverage_state: null }],
+  });
+  const sms = fakeSms();
+  await createAuthoritySms({ repo, sms, logger }).notifyApproved({ ...report, id: 'obi-benue', lga: 'Obi', state: 'Benue' });
+  assert.deepEqual(sms.sent.map((s) => s.to), ['+2348031110002']);
 });

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:climate_app/core/theme/app_colors.dart';
 import 'package:climate_app/features/knowledge_base/knowledge_categories.dart';
 import 'package:climate_app/features/knowledge_base/widgets/guide_image.dart';
@@ -8,7 +10,7 @@ import 'package:climate_app/core/services/tts_service.dart';
 import 'package:climate_app/features/knowledge_base/providers/knowledge_provider.dart';
 import 'package:go_router/go_router.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:climate_app/features/knowledge_base/guide_bookmarks.dart';
 import 'package:climate_app/core/l10n/l10n.dart';
 import 'package:climate_app/core/widgets/app_network_image.dart';
 
@@ -22,11 +24,12 @@ class KnowledgeDetailScreen extends StatefulWidget {
 }
 
 class _KnowledgeDetailScreenState extends State<KnowledgeDetailScreen> {
+  final GuideBookmarks _bookmarks = GuideBookmarks();
   bool _isBookmarked = false;
-  static const _bookmarksKey = 'bookmarked_guides';
 
   @override
   void dispose() {
+    _bookmarks.ids.removeListener(_onBookmarksChanged);
     // Don't keep reading the guide aloud after leaving it.
     TTSService().stop();
     super.dispose();
@@ -35,31 +38,24 @@ class _KnowledgeDetailScreenState extends State<KnowledgeDetailScreen> {
   @override
   void initState() {
     super.initState();
-    _loadBookmarkState();
+    _isBookmarked = _bookmarks.contains(_guideId);
+    _bookmarks.ids.addListener(_onBookmarksChanged);
+    unawaited(_bookmarks.load());
   }
 
-  String get _guideId =>
-      widget.guide['id']?.toString() ?? widget.guide['title']?.toString() ?? '';
+  String get _guideId => GuideBookmarks.idFor(widget.guide);
 
-  Future<void> _loadBookmarkState() async {
-    final prefs = await SharedPreferences.getInstance();
-    final bookmarks = prefs.getStringList(_bookmarksKey) ?? [];
-    if (mounted) {
-      setState(() => _isBookmarked = bookmarks.contains(_guideId));
+  void _onBookmarksChanged() {
+    final saved = _bookmarks.contains(_guideId);
+    if (mounted && saved != _isBookmarked) {
+      setState(() => _isBookmarked = saved);
     }
   }
 
   Future<void> _toggleBookmark() async {
-    final prefs = await SharedPreferences.getInstance();
-    final bookmarks = prefs.getStringList(_bookmarksKey) ?? [];
-    if (_isBookmarked) {
-      bookmarks.remove(_guideId);
-    } else {
-      bookmarks.add(_guideId);
-    }
-    await prefs.setStringList(_bookmarksKey, bookmarks);
+    final saved = await _bookmarks.toggle(_guideId);
     if (mounted) {
-      setState(() => _isBookmarked = !_isBookmarked);
+      setState(() => _isBookmarked = saved);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(

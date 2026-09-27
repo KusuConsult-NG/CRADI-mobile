@@ -202,6 +202,10 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
           setState(() {
             _isLoadingLocation = false;
             _locationError = context.l10n.locationPermissionDenied;
+            // Nothing will reverse-geocode now, so the card must stop
+            // saying "Loading…" and show that the area is unknown.
+            _lga = '';
+            _ward = '';
           });
         }
         return;
@@ -266,6 +270,8 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
             _locationError =
                 _geoService.lastErrorMessage?.call(context.l10n) ??
                 context.l10n.enableGpsMessage;
+            _lga = '';
+            _ward = '';
           });
         }
       }
@@ -274,6 +280,8 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
         setState(() {
           _isLoadingLocation = false;
           _locationError = context.l10n.locationError;
+          _lga = '';
+          _ward = '';
         });
       }
     }
@@ -442,7 +450,13 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
         });
       }
     } on Exception {
-      // ignore
+      // The tapped point stands; only its printed area name is unavailable.
+      if (mounted) {
+        setState(() {
+          _lga = '';
+          _ward = '';
+        });
+      }
     }
   }
 

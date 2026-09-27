@@ -93,7 +93,7 @@ update profiles set is_approved=true;
 select role, count(*) from profiles group by role order by role;
 
 -- ── seed rows the read probes need ──
-insert into authorities(name,phone,coverage_lga) values ('Seed Authority','+2348000000000','L1');
+insert into authorities(name,phone,coverage_lga,coverage_state) values ('Seed Authority','+2348000000000','Makurdi','Benue');
 insert into knowledge_base(hazard_type,title,content) values ('Flooding','Seed','c');
 insert into alerts(id,title,message,created_by)
   values ('30000000-0000-0000-0000-000000000001','Seed alert','m','00000000-0000-0000-0000-0000000000a8');
@@ -153,7 +153,7 @@ insert into app_settings(key,value) values ('zz','1');
 \echo '--- 2.07 plain user writes news links (expect ERROR)'
 insert into news_links(title,url) values ('t','http://x');
 \echo '--- 2.08 plain user writes authorities (expect ERROR)'
-insert into authorities(name,phone,coverage_lga) values ('a','+234','L1');
+insert into authorities(name,phone,coverage_lga,coverage_state) values ('a','+234','Makurdi','Benue');
 \echo '--- 2.09 plain user marks own report verified (expect ERROR)'
 update reports set status='verified' where id='21000000-0000-0000-0000-0000000000b2';
 \echo '--- 2.10 plain user approves own report (expect ERROR)'
@@ -207,7 +207,7 @@ update reports set status='pending' where id='20000000-0000-0000-0000-0000000000
 \echo '--- 2.24 ewr writes the knowledge base (expect ERROR)'
 insert into knowledge_base(hazard_type,title,content) values ('Flooding','t','c');
 \echo '--- 2.25 ewr writes authorities (expect ERROR)'
-insert into authorities(name,phone,coverage_lga) values ('a','+234','L1');
+insert into authorities(name,phone,coverage_lga,coverage_state) values ('a','+234','Makurdi','Benue');
 \echo '--- ewr CAN vote on another ward''s report (expect INSERT 0 1)'
 insert into verifications(report_id,is_confirmed,comment) values ('20000000-0000-0000-0000-000000000003',true,'');
 \echo '--- ewr CAN reopen another user''s report (expect the RPC to succeed)'
@@ -258,7 +258,7 @@ update reports set status='rejected', rejection_reason='no' where id='20000000-0
 \echo '--- 2.35 techSupport reopens a report (expect ERROR)'
 select reopen_report('20000000-0000-0000-0000-000000000003');
 \echo '--- 2.36 techSupport writes authorities (expect ERROR — admin only)'
-insert into authorities(name,phone,coverage_lga) values ('a','+234','L1');
+insert into authorities(name,phone,coverage_lga,coverage_state) values ('a','+234','Makurdi','Benue');
 \echo '--- 2.37 techSupport writes app settings (expect ERROR — admin only)'
 insert into app_settings(key,value) values ('zz','1');
 \echo '--- techSupport CAN create an alert, dismiss one, and edit content'
@@ -415,7 +415,7 @@ begin
       probe_count('select count(*) from profiles'),
       probe('insert into knowledge_base(hazard_type,title,content) values (''Flooding'',''t'',''c'')'),
       probe_count('select count(*) from authorities'),
-      probe('insert into authorities(name,phone,coverage_lga) values (''a'',''+2341'',''L1'')'),
+      probe('insert into authorities(name,phone,coverage_lga,coverage_state) values (''a'',''+2341'',''Makurdi'',''Benue'')'),
       probe('insert into app_settings(key,value) values (''zz'',''1'')'),
       probe('insert into news_links(title,url) values (''t'',''http://x'')'),
       probe(format('insert into messages(sender_id,message) values (%L,''hi'')', uid))

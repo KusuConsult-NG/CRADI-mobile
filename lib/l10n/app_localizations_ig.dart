@@ -205,7 +205,7 @@ class AppLocalizationsIg extends AppLocalizations {
   String get onlineJustNow => 'Na ịntanetị • Ugbu a';
 
   @override
-  String get active => 'na-arụ ọrụ';
+  String get active => 'Na-arụ ọrụ';
 
   @override
   String get pending => 'Na-eche';
@@ -2934,7 +2934,7 @@ class AppLocalizationsIg extends AppLocalizations {
   }
 
   @override
-  String get adminAlertBroadcastSuccess => '✅ Agbasala ọkwa nke ọma';
+  String get adminAlertBroadcastSuccess => 'Agbasala ọkwa nke ọma';
 
   @override
   String adminAlertSendFailed(String error) {
@@ -2951,7 +2951,7 @@ class AppLocalizationsIg extends AppLocalizations {
   String get adminAlertTargetArea => 'Mpaghara A Chọrọ';
 
   @override
-  String get adminAlertAllAreas => '🌍 Mpaghara Niile';
+  String get adminAlertAllAreas => 'Mpaghara Niile';
 
   @override
   String get adminAlertTitleLabel => 'Isiokwu Ọkwa';
@@ -3003,10 +3003,10 @@ class AppLocalizationsIg extends AppLocalizations {
   String get adminGuideAddFirst => 'Tinye ntuziaka mbụ';
 
   @override
-  String get adminGuideEditMenu => '✏️ Dezie';
+  String get adminGuideEditMenu => 'Dezie';
 
   @override
-  String get adminGuideDeleteMenu => '🗑️ Hichapụ';
+  String get adminGuideDeleteMenu => 'Hichapụ';
 
   @override
   String get adminGuideUpdated => 'Emelitela ntuziaka';
@@ -3157,22 +3157,22 @@ class AppLocalizationsIg extends AppLocalizations {
   String get adminUsersPendingChip => 'Na-eche';
 
   @override
-  String get adminUsersApproveMenu => '✅ Kwado';
+  String get adminUsersApproveMenu => 'Kwado';
 
   @override
-  String get adminUsersRevokeMenu => '❌ Wepụ ohere';
+  String get adminUsersRevokeMenu => 'Wepụ ohere';
 
   @override
-  String get adminUsersChangeRoleMenu => '🔄 Gbanwee ọrụ';
+  String get adminUsersChangeRoleMenu => 'Gbanwee ọrụ';
 
   @override
-  String get adminUsersChangeLocationMenu => '📍 Gbanwee ebe';
+  String get adminUsersChangeLocationMenu => 'Gbanwee ebe';
 
   @override
-  String get adminUsersReenableMenu => '🔓 Gbanyeghachi onye ọrụ';
+  String get adminUsersReenableMenu => 'Gbanyeghachi onye ọrụ';
 
   @override
-  String get adminUsersDisableMenu => '🚫 Gbanyụọ onye ọrụ';
+  String get adminUsersDisableMenu => 'Gbanyụọ onye ọrụ';
 
   @override
   String get onboardingWelcomeBody =>
@@ -3379,4 +3379,37 @@ class AppLocalizationsIg extends AppLocalizations {
   String reportRemovePhoto(int number) {
     return 'Wepụ foto $number';
   }
+
+  @override
+  String get notificationReportStatusTitle => 'Mmelite akụkọ';
+
+  @override
+  String notificationReportApproved(String hazard) {
+    return 'Akwadoro akụkọ gị ($hazard), e wepụtakwala ọkwa.';
+  }
+
+  @override
+  String notificationReportVerified(String hazard) {
+    return 'Ndị agbata obi akwadola akụkọ gị ($hazard); ọ na-echere nkwado ikpeazụ.';
+  }
+
+  @override
+  String notificationReportRejected(String hazard) {
+    return 'Ajụrụ akụkọ gị ($hazard). Mepee ya maka nkọwa.';
+  }
+
+  @override
+  String notificationReportPending(String hazard) {
+    return 'Akụkọ gị ($hazard) na-echere nkwado ndị agbata obi.';
+  }
+
+  @override
+  String get notificationAlertBody => 'E wepụtara ọkwa ọhụrụ maka mpaghara gị.';
+
+  @override
+  String get knowledgeSavedFilter => 'Echekwara';
+
+  @override
+  String get knowledgeNoSavedGuides =>
+      'Enwebeghị ntuziaka echekwara. Pịa akara nchekwa na ntuziaka iji chekwaa ya.';
 }

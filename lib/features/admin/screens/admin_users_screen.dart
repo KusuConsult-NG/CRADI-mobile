@@ -1,3 +1,4 @@
+import 'package:climate_app/core/widgets/admin_menu_entry.dart';
 import 'package:climate_app/core/constants/app_config.dart';
 import 'package:climate_app/core/services/supabase_service.dart';
 import 'package:climate_app/core/widgets/location_selector_widget.dart';
@@ -637,27 +638,32 @@ class _AdminUsersScreenState extends State<AdminUsersScreen>
                               if (!approved)
                                 PopupMenuItem(
                                   value: 'approve',
-                                  child: Text(
-                                    context.l10n.adminUsersApproveMenu,
+                                  child: AdminMenuEntry(
+                                    icon: Icons.check_circle_outline,
+                                    label: context.l10n.adminUsersApproveMenu,
                                   ),
                                 ),
                               if (approved)
                                 PopupMenuItem(
                                   value: 'reject',
-                                  child: Text(
-                                    context.l10n.adminUsersRevokeMenu,
+                                  child: AdminMenuEntry(
+                                    icon: Icons.cancel_outlined,
+                                    label: context.l10n.adminUsersRevokeMenu,
                                   ),
                                 ),
                               PopupMenuItem(
                                 value: 'role',
-                                child: Text(
-                                  context.l10n.adminUsersChangeRoleMenu,
+                                child: AdminMenuEntry(
+                                  icon: Icons.swap_horiz,
+                                  label: context.l10n.adminUsersChangeRoleMenu,
                                 ),
                               ),
                               PopupMenuItem(
                                 value: 'location',
-                                child: Text(
-                                  context.l10n.adminUsersChangeLocationMenu,
+                                child: AdminMenuEntry(
+                                  icon: Icons.place_outlined,
+                                  label:
+                                      context.l10n.adminUsersChangeLocationMenu,
                                 ),
                               ),
                               const PopupMenuDivider(),
@@ -665,15 +671,16 @@ class _AdminUsersScreenState extends State<AdminUsersScreen>
                                 value: d['isDisabled'] == true
                                     ? 'enable'
                                     : 'disable',
-                                child: Text(
-                                  d['isDisabled'] == true
+                                child: AdminMenuEntry(
+                                  icon: d['isDisabled'] == true
+                                      ? Icons.lock_open
+                                      : Icons.block,
+                                  label: d['isDisabled'] == true
                                       ? context.l10n.adminUsersReenableMenu
                                       : context.l10n.adminUsersDisableMenu,
-                                  style: TextStyle(
-                                    color: d['isDisabled'] == true
-                                        ? Colors.green
-                                        : Colors.red,
-                                  ),
+                                  color: d['isDisabled'] == true
+                                      ? Colors.green
+                                      : Colors.red,
                                 ),
                               ),
                             ],

@@ -13,6 +13,7 @@ import {
     BASE, MOCK, Recorder, Shots, enableSemantics, findNode, goto, has, nodes,
     screenText, scroll, setRange, stubFonts, tap, type, typeNth,
 } from './driver.mjs';
+import { probeScreen, trackNetwork, controlsOnScreen } from './controls.mjs';
 
 const OUT = path.resolve('web_smoke/screenshots');
 const REPORT = path.resolve('web_smoke/report.json');
@@ -36,6 +37,23 @@ const results = { passes: [], findings: [] };
 function note(pass, screen, kind, text) {
     results.findings.push({ pass, screen, kind, text });
     console.log(`  ! [${kind}] ${screen}: ${text}`);
+}
+
+/**
+ * Polls the semantics tree until one of `matches` appears. Flutter repaints
+ * the canvas and rebuilds the semantics tree asynchronously, so a single
+ * `has()` immediately after a tap races the frame that shows the dialog.
+ */
+async function waitFor(page, matches, { timeout = 12000, step = 500 } = {}) {
+    const list = Array.isArray(matches) ? matches : [matches];
+    const deadline = Date.now() + timeout;
+    for (;;) {
+        for (const m of list) {
+            if (await has(page, m)) return m;
+        }
+        if (Date.now() >= deadline) return null;
+        await page.waitForTimeout(step);
+    }
 }
 
 async function newSession(browser, { width = 390, height = 844, fontScale = 1 } = {}) {
@@ -131,6 +149,9 @@ async function signedOutPass(browser) {
     screens.push(await visit(pass, page, rec, shots, 'landing', '#/landing'));
     screens.push(await visit(pass, page, rec, shots, 'login', '#/login', {
         after: async (p) => {
+            // The empty form, before the validation and bad-credentials
+            // states are driven into it.
+            await shots.take(p, 'login-empty');
             await typeNth(p, 0, 'not-an-email');
             await typeNth(p, 1, 'short');
             await tap(p, 'Login', { settle: 1500 });
@@ -150,10 +171,18 @@ async function signedOutPass(browser) {
     }));
     screens.push(await visit(pass, page, rec, shots, 'reset-password', `#/reset-password?email=${encodeURIComponent(ACCOUNTS.user)}`, {
         after: async (p) => {
-            await typeNth(p, 0, '123456');
-            await typeNth(p, 1, 'NewPassword123!');
+            // Field 0 is the email (pre-filled from the query), 1 the code,
+            // 2 / 3 the new password and its confirmation.
+            await typeNth(p, 1, '000000');
             await typeNth(p, 2, 'NewPassword123!');
+            await typeNth(p, 3, 'NewPassword123!');
             await shots.take(p, 'reset-password-filled');
+            // A wrong code must be refused without leaving the form.
+            await tap(p, 'Reset Password', { settle: 2500 });
+            await shots.take(p, 'reset-password-wrong-code');
+            await typeNth(p, 1, '123456');
+            await tap(p, 'Reset Password', { settle: 3000 });
+            await shots.take(p, 'reset-password-done');
         },
     }));
     screens.push(await visit(pass, page, rec, shots, 'registration', '#/register', {
@@ -237,6 +266,7 @@ async function rolePass(browser, role) {
     }
     if (role === 'admin') {
         screens.push(...(await reportWizard(pass, page, rec, shots, 'Drought')));
+        screens.push(...(await adminMenus(pass, page, rec, shots)));
     }
 
     // Open the first alert, the first knowledge guide and the first report.
@@ -311,19 +341,70 @@ async function rolePass(browser, role) {
     await ctx.close();
 }
 
+/**
+ * Opens the per-row overflow menus on the admin screens. Those menu entries
+ * draw real Material icons (AdminMenuEntry), which only exist once the menu
+ * is open — the closed screen shows nothing of them.
+ */
+async function adminMenus(pass, page, rec, shots) {
+    const out = [];
+    const openRowMenu = async (p) => {
+        // PopupMenuButton publishes MaterialLocalizations.showMenuTooltip.
+        for (const label of ['Show menu', 'Popup menu', 'menu']) {
+            if (await tap(p, { contains: label }, { settle: 1800 })) return true;
+        }
+        return false;
+    };
+    out.push(await visit(pass, page, rec, shots, 'admin-users-row-menu', '#/admin/users', {
+        after: async (p) => {
+            if (!(await openRowMenu(p))) {
+                note(pass, 'admin-users-row-menu', 'missing-control', 'could not open a user row overflow menu');
+                return;
+            }
+            await shots.take(p, 'admin-users-row-menu-open');
+            await p.keyboard.press('Escape');
+            await p.waitForTimeout(600);
+        },
+    }));
+    out.push(await visit(pass, page, rec, shots, 'admin-knowledge-row-menu', '#/admin/knowledge', {
+        after: async (p) => {
+            if (!(await openRowMenu(p))) {
+                note(pass, 'admin-knowledge-row-menu', 'missing-control', 'could not open a guide row overflow menu');
+                return;
+            }
+            await shots.take(p, 'admin-knowledge-row-menu-open');
+            await p.keyboard.press('Escape');
+            await p.waitForTimeout(600);
+        },
+    }));
+    return out;
+}
+
 async function reportWizard(pass, page, rec, shots, hazard) {
     const out = [];
     out.push(await visit(pass, page, rec, shots, `report-1-hazard-${hazard}`, '#/report', {
         after: async (p) => {
-            let picked = await tap(p, hazard, { settle: 900 });
-            for (let i = 0; !picked && i < 4; i++) {
-                await scroll(p, 260);
-                picked = await tap(p, hazard, { settle: 900 });
+            // A tile below the fold has a rect outside the viewport but is
+            // not clipped, so a click on it can land on whatever is really
+            // drawn at that point and select nothing — which leaves Continue
+            // disabled and the next four steps reporting phantom missing
+            // controls. Treat the tile as picked only once Continue actually
+            // leaves the hazard screen, and scroll and retry until it does.
+            const onHazardScreen = () => has(p, { contains: 'What type of incident' });
+            let advanced = false;
+            for (let round = 0; round < 8 && !advanced; round++) {
+                if (await tap(p, hazard, { settle: 900 })) {
+                    await shots.take(p, `report-1-hazard-selected-${hazard}`);
+                    if (!(await tap(p, 'Continue', { settle: 1800 }))) {
+                        note(pass, `report-1-hazard-${hazard}`, 'missing-control', 'no Continue button on the hazard screen');
+                        return;
+                    }
+                    advanced = !(await onHazardScreen());
+                }
+                if (!advanced) await scroll(p, 260);
             }
-            if (!picked) note(pass, `report-1-hazard-${hazard}`, 'missing-control', `hazard tile "${hazard}" not reachable`);
-            await shots.take(p, `report-1-hazard-selected-${hazard}`);
-            if (!(await tap(p, 'Continue', { settle: 1800 }))) {
-                note(pass, `report-1-hazard-${hazard}`, 'missing-control', 'no Continue button on the hazard screen');
+            if (!advanced) {
+                note(pass, `report-1-hazard-${hazard}`, 'missing-control', `hazard tile "${hazard}" could not be selected`);
             }
         },
     }));
@@ -352,8 +433,11 @@ async function reportWizard(pass, page, rec, shots, hazard) {
             await pickDropdown(p, 'Select State', 'Benue');
             await pickDropdown(p, 'Select LGA', 'Makurdi');
             await pickDropdown(p, 'Select Ward', 'Agan');
-            await shots.take(p, `report-3-location-filled-${hazard}`);
+            // The three pickers sit below the map, so scroll down to them
+            // before the shot — otherwise it records the step without
+            // showing what was chosen.
             await scroll(p, 500);
+            await shots.take(p, `report-3-location-filled-${hazard}`);
             if (!(await tap(p, { contains: 'Confirm & Continue' }, { settle: 2000 }))) {
                 if (!(await tap(p, { contains: 'Continue' }, { settle: 2000 }))) {
                     note(pass, `report-3-location-${hazard}`, 'missing-control', 'no Continue on the location screen');
@@ -378,9 +462,23 @@ async function reportWizard(pass, page, rec, shots, hazard) {
             await shots.take(p, `report-5-review-scrolled-${hazard}`);
             if (!(await tap(p, { contains: 'Submit Report' }, { settle: 5000 }))) {
                 note(pass, `report-5-review-${hazard}`, 'missing-control', 'no Submit Report button on the review screen');
-            } else if (!(await has(p, { contains: 'Report Submitted' }))) {
-                // The success screen is a modal dialog over the review page.
-                note(pass, `report-5-review-${hazard}`, 'submit-failed', 'no "Report Submitted" dialog after Submit');
+            } else {
+                // The success screen is a modal Dialog drawn over the review
+                // page, so the route does not change and the review page's own
+                // labels stay in the tree. Wait for the dialog to paint, and
+                // accept any of the three things it can say: the online
+                // success title, the offline "saved for later" title, or the
+                // "Return to Dashboard" button that only that dialog carries.
+                const seen = await waitFor(p, [
+                    { contains: 'Report Submitted' },
+                    { contains: 'Saved for Later' },
+                    { contains: 'Return to Dashboard' },
+                ], { timeout: 15000 });
+                if (!seen) {
+                    note(pass, `report-5-review-${hazard}`, 'submit-failed', 'no submission-result dialog after Submit');
+                } else {
+                    await shots.take(p, `report-5-submitted-${hazard}`);
+                }
             }
         },
     }));
@@ -474,7 +572,14 @@ async function languagePass(browser) {
             if (tr.length === 0) continue;
             const identical = tr.filter((t) => en.has(t) && /[a-z]/i.test(t) && t.length > 3);
             const ratio = identical.length / tr.length;
-            if (ratio > 0.8) {
+            // Nigerian Pidgin deliberately keeps about a third of the strings
+            // as their English spelling ("Home", "Alerts", "Report",
+            // "Settings", "History"), so a short screen made only of those is
+            // correct, not untranslated. Flagging it would make the report
+            // untrustworthy, so only the other three locales get the
+            // whole-screen check; Pidgin still gets the per-label record
+            // below, which is information rather than a finding.
+            if (ratio > 0.8 && lang !== 'Pidgin') {
                 note(pass, `${lang}/${screen}`, 'untranslated', `${identical.length}/${tr.length} labels identical to English`);
             } else if (identical.length > 0) {
                 results.findings.push({
@@ -673,6 +778,179 @@ async function focusPass(browser) {
     await ctx.close();
 }
 
+
+// ── Control-wiring pass ─────────────────────────────────────────────────────
+//
+// Clicks every interactive node on a screen and records what it did. See
+// web_smoke/controls.mjs.
+
+const openFirst = (label) => async (p) => { await tap(p, { contains: label }, { settle: 2200 }); };
+
+const CONTROL_SCREENS = {
+    user: [
+        ['dashboard', '#/dashboard'],
+        ['dashboard-drawer', '#/dashboard', async (p) => {
+            for (const l of ['Open navigation menu', 'Menu', 'Show menu']) {
+                if (await tap(p, { contains: l }, { settle: 1400 })) break;
+            }
+        }],
+        ['my-reports', '#/my-reports'],
+        ['nearby-reports', '#/nearby-reports'],
+        ['reports-status', '#/reports-status'],
+        ['report-view', '#/reports-status', openFirst('View Details')],
+        ['alerts', '#/alerts'],
+        ['alert-detail', '#/alerts', openFirst('Flood warning')],
+        // The "Recent updates" rows are news links: url_launcher opens them
+        // in a new tab, so the driven page never changes.
+        ['knowledge-base', '#/knowledge-base', null, /NiMet|UNDRR|Red Cross|Safety Guide|ReliefWeb|NEMA/],
+        ['hazard-guides', '#/knowledge-base/guides'],
+        ['knowledge-detail', '#/knowledge-base', openFirst('Flood safety')],
+        ['contacts', '#/contacts'],
+        ['chat', '#/chat'],
+        ['notifications', '#/notifications'],
+        ['profile', '#/profile'],
+        ['settings', '#/settings'],
+        ['about', '#/about'],
+        ['help', '#/help'],
+        ['report-wizard-step1', '#/report'],
+    ],
+    ewv: [
+        ['verification-list', '#/verification'],
+        ['verification-detail', '#/verification', openFirst('Review')],
+        ['verification-request', '#/verification/request'],
+    ],
+    admin: [
+        ['admin', '#/admin'],
+        ['admin-users', '#/admin/users'],
+        ['admin-reports', '#/admin/reports'],
+        ['admin-alerts', '#/admin/alerts'],
+        ['admin-knowledge', '#/admin/knowledge'],
+        ['alerts-manage', '#/alerts/manage'],
+    ],
+};
+
+async function controlsPass(browser, role) {
+    const pass = `controls-${role}`;
+    const shots = new Shots(path.join(OUT, pass));
+    const { ctx, page, rec } = await newSession(browser);
+    const net = trackNetwork(page, MOCK);
+    const rows = [];
+    console.log(`\n== ${pass} ==`);
+
+    rec.at('login');
+    await login(page, ACCOUNTS[role]);
+
+    for (const [screen, route, before, external] of CONTROL_SCREENS[role]) {
+        rec.at(screen);
+        try {
+            await probeScreen({
+                page, shots, net, screen, route, rows, before, external,
+                log: (m) => console.log(m),
+            });
+        } catch (e) {
+            note(pass, screen, 'harness', `probe failed: ${e.message}`);
+        }
+    }
+
+    const dead = rows.filter((r) => r.result === 'dead');
+    for (const r of dead) note(pass, r.screen, 'dead-control', `"${r.control}" (${r.role}) — nothing observable happened`);
+    results.controls = (results.controls || []).concat(rows);
+    results.passes.push({ pass, screens: [], controls: rows.length, dead: dead.length, events: rec.events });
+    console.log(`  ${pass}: ${rows.length} controls probed, ${dead.length} with no observable effect`);
+    await ctx.close();
+}
+
+
+/**
+ * Two live sessions on the same chat room. Proves the three things the
+ * screen claims to do: the message is sent, the backend keeps it, and the
+ * other session receives it over realtime without reloading.
+ */
+/** Presses flutter_chat_ui's send control (an unlabelled icon button). */
+async function sendChatMessage(page) {
+    const all = await nodes(page);
+    const field = all.filter((n) => n.input).pop();
+    if (!field) return false;
+    const view = page.viewportSize();
+    const y = field.y + field.h / 2;
+    // The send button sits to the right of the field, inside the composer row.
+    const candidates = all.filter(
+        (n) => n.role === 'button' && Math.abs(n.y + n.h / 2 - y) < field.h && n.x > field.x + field.w - 4,
+    );
+    if (candidates.length > 0) {
+        const b = candidates[0];
+        await page.mouse.click(b.x + b.w / 2, b.y + b.h / 2);
+    } else {
+        await page.mouse.click(Math.min(field.x + field.w + 24, view.width - 12), y);
+    }
+    await page.waitForTimeout(1200);
+    return true;
+}
+
+async function chatPass(browser) {
+    const pass = 'chat';
+    const shots = new Shots(path.join(OUT, pass));
+    console.log(`\n== ${pass} ==`);
+    const a = await newSession(browser);
+    const b = await newSession(browser);
+    const screens = [];
+
+    await login(a.page, ACCOUNTS.user);
+    await login(b.page, ACCOUNTS.ewm);
+    await goto(a.page, '#/chat', { settle: 3000 });
+    await goto(b.page, '#/chat', { settle: 3000 });
+    a.rec.at('chat-sender');
+    b.rec.at('chat-receiver');
+    await shots.take(a.page, 'a-before');
+    await shots.take(b.page, 'b-before');
+
+    const text = `smoke-${Date.now()}`;
+    const composed = await typeNth(a.page, 0, text);
+    if (!composed) note(pass, 'chat', 'missing-control', 'no composer field on the chat screen');
+    // flutter_chat_ui's Composer does not send on Enter and its send control
+    // is an unlabelled icon button at the end of the composer row, so it has
+    // to be clicked where it is drawn.
+    const sent = await sendChatMessage(a.page);
+    if (!sent) note(pass, 'chat', 'missing-control', 'could not press the composer send button');
+    await a.page.waitForTimeout(2500);
+    await shots.take(a.page, 'a-sent');
+
+    const inSender = await waitFor(a.page, { contains: text }, { timeout: 8000 });
+    if (!inSender) note(pass, 'chat', 'send-failed', `sent message "${text}" never appeared in the sender's own list`);
+
+    // Persistence: the row must be in the backend, not only on screen.
+    const rows = await fetch(`${MOCK}/__mock/table/messages`).then((r) => r.json()).catch(() => []);
+    const stored = rows.find((r) => String(r.message) === text);
+    if (!stored) note(pass, 'chat', 'not-persisted', `no messages row with "${text}" after sending`);
+    else console.log(`  persisted: chat_id=${stored.chat_id} sender_name=${stored.sender_name}`);
+
+    // Realtime: the second session must see it without being reloaded.
+    const inReceiver = await waitFor(b.page, { contains: text }, { timeout: 20000 });
+    if (!inReceiver) note(pass, 'chat', 'no-realtime', `the second session never received "${text}"`);
+    await shots.take(b.page, 'b-received');
+
+    // Durability: a fresh load of the screen still shows it.
+    await goto(a.page, '#/dashboard', { settle: 1500 });
+    await goto(a.page, '#/chat', { settle: 3500 });
+    const afterReload = await waitFor(a.page, { contains: text }, { timeout: 10000 });
+    if (!afterReload) note(pass, 'chat', 'not-reloaded', `"${text}" is gone after leaving and reopening the chat`);
+    await shots.take(a.page, 'a-reopened');
+
+    screens.push({
+        screen: 'chat-two-sessions',
+        sent: !!composed,
+        echoedToSender: !!inSender,
+        persisted: !!stored,
+        deliveredByRealtime: !!inReceiver,
+        survivesReopen: !!afterReload,
+    });
+    console.log(`  sent=${!!composed} echoed=${!!inSender} persisted=${!!stored} realtime=${!!inReceiver} reopen=${!!afterReload}`);
+
+    results.passes.push({ pass, screens, events: [...a.rec.events, ...b.rec.events] });
+    await a.ctx.close();
+    await b.ctx.close();
+}
+
 // ── Main ────────────────────────────────────────────────────────────────────
 
 const only = process.argv.slice(2);
@@ -686,7 +964,8 @@ for (const dir of fs.readdirSync(OUT)) {
     const selected = only.length === 0
         || only.includes(dir)
         || only.some((o) => PASS_DIRS[o] === dir)
-        || (dir.startsWith('role-') && only.includes('roles'));
+        || (dir.startsWith('role-') && only.includes('roles'))
+        || (dir.startsWith('controls-') && only.includes('controls'));
     if (selected) fs.rmSync(path.join(OUT, dir), { recursive: true, force: true });
 }
 await fetch(`${MOCK}/__mock/reset`, { method: 'POST' }).catch(() => {
@@ -706,10 +985,19 @@ try {
     if (wanted('focus')) await focusPass(browser);
     if (wanted('languages')) await languagePass(browser);
     if (wanted('small')) await smallViewportPass(browser);
+    for (const role of ['user', 'ewv', 'admin']) {
+        if (wanted(`controls-${role}`) || wanted('controls')) await controlsPass(browser, role);
+    }
+    if (wanted('chat')) await chatPass(browser);
 } finally {
     await browser.close();
     fs.writeFileSync(REPORT, JSON.stringify(results, null, 1));
     console.log(`\nScreenshots: ${OUT}\nReport:      ${REPORT}`);
     const bad = results.passes.flatMap((p) => p.events.filter((e) => e.kind === 'pageerror' || e.kind.startsWith('console.error')));
     console.log(`Findings: ${results.findings.length}, console/page errors: ${bad.length}`);
+    if (results.controls) {
+        const tally = {};
+        for (const r of results.controls) tally[r.result] = (tally[r.result] || 0) + 1;
+        console.log(`Controls probed: ${results.controls.length} — ${JSON.stringify(tally)}`);
+    }
 }

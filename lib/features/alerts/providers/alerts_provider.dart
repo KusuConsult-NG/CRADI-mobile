@@ -128,13 +128,18 @@ class AlertsProvider extends ChangeNotifier {
   /// Whether [alert] targets a user in [lga] of [state] (alerts for 'All'
   /// with no target state reach everyone).
   ///
-  /// LGA names repeat across states (Obi is in Benue and in Nasarawa), so
-  /// alerts carry `target_state` too:
-  ///  * no target state (legacy alerts): `target_lga` is matched by exact
-  ///    (case-insensitive) name in any state;
+  /// LGA names repeat across states (Obi is in Benue and in Nasarawa, and five
+  /// more names do the same), so an alert that names an LGA always names its
+  /// state too — the database rejects any other shape
+  /// (`alerts_target_lga_needs_state`, migration 20260927080000):
   ///  * a target state: the user's [state] must match as well, and a
-  ///    `target_lga` of 'All' means every LGA of that state.
+  ///    `target_lga` of 'All' means every LGA of that state;
+  ///  * no target state: `target_lga` is 'All' and the alert reaches everyone.
   /// A user whose state is unknown never matches a state-targeted alert.
+  ///
+  /// The name-only branch below (an LGA with no state) can no longer come from
+  /// the database; it is kept so a cached row written by an older build still
+  /// renders somewhere sensible instead of vanishing.
   static bool targetsLga(
     Map<String, dynamic> alert,
     String? lga, {
@@ -150,7 +155,8 @@ class AlertsProvider extends ChangeNotifier {
   }
 
   /// Where [alert] is addressed, for display: "Obi, Benue", "Benue" (every
-  /// LGA of the state), "Obi" (legacy, no state), or null for everyone.
+  /// LGA of the state), or null for everyone. A bare "Obi" is only possible
+  /// for a stale cached row (see [targetsLga]).
   static String? targetLabel(Map<String, dynamic> alert) {
     String? str(Object? v) {
       final s = v?.toString().trim();

@@ -147,13 +147,28 @@ export function createRepo(supabase) {
     },
 
     /**
-     * Authorities covering the report's LGA: coverage_lga equals `lga` (exact
-     * match, as stored on the report) and coverage_state equals `state` or is
-     * NULL (legacy rows that predate coverage_state match by LGA name only).
-     * LGA names repeat across states (Obi: Benue and Nasarawa), so a report
-     * with a state never reaches another state's same-named LGA. An empty
-     * `state` matches only rows with no coverage_state (it can't tell which
-     * state's same-named LGA is meant).
+     * Authorities covering the report's (state, LGA): coverage_lga equals
+     * `lga` and coverage_state equals `state`, both exact matches as stored on
+     * the report. LGA names repeat across states (Obi is in Benue and in
+     * Nasarawa, and five more names do the same), so a report never reaches
+     * another state's same-named LGA.
+     *
+     * Since migration 20260927090000 coverage_state is NOT NULL and
+     * (coverage_state, coverage_lga) is a foreign key into
+     * public.nigeria_lgas, so there are no state-less rows left to match. The
+     * `coverage_state.is.null` half of the filter is kept for the same reason
+     * notifications.js alertTarget() keeps its state-less branch: it is
+     * unreachable from the database, and exists only so a hand-inserted row or
+     * a stale replica degrades to the old LGA-name-only match instead of
+     * silently texting nobody. It can never widen a live row's coverage,
+     * because no live row can have a NULL coverage_state.
+     *
+     * An empty `state` on the report matches NOTHING, deliberately: with no
+     * state on either side there is no way to tell which same-named LGA is
+     * meant, and texting the wrong state's emergency desk is worse than
+     * texting no one. The caller (src/sms/authorities.js) logs
+     * `sms.report_without_state` before calling, and reports.lga/state are set
+     * from the app's fixed location list, so this should never happen.
      */
     async findAuthorities(lga, state, limit) {
       let q = supabase

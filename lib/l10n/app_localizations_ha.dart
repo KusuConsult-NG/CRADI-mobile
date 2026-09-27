@@ -207,7 +207,7 @@ class AppLocalizationsHa extends AppLocalizations {
   String get onlineJustNow => 'Kan Layi • Yanzu';
 
   @override
-  String get active => 'mai aiki';
+  String get active => 'Mai aiki';
 
   @override
   String get pending => 'Ana Jira';
@@ -2970,7 +2970,7 @@ class AppLocalizationsHa extends AppLocalizations {
   }
 
   @override
-  String get adminAlertBroadcastSuccess => '✅ An watsa faɗakarwa cikin nasara';
+  String get adminAlertBroadcastSuccess => 'An watsa faɗakarwa cikin nasara';
 
   @override
   String adminAlertSendFailed(String error) {
@@ -2987,7 +2987,7 @@ class AppLocalizationsHa extends AppLocalizations {
   String get adminAlertTargetArea => 'Yankin da Ake Nufi';
 
   @override
-  String get adminAlertAllAreas => '🌍 Dukkan Yankuna';
+  String get adminAlertAllAreas => 'Dukkan Yankuna';
 
   @override
   String get adminAlertTitleLabel => 'Taken Faɗakarwa';
@@ -3039,10 +3039,10 @@ class AppLocalizationsHa extends AppLocalizations {
   String get adminGuideAddFirst => 'Ƙara jagora ta farko';
 
   @override
-  String get adminGuideEditMenu => '✏️ Gyara';
+  String get adminGuideEditMenu => 'Gyara';
 
   @override
-  String get adminGuideDeleteMenu => '🗑️ Goge';
+  String get adminGuideDeleteMenu => 'Goge';
 
   @override
   String get adminGuideUpdated => 'An sabunta jagora';
@@ -3195,22 +3195,22 @@ class AppLocalizationsHa extends AppLocalizations {
   String get adminUsersPendingChip => 'Ana Jira';
 
   @override
-  String get adminUsersApproveMenu => '✅ Amince';
+  String get adminUsersApproveMenu => 'Amince';
 
   @override
-  String get adminUsersRevokeMenu => '❌ Janye izini';
+  String get adminUsersRevokeMenu => 'Janye izini';
 
   @override
-  String get adminUsersChangeRoleMenu => '🔄 Canza matsayi';
+  String get adminUsersChangeRoleMenu => 'Canza matsayi';
 
   @override
-  String get adminUsersChangeLocationMenu => '📍 Canza wuri';
+  String get adminUsersChangeLocationMenu => 'Canza wuri';
 
   @override
-  String get adminUsersReenableMenu => '🔓 Sake kunna mai amfani';
+  String get adminUsersReenableMenu => 'Sake kunna mai amfani';
 
   @override
-  String get adminUsersDisableMenu => '🚫 Dakatar da mai amfani';
+  String get adminUsersDisableMenu => 'Dakatar da mai amfani';
 
   @override
   String get onboardingWelcomeBody =>
@@ -3416,4 +3416,38 @@ class AppLocalizationsHa extends AppLocalizations {
   String reportRemovePhoto(int number) {
     return 'Cire hoto $number';
   }
+
+  @override
+  String get notificationReportStatusTitle => 'Sabuntawar rahoto';
+
+  @override
+  String notificationReportApproved(String hazard) {
+    return 'An amince da rahotonka ($hazard), an kuma fitar da faɗakarwa.';
+  }
+
+  @override
+  String notificationReportVerified(String hazard) {
+    return 'Maƙwabta sun tabbatar da rahotonka ($hazard); yana jiran amincewa ta ƙarshe.';
+  }
+
+  @override
+  String notificationReportRejected(String hazard) {
+    return 'An ƙi rahotonka ($hazard). Buɗe shi don cikakken bayani.';
+  }
+
+  @override
+  String notificationReportPending(String hazard) {
+    return 'Rahotonka ($hazard) yana jiran tabbatarwa daga maƙwabta.';
+  }
+
+  @override
+  String get notificationAlertBody =>
+      'An fitar da sabuwar faɗakarwa don yankinka.';
+
+  @override
+  String get knowledgeSavedFilter => 'Ajiyayyu';
+
+  @override
+  String get knowledgeNoSavedGuides =>
+      'Babu jagororin da aka ajiye tukuna. Danna alamar ajiya a kan jagora don ajiye shi.';
 }

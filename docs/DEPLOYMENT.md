@@ -80,11 +80,18 @@ types, functions, triggers and policies outright, so a second run fails with
    select count(*) from public.knowledge_base;
    ```
 
-   The 17 tables are: `alerts`, `app_settings`, `authorities`, `contacts`,
-   `knowledge_base`, `login_history`, `messages`, `ndpa_consents`, `news_links`,
-   `notification_outbox`, `profiles`, `reports`, `scheduled_escalations`,
-   `sms_deliveries`, `trusted_devices`, `verification_overrides`,
-   `verifications`.
+   The 21 tables are: `alerts`, `alerts_unresolved_target`, `app_settings`,
+   `authorities`, `authorities_unresolved_coverage`, `contacts`,
+   `knowledge_base`, `login_history`, `messages`, `ndpa_consents`,
+   `news_links`, `nigeria_lgas`, `nigeria_states`, `notification_outbox`,
+   `profiles`, `reports`, `scheduled_escalations`, `sms_deliveries`,
+   `trusted_devices`, `verification_overrides`, `verifications`.
+
+   `nigeria_states` (37 rows) and `nigeria_lgas` (770 rows) are canonical
+   reference data, read-only to clients. The two `*_unresolved_*` tables are
+   empty on a fresh project; they only ever hold rows that migrations
+   `20260927080000` / `20260927090000` had to set aside — see
+   [Authority SMS do not arrive](#authority-sms-do-not-arrive) below.
 
 4. **Storage buckets — already done.** The init migration inserts them; you do
    **not** create them by hand. Confirm under **Storage**, or:
@@ -98,14 +105,9 @@ types, functions, triggers and policies outright, so a second run fails with
    `image/jpeg, image/png, image/webp, image/heic`. Object paths must start with
    the uploader's user id — that is what the storage policies enforce.
 
-5. **Auth settings** (Supabase dashboard → **Authentication**):
-   * **Providers → Email**: enabled, *Confirm email* **on**. Accounts cannot be
-     approved or promoted to admin until their email or phone is confirmed —
-     the `profiles_guard_approval` trigger refuses it.
-   * **Email Templates**: the app verifies accounts and resets passwords with
-     **6-digit codes**, not links. *Confirm signup* and *Reset password* must
-     contain `{{ .Token }}`.
-   * Phone sign-up is optional; see the repo `README.md` section 1.
+5. **Auth settings** — every one of them is listed in **section 1a** below.
+   Work through that checklist now; auth does not work with the dashboard
+   defaults.
 
 6. **Collect the keys** — dashboard → **Project Settings → API**:
    * **Project URL** → `https://<project-ref>.supabase.co`. Used by everything.
@@ -118,6 +120,198 @@ types, functions, triggers and policies outright, so a second run fails with
 
 > `supabase/tests/local_stubs.sql` is **for local Postgres testing only**. Never
 > run it against a Supabase project.
+
+---
+
+## 1a. Auth configuration — the complete checklist
+
+Supabase ships with defaults that **do not work for this app**: the Site URL is
+`http://localhost:3000` and every email template sends a *link*, while the
+mobile app asks the user to type a **6-digit code**. That mismatch is why a
+recovery mail can arrive perfectly (SMTP fine) and still be useless.
+
+Password recovery is the one flow with **two audiences**: the mobile app needs
+the 6-digit code, and the admin panel now has a browser page at
+`/reset-password`. The **Reset Password** template in section *d* below carries
+both, so one mail serves both. Do not trim it down to one half.
+
+### What each flow actually needs
+
+| Flow | App entry point | Sends to Supabase | Needs | Email template | Required variable |
+| --- | --- | --- | --- | --- | --- |
+| Registration (email) | `/register` → `AuthProvider.signUpWithEmail` | `auth.signUp(email, password, data: {name, role, phone, state, lga, ward, address})` | — | — | — |
+| Email confirmation | `/verify-otp` → `verifyOtpAndLogin` | `auth.verifyOTP(type: signup, email, token)` | **code** | **Confirm signup** | `{{ .Token }}` |
+| Resend confirmation | `/verify-otp`, and automatically after an `email_not_confirmed` login | `auth.resend(type: signup, email)` | **code** | **Confirm signup** | `{{ .Token }}` |
+| Sign-in | `/login` | `auth.signInWithPassword(email, password)` | — | — | — |
+| Password reset — send | `/forgot-password` (app), or Supabase → Users → *Send password recovery* | `auth.resetPasswordForEmail(email)` | **code + link** | **Reset Password** | `{{ .Token }}` **and** `{{ .TokenHash }}` |
+| Password reset — confirm (mobile app) | `/reset-password` in the app | `auth.verifyOTP(type: recovery, email, token)` then `auth.updateUser(password:)` | **code** | **Reset Password** | `{{ .Token }}` |
+| Password reset — confirm (browser) | admin panel `/reset-password` | `auth.verifyOtp({token_hash, type: 'recovery'})` (or `setSession` from an `#access_token` fragment) then `auth.updateUser({password})` | **link** | **Reset Password** | `{{ .TokenHash }}` |
+| Change sign-in email | Profile → email → `ProfileProvider.updateEmail` | `auth.updateUser(email:)` | **link** | **Change Email Address** (plus **Confirm Email Change** while *Secure email change* is on) | `{{ .ConfirmationURL }}` (the default) |
+| Session restore / refresh | automatic (`supabase_flutter` secure storage) | `POST /token?grant_type=refresh_token` | — | — | — |
+| Biometric unlock | lock screen | re-uses the persisted session, refreshes it if expired | — | — | — |
+| Sign-out | anywhere | `auth.signOut()` | — | — | — |
+| Admin panel sign-in | `https://cradi-mobile-admin-production.up.railway.app/login` | `auth.signInWithPassword` | — | — | — |
+| Phone / SMS OTP | **disabled in code** (`AuthProvider.phoneAuthEnabled = false`) | — | — | — | — |
+
+Everything the **mobile app** does is code-based. Two flows follow a **link**,
+and both links are built from the Site URL — which is why the Site URL is not
+cosmetic: the email change, and the browser half of password recovery.
+
+Neither app ever passes `redirectTo` / `emailRedirectTo`. The admin panel keeps
+`detectSessionInUrl: false` on its shared Supabase client (turning it on would
+make every admin page try to consume tokens from its URL); its
+`/reset-password` page instead reads `token_hash` — or an `#access_token`
+fragment — out of the URL itself and hands it to a short-lived client of its
+own. No OAuth provider is involved anywhere.
+
+### a. URL Configuration — **Authentication → URL Configuration**
+
+* **Site URL**: `https://cradi-mobile-admin-production.up.railway.app`
+  The default `http://localhost:3000` is what makes a password-reset mail point
+  at a dead address. GoTrue applies an email change *server-side* when the link
+  is opened and only then redirects the browser here, so the admin login page is
+  a fine landing spot even though it ignores the URL fragment.
+* **Redirect URLs** (allow list) — GoTrue will only redirect a browser to a URL
+  on this list. Add all of these:
+  * `https://cradi-mobile-admin-production.up.railway.app/reset-password`
+    — **required**. This is where the link in the recovery mail lands (section
+    *d*). Without it GoTrue refuses the redirect and the staff-facing half of
+    password recovery does not work.
+  * `https://cradi-mobile-admin-production.up.railway.app/**`
+  * `https://cradi.ng/**` (the app-link host in `AndroidManifest.xml` / `Info.plist`)
+  * `cradi://**` (the custom scheme the app registers)
+
+### b. Providers — **Authentication → Providers**
+
+* **Email**: *Enabled*.
+  * **Confirm email: ON.** Required, not optional: the admin panel and the
+    `profiles_guard` trigger refuse to approve an account whose email (or phone)
+    is unconfirmed, so with confirmations off nobody could ever be approved.
+  * **Secure email change**: leave ON. The user then gets a confirmation link at
+    *both* the old and the new address and must open both.
+  * **Email OTP length: 6**, **Email OTP expiry: 3600 s**. The reset screen
+    rejects anything shorter than 6 characters.
+* **Phone**: *Disabled*. `AuthProvider.phoneAuthEnabled` is `false`, and the
+  login and registration screens hide every phone control behind it. Enabling
+  the provider in the dashboard alone changes nothing — the constant has to be
+  flipped and the app rebuilt.
+
+### c. Sign-ups — **Authentication → Sign In / Providers**
+
+* **Allow new users to sign up: ON.** The registration screen calls `signUp`;
+  with sign-ups disabled Supabase answers `signup_disabled` and the app shows
+  "Registration is currently disabled".
+* **Allow anonymous sign-ins: OFF** (unused).
+
+### d. Email templates — **Authentication → Emails → Templates**
+
+Two templates must be changed from their shipped, link-based defaults. Paste
+these as-is.
+
+**Confirm signup** — subject `Your CRADI verification code`
+
+```html
+<h2>Confirm your CRADI / EWER account</h2>
+<p>Enter this code in the app to finish creating your account:</p>
+<p style="font-size:28px;font-weight:700;letter-spacing:6px;margin:24px 0">{{ .Token }}</p>
+<p>The code expires in one hour. If you did not create an account, ignore this email.</p>
+```
+
+**Reset Password** — subject `Your CRADI password reset code`
+
+This one template serves **both** audiences and must keep both halves:
+
+* the **6-digit code** (`{{ .Token }}`) — for **mobile app users**. The app's
+  "Create New Password" screen asks for six digits and calls
+  `auth.verifyOTP(type: recovery)`. **Deleting the `{{ .Token }}` half breaks
+  password reset in the mobile app completely**; there is no link handler in
+  the app.
+* the **link** — for **staff using the browser** (admins, anyone without the
+  app). It points at the admin panel's `/reset-password` page, which exchanges
+  `{{ .TokenHash }}` (the hashed form of the same code) for a recovery session
+  and then updates the password. `{{ .SiteURL }}` resolves to the Site URL set
+  in section *a*, and the path must be on the Redirect URL allow list.
+
+```html
+<h2>Reset your CRADI / EWER password</h2>
+
+<p><strong>Using the CRADI mobile app?</strong><br>
+Enter this code on the "Create New Password" screen:</p>
+<p style="font-size:28px;font-weight:700;letter-spacing:6px;margin:24px 0">{{ .Token }}</p>
+
+<p><strong>Using a web browser (admin panel)?</strong><br>
+<a href="{{ .SiteURL }}/reset-password?token_hash={{ .TokenHash }}&amp;type=recovery">Choose a new password in your browser</a></p>
+<p style="font-size:12px;color:#666">If the link does not open, copy this address into your browser:<br>
+{{ .SiteURL }}/reset-password?token_hash={{ .TokenHash }}&amp;type=recovery</p>
+
+<p>The code and the link are two forms of the same one-hour, single-use token —
+use whichever suits you. If you did not ask for a password reset, ignore this
+email — your password has not changed.</p>
+```
+
+`{{ .Token }}` is the 6-digit OTP; `{{ .TokenHash }}` is its hashed form and is
+the value Supabase also embeds in `{{ .ConfirmationURL }}`. Using
+`{{ .TokenHash }}` in a link of our own — rather than `{{ .ConfirmationURL }}`
+— keeps the landing page under our control and avoids the extra
+`/auth/v1/verify` redirect hop.
+
+**Change Email Address** and **Confirm Email Change**: leave the defaults
+(`{{ .ConfirmationURL }}`). This is the only flow that needs a working link, so
+it is also the only one that depends on the Site URL above.
+
+**Magic Link**, **Invite user**, **Reauthentication**: unused. The app never
+sends a magic link or an invite. `reauthentication_needed` is mapped to a
+message in `ProfileProvider.updateEmail`, but no screen collects a reauth code.
+
+> After editing a template, send yourself a real reset from the app and read the
+> mail. It must contain **both** a 6-digit code and a link that starts with the
+> Site URL and `/reset-password?token_hash=`. If the only link is a bare
+> `.../auth/v1/verify?...`, the template was not saved.
+
+### e. SMTP — **Project Settings → Authentication → SMTP Settings**
+
+* Custom SMTP **enabled**, pointed at Resend. The sender domain must be verified
+  in Resend or every message is silently dropped.
+* **Sender email / name** must match a verified Resend identity.
+
+### f. Rate limits — **Authentication → Rate Limits**
+
+* **Emails sent per hour**: the default is `2` while the built-in SMTP is in
+  use. With custom SMTP raise it to at least `30`, otherwise a user who
+  registers, mistypes the code and asks for a resend hits
+  `over_email_send_rate_limit` and the app says "Too many attempts".
+* **Token verifications** and **sign-ins**: the defaults are fine.
+
+### g. What the code additionally assumes
+
+* The `on_auth_user_created` trigger reads the `raw_user_meta_data` keys `name`,
+  `role`, `phone`, `state`, `lga`, `ward`, `address` and creates the `profiles`
+  row. The client never inserts it, so a failure here leaves a user who can sign
+  in but has no profile.
+* A requested `role` outside the six self-service values is silently demoted to
+  `user`, and `is_approved` always starts `false` — every new account lands on
+  `/pending-approval` until an admin approves it.
+* The app subscribes to its own `profiles` row over Realtime, so **Realtime must
+  be enabled for `public.profiles`**: that is what makes an approval, a role
+  change or a disable take effect without a restart.
+* The admin panel has a password-reset screen at `/reset-password` (public, not
+  behind the admin sign-in guard). An admin who forgets their password asks for
+  a recovery mail — from the mobile app's `/forgot-password`, or from Supabase →
+  Authentication → Users → *Send password recovery* — and follows the link in
+  it. It works for any account, not only admins: the page uses its own
+  short-lived Supabase client, so the admin-only guard never sees the recovery
+  session. After the change it signs the account out everywhere, so the next
+  sign-in uses the new password.
+* The panel enforces the same password rules as the app
+  (`admin/lib/password.ts` mirrors `lib/core/utils/password_validator.dart`):
+  8–128 characters, upper and lower case, a digit, a special character, not a
+  common password, no sequential run such as `123` or `abc`. Supabase's own
+  *Minimum password length* / *Required characters* setting applies on top and
+  its message is shown verbatim.
+* Login throttling is **per device**, in the app's own `RateLimiter` (5 attempts
+  / 15 min, then an exponentially growing lock). It is independent of Supabase's
+  limits and clears itself when the lock expires or on the next successful
+  sign-in.
 
 ---
 
@@ -662,7 +856,9 @@ must be approved by the admin first (Admin → Users → Approve).
 
 Before you start, add one row under **Admin → Authorities** with
 `coverage_lga` = the report's LGA and `coverage_state` = the report's state,
-and a Nigerian phone number you control.
+and a Nigerian phone number you control. Both are picked together from the
+list, which is grouped by state: the state is required, and a contact is texted
+only for its own state's LGA (`20260927090000`).
 
 1. **Submit a report.** Reporter account, mobile app → new report in that ward
    / LGA. Expect `reports.status = 'pending'`.
@@ -695,7 +891,16 @@ and a Nigerian phone number you control.
    Nothing at all → `SMS_PROVIDER` or its credentials are incomplete; the
    backend logs `sms.skipped_not_configured`.
 7. **Create a targeted alert.** Admin → Community Alerts → new alert with
-   **target state = X** and **target LGA = Y**.
+   **target state = X** and **target LGA = Y**. The state comes first and is
+   required: six LGA names (Bassa, Ifelodun, Irepodun, Nasarawa, Obi,
+   Surulere) belong to two states each, so an LGA on its own names no single
+   place. The database enforces it — `alerts` has a check constraint
+   (`alerts_target_lga_needs_state`) plus foreign keys into
+   `public.nigeria_states` / `public.nigeria_lgas`, so an alert with an LGA and
+   no state, an invented state, or an LGA that is not in the state it claims,
+   is rejected at insert time. The three targetings that remain are: one LGA of
+   one state; every LGA of one state (`All` + a state); and everyone
+   (`All`, no state).
    * A device whose profile is in state X / LGA Y **receives** it.
    * A device in a **different** LGA (or the same LGA name in a different
      state — e.g. Obi in Benue vs Obi in Nasarawa) **does not**.
@@ -823,8 +1028,35 @@ skipped rather than risk a double text. Also check the caps:
 `app_settings.max_sms_per_alert_event` (default 20 per report) and
 `max_sms_per_lga_per_day` (default 50 per state+LGA per Africa/Lagos day).
 
-An authority row with `coverage_state` NULL is a legacy row that matches every
-same-named LGA in any state; edit it in the admin panel and pick the state.
+Every authority names the state of the LGA it covers, and is texted for that
+(state, LGA) only. Migration `20260927090000` made `coverage_state` NOT NULL
+and added foreign keys into `public.nigeria_states` / `public.nigeria_lgas`, so
+a contact with no state, an invented state, or an LGA that is not in the state
+it claims, is rejected at insert time. Six LGA names (Bassa, Ifelodun,
+Irepodun, Nasarawa, Obi, Surulere) exist in two states each: before that
+migration a state-less contact for one of them was texted about incidents in
+both.
+
+A report whose `state` is empty therefore matches **no** authority and sends no
+SMS, logged as `sms.report_without_state`. That is deliberate — texting the
+wrong state's emergency desk is worse than texting no one — so fix the report's
+`state` rather than the query.
+
+**If that migration quarantined contacts** it raised a `WARNING` naming each
+one, and copied them into `public.authorities_unresolved_coverage` (service
+role only). Those numbers are **no longer being texted**. Recover them:
+
+```sql
+-- SQL editor (service role)
+select id, name, organization, phone, coverage_lga, coverage_state, reason
+  from public.authorities_unresolved_coverage
+ order by quarantined_at;
+```
+
+For each row, establish which state that desk actually serves — ask them if you
+have to, never guess — re-add it under **Admin → Authorities** (the LGA list is
+grouped by state), then `delete` the row from the quarantine table. It holds
+real names and phone numbers, so do not leave it populated.
 
 ---
 

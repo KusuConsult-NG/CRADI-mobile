@@ -1,0 +1,8 @@
+# The root Dockerfile builds only backend/. Everything else is excluded so the
+# build context stays small (the Flutter app, its build output and the browser
+# smoke-test screenshots are hundreds of megabytes).
+*
+
+!backend/package.json
+!backend/package-lock.json
+!backend/src

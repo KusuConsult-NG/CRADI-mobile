@@ -82,6 +82,16 @@ class BiometricService {
     }
   }
 
+  /// Whether biometric login can actually be offered on this device:
+  /// the hardware can be queried *and* the user has enrolled a fingerprint
+  /// or face. Hardware without an enrolment can only fail at the prompt, so
+  /// every screen that offers the setting asks this first and disables the
+  /// control instead.
+  Future<bool> isBiometricUsable() async {
+    if (!await isBiometricAvailable()) return false;
+    return (await getAvailableBiometrics()).isNotEmpty;
+  }
+
   /// Check if device has biometric hardware
   Future<bool> isDeviceSupported() async {
     try {

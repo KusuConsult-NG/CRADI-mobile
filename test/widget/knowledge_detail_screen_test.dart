@@ -5,6 +5,7 @@ import 'package:mockito/annotations.dart';
 import 'package:mockito/mockito.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
+import 'package:climate_app/features/knowledge_base/guide_bookmarks.dart';
 import 'package:climate_app/features/knowledge_base/screens/knowledge_detail_screen.dart';
 import 'package:climate_app/features/knowledge_base/knowledge_categories.dart';
 import 'package:climate_app/features/knowledge_base/providers/knowledge_provider.dart';
@@ -39,6 +40,9 @@ void main() {
 
   setUp(() {
     SharedPreferences.setMockInitialValues({});
+    // GuideBookmarks is a process-wide singleton; drop what an earlier
+    // test saved so each one starts with nothing bookmarked.
+    GuideBookmarks().resetForTesting();
     mockKnowledgeProvider = MockKnowledgeProvider();
     when(mockKnowledgeProvider.guides).thenReturn([testGuide, relatedGuide]);
     when(mockKnowledgeProvider.hasListeners).thenReturn(false);

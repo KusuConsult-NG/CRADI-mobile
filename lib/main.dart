@@ -133,6 +133,15 @@ class _ClimateAppState extends State<ClimateApp> with WidgetsBindingObserver {
   VoidCallback? _onSignedIn;
   VoidCallback? _onSignedOut;
 
+  /// In-app producers for the notifications history: the screen must show
+  /// what happened to this user even when push is not configured, was
+  /// denied, or has not delivered (yet). See NotificationService's
+  /// "In-app producers" section.
+  AlertsProvider? _alerts;
+  ProfileProvider? _profile;
+  VoidCallback? _onAlertsChanged;
+  StreamSubscription<List<Map<String, dynamic>>>? _ownReportsSub;
+
   @override
   void initState() {
     super.initState();
@@ -158,6 +167,12 @@ class _ClimateAppState extends State<ClimateApp> with WidgetsBindingObserver {
     if (onSignedIn != null) _auth?.removeSignInListener(onSignedIn);
     final onSignedOut = _onSignedOut;
     if (onSignedOut != null) _auth?.removeSignOutListener(onSignedOut);
+    final onAlertsChanged = _onAlertsChanged;
+    if (onAlertsChanged != null) {
+      _alerts?.removeListener(onAlertsChanged);
+      _profile?.removeListener(onAlertsChanged);
+    }
+    unawaited(_ownReportsSub?.cancel());
     super.dispose();
   }
 
@@ -202,12 +217,15 @@ class _ClimateAppState extends State<ClimateApp> with WidgetsBindingObserver {
       unawaited(RemoteConfigService().refreshOnSignIn());
       unawaited(alerts.fetchAlerts());
       if (uid != null) unawaited(reloadFor(uid));
+      _watchOwnReports(profile);
     };
     _onSignedOut = () {
       // The alerts feed is per session (RLS); restarted by fetchAlerts.
       alerts.stopRealtime();
       reports.clearUserData();
       unawaited(profile.clearProfile());
+      unawaited(_ownReportsSub?.cancel());
+      _ownReportsSub = null;
     };
     _auth!
       ..addSignInListener(_onSignedIn!)
@@ -221,6 +239,36 @@ class _ClimateAppState extends State<ClimateApp> with WidgetsBindingObserver {
       unawaited(reports.refreshReports());
       if (uid != null) unawaited(reports.refreshReports(userId: uid));
     };
+
+    // Producer 1: an alert that targets this user. AlertsProvider notifies
+    // on every realtime update; the service ignores alerts it has already
+    // recorded, so calling it on each notification is harmless.
+    _alerts = alerts;
+    _profile = profile;
+    _onAlertsChanged = () {
+      if (_auth?.currentUser == null || profile.isLoading) return;
+      unawaited(
+        NotificationService().recordAlerts(
+          alerts.alertsForLga(profile.lga, state: profile.state),
+        ),
+      );
+    };
+    alerts.addListener(_onAlertsChanged!);
+    // Which alerts target the user also changes when their profile (LGA,
+    // state) arrives or changes, not only when the alerts list does.
+    profile.addListener(_onAlertsChanged!);
+    if (_auth?.currentUser != null) _watchOwnReports(profile);
+  }
+
+  /// Producer 2: a change to the status of one of the user's own reports
+  /// (which is also how a peer verification outcome reaches its author).
+  void _watchOwnReports(ProfileProvider profile) {
+    unawaited(_ownReportsSub?.cancel());
+    _ownReportsSub = profile.getUserReportsStream().listen(
+      (rows) => unawaited(NotificationService().recordOwnReportStatuses(rows)),
+      onError: (Object e) =>
+          ErrorHandler.logError(e, context: 'ownReports.notifications'),
+    );
   }
 
   void _wireAutoSync() {

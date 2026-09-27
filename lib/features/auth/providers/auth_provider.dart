@@ -135,8 +135,9 @@ class AuthProvider extends ChangeNotifier {
   // Set during an explicit sign-in / OTP verification so the sign-in handler
   // does not immediately re-lock the app behind the biometric screen.
   bool _justLoggedIn = false;
-  // True while a password-recovery session is active (verifyOTP recovery →
-  // updateUser → signOut); auth events are ignored meanwhile.
+  // True for the length of [confirmPasswordReset] (verifyOTP recovery →
+  // updateUser → signOut); auth events are ignored meanwhile. Only that
+  // method sets it, so it can never stay raised past the reset.
   bool _recovering = false;
   // Set when the profile row says the account is disabled.
   bool _accountDisabled = false;
@@ -346,7 +347,20 @@ class AuthProvider extends ChangeNotifier {
     final session = state.session;
     switch (state.event) {
       case sb.AuthChangeEvent.passwordRecovery:
-        _recovering = true;
+        // [_recovering] is raised by [confirmPasswordReset] for the length
+        // of the reset; the event it triggers is ignored there.
+        if (_recovering) return;
+        // An unsolicited recovery session (a recovery link opened in the
+        // app rather than a code typed on the reset screen) is a perfectly
+        // valid session. Treat it as a sign-in: latching [_recovering]
+        // here would make the provider ignore every later auth event —
+        // token refreshes and the initial session included — for the rest
+        // of the app's life.
+        if (session == null) {
+          await _handleSignedOut();
+          return;
+        }
+        await _ensureSignedIn(session.user);
         return;
       case sb.AuthChangeEvent.signedOut:
         await _handleSignedOut();
@@ -1179,8 +1193,13 @@ class AuthProvider extends ChangeNotifier {
         );
       }
 
-      final user = response.user ?? response.session?.user;
-      if (user == null) {
+      // A session is what makes this a sign-in. `verifyOTP` also answers
+      // with a user and no session for the first step of a secure email /
+      // phone change — accepting that would flip the app to "signed in"
+      // with no credentials behind it.
+      final session = response.session;
+      final user = session?.user ?? response.user;
+      if (session == null || user == null) {
         throw AuthException((l) => l.authErrorVerificationFailed);
       }
       _pendingPhoneMetadata = null;
@@ -1274,6 +1293,20 @@ class AuthProvider extends ChangeNotifier {
       await _db.auth.resetPasswordForEmail(email.trim().toLowerCase());
       _isLoading = false;
       notifyListeners();
+    } on sb.AuthException catch (e) {
+      _isLoading = false;
+      notifyListeners();
+      ErrorHandler.logError(e, context: 'AuthProvider.sendPasswordResetEmail');
+      if (e is sb.AuthRetryableFetchException) {
+        throw AuthException((l) => l.authErrorNetworkRetry);
+      }
+      // Supabase throttles recovery mail per address and per project; say so
+      // instead of "failed to send", which invites an immediate retry.
+      if (e.code == 'over_email_send_rate_limit' ||
+          e.code == 'over_request_rate_limit') {
+        throw AuthException((l) => l.authErrorTooManyAttempts);
+      }
+      throw AuthException((l) => l.authErrorResetEmailFailed);
     } on Exception catch (e) {
       _isLoading = false;
       notifyListeners();
@@ -1283,13 +1316,20 @@ class AuthProvider extends ChangeNotifier {
   }
 
   /// Completes a password reset with the recovery [code] emailed to
-  /// [email]. The temporary recovery session is signed out afterwards so the
-  /// user logs in with the new password.
+  /// [email].
+  ///
+  /// Once the code has been accepted the temporary recovery session is
+  /// always signed out — whether the password change then succeeded or not
+  /// — so the user comes back through the login screen and no recovery
+  /// session is left behind. A code that is *refused* leaves any session
+  /// that already existed alone: this screen is reachable while signed in,
+  /// and a typo must not log the user out.
   Future<void> confirmPasswordReset({
     required String email,
     required String code,
     required String newPassword,
   }) async {
+    var codeAccepted = false;
     try {
       _isLoading = true;
       _recovering = true;
@@ -1299,6 +1339,7 @@ class AuthProvider extends ChangeNotifier {
         email: email.trim().toLowerCase(),
         token: code.trim(),
       );
+      codeAccepted = true;
       await _db.auth.updateUser(sb.UserAttributes(password: newPassword));
     } on sb.AuthException catch (e) {
       ErrorHandler.logError(e, context: 'AuthProvider.confirmPasswordReset');
@@ -1319,7 +1360,7 @@ class AuthProvider extends ChangeNotifier {
       throw AuthException((l) => l.authErrorResetFailed);
     } finally {
       try {
-        if (_db.getCurrentUser() != null) await _db.logout();
+        if (codeAccepted && _db.getCurrentUser() != null) await _db.logout();
       } on Exception catch (_) {}
       _recovering = false;
       _isLoading = false;
@@ -1398,6 +1439,11 @@ class AuthProvider extends ChangeNotifier {
   );
   Future<bool> isBiometricAvailable() =>
       _biometricService.isBiometricAvailable();
+
+  /// Whether the biometric-login setting can be offered at all (hardware
+  /// present *and* a fingerprint/face enrolled). Settings and Profile both
+  /// gate their control on this.
+  Future<bool> isBiometricUsable() => _biometricService.isBiometricUsable();
 
   // ─────────────────────────── Session ─────────────────────────────────────
 

@@ -9,8 +9,9 @@ import {
   transformAlert, transformMessage, transformContact, transformKnowledge, transformAuthority,
   transformTrustedDevice, transformLoginHistory, transformNdpaConsent, decodeHtmlEntities,
   capText, imageUrl, normalizeNigerianState, NIGERIAN_STATES, storageUploadPlan, STORAGE_MAX_BYTES,
-  REPORT_TEXT_LIMITS,
+  REPORT_TEXT_LIMITS, lgaPairs, canonicalLga, isAmbiguousLga, isAllLgas,
 } from '../src/transform.js';
+import { NIGERIA_LGAS_BY_STATE } from '../src/nigeria-lgas.js';
 
 const NOW = '2026-09-25T00:00:00.000Z';
 const users = { alice: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', bob: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' };
@@ -20,7 +21,11 @@ const ctx = {
   user: (uid) => users[uid] ?? null,
   report: (id) => reports[id] ?? null,
   url: (u) => u,
+  // alice is in Nasarawa, bob in Lagos (neither an 'Obi' state for bob).
+  userState: (uid) => ({ alice: 'Nasarawa', bob: 'Lagos' })[uid] ?? null,
 };
+// A context with no creator-state resolver at all (older callers / dry runs).
+const ctxNoStates = { ...ctx, userState: undefined };
 const FB_URL =
   'https://firebasestorage.googleapis.com/v0/b/ewer-8f788.firebasestorage.app/o/report_images%2Falice%2F1700000000_0.jpg?alt=media&token=abc';
 
@@ -322,8 +327,65 @@ describe('other collections', () => {
     assert.equal(transformAuthority('au2', { phone: '+234', lga: 'Gboko' }, ctx).row.coverage_lga, 'Gboko');
     assert.ok(transformAuthority('au3', { phone: '+234' }, ctx).skip);
     assert.equal(transformAuthority('au4', { phone: '+234', lga: 'Obi', state: 'Benue State' }, ctx).row.coverage_state, 'Benue');
-    assert.equal(transformAuthority('au5', { phone: '+234', lga: 'Makurdi' }, ctx).row.coverage_state, null);
-    assert.equal(transformAuthority('au6', { phone: '+234', lga: 'Obi' }, ctx).warnings.length, 1);
+    // An unambiguous LGA name fixes its own state: Makurdi is only in Benue.
+    assert.equal(transformAuthority('au5', { phone: '+234', lga: 'Makurdi' }, ctx).row.coverage_state, 'Benue');
+  });
+
+  test('authorities: coverage_state is always resolved, never guessed', () => {
+    // 1. Unambiguous LGA, no state: the one state it can be, both names
+    //    re-spelled canonically. Nothing about who is texted changes.
+    const only = transformAuthority('a1', { name: 'Gboko Desk', phone: '+2348030000001', lga: '  gBOKO ' }, ctx);
+    assert.equal(only.skip, null);
+    assert.deepEqual(only.warnings, []);
+    assert.equal(only.row.coverage_state, 'Benue');
+    assert.equal(only.row.coverage_lga, 'Gboko');
+
+    // 2. State given: the pair is validated and canonicalised.
+    const pair = transformAuthority('a2', { name: 'Obi Desk', phone: '+2348030000002', lga: 'obi', coverageState: 'nasarawa state' }, ctx);
+    assert.equal(pair.skip, null);
+    assert.deepEqual(pair.warnings, []);
+    assert.equal(pair.row.coverage_state, 'Nasarawa');
+    assert.equal(pair.row.coverage_lga, 'Obi');
+
+    // 3. Ambiguous LGA, no state: SKIPPED, naming the contact, its phone and
+    //    the candidate states. Picking one would text the wrong desk.
+    for (const [lga, states] of [
+      ['Bassa', 'Kogi, Plateau'], ['Ifelodun', 'Kwara, Osun'], ['Irepodun', 'Kwara, Osun'],
+      ['Nasarawa', 'Kano, Nasarawa'], ['Obi', 'Benue, Nasarawa'], ['Surulere', 'Lagos, Oyo'],
+    ]) {
+      const amb = transformAuthority('a3', { name: `${lga} Desk`, phone: '+2348030000003', lga }, ctx);
+      assert.equal(amb.row, undefined, lga);
+      assert.match(amb.skip, new RegExp(`authority '${lga} Desk' \\(\\+2348030000003\\)`), lga);
+      assert.ok(amb.skip.includes(`exists in more than one state (${states})`), `${lga}: ${amb.skip}`);
+      assert.match(amb.skip, /Authorities page/, lga);
+    }
+
+    // 4. A state/LGA pair that does not exist: SKIPPED, naming the real states.
+    const wrong = transformAuthority('a4', { name: 'Wrong', phone: '+2348030000004', lga: 'Obi', state: 'Plateau' }, ctx);
+    assert.equal(wrong.row, undefined);
+    assert.match(wrong.skip, /'Obi' is not an LGA of Plateau \(it is in Benue, Nasarawa\)/);
+
+    // 5. An LGA that is in no state at all: SKIPPED.
+    const ghost = transformAuthority('a5', { name: 'Ghost', phone: '+2348030000005', lga: 'Atlantis City' }, ctx);
+    assert.equal(ghost.row, undefined);
+    assert.match(ghost.skip, /is not an LGA of any Nigerian state/);
+
+    // 6. An unrecognised state: SKIPPED (it used to become coverage_state null,
+    //    which the database now rejects).
+    const bad = transformAuthority('a6', { name: 'Bad', phone: '+2348030000006', lga: 'Makurdi', state: 'Middle Belt' }, ctx);
+    assert.equal(bad.row, undefined);
+    assert.match(bad.skip, /state 'Middle Belt' is not a Nigerian state/);
+
+    // No authority this module emits can violate the constraint.
+    for (const d of [
+      { phone: '+234', lga: 'Makurdi' }, { phone: '+234', lga: 'Obi', state: 'Benue' },
+      { phone: '+234', lga: 'obi', coverageState: 'BENUE STATE' }, { phone: '+234', lga: "Qua'an Pan" },
+    ]) {
+      const r = transformAuthority('x', d, ctx);
+      assert.equal(r.skip, null, JSON.stringify(d));
+      assert.ok(r.row.coverage_state, JSON.stringify(d));
+      assert.deepEqual(canonicalLga(r.row.coverage_state, r.row.coverage_lga), r.row.coverage_lga, JSON.stringify(d));
+    }
   });
   test('trusted devices and login history (timestamp → occurred_at)', () => {
     const td = transformTrustedDevice('t1', { userId: 'alice', deviceFingerprint: 'fp', deviceName: 'Pixel', lastUsed: { _seconds: 1700000000 } }, ctx).row;
@@ -461,9 +523,11 @@ describe('audit fixes', () => {
     const t = transformAuthority('au', { phone: '+234', lga: 'Lafia', coverageState: 'NASSARAWA' }, ctx);
     assert.equal(t.row.coverage_state, 'Nasarawa');
     assert.deepEqual(t.warnings, []);
+    // An unrecognised state is no longer turned into coverage_state null:
+    // since 20260927090000 the column is NOT NULL, so the row is skipped.
     const bad = transformAuthority('au2', { phone: '+234', lga: 'Makurdi', state: 'Middle Belt' }, ctx);
-    assert.equal(bad.row.coverage_state, null);
-    assert.deepEqual(bad.warnings, ["unknown state 'Middle Belt'; coverage_state set to null"]);
+    assert.equal(bad.row, undefined);
+    assert.match(bad.skip, /state 'Middle Belt' is not a Nigerian state/);
   });
 
   test('verification overrides: action verified; unmigrated validator kept as null', () => {
@@ -491,5 +555,98 @@ describe('audit fixes', () => {
     assert.match(storageUploadPlan('report_images/a/doc.pdf', { contentType: 'application/octet-stream' }).skip, /'\.pdf' not allowed/);
     assert.match(storageUploadPlan('report_images/a/big.jpg', { contentType: 'image/jpeg', size: STORAGE_MAX_BYTES + 1 }).skip, /larger than the 5 MB bucket limit/);
     assert.deepEqual(storageUploadPlan('report_images/a/edge.jpg', { contentType: 'image/jpeg', size: STORAGE_MAX_BYTES }), { contentType: 'image/jpeg' });
+  });
+});
+
+// alerts.target_state is NOT NULL-in-effect since 20260927080000: the database
+// rejects a target_lga that names an LGA without the state it is in. Every row
+// transformAlert produces has to be resolvable to exactly one place.
+describe('alert targets (state is mandatory)', () => {
+  test('an LGA in exactly one state resolves to it, spelled canonically', () => {
+    const { row, warnings } = transformAlert('a', { title: 'Flood', targetLga: 'Makurdi' }, ctx);
+    assert.equal(row.target_lga, 'Makurdi');
+    assert.equal(row.target_state, 'Benue');
+    assert.deepEqual(warnings, []);
+    // Case and padding in the source document are normalised to the canonical
+    // spelling the database's foreign key requires.
+    const messy = transformAlert('b', { title: 'Flood', targetLga: '  gWeR eAsT ' }, ctx).row;
+    assert.equal(messy.target_lga, 'Gwer East');
+    assert.equal(messy.target_state, 'Benue');
+  });
+
+  test("an ambiguous LGA uses the creator's profile state as a tiebreak", () => {
+    const { row, warnings } = transformAlert('a', { title: 'Obi flood', targetLga: 'Obi', createdBy: 'alice' }, ctx);
+    assert.equal(row.target_lga, 'Obi');
+    assert.equal(row.target_state, 'Nasarawa');
+    assert.match(warnings[0], /exists in Benue and Nasarawa/);
+    assert.match(warnings[0], /resolved to Nasarawa from the alert creator's profile state/);
+  });
+
+  test('an ambiguous LGA with no usable tiebreak is skipped, naming the alert and why', () => {
+    // No creator at all.
+    const none = transformAlert('a', { title: 'Obi flood' , targetLga: 'Obi' }, ctx);
+    assert.equal(none.row, undefined);
+    assert.match(none.skip, /^alert 'Obi flood': /);
+    assert.match(none.skip, /exists in more than one state \(Benue, Nasarawa\)/);
+    assert.match(none.skip, /no creator whose profile state could disambiguate it/);
+
+    // A creator whose own state is not one of the candidates.
+    const wrong = transformAlert('b', { title: 'Obi flood', targetLga: 'Obi', createdBy: 'bob' }, ctx);
+    assert.equal(wrong.row, undefined);
+    assert.match(wrong.skip, /creator's profile state \(Lagos\) is not one of them/);
+
+    // A context that cannot resolve creator states at all.
+    const noResolver = transformAlert('c', { title: 'Obi flood', targetLga: 'Obi', createdBy: 'alice' }, ctxNoStates);
+    assert.equal(noResolver.row, undefined);
+    assert.match(noResolver.skip, /exists in more than one state/);
+
+    // Never widened to 'All' or to a whole state to make it fit.
+    for (const r of [none, wrong, noResolver]) assert.equal(r.row, undefined);
+  });
+
+  test('an LGA that is in no state is skipped', () => {
+    const r = transformAlert('a', { title: 'Nowhere', targetLga: 'Atlantis Central', createdBy: 'alice' }, ctx);
+    assert.equal(r.row, undefined);
+    assert.match(r.skip, /^alert 'Nowhere': target LGA 'Atlantis Central' is not an LGA of any Nigerian state/);
+  });
+
+  test("target_lga 'All' keeps a null state, or the alert's own state", () => {
+    assert.deepEqual(
+      (() => { const { target_lga, target_state } = transformAlert('a', { title: 'x' }, ctx).row; return { target_lga, target_state }; })(),
+      { target_lga: 'All', target_state: null },
+    );
+    // Explicit 'all'/'ALL'/blank all mean the same sentinel.
+    for (const v of ['All', 'all', ' ALL ', '']) {
+      const row = transformAlert('b', { title: 'x', targetLga: v }, ctx).row;
+      assert.deepEqual([row.target_lga, row.target_state], ['All', null], `targetLga ${JSON.stringify(v)}`);
+    }
+    // 'All' with a state = every LGA of that state; the state is canonicalised.
+    const statewide = transformAlert('c', { title: 'x', targetLga: 'All', targetState: 'nassarawa state' }, ctx).row;
+    assert.deepEqual([statewide.target_lga, statewide.target_state], ['All', 'Nasarawa']);
+  });
+
+  test('a state on the document is used, and an impossible pair is skipped', () => {
+    const ok = transformAlert('a', { title: 'x', targetLga: 'obi', targetState: 'benue state' }, ctx).row;
+    assert.deepEqual([ok.target_lga, ok.target_state], ['Obi', 'Benue']);
+    const mismatch = transformAlert('b', { title: 'x', targetLga: 'Obi', targetState: 'Plateau' }, ctx);
+    assert.equal(mismatch.row, undefined);
+    assert.match(mismatch.skip, /is not an LGA of Plateau \(it is in Benue, Nasarawa\)/);
+    const unknownState = transformAlert('c', { title: 'x', targetLga: 'Obi', targetState: 'Atlantis' }, ctx);
+    assert.equal(unknownState.row, undefined);
+    assert.match(unknownState.skip, /target state 'Atlantis' is not a Nigerian state/);
+  });
+
+  test('LGA lookup helpers', () => {
+    assert.deepEqual(lgaPairs('obi'), [['Benue', 'Obi'], ['Nasarawa', 'Obi']]);
+    assert.deepEqual(lgaPairs('nowhere at all'), []);
+    assert.equal(canonicalLga('Benue', '  mAkUrDi '), 'Makurdi');
+    assert.equal(canonicalLga('Lagos', 'Makurdi'), null);
+    // Exactly these 6 of the 770 LGA names occur in more than one state.
+    const ambiguous = [...new Set(
+      Object.values(NIGERIA_LGAS_BY_STATE).flat().filter(isAmbiguousLga),
+    )].sort();
+    assert.deepEqual(ambiguous, ['Bassa', 'Ifelodun', 'Irepodun', 'Nasarawa', 'Obi', 'Surulere']);
+    assert.ok(isAllLgas('all') && isAllLgas(' All ') && isAllLgas(''));
+    assert.ok(!isAllLgas('Obi'));
   });
 });

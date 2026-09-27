@@ -1,4 +1,5 @@
 import 'package:climate_app/core/l10n/l10n.dart';
+import 'package:climate_app/core/utils/password_validator.dart';
 
 /// Input validators for security. Messages are returned in the language of
 /// the [AppLocalizations] passed in.
@@ -203,39 +204,18 @@ class Validators {
     return emailRegex.hasMatch(value);
   }
 
-  /// Enhanced password validation with security best practices
-  /// Requirements:
-  /// - Minimum 8 characters
-  /// - At least 1 uppercase letter
-  /// - At least 1 lowercase letter
-  /// - At least 1 number
-  /// - At least 1 special character
+  /// Password validation for every screen that takes a password.
+  ///
+  /// Delegates to [PasswordValidator.validate] so registration, password
+  /// reset and the web admin panel all enforce the same rules. They used to
+  /// differ: this method carried a weaker copy (no maximum length, no
+  /// common-password list, no sequential-run check) while the stricter
+  /// [PasswordValidator] was used by nothing at all.
   static String? validatePassword(String? value, AppLocalizations l10n) {
     if (value == null || value.isEmpty) {
       return l10n.validatorPasswordRequired;
     }
-
-    if (value.length < 8) {
-      return l10n.validatorPasswordMinLength(8);
-    }
-
-    if (!RegExp(r'[A-Z]').hasMatch(value)) {
-      return l10n.validatorPasswordUppercase;
-    }
-
-    if (!RegExp(r'[a-z]').hasMatch(value)) {
-      return l10n.validatorPasswordLowercase;
-    }
-
-    if (!RegExp(r'[0-9]').hasMatch(value)) {
-      return l10n.validatorPasswordNumber;
-    }
-
-    if (!RegExp(r'[!@#$%^&*(),.?":{}|<>_\-+=\[\]\\\/]').hasMatch(value)) {
-      return l10n.validatorPasswordSpecial;
-    }
-
-    return null;
+    return PasswordValidator.validate(value, l10n);
   }
 
   /// Get password strength score (0-4)

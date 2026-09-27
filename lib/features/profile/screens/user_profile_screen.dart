@@ -9,6 +9,7 @@ import 'package:climate_app/features/profile/providers/profile_provider.dart';
 import 'package:climate_app/features/profile/widgets/sos_sheet.dart';
 import 'package:climate_app/core/providers/language_provider.dart';
 import 'package:climate_app/core/services/biometric_service.dart';
+import 'package:climate_app/features/profile/widgets/biometric_login_tile.dart';
 import 'package:climate_app/features/contacts/providers/emergency_contacts_provider.dart';
 import 'package:climate_app/core/widgets/location_selector_widget.dart';
 import 'package:climate_app/core/widgets/language_selector_sheet.dart';
@@ -39,10 +40,69 @@ class _UserProfileScreenState extends State<UserProfileScreen>
   /// Created once so profile rebuilds do not resubscribe the realtime stream.
   late final Stream<List<Map<String, dynamic>>> _reportsStream;
 
+  /// Biometric login can only be offered when the device has the hardware
+  /// and an enrolled fingerprint/face — the same check Settings makes.
+  /// Until it answers the switch stays disabled rather than failing later
+  /// with a snackbar.
+  bool _biometricAvailable = false;
+  bool _checkingBiometric = true;
+
   @override
   void initState() {
     super.initState();
     _reportsStream = context.read<ProfileProvider>().getUserReportsStream();
+    _checkBiometric();
+  }
+
+  /// Turns the device lock on or off, reporting a refused prompt.
+  Future<void> _setBiometricEnabled(ProfileProvider profile, bool value) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final l10n = context.l10n;
+    final auth = context.read<app_auth.AuthProvider>();
+    try {
+      await auth.setBiometricEnabled(
+        value,
+        promptReason: l10n.biometricEnablePrompt,
+      );
+      await profile.refreshBiometricsEnabled();
+      if (value) {
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(l10n.profileBiometricsEnabled),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } on Exception {
+      final message =
+          BiometricService.messageFor(
+            BiometricService().lastErrorCode,
+          )?.call(l10n) ??
+          (BiometricService().lastErrorCode == null
+              ? l10n.profileBiometricChangeFailed
+              : null);
+      if (message != null) {
+        messenger.showSnackBar(
+          SnackBar(content: Text(message), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  Future<void> _checkBiometric() async {
+    bool available = false;
+    try {
+      available = await context
+          .read<app_auth.AuthProvider>()
+          .isBiometricUsable();
+    } on Exception {
+      available = false;
+    }
+    if (!mounted) return;
+    setState(() {
+      _biometricAvailable = available;
+      _checkingBiometric = false;
+    });
   }
 
   Future<void> _pickImage(ImageSource source) async {
@@ -620,88 +680,14 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                   const SizedBox(height: 8),
                   // Biometrics Toggle
                   Consumer<ProfileProvider>(
-                    builder: (context, profile, _) => SwitchListTile(
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        side: BorderSide(color: Colors.grey.shade100),
-                      ),
-                      tileColor: Colors.white,
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 8,
-                      ),
-                      secondary: Icon(
-                        Icons.fingerprint,
-                        color: profile.biometricsEnabled
-                            ? AppColors.primaryRed
-                            : Colors.grey.shade400,
-                      ),
-                      title: Text(
-                        context.l10n.biometricLogin,
-                        style: GoogleFonts.lexend(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500,
-                          color: AppColors.textPrimary,
-                        ),
-                      ),
-                      subtitle: Text(
-                        profile.biometricsEnabled
-                            ? context.l10n.enabled
-                            : context.l10n.disabled,
-                        style: GoogleFonts.lexend(
-                          fontSize: 12,
-                          color: Colors.grey.shade400,
-                        ),
-                      ),
-                      activeThumbColor: AppColors.primaryRed,
-                      value: profile.biometricsEnabled,
+                    builder: (context, profile, _) => BiometricLoginTile(
+                      available: _biometricAvailable,
+                      checking: _checkingBiometric,
+                      enabled: profile.biometricsEnabled,
                       // The device lock flag is only written through
                       // AuthProvider (it prompts for biometrics first).
-                      onChanged: (value) async {
-                        final messenger = ScaffoldMessenger.of(context);
-                        final l10n = context.l10n;
-                        final auth = context.read<app_auth.AuthProvider>();
-                        if (value && !await auth.isBiometricAvailable()) {
-                          messenger.showSnackBar(
-                            SnackBar(
-                              content: Text(l10n.biometricsNotAvailable),
-                              backgroundColor: Colors.red,
-                            ),
-                          );
-                          return;
-                        }
-                        try {
-                          await auth.setBiometricEnabled(
-                            value,
-                            promptReason: l10n.biometricEnablePrompt,
-                          );
-                          await profile.refreshBiometricsEnabled();
-                          if (value) {
-                            messenger.showSnackBar(
-                              SnackBar(
-                                content: Text(l10n.profileBiometricsEnabled),
-                                backgroundColor: Colors.green,
-                              ),
-                            );
-                          }
-                        } on Exception {
-                          final message =
-                              BiometricService.messageFor(
-                                BiometricService().lastErrorCode,
-                              )?.call(l10n) ??
-                              (BiometricService().lastErrorCode == null
-                                  ? l10n.profileBiometricChangeFailed
-                                  : null);
-                          if (message != null) {
-                            messenger.showSnackBar(
-                              SnackBar(
-                                content: Text(message),
-                                backgroundColor: Colors.red,
-                              ),
-                            );
-                          }
-                        }
-                      },
+                      onChanged: (value) =>
+                          _setBiometricEnabled(profile, value),
                     ),
                   ),
                   const SizedBox(height: 8),

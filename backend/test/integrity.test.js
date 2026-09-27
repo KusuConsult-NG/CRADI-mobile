@@ -33,7 +33,7 @@ function recordingSupabase(result = () => ({ data: [], error: null })) {
   };
 }
 
-test('repo.findAuthorities: with a state, that state or NULL; without one, only NULL coverage_state', async () => {
+test('repo.findAuthorities: with a state, that state (or a hand-made NULL row); without one, nothing live can match', async () => {
   const supabase = recordingSupabase();
   const repo = createRepo(supabase);
   await repo.findAuthorities('Obi', 'Benue', 20);
@@ -42,6 +42,10 @@ test('repo.findAuthorities: with a state, that state or NULL; without one, only 
   const [withState, blank, missing] = supabase.queries;
   assert.deepEqual(withState.find((c) => c[0] === 'or'), ['or', 'coverage_state.eq."Benue",coverage_state.is.null']);
   assert.equal(withState.some((c) => c[0] === 'is'), false);
+  // No state on the report: the filter is coverage_state IS NULL, which since
+  // migration 20260927090000 (coverage_state NOT NULL) matches no live row.
+  // That is the intended outcome — an LGA name alone can mean two states, so
+  // texting nobody beats texting the wrong state's emergency desk.
   for (const q of [blank, missing]) {
     assert.deepEqual(q.find((c) => c[0] === 'is'), ['is', 'coverage_state', null]);
     assert.equal(q.some((c) => c[0] === 'or'), false);

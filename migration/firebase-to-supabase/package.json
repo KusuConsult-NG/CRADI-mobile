@@ -9,6 +9,7 @@
   },
   "scripts": {
     "test": "node --test \"test/**/*.test.js\"",
+    "gen:locations": "node scripts/gen-nigeria-lgas.mjs",
     "dry-run": "node src/migrate.js",
     "apply": "node src/migrate.js --apply"
   },
