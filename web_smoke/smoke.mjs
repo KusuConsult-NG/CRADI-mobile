@@ -951,6 +951,130 @@ async function chatPass(browser) {
     await b.ctx.close();
 }
 
+/**
+ * The notifications screen, driven without a push.
+ *
+ * Until the in-app producers were added, the only writers of the history box
+ * were two OneSignal callbacks, so on any build without a push credential —
+ * this one included, ONESIGNAL_APP_ID is empty — the screen could only ever
+ * be empty. That is exactly the state a reviewer or a user on a device with
+ * no Play Services sees, so it is worth a pass of its own.
+ *
+ * Both producers deliberately ignore everything that existed when the user
+ * signed in (a report you just filed is not news, and the user's LGA is not
+ * known at the instant the session starts), so a seeded row proves nothing.
+ * The pass therefore changes the backend *after* sign-in and lets realtime
+ * deliver it, which is what happens in life.
+ */
+async function notificationsPass(browser) {
+    const pass = 'notifications';
+    const shots = new Shots(path.join(OUT, pass));
+    console.log(`\n== ${pass} ==`);
+    const { ctx, page, rec } = await newSession(browser);
+    const screens = [];
+
+    await login(page, ACCOUNTS.user);
+    rec.at('notifications');
+
+    // Empty to begin with: the producers seed silently on first run.
+    await goto(page, '#/notifications', { settle: 3000 });
+    await shots.take(page, 'before');
+    const startText = await screenText(page);
+
+    // ── 1. a status change on one of the user's own reports ────────────────
+    const reports = await fetch(`${MOCK}/__mock/table/reports`).then((r) => r.json()).catch(() => []);
+    const profiles = await fetch(`${MOCK}/__mock/table/profiles`).then((r) => r.json()).catch(() => []);
+    const me = profiles.find((p) => p.email === ACCOUNTS.user);
+    const mine = reports.find((r) => r.user_id === me?.id && r.status === 'pending' && !r.type);
+    let statusShown = false;
+    let deepLink = null;
+    if (!mine) {
+        note(pass, 'notifications', 'no-fixture', 'no pending report belongs to the signed-in user');
+    } else {
+        // Leave the screen first: the producer must work from the app-level
+        // stream, not from whatever the notifications screen happens to
+        // subscribe to while it is open.
+        await goto(page, '#/dashboard', { settle: 2000 });
+        const patched = await fetch(`${MOCK}/__mock/table/reports/${mine.id}`, {
+            method: 'PATCH',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ status: 'approved', approved_at: new Date().toISOString() }),
+        }).then((r) => r.ok).catch(() => false);
+        if (!patched) note(pass, 'notifications', 'mock-failed', `could not approve report ${mine.id}`);
+        await page.waitForTimeout(3000);
+
+        await goto(page, '#/notifications', { settle: 3000 });
+        // The body is built from the payload, so it carries the hazard name.
+        statusShown = !!(await waitFor(page, [{ contains: 'was approved' }, { contains: 'Report update' }], { timeout: 15000 }));
+        if (!statusShown) {
+            note(pass, 'notifications', 'no-entry', `approving the user's own report (${mine.hazard_type}) produced no history entry`);
+        }
+        await shots.take(page, 'after-report-approved');
+
+        // The entry must be a working deep link, not just text.
+        if (statusShown) {
+            const opened = await tap(page, { contains: 'was approved' }, { settle: 3000 })
+                || await tap(page, { contains: 'Report update' }, { settle: 3000 });
+            const url = page.url();
+            deepLink = opened && url.includes(`/report/${mine.id}`) ? url : null;
+            if (!deepLink) note(pass, 'notifications', 'dead-entry', `tapping the entry did not open /report/${mine.id} (at ${url})`);
+            await shots.take(page, 'entry-followed');
+        }
+    }
+
+    // ── 2. an alert issued for the user's own LGA ──────────────────────────
+    const title = `Smoke alert ${Date.now()}`;
+    await goto(page, '#/dashboard', { settle: 2000 });
+    const inserted = await fetch(`${MOCK}/__mock/table/alerts`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+            title,
+            message: 'Issued by the smoke tour after sign-in.',
+            severity: 'warning',
+            target_lga: me?.lga ?? 'Makurdi',
+            target_state: me?.state ?? 'Benue',
+            is_active: true,
+        }),
+    }).then((r) => r.ok).catch(() => false);
+    if (!inserted) note(pass, 'notifications', 'mock-failed', 'could not insert an alert for the user LGA');
+    await page.waitForTimeout(3000);
+
+    await goto(page, '#/notifications', { settle: 3000 });
+    const alertShown = !!(await waitFor(page, { contains: title }, { timeout: 15000 }));
+    if (!alertShown) note(pass, 'notifications', 'no-entry', `an alert for ${me?.lga} produced no history entry`);
+    await shots.take(page, 'after-alert');
+
+    // ── 3. an alert for somewhere else must NOT appear ─────────────────────
+    const otherTitle = `Elsewhere ${Date.now()}`;
+    await fetch(`${MOCK}/__mock/table/alerts`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+            title: otherTitle, message: 'Different state entirely.', severity: 'warning',
+            target_lga: 'Obi', target_state: 'Nasarawa', is_active: true,
+        }),
+    }).catch(() => {});
+    await page.waitForTimeout(3000);
+    await goto(page, '#/notifications', { settle: 3000 });
+    const leaked = await has(page, { contains: otherTitle });
+    if (leaked) note(pass, 'notifications', 'over-notified', `an alert targeting Obi, Nasarawa reached a user in ${me?.lga}, ${me?.state}`);
+    await shots.take(page, 'after-foreign-alert');
+
+    screens.push({
+        screen: 'notifications-without-push',
+        startedEmpty: !/was approved/i.test(startText),
+        reportStatusEntry: statusShown,
+        entryDeepLinks: !!deepLink,
+        ownLgaAlertEntry: alertShown,
+        foreignAlertSuppressed: !leaked,
+    });
+    console.log(`  reportStatus=${statusShown} deepLink=${!!deepLink} ownLgaAlert=${alertShown} foreignSuppressed=${!leaked}`);
+
+    results.passes.push({ pass, screens, events: rec.events });
+    await ctx.close();
+}
+
 // ── Main ────────────────────────────────────────────────────────────────────
 
 const only = process.argv.slice(2);
@@ -989,6 +1113,7 @@ try {
         if (wanted(`controls-${role}`) || wanted('controls')) await controlsPass(browser, role);
     }
     if (wanted('chat')) await chatPass(browser);
+    if (wanted('notifications')) await notificationsPass(browser);
 } finally {
     await browser.close();
     fs.writeFileSync(REPORT, JSON.stringify(results, null, 1));

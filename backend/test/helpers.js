@@ -123,6 +123,9 @@ export function fakeRepo({
         .filter((a) => a.coverage_lga === lga && (a.coverage_state == null || (st && a.coverage_state === st)))
         .slice(0, limit);
     },
+    async countAuthorities() {
+      return state.authorities.length;
+    },
     // sms_deliveries: unique (report_id, phone); created_at from `now`.
     async claimSmsDelivery({ reportId, phone, lga, state: st }) {
       if (state.smsFailClaim) throw new Error('claim failed');

@@ -16,6 +16,8 @@
 //   POST /__mock/reset      restore the seed data and clear the request log
 //   GET  /__mock/requests   request log [{ method, path, query, prefer, body }]
 //   GET  /__mock/table/:t   current rows of a table
+//   POST /__mock/table/:t   insert a row (emits the realtime change)
+//   PATCH /__mock/table/:t/:id  update a row (emits the realtime change)
 //   GET  /__mock/health     liveness
 import http from 'node:http';
 import crypto, { randomUUID, randomBytes } from 'node:crypto';
@@ -1286,7 +1288,26 @@ const server = http.createServer(async (req, res) => {
             return send(res, 200, state.authUsers.map((u) => ({ email: u.email, password: u.password, id: u.id })));
         }
         const t = url.pathname.match(/^\/__mock\/table\/([a-z_]+)$/);
-        if (t && state.tables[t[1]]) return send(res, 200, state.tables[t[1]]);
+        if (t && req.method === 'GET' && state.tables[t[1]]) return send(res, 200, state.tables[t[1]]);
+        if (t && req.method === 'POST' && state.tables[t[1]]) {
+            // Insert a row the way PostgREST would, then emit the realtime
+            // change. The tour uses this to make something happen *after*
+            // sign-in: the in-app notification producers deliberately ignore
+            // everything that already existed when the user signed in, so a
+            // seeded row can never prove they work.
+            const table = t[1];
+            const schema = SCHEMA[table];
+            const before = snapshot(table);
+            const row = Object.fromEntries(schema.columns.map((c) => [c, null]));
+            Object.assign(row, schema.defaults);
+            if (schema.pk === 'id') row.id = randomUUID();
+            if ('created_at' in row) row.created_at = nowIso();
+            if ('updated_at' in row) row.updated_at = nowIso();
+            Object.assign(row, body ?? {});
+            state.tables[table].push(row);
+            emitChanges(table, before);
+            return send(res, 201, row);
+        }
         const r = url.pathname.match(/^\/__mock\/table\/([a-z_]+)\/([^/]+)$/);
         if (r && req.method === 'PATCH' && state.tables[r[1]]) {
             const target = state.tables[r[1]].find((x) => x[SCHEMA[r[1]].pk] === decodeURIComponent(r[2]));

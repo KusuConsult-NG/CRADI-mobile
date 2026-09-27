@@ -184,6 +184,22 @@ export function createRepo(supabase) {
     },
 
     /**
+     * How many authority contacts exist at all, ignoring coverage.
+     *
+     * Only read when a lookup found none, to tell an operator which of two
+     * very different situations they are in: nobody has been added yet (the
+     * whole SMS path is dormant), or contacts exist but none covers this
+     * place.
+     */
+    async countAuthorities() {
+      const { count, error } = await supabase
+        .from('authorities')
+        .select('id', { count: 'exact', head: true });
+      if (error) throw new Error(`count authorities: ${error.message ?? error}`);
+      return count ?? 0;
+    },
+
+    /**
      * Claims (report, phone) in sms_deliveries before texting it. Returns
      * false when a row already exists (sent, rejected or in flight).
      */
