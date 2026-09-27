@@ -13,6 +13,7 @@ import {
     BASE, MOCK, Recorder, Shots, enableSemantics, findNode, goto, has, nodes,
     screenText, scroll, setRange, stubFonts, tap, type, typeNth,
 } from './driver.mjs';
+import { probeScreen, trackNetwork, controlsOnScreen } from './controls.mjs';
 
 const OUT = path.resolve('web_smoke/screenshots');
 const REPORT = path.resolve('web_smoke/report.json');
@@ -777,6 +778,179 @@ async function focusPass(browser) {
     await ctx.close();
 }
 
+
+// ── Control-wiring pass ─────────────────────────────────────────────────────
+//
+// Clicks every interactive node on a screen and records what it did. See
+// web_smoke/controls.mjs.
+
+const openFirst = (label) => async (p) => { await tap(p, { contains: label }, { settle: 2200 }); };
+
+const CONTROL_SCREENS = {
+    user: [
+        ['dashboard', '#/dashboard'],
+        ['dashboard-drawer', '#/dashboard', async (p) => {
+            for (const l of ['Open navigation menu', 'Menu', 'Show menu']) {
+                if (await tap(p, { contains: l }, { settle: 1400 })) break;
+            }
+        }],
+        ['my-reports', '#/my-reports'],
+        ['nearby-reports', '#/nearby-reports'],
+        ['reports-status', '#/reports-status'],
+        ['report-view', '#/reports-status', openFirst('View Details')],
+        ['alerts', '#/alerts'],
+        ['alert-detail', '#/alerts', openFirst('Flood warning')],
+        // The "Recent updates" rows are news links: url_launcher opens them
+        // in a new tab, so the driven page never changes.
+        ['knowledge-base', '#/knowledge-base', null, /NiMet|UNDRR|Red Cross|Safety Guide|ReliefWeb|NEMA/],
+        ['hazard-guides', '#/knowledge-base/guides'],
+        ['knowledge-detail', '#/knowledge-base', openFirst('Flood safety')],
+        ['contacts', '#/contacts'],
+        ['chat', '#/chat'],
+        ['notifications', '#/notifications'],
+        ['profile', '#/profile'],
+        ['settings', '#/settings'],
+        ['about', '#/about'],
+        ['help', '#/help'],
+        ['report-wizard-step1', '#/report'],
+    ],
+    ewv: [
+        ['verification-list', '#/verification'],
+        ['verification-detail', '#/verification', openFirst('Review')],
+        ['verification-request', '#/verification/request'],
+    ],
+    admin: [
+        ['admin', '#/admin'],
+        ['admin-users', '#/admin/users'],
+        ['admin-reports', '#/admin/reports'],
+        ['admin-alerts', '#/admin/alerts'],
+        ['admin-knowledge', '#/admin/knowledge'],
+        ['alerts-manage', '#/alerts/manage'],
+    ],
+};
+
+async function controlsPass(browser, role) {
+    const pass = `controls-${role}`;
+    const shots = new Shots(path.join(OUT, pass));
+    const { ctx, page, rec } = await newSession(browser);
+    const net = trackNetwork(page, MOCK);
+    const rows = [];
+    console.log(`\n== ${pass} ==`);
+
+    rec.at('login');
+    await login(page, ACCOUNTS[role]);
+
+    for (const [screen, route, before, external] of CONTROL_SCREENS[role]) {
+        rec.at(screen);
+        try {
+            await probeScreen({
+                page, shots, net, screen, route, rows, before, external,
+                log: (m) => console.log(m),
+            });
+        } catch (e) {
+            note(pass, screen, 'harness', `probe failed: ${e.message}`);
+        }
+    }
+
+    const dead = rows.filter((r) => r.result === 'dead');
+    for (const r of dead) note(pass, r.screen, 'dead-control', `"${r.control}" (${r.role}) — nothing observable happened`);
+    results.controls = (results.controls || []).concat(rows);
+    results.passes.push({ pass, screens: [], controls: rows.length, dead: dead.length, events: rec.events });
+    console.log(`  ${pass}: ${rows.length} controls probed, ${dead.length} with no observable effect`);
+    await ctx.close();
+}
+
+
+/**
+ * Two live sessions on the same chat room. Proves the three things the
+ * screen claims to do: the message is sent, the backend keeps it, and the
+ * other session receives it over realtime without reloading.
+ */
+/** Presses flutter_chat_ui's send control (an unlabelled icon button). */
+async function sendChatMessage(page) {
+    const all = await nodes(page);
+    const field = all.filter((n) => n.input).pop();
+    if (!field) return false;
+    const view = page.viewportSize();
+    const y = field.y + field.h / 2;
+    // The send button sits to the right of the field, inside the composer row.
+    const candidates = all.filter(
+        (n) => n.role === 'button' && Math.abs(n.y + n.h / 2 - y) < field.h && n.x > field.x + field.w - 4,
+    );
+    if (candidates.length > 0) {
+        const b = candidates[0];
+        await page.mouse.click(b.x + b.w / 2, b.y + b.h / 2);
+    } else {
+        await page.mouse.click(Math.min(field.x + field.w + 24, view.width - 12), y);
+    }
+    await page.waitForTimeout(1200);
+    return true;
+}
+
+async function chatPass(browser) {
+    const pass = 'chat';
+    const shots = new Shots(path.join(OUT, pass));
+    console.log(`\n== ${pass} ==`);
+    const a = await newSession(browser);
+    const b = await newSession(browser);
+    const screens = [];
+
+    await login(a.page, ACCOUNTS.user);
+    await login(b.page, ACCOUNTS.ewm);
+    await goto(a.page, '#/chat', { settle: 3000 });
+    await goto(b.page, '#/chat', { settle: 3000 });
+    a.rec.at('chat-sender');
+    b.rec.at('chat-receiver');
+    await shots.take(a.page, 'a-before');
+    await shots.take(b.page, 'b-before');
+
+    const text = `smoke-${Date.now()}`;
+    const composed = await typeNth(a.page, 0, text);
+    if (!composed) note(pass, 'chat', 'missing-control', 'no composer field on the chat screen');
+    // flutter_chat_ui's Composer does not send on Enter and its send control
+    // is an unlabelled icon button at the end of the composer row, so it has
+    // to be clicked where it is drawn.
+    const sent = await sendChatMessage(a.page);
+    if (!sent) note(pass, 'chat', 'missing-control', 'could not press the composer send button');
+    await a.page.waitForTimeout(2500);
+    await shots.take(a.page, 'a-sent');
+
+    const inSender = await waitFor(a.page, { contains: text }, { timeout: 8000 });
+    if (!inSender) note(pass, 'chat', 'send-failed', `sent message "${text}" never appeared in the sender's own list`);
+
+    // Persistence: the row must be in the backend, not only on screen.
+    const rows = await fetch(`${MOCK}/__mock/table/messages`).then((r) => r.json()).catch(() => []);
+    const stored = rows.find((r) => String(r.message) === text);
+    if (!stored) note(pass, 'chat', 'not-persisted', `no messages row with "${text}" after sending`);
+    else console.log(`  persisted: chat_id=${stored.chat_id} sender_name=${stored.sender_name}`);
+
+    // Realtime: the second session must see it without being reloaded.
+    const inReceiver = await waitFor(b.page, { contains: text }, { timeout: 20000 });
+    if (!inReceiver) note(pass, 'chat', 'no-realtime', `the second session never received "${text}"`);
+    await shots.take(b.page, 'b-received');
+
+    // Durability: a fresh load of the screen still shows it.
+    await goto(a.page, '#/dashboard', { settle: 1500 });
+    await goto(a.page, '#/chat', { settle: 3500 });
+    const afterReload = await waitFor(a.page, { contains: text }, { timeout: 10000 });
+    if (!afterReload) note(pass, 'chat', 'not-reloaded', `"${text}" is gone after leaving and reopening the chat`);
+    await shots.take(a.page, 'a-reopened');
+
+    screens.push({
+        screen: 'chat-two-sessions',
+        sent: !!composed,
+        echoedToSender: !!inSender,
+        persisted: !!stored,
+        deliveredByRealtime: !!inReceiver,
+        survivesReopen: !!afterReload,
+    });
+    console.log(`  sent=${!!composed} echoed=${!!inSender} persisted=${!!stored} realtime=${!!inReceiver} reopen=${!!afterReload}`);
+
+    results.passes.push({ pass, screens, events: [...a.rec.events, ...b.rec.events] });
+    await a.ctx.close();
+    await b.ctx.close();
+}
+
 // ── Main ────────────────────────────────────────────────────────────────────
 
 const only = process.argv.slice(2);
@@ -790,7 +964,8 @@ for (const dir of fs.readdirSync(OUT)) {
     const selected = only.length === 0
         || only.includes(dir)
         || only.some((o) => PASS_DIRS[o] === dir)
-        || (dir.startsWith('role-') && only.includes('roles'));
+        || (dir.startsWith('role-') && only.includes('roles'))
+        || (dir.startsWith('controls-') && only.includes('controls'));
     if (selected) fs.rmSync(path.join(OUT, dir), { recursive: true, force: true });
 }
 await fetch(`${MOCK}/__mock/reset`, { method: 'POST' }).catch(() => {
@@ -810,10 +985,19 @@ try {
     if (wanted('focus')) await focusPass(browser);
     if (wanted('languages')) await languagePass(browser);
     if (wanted('small')) await smallViewportPass(browser);
+    for (const role of ['user', 'ewv', 'admin']) {
+        if (wanted(`controls-${role}`) || wanted('controls')) await controlsPass(browser, role);
+    }
+    if (wanted('chat')) await chatPass(browser);
 } finally {
     await browser.close();
     fs.writeFileSync(REPORT, JSON.stringify(results, null, 1));
     console.log(`\nScreenshots: ${OUT}\nReport:      ${REPORT}`);
     const bad = results.passes.flatMap((p) => p.events.filter((e) => e.kind === 'pageerror' || e.kind.startsWith('console.error')));
     console.log(`Findings: ${results.findings.length}, console/page errors: ${bad.length}`);
+    if (results.controls) {
+        const tally = {};
+        for (const r of results.controls) tally[r.result] = (tally[r.result] || 0) + 1;
+        console.log(`Controls probed: ${results.controls.length} — ${JSON.stringify(tally)}`);
+    }
 }

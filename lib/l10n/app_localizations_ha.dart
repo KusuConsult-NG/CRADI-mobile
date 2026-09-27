@@ -3416,4 +3416,38 @@ class AppLocalizationsHa extends AppLocalizations {
   String reportRemovePhoto(int number) {
     return 'Cire hoto $number';
   }
+
+  @override
+  String get notificationReportStatusTitle => 'Sabuntawar rahoto';
+
+  @override
+  String notificationReportApproved(String hazard) {
+    return 'An amince da rahotonka ($hazard), an kuma fitar da faɗakarwa.';
+  }
+
+  @override
+  String notificationReportVerified(String hazard) {
+    return 'Maƙwabta sun tabbatar da rahotonka ($hazard); yana jiran amincewa ta ƙarshe.';
+  }
+
+  @override
+  String notificationReportRejected(String hazard) {
+    return 'An ƙi rahotonka ($hazard). Buɗe shi don cikakken bayani.';
+  }
+
+  @override
+  String notificationReportPending(String hazard) {
+    return 'Rahotonka ($hazard) yana jiran tabbatarwa daga maƙwabta.';
+  }
+
+  @override
+  String get notificationAlertBody =>
+      'An fitar da sabuwar faɗakarwa don yankinka.';
+
+  @override
+  String get knowledgeSavedFilter => 'Ajiyayyu';
+
+  @override
+  String get knowledgeNoSavedGuides =>
+      'Babu jagororin da aka ajiye tukuna. Danna alamar ajiya a kan jagora don ajiye shi.';
 }

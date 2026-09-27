@@ -972,5 +972,13 @@
   "a11ySeverityLabel": "Líle: {severity}",
   "a11yStatusLabel": "Ipò: {status}",
   "contactsSmsTooltip": "Fi ìfiránṣẹ́ ọ̀rọ̀ ránṣẹ́ sí {name}",
-  "reportRemovePhoto": "Yọ àwòrán {number} kúrò"
+  "reportRemovePhoto": "Yọ àwòrán {number} kúrò",
+  "notificationReportStatusTitle": "Ìmúdójúìwọ̀n ìròyìn",
+  "notificationReportApproved": "A ti fọwọ́ sí ìròyìn rẹ ({hazard}), a sì ti gbé ìkìlọ̀ jáde.",
+  "notificationReportVerified": "Àwọn ẹlẹgbẹ́ ti jẹ́rìí sí ìròyìn rẹ ({hazard}); ó ń dúró de ìfọwọ́sí ìkẹyìn.",
+  "notificationReportRejected": "A kọ ìròyìn rẹ ({hazard}) sílẹ̀. Ṣí i láti rí àlàyé.",
+  "notificationReportPending": "Ìròyìn rẹ ({hazard}) ń dúró de ìjẹ́rìí àwọn ẹlẹgbẹ́.",
+  "notificationAlertBody": "A gbé ìkìlọ̀ tuntun jáde fún agbègbè rẹ.",
+  "knowledgeSavedFilter": "Tí a fipamọ́",
+  "knowledgeNoSavedGuides": "Kò sí ìwé ìtọ́nisọ́nà tí a fipamọ́ síbẹ̀. Tẹ àmì ìfipamọ́ lórí ìwé ìtọ́nisọ́nà láti fipamọ́ ọ."
 }

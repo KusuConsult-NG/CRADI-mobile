@@ -112,6 +112,10 @@ export function fakeRepo({
     async getSettings(keys) {
       return Object.fromEntries(keys.filter((k) => k in state.settings).map((k) => [k, state.settings[k]]));
     },
+    // Mirrors repo.findAuthorities: (coverage_state = state or coverage_state
+    // is null). The NULL half is unreachable from a real database since
+    // 20260927090000 made coverage_state NOT NULL; it stays here so the
+    // defensive branch can be exercised.
     async findAuthorities(lga, reportState, limit) {
       state.authorityQueries.push({ lga, state: reportState, limit });
       const st = typeof reportState === 'string' ? reportState.trim() : '';

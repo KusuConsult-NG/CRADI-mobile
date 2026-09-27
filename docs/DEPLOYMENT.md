@@ -80,11 +80,18 @@ types, functions, triggers and policies outright, so a second run fails with
    select count(*) from public.knowledge_base;
    ```
 
-   The 17 tables are: `alerts`, `app_settings`, `authorities`, `contacts`,
-   `knowledge_base`, `login_history`, `messages`, `ndpa_consents`, `news_links`,
-   `notification_outbox`, `profiles`, `reports`, `scheduled_escalations`,
-   `sms_deliveries`, `trusted_devices`, `verification_overrides`,
-   `verifications`.
+   The 21 tables are: `alerts`, `alerts_unresolved_target`, `app_settings`,
+   `authorities`, `authorities_unresolved_coverage`, `contacts`,
+   `knowledge_base`, `login_history`, `messages`, `ndpa_consents`,
+   `news_links`, `nigeria_lgas`, `nigeria_states`, `notification_outbox`,
+   `profiles`, `reports`, `scheduled_escalations`, `sms_deliveries`,
+   `trusted_devices`, `verification_overrides`, `verifications`.
+
+   `nigeria_states` (37 rows) and `nigeria_lgas` (770 rows) are canonical
+   reference data, read-only to clients. The two `*_unresolved_*` tables are
+   empty on a fresh project; they only ever hold rows that migrations
+   `20260927080000` / `20260927090000` had to set aside — see
+   [Authority SMS do not arrive](#authority-sms-do-not-arrive) below.
 
 4. **Storage buckets — already done.** The init migration inserts them; you do
    **not** create them by hand. Confirm under **Storage**, or:
@@ -849,7 +856,9 @@ must be approved by the admin first (Admin → Users → Approve).
 
 Before you start, add one row under **Admin → Authorities** with
 `coverage_lga` = the report's LGA and `coverage_state` = the report's state,
-and a Nigerian phone number you control.
+and a Nigerian phone number you control. Both are picked together from the
+list, which is grouped by state: the state is required, and a contact is texted
+only for its own state's LGA (`20260927090000`).
 
 1. **Submit a report.** Reporter account, mobile app → new report in that ward
    / LGA. Expect `reports.status = 'pending'`.
@@ -882,7 +891,16 @@ and a Nigerian phone number you control.
    Nothing at all → `SMS_PROVIDER` or its credentials are incomplete; the
    backend logs `sms.skipped_not_configured`.
 7. **Create a targeted alert.** Admin → Community Alerts → new alert with
-   **target state = X** and **target LGA = Y**.
+   **target state = X** and **target LGA = Y**. The state comes first and is
+   required: six LGA names (Bassa, Ifelodun, Irepodun, Nasarawa, Obi,
+   Surulere) belong to two states each, so an LGA on its own names no single
+   place. The database enforces it — `alerts` has a check constraint
+   (`alerts_target_lga_needs_state`) plus foreign keys into
+   `public.nigeria_states` / `public.nigeria_lgas`, so an alert with an LGA and
+   no state, an invented state, or an LGA that is not in the state it claims,
+   is rejected at insert time. The three targetings that remain are: one LGA of
+   one state; every LGA of one state (`All` + a state); and everyone
+   (`All`, no state).
    * A device whose profile is in state X / LGA Y **receives** it.
    * A device in a **different** LGA (or the same LGA name in a different
      state — e.g. Obi in Benue vs Obi in Nasarawa) **does not**.
@@ -1010,8 +1028,35 @@ skipped rather than risk a double text. Also check the caps:
 `app_settings.max_sms_per_alert_event` (default 20 per report) and
 `max_sms_per_lga_per_day` (default 50 per state+LGA per Africa/Lagos day).
 
-An authority row with `coverage_state` NULL is a legacy row that matches every
-same-named LGA in any state; edit it in the admin panel and pick the state.
+Every authority names the state of the LGA it covers, and is texted for that
+(state, LGA) only. Migration `20260927090000` made `coverage_state` NOT NULL
+and added foreign keys into `public.nigeria_states` / `public.nigeria_lgas`, so
+a contact with no state, an invented state, or an LGA that is not in the state
+it claims, is rejected at insert time. Six LGA names (Bassa, Ifelodun,
+Irepodun, Nasarawa, Obi, Surulere) exist in two states each: before that
+migration a state-less contact for one of them was texted about incidents in
+both.
+
+A report whose `state` is empty therefore matches **no** authority and sends no
+SMS, logged as `sms.report_without_state`. That is deliberate — texting the
+wrong state's emergency desk is worse than texting no one — so fix the report's
+`state` rather than the query.
+
+**If that migration quarantined contacts** it raised a `WARNING` naming each
+one, and copied them into `public.authorities_unresolved_coverage` (service
+role only). Those numbers are **no longer being texted**. Recover them:
+
+```sql
+-- SQL editor (service role)
+select id, name, organization, phone, coverage_lga, coverage_state, reason
+  from public.authorities_unresolved_coverage
+ order by quarantined_at;
+```
+
+For each row, establish which state that desk actually serves — ask them if you
+have to, never guess — re-add it under **Admin → Authorities** (the LGA list is
+grouped by state), then `delete` the row from the quarantine table. It holds
+real names and phone numbers, so do not leave it populated.
 
 ---
 

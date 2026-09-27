@@ -1,3 +1,4 @@
+import 'package:climate_app/core/constants/hazards.dart';
 import 'package:climate_app/core/services/notification_service.dart';
 import 'package:climate_app/core/theme/app_colors.dart';
 import 'package:climate_app/shared/widgets/app_card.dart';
@@ -204,13 +205,10 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                                     children: [
                                       Expanded(
                                         child: Text(
-                                          (notif['title'] as String?)
-                                                      ?.isNotEmpty ==
-                                                  true
-                                              ? notif['title'] as String
-                                              : context
-                                                    .l10n
-                                                    .notificationsDefaultTitle,
+                                          notificationTitleFor(
+                                            context.l10n,
+                                            notif,
+                                          ),
                                           style: GoogleFonts.lexend(
                                             fontWeight: isRead
                                                 ? FontWeight.w500
@@ -231,7 +229,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                                   ),
                                   const SizedBox(height: 4),
                                   Text(
-                                    notif['body'] ?? '',
+                                    notificationBodyFor(context.l10n, notif),
                                     style: GoogleFonts.lexend(
                                       fontSize: 14,
                                       color: AppColors.textSecondary,
@@ -258,14 +256,62 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   }
 }
 
+/// The `data` payload of a history entry, as string-keyed map.
+Map<String, dynamic> _dataOf(Map<String, dynamic> notif) {
+  final raw = notif['data'];
+  return raw is Map
+      ? raw.map((k, v) => MapEntry(k.toString(), v))
+      : <String, dynamic>{};
+}
+
+/// Title of a history entry.
+///
+/// Push entries carry the text the backend sent. Entries produced in the
+/// app store no text at all (see `NotificationService.recordOwnReportStatuses`)
+/// and are written here from their payload, so they read in whatever
+/// language the user is using now — including after they change it.
+@visibleForTesting
+String notificationTitleFor(AppLocalizations l10n, Map<String, dynamic> notif) {
+  final stored = (notif['title'] as String?)?.trim() ?? '';
+  if (stored.isNotEmpty) return stored;
+  if (_dataOf(notif)['type'] == 'report_status') {
+    return l10n.notificationReportStatusTitle;
+  }
+  return l10n.notificationsDefaultTitle;
+}
+
+/// Body of a history entry (see [notificationTitleFor]).
+@visibleForTesting
+String notificationBodyFor(AppLocalizations l10n, Map<String, dynamic> notif) {
+  final stored = (notif['body'] as String?)?.trim() ?? '';
+  if (stored.isNotEmpty) return stored;
+  final data = _dataOf(notif);
+  switch (data['type']) {
+    case 'report_status':
+      final hazard = Hazard.labelFor(data['hazardType'], l10n);
+      switch ((data['status'] ?? '').toString().toLowerCase()) {
+        case 'approved':
+          return l10n.notificationReportApproved(hazard);
+        case 'verified':
+          return l10n.notificationReportVerified(hazard);
+        case 'rejected':
+          return l10n.notificationReportRejected(hazard);
+        case 'pending':
+          return l10n.notificationReportPending(hazard);
+      }
+      return '';
+    case 'admin_alert':
+    case 'alert':
+      return l10n.notificationAlertBody;
+  }
+  return '';
+}
+
 /// Route a history entry opens, or null when it has no target beyond this
 /// screen.
 @visibleForTesting
 String? notificationRouteFor(Map<String, dynamic> notif) {
-  final raw = notif['data'];
-  final data = raw is Map
-      ? raw.map((k, v) => MapEntry(k.toString(), v))
-      : <String, dynamic>{};
+  final data = _dataOf(notif);
   if (data.isEmpty) return null;
   final route = NotificationService.routeForData(data);
   return route == '/notifications' ? null : route;

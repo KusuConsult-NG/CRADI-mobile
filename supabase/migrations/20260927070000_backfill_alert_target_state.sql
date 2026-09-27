@@ -11,10 +11,14 @@
 -- lib/core/data/mvp_locations_data.dart). Only names that occur in exactly one
 -- state are listed, matched case-insensitively against a trimmed target_lga.
 --
--- Left alone on purpose (the same name is an LGA of two states, so target_lga
--- cannot say which one is meant): Bassa, Ifelodun, Irepodun, Nasarawa, Obi, Surulere.
--- Those alerts keep target_state null and go on matching by LGA name in any
--- state; an admin has to open each one and set the state by hand.
+-- Left alone here (the same name is an LGA of two states, so target_lga cannot
+-- say which one is meant): Bassa, Ifelodun, Irepodun, Nasarawa, Obi, Surulere.
+-- This migration leaves those alerts with target_state null; the very next
+-- migration, 20260927080000, finishes the job — it makes the state mandatory
+-- and moves any alert whose target still cannot be resolved to one place into
+-- public.alerts_unresolved_target, naming each one in a WARNING, so nothing is
+-- left silently matching an LGA name in every state and no admin has to hunt
+-- for them.
 --
 -- 'All' is not an LGA name and is not in the table, so alerts targeting
 -- everyone stay untouched (null state + 'All' = every state, as before).

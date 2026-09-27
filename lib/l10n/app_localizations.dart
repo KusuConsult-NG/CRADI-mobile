@@ -5941,6 +5941,54 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Remove photo {number}'**
   String reportRemovePhoto(int number);
+
+  /// Title of an in-app notification about the user's own report changing status.
+  ///
+  /// In en, this message translates to:
+  /// **'Report update'**
+  String get notificationReportStatusTitle;
+
+  /// In-app notification body when the user's report is approved. {hazard} is the hazard type.
+  ///
+  /// In en, this message translates to:
+  /// **'Your report ({hazard}) was approved and an alert has been issued.'**
+  String notificationReportApproved(String hazard);
+
+  /// In-app notification body when peers verify the user's report. {hazard} is the hazard type.
+  ///
+  /// In en, this message translates to:
+  /// **'Your report ({hazard}) was verified by peers and is awaiting approval.'**
+  String notificationReportVerified(String hazard);
+
+  /// In-app notification body when the user's report is rejected. {hazard} is the hazard type.
+  ///
+  /// In en, this message translates to:
+  /// **'Your report ({hazard}) was rejected. Open it for details.'**
+  String notificationReportRejected(String hazard);
+
+  /// In-app notification body when the user's report goes back to awaiting peer verification. {hazard} is the hazard type.
+  ///
+  /// In en, this message translates to:
+  /// **'Your report ({hazard}) is awaiting peer verification.'**
+  String notificationReportPending(String hazard);
+
+  /// In-app notification body for an alert that carries no message text of its own.
+  ///
+  /// In en, this message translates to:
+  /// **'A new alert was issued for your area.'**
+  String get notificationAlertBody;
+
+  /// Filter chip (keep short, max ~10 chars) listing the guides the user bookmarked.
+  ///
+  /// In en, this message translates to:
+  /// **'Saved'**
+  String get knowledgeSavedFilter;
+
+  /// Empty state of the Saved filter on the hazard guides screen.
+  ///
+  /// In en, this message translates to:
+  /// **'No saved guides yet. Tap the bookmark on a guide to save it.'**
+  String get knowledgeNoSavedGuides;
 }
 
 class _AppLocalizationsDelegate

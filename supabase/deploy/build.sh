@@ -67,7 +67,7 @@ $rule
 --  Storage buckets \`report-images\` and \`profile-images\` are created by the
 --  init migration (public read, 5 MB, image mime types) — no manual setup.
 --
---  After a successful run the \`public\` schema holds 17 tables.
+--  After a successful run the \`public\` schema holds 21 tables.
 --
 --  Source migrations, in the order applied:
 EOF

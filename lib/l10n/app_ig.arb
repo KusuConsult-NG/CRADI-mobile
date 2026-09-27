@@ -972,5 +972,13 @@
   "a11ySeverityLabel": "Ogo njọ: {severity}",
   "a11yStatusLabel": "Ọnọdụ: {status}",
   "contactsSmsTooltip": "Zigara {name} ozi ederede",
-  "reportRemovePhoto": "Wepụ foto {number}"
+  "reportRemovePhoto": "Wepụ foto {number}",
+  "notificationReportStatusTitle": "Mmelite akụkọ",
+  "notificationReportApproved": "Akwadoro akụkọ gị ({hazard}), e wepụtakwala ọkwa.",
+  "notificationReportVerified": "Ndị agbata obi akwadola akụkọ gị ({hazard}); ọ na-echere nkwado ikpeazụ.",
+  "notificationReportRejected": "Ajụrụ akụkọ gị ({hazard}). Mepee ya maka nkọwa.",
+  "notificationReportPending": "Akụkọ gị ({hazard}) na-echere nkwado ndị agbata obi.",
+  "notificationAlertBody": "E wepụtara ọkwa ọhụrụ maka mpaghara gị.",
+  "knowledgeSavedFilter": "Echekwara",
+  "knowledgeNoSavedGuides": "Enwebeghị ntuziaka echekwara. Pịa akara nchekwa na ntuziaka iji chekwaa ya."
 }

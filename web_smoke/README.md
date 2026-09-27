@@ -42,6 +42,32 @@ Pass names:
 | `focus` | the interactions the broad tour cannot reach cleanly: settings toggles, peer verification vote, report view with peer votes, the severity slider, search fields |
 | `languages` | English, then Hausa, Yoruba, Igbo and Pidgin across 16 screens each, comparing every label against the English baseline |
 | `small` | the whole tour at 320×640 |
+| `controls` | the dead-control sweep — `controls-user`, `controls-ewv`, `controls-admin`. On each screen it enumerates every interactive semantics node, clicks it, and records whether anything observable happened (see below). |
+| `chat` | two live sessions in the same room: send from one, assert the row is persisted and that the other session receives it over realtime without reloading |
+
+### The `controls` pass
+
+`web_smoke/controls.mjs` answers one question: *is every control wired to
+something?* For each control it snapshots the route, every semantics label,
+every widget's checked / selected / value state and the request count, clicks
+the control, and compares. The result is one of:
+
+| Result | Meaning |
+| --- | --- |
+| `navigation` | the route changed |
+| `content-change` | labels appeared or disappeared (a dialog, a sheet, a snackbar, a re-filtered list) |
+| `state-change` | a widget's checked / selected / value changed |
+| `network` | the app called the backend |
+| `already-selected` | the chip / tab was already active, so re-picking it is a no-op by design |
+| `disabled` | `aria-disabled` — a deliberate disabled state |
+| `plugin` | nothing happened, but the control is plugin-backed (share sheet, TTS, `tel:` / `mailto:`, camera) and cannot do anything in a browser |
+| `skipped` | destructive (would end the session) or a locale switch (covered by the `languages` pass) |
+| `unreachable` | the control could not be scrolled into the viewport |
+| `dead` | **a finding** — nothing observable happened |
+
+Every `dead` and `plugin` result keeps a before/after screenshot next to it in
+`web_smoke/screenshots/controls-*/`, and the rows land in `report.json` under
+`controls`.
 
 Two quirks the driver works around, both from Flutter's semantics tree and
 neither an app defect:

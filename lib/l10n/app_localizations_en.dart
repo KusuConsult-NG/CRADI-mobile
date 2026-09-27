@@ -3398,4 +3398,37 @@ class AppLocalizationsEn extends AppLocalizations {
   String reportRemovePhoto(int number) {
     return 'Remove photo $number';
   }
+
+  @override
+  String get notificationReportStatusTitle => 'Report update';
+
+  @override
+  String notificationReportApproved(String hazard) {
+    return 'Your report ($hazard) was approved and an alert has been issued.';
+  }
+
+  @override
+  String notificationReportVerified(String hazard) {
+    return 'Your report ($hazard) was verified by peers and is awaiting approval.';
+  }
+
+  @override
+  String notificationReportRejected(String hazard) {
+    return 'Your report ($hazard) was rejected. Open it for details.';
+  }
+
+  @override
+  String notificationReportPending(String hazard) {
+    return 'Your report ($hazard) is awaiting peer verification.';
+  }
+
+  @override
+  String get notificationAlertBody => 'A new alert was issued for your area.';
+
+  @override
+  String get knowledgeSavedFilter => 'Saved';
+
+  @override
+  String get knowledgeNoSavedGuides =>
+      'No saved guides yet. Tap the bookmark on a guide to save it.';
 }

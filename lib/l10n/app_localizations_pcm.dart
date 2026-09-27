@@ -3393,4 +3393,37 @@ class AppLocalizationsPcm extends AppLocalizations {
   String reportRemovePhoto(int number) {
     return 'Remove photo $number';
   }
+
+  @override
+  String get notificationReportStatusTitle => 'Report update';
+
+  @override
+  String notificationReportApproved(String hazard) {
+    return 'Dem don approve your report ($hazard) and dem don send alert.';
+  }
+
+  @override
+  String notificationReportVerified(String hazard) {
+    return 'Peers don verify your report ($hazard); e dey wait final approval.';
+  }
+
+  @override
+  String notificationReportRejected(String hazard) {
+    return 'Dem reject your report ($hazard). Open am make you see wetin happen.';
+  }
+
+  @override
+  String notificationReportPending(String hazard) {
+    return 'Your report ($hazard) dey wait make peers verify am.';
+  }
+
+  @override
+  String get notificationAlertBody => 'Dem don send new alert for your area.';
+
+  @override
+  String get knowledgeSavedFilter => 'Saved';
+
+  @override
+  String get knowledgeNoSavedGuides =>
+      'You never save any guide. Tap di bookmark for one guide make you save am.';
 }

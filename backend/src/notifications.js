@@ -133,9 +133,18 @@ export function validatedAlertNotification(report) {
  * is an object of (already sanitised) OneSignal tag values that must ALL match.
  *
  *   target_state NULL, target_lga 'All'  -> everyone
- *   target_state NULL, target_lga X      -> { lga: X }            (legacy: X in any state)
  *   target_state S,    target_lga 'All'  -> { state: S }          (every LGA of S)
  *   target_state S,    target_lga X      -> { lga: X, state: S }  (X in S only; Obi exists in two states)
+ *
+ * Since migration 20260927080000 those are the only three shapes the database
+ * stores: an LGA without a state is rejected by the check constraint
+ * alerts_target_lga_needs_state, because an LGA name alone can mean two
+ * different places. The fourth branch below —
+ *
+ *   target_state NULL, target_lga X      -> { lga: X }            (X in any state)
+ *
+ * is therefore unreachable from `alerts`, and is kept only so a hand-built row
+ * or a stale replica degrades to the old name-only match instead of throwing.
  *
  * Devices without a `state` tag (app versions that predate it, or profiles
  * without a state) never match a state-scoped alert.

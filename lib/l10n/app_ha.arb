@@ -1032,5 +1032,13 @@
   "a11ySeverityLabel": "Tsanani: {severity}",
   "a11yStatusLabel": "Matsayi: {status}",
   "contactsSmsTooltip": "Aika saƙon rubutu zuwa {name}",
-  "reportRemovePhoto": "Cire hoto {number}"
+  "reportRemovePhoto": "Cire hoto {number}",
+  "notificationReportStatusTitle": "Sabuntawar rahoto",
+  "notificationReportApproved": "An amince da rahotonka ({hazard}), an kuma fitar da faɗakarwa.",
+  "notificationReportVerified": "Maƙwabta sun tabbatar da rahotonka ({hazard}); yana jiran amincewa ta ƙarshe.",
+  "notificationReportRejected": "An ƙi rahotonka ({hazard}). Buɗe shi don cikakken bayani.",
+  "notificationReportPending": "Rahotonka ({hazard}) yana jiran tabbatarwa daga maƙwabta.",
+  "notificationAlertBody": "An fitar da sabuwar faɗakarwa don yankinka.",
+  "knowledgeSavedFilter": "Ajiyayyu",
+  "knowledgeNoSavedGuides": "Babu jagororin da aka ajiye tukuna. Danna alamar ajiya a kan jagora don ajiye shi."
 }

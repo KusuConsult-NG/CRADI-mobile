@@ -34,7 +34,7 @@ notifications) live in the database (RLS + triggers in
    supabase db push
    ```
 
-   Afterwards `public` holds 17 tables, all with RLS enabled.
+   Afterwards `public` holds 21 tables, all with RLS enabled.
 
 3. **Authentication → Providers → Email**: keep *Confirm email* on.
 4. **Authentication → Email Templates**: the app verifies accounts and resets

@@ -11,11 +11,14 @@
 //   ctx.user(firebaseUid)     → supabase profile uuid | null
 //   ctx.report(firestoreId)   → supabase report uuid | null
 //   ctx.url(firebaseUrl)      → rewritten URL (identity when storage is skipped)
+//   ctx.userState(firebaseUid)→ that user's canonical profile state | null
+//                               (optional; used only to disambiguate an LGA name)
 //   ctx.now                   → ISO timestamp used as a last-resort default
 
 import { randomUUID } from 'node:crypto';
 
 import { builtinGuideFor } from './builtinContent.js';
+import { NIGERIA_LGAS_BY_STATE } from './nigeria-lgas.js';
 
 // ── Scalars ──────────────────────────────────────────────────────────────────
 
@@ -221,14 +224,11 @@ export function normalizeOverrideAction(raw) {
   return null;
 }
 
-// Canonical state names, as reports.state stores them (the app's
-// lib/core/data/nigeria_locations_data.dart): 36 states + FCT.
-export const NIGERIAN_STATES = [
-  'Abia', 'Adamawa', 'Akwa Ibom', 'Anambra', 'Bauchi', 'Bayelsa', 'Benue', 'Borno', 'Cross River',
-  'Delta', 'Ebonyi', 'Edo', 'Ekiti', 'Enugu', 'FCT', 'Gombe', 'Imo', 'Jigawa', 'Kaduna', 'Kano',
-  'Katsina', 'Kebbi', 'Kogi', 'Kwara', 'Lagos', 'Nasarawa', 'Niger', 'Ogun', 'Ondo', 'Osun', 'Oyo',
-  'Plateau', 'Rivers', 'Sokoto', 'Taraba', 'Yobe', 'Zamfara',
-];
+// Canonical state names, as reports.state stores them: 36 states + FCT. Taken
+// from the same generated copy of lib/core/data/nigeria_locations_data.dart
+// that the LGA lookups below use, so a state cannot be canonical here and
+// unknown there (or vice versa).
+export const NIGERIAN_STATES = Object.keys(NIGERIA_LGAS_BY_STATE);
 
 const stateKey = (s) => s.toLowerCase().replace(/[^a-z]/g, '');
 
@@ -264,6 +264,56 @@ export function normalizeNigerianState(raw) {
   return STATE_BY_KEY.get(key)
     ?? (key.endsWith('state') ? STATE_BY_KEY.get(key.slice(0, -'state'.length)) : undefined)
     ?? null;
+}
+
+// ── LGAs ─────────────────────────────────────────────────────────────────────
+//
+// Built from the generated copy of lib/core/data/nigeria_locations_data.dart,
+// which is also what seeds public.nigeria_states / public.nigeria_lgas. Since
+// 20260927080000 the database rejects an alert that names an LGA without a
+// state, and rejects a (state, LGA) pair that is not in that table, so every
+// row this module produces has to be resolved and spelled the same way.
+
+const lgaKey = (s) => asText(s).toLowerCase();
+
+// 'obi' -> [['Benue', 'Obi'], ['Nasarawa', 'Obi']]: every canonical
+// (state, LGA) pair whose LGA name matches, case-insensitively.
+const LGA_PAIRS_BY_NAME = new Map();
+for (const [state, lgas] of Object.entries(NIGERIA_LGAS_BY_STATE)) {
+  for (const lga of lgas) {
+    const key = lgaKey(lga);
+    if (!LGA_PAIRS_BY_NAME.has(key)) LGA_PAIRS_BY_NAME.set(key, []);
+    LGA_PAIRS_BY_NAME.get(key).push([state, lga]);
+  }
+}
+
+/**
+ * Every canonical [state, lga] pair for an LGA name (case-insensitive).
+ * Empty when the name is not an LGA of any state; more than one entry when the
+ * name is ambiguous — 6 of the 770 names are (Bassa, Ifelodun, Irepodun,
+ * Nasarawa, Obi, Surulere).
+ */
+export function lgaPairs(name) {
+  return LGA_PAIRS_BY_NAME.get(lgaKey(name)) ?? [];
+}
+
+/** Whether an LGA name belongs to more than one state. */
+export function isAmbiguousLga(name) {
+  return lgaPairs(name).length > 1;
+}
+
+/**
+ * The canonical spelling of [lga] within [state], or null when [state] has no
+ * such LGA. Both arguments are matched case-insensitively.
+ */
+export function canonicalLga(state, lga) {
+  return lgaPairs(lga).find(([s]) => s === state)?.[1] ?? null;
+}
+
+/** Whether a target_lga value is the 'every LGA' sentinel (the column's default). */
+export function isAllLgas(value) {
+  const text = asText(value);
+  return text === '' || text.toLowerCase() === 'all';
 }
 
 // ── Phone accounts ───────────────────────────────────────────────────────────
@@ -662,17 +712,83 @@ export function transformAlert(id, d, ctx) {
   const reportFb = refId(d.reportId);
   const reportId = reportFb ? ctx.report(reportFb) : null;
   if (reportFb && !reportId) warnings.push(`report ${reportFb} not migrated; report_id set to null`);
+
+  const target = alertTarget(d, creator, ctx, warnings);
+  if (target.skip) return skipped(`alert '${title}': ${target.skip}`);
+
   const created = toIso(d.createdAt) ?? toIso(d.timestamp) ?? ctx.now;
   return result({
     title,
     message: asText(d.message ?? d.body),
     severity,
-    target_lga: asText(d.targetLga ?? d.targetLGA ?? d.lga) || 'All',
+    target_lga: target.lga,
+    target_state: target.state,
     report_id: reportId,
     created_by: createdBy,
     is_active: asBool(d.isActive, true),
     created_at: created,
   }, warnings);
+}
+
+/**
+ * The (target_state, target_lga) an alert document means, or a skip reason.
+ *
+ * Firestore alerts only ever carried an LGA name, and since 20260927080000 the
+ * database will not accept one without its state — an LGA name alone can mean
+ * two different places. So the state is resolved here from the canonical LGA
+ * table, and an alert whose target still cannot be pinned to one place is
+ * skipped with a reason naming it. Nothing is guessed, and an alert is never
+ * widened to 'All' or to a whole state to make it fit: that would broadcast to
+ * people it was never addressed to.
+ *
+ * Returns { state, lga } or { skip }.
+ */
+function alertTarget(d, creatorFb, ctx, warnings) {
+  const rawLga = asText(d.targetLga ?? d.targetLGA ?? d.lga);
+  const rawState = asText(d.targetState ?? d.targetLgaState ?? d.state);
+  const state = normalizeNigerianState(rawState);
+  if (rawState && !state) {
+    return { skip: `target state '${rawState}' is not a Nigerian state; re-create the alert in the admin panel with a state from the list` };
+  }
+
+  // Every LGA (of `state`, or of the whole country when the alert names none).
+  if (isAllLgas(rawLga)) return { state, lga: 'All' };
+
+  const pairs = lgaPairs(rawLga);
+  if (pairs.length === 0) {
+    return { skip: `target LGA '${rawLga}' is not an LGA of any Nigerian state; re-create the alert in the admin panel with an LGA from the list` };
+  }
+
+  if (state) {
+    const lga = canonicalLga(state, rawLga);
+    if (!lga) {
+      return { skip: `target LGA '${rawLga}' is not an LGA of ${state} (it is in ${pairs.map(([s]) => s).join(', ')})` };
+    }
+    return { state, lga };
+  }
+
+  if (pairs.length === 1) {
+    const [only, lga] = pairs[0];
+    return { state: only, lga };
+  }
+
+  // Ambiguous name, no state on the alert: the only honest tiebreak is the
+  // state of whoever published it.
+  const states = pairs.map(([s]) => s);
+  const creatorState = creatorFb ? (ctx.userState?.(creatorFb) ?? null) : null;
+  if (creatorState && states.includes(creatorState)) {
+    warnings.push(`target LGA '${rawLga}' exists in ${states.join(' and ')}; resolved to ${creatorState} from the alert creator's profile state`);
+    return { state: creatorState, lga: canonicalLga(creatorState, rawLga) };
+  }
+  return {
+    skip: `target LGA '${rawLga}' exists in more than one state (${states.join(', ')}) and the alert names none`
+      + (creatorState
+        ? `; its creator's profile state (${creatorState}) is not one of them`
+        : creatorFb
+          ? `; its creator (${creatorFb}) has no usable profile state either`
+          : '; the alert has no creator whose profile state could disambiguate it')
+      + '. Re-create the alert in the admin panel with the state you meant',
+  };
 }
 
 export function transformMessage(id, d, ctx) {
@@ -735,34 +851,73 @@ export function transformKnowledge(id, d, ctx) {
   }, warnings);
 }
 
+/**
+ * An SMS contact for one (coverage_state, coverage_lga).
+ *
+ * Since migration 20260927090000 coverage_state is NOT NULL and
+ * (coverage_state, coverage_lga) is a foreign key into public.nigeria_lgas, so
+ * a row without a state, with an invented state, or with an LGA that is not in
+ * the state it claims, is rejected outright. Firestore authorities often
+ * carried only an LGA name, so the state is resolved here from the canonical
+ * LGA table (src/nigeria-lgas.js), exactly as transformAlert does for alert
+ * targets, and both names are re-spelled canonically.
+ *
+ * Nothing is ever guessed. 6 of the 770 LGA names belong to two states
+ * (Bassa, Ifelodun, Irepodun, Nasarawa, Obi, Surulere); a contact with such a
+ * name and no state is SKIPPED with a warning naming it, its phone and the
+ * candidate states, so an operator can add it by hand with the state that desk
+ * actually serves. Picking one would text the wrong emergency desk.
+ */
 export function transformAuthority(id, d, ctx) {
   const phone = asText(d.phone);
   if (!phone) return skipped('missing phone');
-  const lga = asText(d.coverageLGA ?? d.coverageLga ?? d.coverage_lga ?? d.lga);
-  if (!lga) return skipped('missing coverage LGA');
+  const rawLga = asText(d.coverageLGA ?? d.coverageLga ?? d.coverage_lga ?? d.lga);
+  if (!rawLga) return skipped('missing coverage LGA');
+  const who = `authority '${asText(d.name) || '(no name)'}' (${phone})`;
+
   // "Benue State" / "benue" → "Benue", "Abuja" → "FCT": the canonical names
   // reports.state holds, which coverage_state is matched against.
-  const warnings = [];
   const rawState = asText(d.coverageState ?? d.coverage_state ?? d.state);
   const state = normalizeNigerianState(rawState);
-  if (rawState && !state) warnings.push(`unknown state '${rawState}'; coverage_state set to null`);
-  // LGA names that exist in more than one state: without a state the
-  // authority is texted for reports from every one of them.
-  if (!state && AMBIGUOUS_LGAS.has(lga.toLowerCase())) {
-    warnings.push(`LGA '${lga}' exists in more than one state; set its state on the Authorities page`);
+  if (rawState && !state) {
+    return skipped(`${who}: state '${rawState}' is not a Nigerian state; add it on the Authorities page with a state from the list`);
   }
+
+  const pairs = lgaPairs(rawLga);
+  if (pairs.length === 0) {
+    return skipped(`${who}: coverage LGA '${rawLga}' is not an LGA of any Nigerian state; add it on the Authorities page with an LGA from the list`);
+  }
+
+  let coverage;
+  if (state) {
+    const lga = canonicalLga(state, rawLga);
+    if (!lga) {
+      return skipped(`${who}: coverage LGA '${rawLga}' is not an LGA of ${state} (it is in ${pairs.map(([s]) => s).join(', ')})`);
+    }
+    coverage = { state, lga };
+  } else if (pairs.length === 1) {
+    // 764 of the 770 names identify one place: the contact already covered
+    // exactly that place, so filling the state in changes nothing about who is
+    // texted.
+    const [only, lga] = pairs[0];
+    coverage = { state: only, lga };
+  } else {
+    const states = pairs.map(([s]) => s).join(', ');
+    return skipped(
+      `${who}: coverage LGA '${rawLga}' exists in more than one state (${states}) and the contact names none.`
+      + ` Add it on the Authorities page under the state that desk actually serves — it must not be texted for the other one`,
+    );
+  }
+
   return result({
     name: asText(d.name),
     organization: asNullableText(d.organization),
     phone,
-    coverage_lga: lga,
-    coverage_state: state,
+    coverage_lga: coverage.lga,
+    coverage_state: coverage.state,
     created_at: toIso(d.createdAt) ?? ctx.now,
-  }, warnings);
+  });
 }
-
-// Among the covered states (Benue, Nasarawa, Plateau), Obi is in both Benue and Nasarawa.
-const AMBIGUOUS_LGAS = new Set(['obi']);
 
 export function transformTrustedDevice(id, d, ctx) {
   const ownerFb = refId(d.userId);

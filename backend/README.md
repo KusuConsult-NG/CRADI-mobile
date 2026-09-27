@@ -119,11 +119,19 @@ See `../docs/DEPLOYMENT.md` section 4 for the full first-time walkthrough
   `tag lga = sanitize(report.lga / alert.target_lga)`; a report with a `state`
   additionally requires `tag state = sanitize(report.state)`. Alerts with
   `target_lga = 'All'` (and no `target_state`) go to the `Total Subscriptions` segment.
-- Admin alerts with `target_state` set (LGA names repeat across states: Obi is
-  in Benue and in Nasarawa) are sent with two tag filters that OneSignal ANDs:
-  `tag lga = sanitize(target_lga)` **and** `tag state = sanitize(target_state)`;
-  with `target_lga = 'All'` only the `state` filter is used (every LGA of that
-  state). `target_state` NULL is a legacy alert and matches by LGA name only.
+- Admin alerts always carry `target_state` when they name an LGA (LGA names
+  repeat across states: Obi is in Benue and in Nasarawa, and five more names do
+  the same). Since migration `20260927080000` the database rejects an LGA with
+  no state, so only three targetings exist, and `alertTarget()` maps them to:
+  | `target_state` | `target_lga` | OneSignal filters |
+  | --- | --- | --- |
+  | NULL | `'All'` | none — the `Total Subscriptions` segment |
+  | `S` | `'All'` | `tag state = sanitize(S)` |
+  | `S` | `X` | `tag lga = sanitize(X)` **and** `tag state = sanitize(S)` |
+
+  `alertTarget()` still has a branch for an LGA with no state (it falls back to
+  the `lga` filter alone). That branch is unreachable from the database and is
+  kept only so a hand-built row or an older replica cannot crash the handler.
   **Known limitation:** a device that has no `state` tag (an app build from
   before the tag was set, or a profile without a state) does not match a
   state-scoped alert and will not get its push. (The in-app Alerts list is
@@ -237,8 +245,8 @@ Stuck events: `select * from notification_outbox where processed_at is null and 
 ## Authority SMS
 
 On a transition into `approved` (same rule as the LGA broadcast), rows of
-`authorities` with `coverage_lga = report.lga` and
-`coverage_state = report.state` or `coverage_state` NULL (exact matches, at most
+`authorities` with `coverage_lga = report.lga` **and**
+`coverage_state = report.state` (exact matches, at most
 `app_settings.max_sms_per_alert_event`, default 20) get:
 
 ```
@@ -250,12 +258,28 @@ truncated to 320 characters (the description is shortened with `...`).
 - Phone numbers are normalised to E.164 `+234XXXXXXXXXX` (`0803…`, `803…`,
   `234803…`, `+234 (0)803…`, `00234…`); invalid or non-Nigerian numbers are
   skipped and logged; duplicate numbers get one SMS.
-- State-aware routing: LGA names repeat across states (Obi is in Benue and in
-  Nasarawa), so an authority with `coverage_state` set is texted only for
-  reports in that state. Rows with `coverage_state` NULL (legacy, created before
-  the column existed) still match every same-named LGA until an admin edits
-  them and picks the state. A report with no `state` only matches rows with
-  `coverage_state` NULL (logged as `sms.report_without_state`).
+- State-aware routing: LGA names repeat across states — Obi is in Benue and in
+  Nasarawa, and Bassa, Ifelodun, Irepodun, Nasarawa and Surulere do the same —
+  so an authority covers exactly one `(coverage_state, coverage_lga)` and is
+  never texted for another state's same-named LGA. Since migration
+  `20260927090000` the database enforces it: `coverage_state` is NOT NULL, with
+  foreign keys into `public.nigeria_states` and `public.nigeria_lgas`, so a
+  state-less contact, an invented state, or an LGA that is not in the state it
+  claims, is rejected at insert time. The old "legacy" rows that matched a name
+  in every state no longer exist; any that could not be resolved were moved to
+  `public.authorities_unresolved_coverage` by that migration (see
+  `../docs/DEPLOYMENT.md` → *Authority SMS do not arrive* for the recovery
+  procedure).
+- A report with no `state` matches **nothing** and sends no SMS, logged as
+  `sms.report_without_state` with a hint saying why. With no state on either
+  side there is no way to tell which same-named LGA is meant, and texting the
+  wrong emergency desk is worse than texting no one; `reports.state` comes from
+  the app's fixed location list, so this is a data fault to fix at the source.
+  `repo.findAuthorities()` still ORs in `coverage_state is null`, unreachable
+  from the database, for the same reason `alertTarget()` keeps its state-less
+  branch: a hand-inserted row or a stale replica degrades to the old
+  name-only match instead of vanishing. It can never widen a live row,
+  because no live row can have a NULL `coverage_state`.
 - Persisted in `public.sms_deliveries` (service role only), so restarts and
   replicas agree: a `claimed` row per (report, phone) is inserted before each
   send; a conflict means already texted and the number is skipped. Success sets

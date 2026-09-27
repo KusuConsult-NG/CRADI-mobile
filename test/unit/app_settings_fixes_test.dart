@@ -280,7 +280,9 @@ void main() {
   });
 
   group('AlertsProvider.targetsLga', () {
-    test('legacy alerts (no target_state) match by LGA name only', () {
+    // The database can no longer store an LGA without a state (migration
+    // 20260927080000); this is the defensive fallback for a stale cached row.
+    test('an LGA with no target_state falls back to matching by name', () {
       expect(AlertsProvider.targetsLga({'target_lga': 'Obi'}, 'obi'), true);
       expect(AlertsProvider.targetsLga({'target_lga': 'Obi'}, 'Bassa'), false);
       expect(

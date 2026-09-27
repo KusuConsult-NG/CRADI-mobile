@@ -99,6 +99,13 @@ export async function nodes(page) {
                 role: el.getAttribute('role') || el.tagName.toLowerCase(),
                 input: !!field,
                 value: field ? field.value : null,
+                // Flutter marks anything with a tap action as `flt-tappable`
+                // and mirrors checked / selected / expanded state in ARIA.
+                tappable: el.hasAttribute('flt-tappable') || el.getAttribute('role') === 'button',
+                checked: el.getAttribute('aria-checked'),
+                selected: el.getAttribute('aria-selected'),
+                expanded: el.getAttribute('aria-expanded'),
+                disabled: el.getAttribute('aria-disabled'),
                 x: r.x, y: r.y, w: r.width, h: r.height,
             });
         });
@@ -175,6 +182,11 @@ export async function type(page, match, text) {
     await page.keyboard.type(text, { delay: 12 });
     await page.waitForTimeout(250);
     return true;
+}
+
+/** Clicks a node's centre, scrolling it into view when necessary. */
+export async function tapNode(page, node) {
+    return clickNode(page, node);
 }
 
 /** Clicks a node's centre, scrolling it into view when necessary. */

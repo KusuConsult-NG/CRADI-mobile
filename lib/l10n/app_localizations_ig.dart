@@ -3379,4 +3379,37 @@ class AppLocalizationsIg extends AppLocalizations {
   String reportRemovePhoto(int number) {
     return 'Wepụ foto $number';
   }
+
+  @override
+  String get notificationReportStatusTitle => 'Mmelite akụkọ';
+
+  @override
+  String notificationReportApproved(String hazard) {
+    return 'Akwadoro akụkọ gị ($hazard), e wepụtakwala ọkwa.';
+  }
+
+  @override
+  String notificationReportVerified(String hazard) {
+    return 'Ndị agbata obi akwadola akụkọ gị ($hazard); ọ na-echere nkwado ikpeazụ.';
+  }
+
+  @override
+  String notificationReportRejected(String hazard) {
+    return 'Ajụrụ akụkọ gị ($hazard). Mepee ya maka nkọwa.';
+  }
+
+  @override
+  String notificationReportPending(String hazard) {
+    return 'Akụkọ gị ($hazard) na-echere nkwado ndị agbata obi.';
+  }
+
+  @override
+  String get notificationAlertBody => 'E wepụtara ọkwa ọhụrụ maka mpaghara gị.';
+
+  @override
+  String get knowledgeSavedFilter => 'Echekwara';
+
+  @override
+  String get knowledgeNoSavedGuides =>
+      'Enwebeghị ntuziaka echekwara. Pịa akara nchekwa na ntuziaka iji chekwaa ya.';
 }

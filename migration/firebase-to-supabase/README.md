@@ -17,9 +17,9 @@ records created since the last run. Re-running does not duplicate rows.
 | Storage `profile_images/{uid}/…` | bucket `profile-images` at `{newUserId}/…` | URLs in `profiles.profile_image_url` are rewritten |
 | Storage `report_images/{uid}/…` | bucket `report-images` at `{newUserId}/…` | URLs in `reports.image_urls` are rewritten |
 | `knowledge_base` | `knowledge_base` | upsert on `legacy_firebase_id` |
-| `authorities` | `authorities` | `coverageLGA` / `lga` → `coverage_lga` |
+| `authorities` | `authorities` | `coverageLGA` / `lga` → `coverage_lga`, plus the `coverage_state` it needs (see below) |
 | `reports` | `reports` | legacy statuses and severities are normalised. `legacy_firebase_id` holds the Firestore id |
-| `alerts` | `alerts` | `targetLga` → `target_lga`. A `createdBy` of `'admin'` → `null` |
+| `alerts` | `alerts` | `targetLga` → `target_lga`, plus the `target_state` it needs (see below). A `createdBy` of `'admin'` → `null` |
 | `verifications` | `verifications` | upsert on `(report_id, verifier_id)` |
 | `verification_overrides` | `verification_overrides` | `timestamp` → `created_at` |
 | `messages` | `messages` | ISO `sentAt` → `sent_at` |
@@ -55,10 +55,40 @@ The following are **not migrated**:
   `description` ≤ 2000, `location`/`location_details`/`address` ≤ 500, `ward`/`lga`/`state` ≤ 120, at most
   10 `image_urls`. Longer values are cut (and extra images dropped) with a warning. Chat `message` text is
   cut to 2000 characters the same way.
-- **Authority `coverage_state`:** mapped case-insensitively to the canonical state names that
-  `reports.state` holds (36 states + `FCT`, as in the app's `nigeria_locations_data.dart`): `Benue State` → `Benue`,
-  `Nassarawa` → `Nasarawa`, `Abuja` / `Federal Capital Territory` → `FCT`. An unrecognised value becomes `null`
-  with a warning.
+- **Authority coverage:** `authorities.coverage_state` is mandatory (migration `20260927090000`) —
+  an SMS contact covers exactly one `(coverage_state, coverage_lga)`, because LGA names repeat
+  across states and a contact must never be texted about the wrong one. A state in the Firestore
+  document is mapped case-insensitively to the canonical names `reports.state` holds (36 states +
+  `FCT`, as in the app's `nigeria_locations_data.dart`): `Benue State` → `Benue`, `Nassarawa` →
+  `Nasarawa`, `Abuja` / `Federal Capital Territory` → `FCT`. Where there is none, the state is
+  resolved from the LGA via `src/nigeria-lgas.js`, exactly as alert targets are:
+  | Authority | Result |
+  | --- | --- |
+  | an LGA name in exactly one state (764 of the 770) | that state, both names re-spelled canonically — who gets texted does not change |
+  | an LGA name plus a state it really is in | that pair, canonically spelled |
+  | an LGA name in two states (`Bassa`, `Ifelodun`, `Irepodun`, `Nasarawa`, `Obi`, `Surulere`) and no state | **skipped**, naming the contact, its phone and the candidate states |
+  | a state that is not a Nigerian state | **skipped** (it used to become `null`, which the database now rejects) |
+  | an LGA that is in no state, or an LGA that is not in the state given | **skipped**, naming the contact and why |
+
+  Nothing is guessed: there is no "all states" coverage to fall back on, and picking one of two
+  candidate states would text an emergency desk about a place it does not serve. Skipped contacts
+  are listed in the run report — add each one by hand under **Admin → Authorities**, choosing the
+  LGA under the state that desk actually serves.
+- **Alert targets:** `alerts.target_state` is mandatory whenever `target_lga` names an LGA
+  (migration `20260927080000`), because LGA names repeat across states. Firestore alerts only
+  carried an LGA name, so the state is resolved from the canonical LGA table
+  (`src/nigeria-lgas.js`, generated from the app's `nigeria_locations_data.dart`):
+  | Alert | Result |
+  | --- | --- |
+  | `targetLga` empty / `'All'` (any casing) | `target_lga = 'All'`, `target_state` = the alert's own state if it has one, else `null` (everyone) |
+  | an LGA name in exactly one state | that state, both names re-spelled canonically |
+  | an LGA name in two states (`Bassa`, `Ifelodun`, `Irepodun`, `Nasarawa`, `Obi`, `Surulere`), and the alert's creator has a profile state that is one of them | that state, with a warning saying it was taken from the creator |
+  | an LGA name in two states with no usable creator state | **skipped**, naming the alert, the LGA and the candidate states |
+  | an LGA name that is in no state, or a state/LGA pair that does not exist | **skipped**, naming the alert and why |
+
+  Nothing is guessed and an alert is never widened to `'All'` or to a whole state to make it fit —
+  that would broadcast it to people it was not addressed to. Skipped alerts are listed in the run
+  report; re-create each one in the admin panel with the state you meant.
 - **Verification overrides:** actions map to `approved | rejected | verified`. An override whose validator
   was not migrated is kept with `validator_id = null` and a warning.
 - **Missing reports:** an alert whose report does not exist in Supabase (not migrated, or its write failed)
@@ -288,3 +318,7 @@ npm test     # node:test unit tests
 - `src/lifecycle.js`: SIGINT/SIGTERM handling (tested).
 - `src/steps.js`: Supabase-side step helpers: alert re-activation, report existence checks (tested).
 - `src/builtinContent.js`: titles of the seeded built-in guides (tested against the SQL).
+- `src/nigeria-lgas.js`: **generated** — the 36 states + FCT and their 770 LGAs, in the canonical
+  spellings `public.nigeria_states` / `public.nigeria_lgas` store. Regenerate with
+  `node scripts/gen-nigeria-lgas.mjs` after changing the app's
+  `lib/core/data/nigeria_locations_data.dart`; `test/nigeria-lgas.test.js` fails if the two drift.

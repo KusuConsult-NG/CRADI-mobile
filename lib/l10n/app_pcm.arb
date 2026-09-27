@@ -972,5 +972,13 @@
   "a11ySeverityLabel": "How bad e be: {severity}",
   "a11yStatusLabel": "Status: {status}",
   "contactsSmsTooltip": "Send text message give {name}",
-  "reportRemovePhoto": "Remove photo {number}"
+  "reportRemovePhoto": "Remove photo {number}",
+  "notificationReportStatusTitle": "Report update",
+  "notificationReportApproved": "Dem don approve your report ({hazard}) and dem don send alert.",
+  "notificationReportVerified": "Peers don verify your report ({hazard}); e dey wait final approval.",
+  "notificationReportRejected": "Dem reject your report ({hazard}). Open am make you see wetin happen.",
+  "notificationReportPending": "Your report ({hazard}) dey wait make peers verify am.",
+  "notificationAlertBody": "Dem don send new alert for your area.",
+  "knowledgeSavedFilter": "Saved",
+  "knowledgeNoSavedGuides": "You never save any guide. Tap di bookmark for one guide make you save am."
 }

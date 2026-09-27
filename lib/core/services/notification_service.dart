@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:developer' as developer;
 
 import 'package:flutter/foundation.dart';
@@ -10,6 +11,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:climate_app/core/constants/app_config.dart';
 import 'package:climate_app/core/providers/settings_provider.dart';
 import 'package:climate_app/core/services/hive_encryption_service.dart';
+import 'package:climate_app/core/services/supabase_mapping.dart'
+    show parseTimestamp;
 import 'package:climate_app/features/profile/providers/profile_provider.dart';
 
 /// Push notifications via OneSignal.
@@ -298,6 +301,53 @@ class NotificationService {
     }
   }
 
+  /// A key identifying the *event* a notification is about, independent of
+  /// how it reached the device.
+  ///
+  /// The push path and the in-app producers ([recordAlerts],
+  /// [recordOwnReportStatuses]) both store their entry under this key, so a
+  /// push that arrives after the app already recorded the same event (or the
+  /// other way round) updates nothing and the user sees one entry, not two.
+  /// Returns null for payloads with no identifiable subject; those fall back
+  /// to the OneSignal notification id.
+  static String? stableKeyFor(Map<String, dynamic>? data) {
+    if (data == null) return null;
+    String pick(List<String> keys) {
+      for (final k in keys) {
+        final v = data[k];
+        if (v != null && v.toString().isNotEmpty) return v.toString();
+      }
+      return '';
+    }
+
+    final type = (data['type'] ?? '').toString();
+    switch (type) {
+      case 'report_status':
+        final id = pick(['report_id', 'reportId', 'id']);
+        if (id.isEmpty) return null;
+        // The status is part of the identity: pending → verified → approved
+        // are three separate things that happened to the same report. The
+        // backend sends it for every status the app produces an entry for
+        // (see [reportStatuses]), so both paths build the same key.
+        final status = (data['status'] ?? '').toString().trim().toLowerCase();
+        return status.isEmpty
+            ? 'report_status:$id'
+            : 'report_status:$id:$status';
+      case 'verification_request':
+      case 'escalation':
+      case 'escalation_auto':
+      case 'validated_alert':
+        final id = pick(['report_id', 'reportId', 'id']);
+        return id.isEmpty ? null : '$type:$id';
+      case 'admin_alert':
+      case 'alert':
+        final id = pick(['alert_id', 'alertId', 'id']);
+        return id.isEmpty ? null : 'alert:$id';
+      default:
+        return null;
+    }
+  }
+
   void _handleNotificationNavigation(Map<String, dynamic> data) {
     final route = routeForData(data);
     developer.log('Notification nav → $route', name: 'NotificationService');
@@ -497,6 +547,7 @@ class NotificationService {
       await clearAll();
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove(historyOwnerKey);
+      await _clearSeenState(prefs);
     } on Object catch (e) {
       developer.log('History clear error: $e', name: 'NotificationService');
     }
@@ -512,10 +563,201 @@ class NotificationService {
       final owner = prefs.getString(historyOwnerKey);
       if (owner == userId) return;
       await clearAll();
+      // The producers' memory belongs to the previous account too: without
+      // this the next user would be told about their predecessor's reports.
+      await _clearSeenState(prefs);
       await prefs.setString(historyOwnerKey, userId);
     } on Object catch (e) {
       developer.log('History owner error: $e', name: 'NotificationService');
     }
+  }
+
+  // ───────────────────── In-app producers ──────────────────────────────
+  //
+  // The history must reflect what happened to this user whether or not a
+  // push was delivered: push is optional (ONESIGNAL_APP_ID may be unset),
+  // may be denied at the OS level, and never arrives for events that
+  // happen while the app itself is the one watching the data. Everything
+  // here is written straight to the local Hive box — no network call — so
+  // it works offline, and every entry is keyed by [stableKeyFor] so a push
+  // for the same event collapses onto it.
+
+  /// SharedPreferences key holding what the producers have already seen.
+  static const String seenStateKey = 'notifications_seen_state';
+
+  /// The report statuses an entry is produced for. Kept identical to the
+  /// backend's `REPORT_STATUSES`, so a push for the same change builds the
+  /// same [stableKeyFor] key and does not add a second entry.
+  static const Set<String> reportStatuses = {
+    'pending',
+    'verified',
+    'approved',
+    'rejected',
+  };
+
+  /// Most ids remembered per producer, so the record cannot grow forever.
+  static const int _maxSeenEntries = 300;
+
+  Map<String, dynamic>? _seenState;
+
+  Future<Map<String, dynamic>> _loadSeenState() async {
+    final cached = _seenState;
+    if (cached != null) return cached;
+    var state = <String, dynamic>{};
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(seenStateKey);
+      if (raw != null && raw.isNotEmpty) {
+        final decoded = jsonDecode(raw);
+        if (decoded is Map) state = Map<String, dynamic>.from(decoded);
+      }
+    } on Object catch (e) {
+      developer.log('Seen-state read error: $e', name: 'NotificationService');
+    }
+    return _seenState = state;
+  }
+
+  Future<void> _saveSeenState(Map<String, dynamic> state) async {
+    _seenState = state;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(seenStateKey, jsonEncode(state));
+    } on Object catch (e) {
+      developer.log('Seen-state write error: $e', name: 'NotificationService');
+    }
+  }
+
+  Future<void> _clearSeenState(SharedPreferences prefs) async {
+    _seenState = null;
+    await prefs.remove(seenStateKey);
+  }
+
+  /// Records an entry for every alert in [targetedAlerts] the user has not
+  /// been told about yet.
+  ///
+  /// Callers pass alerts already narrowed to this user (see
+  /// `AlertsProvider.alertsForLga`, which applies
+  /// `AlertsProvider.targetsLga`); this service does not know the user's
+  /// LGA.
+  ///
+  /// Only alerts *issued after* this account first called in are announced.
+  /// That cut-off, rather than "an id I have not seen yet", is what keeps a
+  /// backlog out of the history: the user's LGA is not yet known at the
+  /// instant they sign in, so an alert can become targeted a moment later
+  /// (or after they change their LGA) without being news to them. The id
+  /// list is what makes repeated calls idempotent.
+  Future<void> recordAlerts(List<Map<String, dynamic>> targetedAlerts) async {
+    if (_notificationsBox == null) return;
+    final state = await _loadSeenState();
+    final seen = <String>[
+      for (final v in (state['alerts'] as List?) ?? const []) v.toString(),
+    ];
+    final known = seen.toSet();
+    final since = DateTime.tryParse((state['alertsSince'] ?? '').toString());
+
+    final fresh = <Map<String, dynamic>>[];
+    for (final alert in targetedAlerts) {
+      final id = (alert['id'] ?? alert[r'$id'] ?? '').toString();
+      if (id.isEmpty || !known.add(id)) continue;
+      seen.add(id);
+      final createdAt = parseTimestamp(
+        alert['createdAt'] ?? alert['created_at'],
+      );
+      if (since != null && createdAt != null && createdAt.isAfter(since)) {
+        fresh.add(alert);
+      }
+    }
+    if (seen.length > _maxSeenEntries) {
+      seen.removeRange(0, seen.length - _maxSeenEntries);
+    }
+    await _saveSeenState({
+      ...state,
+      'alerts': seen,
+      'alertsSince':
+          state['alertsSince'] ?? DateTime.now().toUtc().toIso8601String(),
+    });
+
+    for (final alert in fresh) {
+      final id = (alert['id'] ?? alert[r'$id'] ?? '').toString();
+      final severity = (alert['severity'] ?? '').toString();
+      await _saveNotification(
+        // Alert copy is authored text, not app UI, so it is stored as is;
+        // an alert with no message falls back to a localised line on the
+        // notifications screen.
+        title: (alert['title'] ?? '').toString().trim(),
+        body: (alert['message'] ?? alert['body'] ?? '').toString().trim(),
+        data: {
+          'type': 'admin_alert',
+          'alert_id': id,
+          if (severity.isNotEmpty) 'severity': severity,
+          'source': 'in_app',
+        },
+      );
+    }
+  }
+
+  /// Records an entry for every one of the user's own [reports] whose
+  /// status changed since the last call.
+  ///
+  /// This also covers peer verification: a peer verifying or disputing a
+  /// report is only visible to its author as the report moving to
+  /// `verified` / `rejected`, so it needs no separate producer — and giving
+  /// it one would put two entries in the history for one thing happening.
+  ///
+  /// Rows the producer has never seen (a report the user just filed) are
+  /// only remembered, never announced.
+  Future<void> recordOwnReportStatuses(
+    List<Map<String, dynamic>> reports,
+  ) async {
+    if (_notificationsBox == null) return;
+    final state = await _loadSeenState();
+    final previous = <String, String>{
+      for (final e in ((state['reports'] as Map?) ?? const {}).entries)
+        e.key.toString(): e.value.toString(),
+    };
+    final seeded = state['reportsSeeded'] == true;
+
+    final current = <String, String>{};
+    final changed = <Map<String, dynamic>>[];
+    for (final report in reports) {
+      final id = (report['id'] ?? report[r'$id'] ?? '').toString();
+      if (id.isEmpty) continue;
+      final status = (report['status'] ?? '').toString().trim().toLowerCase();
+      if (status.isEmpty) continue;
+      if (current.length < _maxSeenEntries) current[id] = status;
+      final was = previous[id];
+      if (!seeded || was == null || was == status) continue;
+      if (!reportStatuses.contains(status)) continue;
+      changed.add(report);
+    }
+    await _saveSeenState({...state, 'reports': current, 'reportsSeeded': true});
+
+    for (final report in changed) {
+      final id = (report['id'] ?? report[r'$id'] ?? '').toString();
+      final status = (report['status'] ?? '').toString().trim().toLowerCase();
+      final hazard = (report['hazardType'] ?? report['hazard_type'] ?? '')
+          .toString();
+      await _saveNotification(
+        // Empty: the notifications screen builds the text from the data
+        // below in the user's current language.
+        title: '',
+        body: '',
+        data: {
+          'type': 'report_status',
+          'report_id': id,
+          'status': status,
+          if (hazard.isNotEmpty) 'hazardType': hazard,
+          'source': 'in_app',
+        },
+      );
+    }
+  }
+
+  /// Drops the producers' memory (tests).
+  @visibleForTesting
+  Future<void> resetSeenStateForTesting() async {
+    final prefs = await SharedPreferences.getInstance();
+    await _clearSeenState(prefs);
   }
 
   /// Records a tapped push: marks its history entry (matched by the
@@ -530,10 +772,9 @@ class NotificationService {
   }) async {
     final box = _notificationsBox;
     if (box == null) return;
-    if (notificationId != null &&
-        notificationId.isNotEmpty &&
-        box.containsKey(notificationId)) {
-      await markAsRead(notificationId);
+    final key = stableKeyFor(data) ?? notificationId;
+    if (key != null && key.isNotEmpty && box.containsKey(key)) {
+      await markAsRead(key);
       return;
     }
     await _saveNotification(
@@ -569,10 +810,15 @@ class NotificationService {
   }) async {
     if (_notificationsBox == null) return;
 
-    final id = (notificationId != null && notificationId.isNotEmpty)
-        ? notificationId
-        : DateTime.now().millisecondsSinceEpoch.toString();
-    // Already recorded (the same push delivered twice): keep that entry.
+    // Keyed by what happened, not by how it arrived, so a push and an
+    // in-app producer for the same event share one entry.
+    final id =
+        stableKeyFor(data) ??
+        ((notificationId != null && notificationId.isNotEmpty)
+            ? notificationId
+            : DateTime.now().millisecondsSinceEpoch.toString());
+    // Already recorded (the same push delivered twice, or the in-app
+    // producer got there first): keep that entry.
     if (_notificationsBox!.containsKey(id)) return;
     final notification = {
       'id': id,

@@ -70,9 +70,20 @@ export function createAuthoritySms({ repo, sms, logger = defaultLog, now = Date.
     const perEvent = positiveInt(settings.max_sms_per_alert_event, DEFAULT_MAX_SMS_PER_ALERT_EVENT);
     const perDay = positiveInt(settings.max_sms_per_lga_per_day, DEFAULT_MAX_SMS_PER_LGA_PER_DAY);
     if (!oneLine(report.state)) {
-      // Without a state, only authorities with no coverage_state can match:
-      // a same-named LGA in another state must never be texted.
-      logger.warn('sms.report_without_state', { report_id: report.id, lga: report.lga });
+      // No state on the report: nobody is texted. Every authority has a
+      // coverage_state since migration 20260927090000 (NOT NULL + a foreign
+      // key into public.nigeria_lgas), and findAuthorities() can only match
+      // state-less rows when the report has no state, so this finds nothing.
+      // That is deliberate: an LGA name alone can mean two states (Obi is in
+      // Benue and in Nasarawa), and texting the wrong state's emergency desk
+      // is worse than texting no one. reports.lga/state come from the app's
+      // fixed location list, so a report without a state is a data fault to
+      // fix at the source, not something to guess around.
+      logger.warn('sms.report_without_state', {
+        report_id: report.id,
+        lga: report.lga,
+        hint: 'No SMS is sent: an LGA name without a state can mean two different states. Set reports.state for this report.',
+      });
     }
     const authorities = await repo.findAuthorities(report.lga, report.state, perEvent);
 

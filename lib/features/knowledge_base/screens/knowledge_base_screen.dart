@@ -3,6 +3,8 @@ import 'package:climate_app/core/providers/connectivity_provider.dart';
 import 'package:climate_app/features/knowledge_base/providers/news_provider.dart';
 import 'package:climate_app/features/knowledge_base/providers/knowledge_provider.dart';
 import 'package:climate_app/core/theme/app_colors.dart';
+import 'package:climate_app/features/knowledge_base/guide_bookmarks.dart';
+import 'package:climate_app/features/knowledge_base/widgets/guide_bookmark_button.dart';
 import 'package:climate_app/features/knowledge_base/knowledge_categories.dart';
 import 'package:climate_app/features/knowledge_base/widgets/guide_image.dart';
 import 'package:flutter/material.dart';
@@ -26,6 +28,9 @@ class _KnowledgeBaseScreenState extends State<KnowledgeBaseScreen> {
   @override
   void initState() {
     super.initState();
+    // Saved guides are read from storage once; the bookmark buttons and the
+    // "Saved" filter on the guides list share this one state.
+    GuideBookmarks().load();
     Future.microtask(() {
       if (mounted) {
         context.read<NewsProvider>().fetchNews();
@@ -556,22 +561,12 @@ class _KnowledgeBaseScreenState extends State<KnowledgeBaseScreen> {
                 ),
               ),
             ),
-            Positioned(
-              top: 8,
-              right: 8,
-              child: Container(
-                padding: const EdgeInsets.all(4),
-                decoration: BoxDecoration(
-                  color: Colors.black.withValues(alpha: 0.5),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.bookmark,
-                  color: Colors.white,
-                  size: 16,
-                ),
+            if (guideData != null)
+              Positioned(
+                top: 4,
+                right: 4,
+                child: GuideBookmarkButton(guide: guideData),
               ),
-            ),
             Positioned(
               bottom: 12,
               left: 12,
@@ -722,7 +717,7 @@ class _KnowledgeBaseScreenState extends State<KnowledgeBaseScreen> {
               ],
             ),
           ),
-          const Icon(Icons.bookmark_border, color: Colors.grey),
+          const Icon(Icons.open_in_new, color: Colors.grey, size: 20),
         ],
       ),
     );

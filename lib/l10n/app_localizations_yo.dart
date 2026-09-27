@@ -3398,4 +3398,38 @@ class AppLocalizationsYo extends AppLocalizations {
   String reportRemovePhoto(int number) {
     return 'Yọ àwòrán $number kúrò';
   }
+
+  @override
+  String get notificationReportStatusTitle => 'Ìmúdójúìwọ̀n ìròyìn';
+
+  @override
+  String notificationReportApproved(String hazard) {
+    return 'A ti fọwọ́ sí ìròyìn rẹ ($hazard), a sì ti gbé ìkìlọ̀ jáde.';
+  }
+
+  @override
+  String notificationReportVerified(String hazard) {
+    return 'Àwọn ẹlẹgbẹ́ ti jẹ́rìí sí ìròyìn rẹ ($hazard); ó ń dúró de ìfọwọ́sí ìkẹyìn.';
+  }
+
+  @override
+  String notificationReportRejected(String hazard) {
+    return 'A kọ ìròyìn rẹ ($hazard) sílẹ̀. Ṣí i láti rí àlàyé.';
+  }
+
+  @override
+  String notificationReportPending(String hazard) {
+    return 'Ìròyìn rẹ ($hazard) ń dúró de ìjẹ́rìí àwọn ẹlẹgbẹ́.';
+  }
+
+  @override
+  String get notificationAlertBody =>
+      'A gbé ìkìlọ̀ tuntun jáde fún agbègbè rẹ.';
+
+  @override
+  String get knowledgeSavedFilter => 'Tí a fipamọ́';
+
+  @override
+  String get knowledgeNoSavedGuides =>
+      'Kò sí ìwé ìtọ́nisọ́nà tí a fipamọ́ síbẹ̀. Tẹ àmì ìfipamọ́ lórí ìwé ìtọ́nisọ́nà láti fipamọ́ ọ.';
 }
