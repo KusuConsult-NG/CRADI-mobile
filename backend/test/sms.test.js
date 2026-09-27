@@ -461,3 +461,65 @@ test('authority SMS: a hand-inserted contact with no coverage_state still matche
   await createAuthoritySms({ repo, sms, logger }).notifyApproved({ ...report, id: 'obi-benue', lga: 'Obi', state: 'Benue' });
   assert.deepEqual(sms.sent.map((s) => s.to), ['+2348031110002']);
 });
+
+test('authority SMS: an empty contacts table is warned about, not passed over silently', async () => {
+  // Approving a report with no contacts anywhere sends no SMS, writes no row
+  // and raises no error, so the whole path can sit dormant unnoticed. The
+  // warning has to say the table is empty, because that is a different fix
+  // from "this LGA has no desk yet".
+  const repo = fakeRepo({ authorities: [] });
+  const sms = fakeSms();
+  const warnings = [];
+  const capture = { ...logger, warn: (msg, fields) => warnings.push({ msg, fields }) };
+  const summary = await createAuthoritySms({ repo, sms, logger: capture }).notifyApproved(report);
+
+  assert.deepEqual(sms.sent, []);
+  assert.equal(summary.sent, 0);
+  assert.equal(summary.note, 'no authorities configured');
+  const warned = warnings.find((w) => w.msg === 'sms.no_authorities');
+  assert.ok(warned, 'sms.no_authorities must be logged');
+  assert.equal(warned.fields.authorities_total, 0);
+  assert.equal(warned.fields.lga, 'Ikeja');
+  assert.match(warned.fields.hint, /No authority contacts exist at all/);
+});
+
+test('authority SMS: contacts that exist but cover nowhere near the report say so differently', async () => {
+  const repo = fakeRepo({
+    authorities: [{ id: 'far', name: 'far', phone: '08031110001', coverage_lga: 'Makurdi', coverage_state: 'Benue' }],
+  });
+  const sms = fakeSms();
+  const warnings = [];
+  const capture = { ...logger, warn: (msg, fields) => warnings.push({ msg, fields }) };
+  const summary = await createAuthoritySms({ repo, sms, logger: capture }).notifyApproved({
+    ...report, id: 'elsewhere', lga: 'Ikeja', state: 'Lagos',
+  });
+
+  assert.deepEqual(sms.sent, []);
+  assert.equal(summary.note, 'no authority covers this area');
+  const warned = warnings.find((w) => w.msg === 'sms.no_authorities');
+  assert.ok(warned, 'sms.no_authorities must be logged');
+  assert.equal(warned.fields.authorities_total, 1);
+  assert.equal(warned.fields.state, 'Lagos');
+  assert.match(warned.fields.hint, /none covers this state and LGA/);
+});
+
+test('authority SMS: a failing contact count never fails the approval event', async () => {
+  // The count exists only to word the warning. If it throws, the event must
+  // still settle as "nobody to text" rather than being retried forever.
+  const repo = fakeRepo({ authorities: [] });
+  repo.countAuthorities = async () => {
+    throw new Error('connection reset');
+  };
+  const sms = fakeSms();
+  const warnings = [];
+  const capture = { ...logger, warn: (msg, fields) => warnings.push({ msg, fields }) };
+  const summary = await createAuthoritySms({ repo, sms, logger: capture }).notifyApproved(report);
+
+  assert.equal(summary.sent, 0);
+  const warned = warnings.find((w) => w.msg === 'sms.no_authorities');
+  assert.ok(warned, 'sms.no_authorities must still be logged');
+  assert.equal(warned.fields.authorities_total, null);
+  // Unknown total: the wording falls back to the per-area case rather than
+  // asserting an empty table it could not confirm.
+  assert.match(warned.fields.hint, /none covers this state and LGA/);
+});

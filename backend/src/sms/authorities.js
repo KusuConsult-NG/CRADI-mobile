@@ -86,6 +86,28 @@ export function createAuthoritySms({ repo, sms, logger = defaultLog, now = Date.
       });
     }
     const authorities = await repo.findAuthorities(report.lga, report.state, perEvent);
+    if (authorities.length === 0) {
+      // An approved report that texts nobody is silent by nature: nothing
+      // fails, no row is written, and the gap only shows up as an emergency
+      // desk that never heard about a hazard. Say so, and say which of the
+      // two cases it is, because the fix differs: an empty table means the
+      // whole SMS path is dormant and someone must add contacts; a populated
+      // one means this particular place has no desk yet.
+      const total = await repo
+        .countAuthorities()
+        .catch(() => null); // never let the diagnostic itself fail the event
+      logger.warn('sms.no_authorities', {
+        report_id: report.id,
+        lga: report.lga,
+        state: report.state ?? null,
+        authorities_total: total,
+        hint:
+          total === 0
+            ? 'No authority contacts exist at all, so approving a report texts nobody. Add them in the admin panel under Authorities.'
+            : 'Contacts exist but none covers this state and LGA. Add one in the admin panel under Authorities.',
+      });
+      return { sent: 0, note: total === 0 ? 'no authorities configured' : 'no authority covers this area' };
+    }
 
     const text = authoritySmsText(report);
     const area = { lga: smsArea(report.lga), state: smsArea(report.state) };
