@@ -108,7 +108,38 @@ void main() {
 
   group('Password Validation', () {
     test('valid strong password', () {
-      expect(Validators.validatePassword('MyP@ss1234', englishL10n), isNull);
+      expect(Validators.validatePassword('MyP@ssw0rd', englishL10n), isNull);
+    });
+
+    // validatePassword delegates to PasswordValidator, so the three rules the
+    // old inline copy lacked apply everywhere a password is set.
+    test('rejects a run of sequential characters', () {
+      expect(Validators.validatePassword('MyP@ss1234', englishL10n), isNotNull);
+      expect(
+        Validators.validatePassword('P@sswordabc1', englishL10n),
+        isNotNull,
+      );
+    });
+
+    // PasswordValidator's common-password list is currently unreachable
+    // through validate(): every entry ('password123', 'qwerty123', …) lacks a
+    // special character, so that rule rejects them first. The list only bites
+    // via isCommonPassword(), which the strength meter uses.
+    test('common passwords are rejected, whichever rule catches them', () {
+      for (final p in ['password123', 'qwerty123', 'admin123', 'letmein']) {
+        expect(
+          Validators.validatePassword(p, englishL10n),
+          isNotNull,
+          reason: p,
+        );
+      }
+    });
+
+    test('rejects an over-long password', () {
+      expect(
+        Validators.validatePassword('Aa1@${'x' * 130}', englishL10n),
+        isNotNull,
+      );
     });
 
     test('null password', () {
