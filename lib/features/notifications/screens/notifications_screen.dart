@@ -38,13 +38,18 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   /// Marks [notif] read, then opens what it is about (the push text is
   /// generic; the details are shown in the app).
   Future<void> _open(Map<String, dynamic> notif, {required bool isRead}) async {
-    if (!isRead) {
-      await _notificationService.markAsRead(notif['id'] as String);
-      await _loadNotifications();
-    }
-    if (!mounted) return;
+    // Navigate first. Marking the entry read is bookkeeping: it writes to
+    // Hive and reloads the list, and while those were awaited ahead of the
+    // push, anything that made them slow or fail — a stalled box, a storage
+    // error — swallowed the tap entirely and the row looked dead. Opening
+    // what the entry is about is the thing the user asked for, so it does
+    // not wait on housekeeping.
     final route = notificationRouteFor(notif);
     if (route != null) context.push(route);
+    if (isRead) return;
+    await _notificationService.markAsRead(notif['id'] as String);
+    if (!mounted) return;
+    await _loadNotifications();
   }
 
   Future<void> _markAllAsRead() async {
