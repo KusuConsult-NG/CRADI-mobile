@@ -205,7 +205,7 @@ class AppLocalizationsYo extends AppLocalizations {
   String get onlineJustNow => 'Lórí ayélujára • Nísinsìnyí';
 
   @override
-  String get active => 'ń ṣiṣẹ́';
+  String get active => 'Ń ṣiṣẹ́';
 
   @override
   String get pending => 'Ń Dúró';

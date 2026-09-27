@@ -64,7 +64,7 @@
   "validation_maxLength": "E no fit pass {length} characters",
   "syncStatus": "SYNC STATUS",
   "onlineJustNow": "Online • Just now",
-  "active": "active",
+  "active": "Active",
   "pending": "Pending",
   "verified": "Don Confam",
   "approved": "Approved",

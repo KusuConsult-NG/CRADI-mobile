@@ -209,16 +209,34 @@ export async function typeNth(page, index, text) {
  * painted thumb does nothing) but the widget does react to its `change`
  * event. [fraction] is 0..1 of the slider's range.
  */
-export async function setRange(page, fraction) {
-    return page.evaluate((f) => {
-        const el = document.querySelector('flt-semantics input[type=range]');
-        if (!el) return null;
-        const min = Number(el.min || 0);
-        const max = Number(el.max || 1);
-        el.value = String(Math.round(min + (max - min) * f));
-        el.dispatchEvent(new Event('change', { bubbles: true }));
-        return el.value;
-    }, fraction);
+/**
+ * Drives a Flutter `Slider`, which the engine publishes as
+ * `<input type=range>`. The engine never reads that element's value as a
+ * position: on every `change` it compares the new value with the one it last
+ * wrote and fires a single `increase` / `decrease` action. So one assignment
+ * moves the slider one step, however far it is moved, and the element is
+ * rewritten back to the engine's own surrogate value on the next frame.
+ *
+ * `fraction` picks the direction: >= 0.5 steps up, below it steps down.
+ * Returns the number of steps that were accepted, or null when there is no
+ * slider on screen.
+ */
+export async function setRange(page, fraction, steps = 6) {
+    const up = fraction >= 0.5;
+    let moved = 0;
+    for (let i = 0; i < steps; i++) {
+        const ok = await page.evaluate((goUp) => {
+            const el = document.querySelector('flt-semantics input[type=range]');
+            if (!el) return null;
+            el.value = String(Number(el.value) + (goUp ? 1 : -1));
+            el.dispatchEvent(new Event('change', { bubbles: true }));
+            return true;
+        }, up);
+        if (ok === null) return moved === 0 ? null : moved;
+        moved += 1;
+        await page.waitForTimeout(250);
+    }
+    return moved;
 }
 
 export async function scroll(page, dy = 400) {

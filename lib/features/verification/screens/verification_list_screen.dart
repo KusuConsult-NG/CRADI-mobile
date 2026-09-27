@@ -6,14 +6,13 @@ import 'package:climate_app/core/constants/app_config.dart';
 import 'package:climate_app/core/theme/app_colors.dart';
 import 'package:climate_app/features/verification/screens/verification_detail_screen.dart';
 import 'package:climate_app/features/auth/providers/auth_provider.dart';
-import 'package:climate_app/features/reporting/providers/reporting_provider.dart'
-    show normalizeSeverity;
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:climate_app/core/l10n/l10n.dart';
 import 'package:climate_app/core/l10n/severity_label.dart';
+import 'package:climate_app/core/theme/severity_color.dart';
 import 'package:climate_app/core/widgets/severity_marker.dart';
 
 /// Verification list screen — shows reports pending community verification.
@@ -113,20 +112,7 @@ class _VerificationListScreenState extends State<VerificationListScreen> {
     color: _severityColor(severity),
   );
 
-  Color _severityColor(String? severity) {
-    switch (normalizeSeverity(severity)) {
-      case 'critical':
-        return Colors.red;
-      case 'high':
-        return Colors.deepOrange;
-      case 'medium':
-        return Colors.amber.shade700;
-      case 'low':
-        return Colors.green;
-      default:
-        return Colors.grey;
-    }
-  }
+  Color _severityColor(String? severity) => severityColor(severity);
 
   /// Roles allowed on /verification/request (see app_router).
   static bool _canRequestVerification(UserRole? role) =>

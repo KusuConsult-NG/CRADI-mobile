@@ -38,6 +38,23 @@ function note(pass, screen, kind, text) {
     console.log(`  ! [${kind}] ${screen}: ${text}`);
 }
 
+/**
+ * Polls the semantics tree until one of `matches` appears. Flutter repaints
+ * the canvas and rebuilds the semantics tree asynchronously, so a single
+ * `has()` immediately after a tap races the frame that shows the dialog.
+ */
+async function waitFor(page, matches, { timeout = 12000, step = 500 } = {}) {
+    const list = Array.isArray(matches) ? matches : [matches];
+    const deadline = Date.now() + timeout;
+    for (;;) {
+        for (const m of list) {
+            if (await has(page, m)) return m;
+        }
+        if (Date.now() >= deadline) return null;
+        await page.waitForTimeout(step);
+    }
+}
+
 async function newSession(browser, { width = 390, height = 844, fontScale = 1 } = {}) {
     const ctx = await browser.newContext({
         viewport: { width, height },
@@ -131,6 +148,9 @@ async function signedOutPass(browser) {
     screens.push(await visit(pass, page, rec, shots, 'landing', '#/landing'));
     screens.push(await visit(pass, page, rec, shots, 'login', '#/login', {
         after: async (p) => {
+            // The empty form, before the validation and bad-credentials
+            // states are driven into it.
+            await shots.take(p, 'login-empty');
             await typeNth(p, 0, 'not-an-email');
             await typeNth(p, 1, 'short');
             await tap(p, 'Login', { settle: 1500 });
@@ -245,6 +265,7 @@ async function rolePass(browser, role) {
     }
     if (role === 'admin') {
         screens.push(...(await reportWizard(pass, page, rec, shots, 'Drought')));
+        screens.push(...(await adminMenus(pass, page, rec, shots)));
     }
 
     // Open the first alert, the first knowledge guide and the first report.
@@ -319,19 +340,70 @@ async function rolePass(browser, role) {
     await ctx.close();
 }
 
+/**
+ * Opens the per-row overflow menus on the admin screens. Those menu entries
+ * draw real Material icons (AdminMenuEntry), which only exist once the menu
+ * is open — the closed screen shows nothing of them.
+ */
+async function adminMenus(pass, page, rec, shots) {
+    const out = [];
+    const openRowMenu = async (p) => {
+        // PopupMenuButton publishes MaterialLocalizations.showMenuTooltip.
+        for (const label of ['Show menu', 'Popup menu', 'menu']) {
+            if (await tap(p, { contains: label }, { settle: 1800 })) return true;
+        }
+        return false;
+    };
+    out.push(await visit(pass, page, rec, shots, 'admin-users-row-menu', '#/admin/users', {
+        after: async (p) => {
+            if (!(await openRowMenu(p))) {
+                note(pass, 'admin-users-row-menu', 'missing-control', 'could not open a user row overflow menu');
+                return;
+            }
+            await shots.take(p, 'admin-users-row-menu-open');
+            await p.keyboard.press('Escape');
+            await p.waitForTimeout(600);
+        },
+    }));
+    out.push(await visit(pass, page, rec, shots, 'admin-knowledge-row-menu', '#/admin/knowledge', {
+        after: async (p) => {
+            if (!(await openRowMenu(p))) {
+                note(pass, 'admin-knowledge-row-menu', 'missing-control', 'could not open a guide row overflow menu');
+                return;
+            }
+            await shots.take(p, 'admin-knowledge-row-menu-open');
+            await p.keyboard.press('Escape');
+            await p.waitForTimeout(600);
+        },
+    }));
+    return out;
+}
+
 async function reportWizard(pass, page, rec, shots, hazard) {
     const out = [];
     out.push(await visit(pass, page, rec, shots, `report-1-hazard-${hazard}`, '#/report', {
         after: async (p) => {
-            let picked = await tap(p, hazard, { settle: 900 });
-            for (let i = 0; !picked && i < 4; i++) {
-                await scroll(p, 260);
-                picked = await tap(p, hazard, { settle: 900 });
+            // A tile below the fold has a rect outside the viewport but is
+            // not clipped, so a click on it can land on whatever is really
+            // drawn at that point and select nothing — which leaves Continue
+            // disabled and the next four steps reporting phantom missing
+            // controls. Treat the tile as picked only once Continue actually
+            // leaves the hazard screen, and scroll and retry until it does.
+            const onHazardScreen = () => has(p, { contains: 'What type of incident' });
+            let advanced = false;
+            for (let round = 0; round < 8 && !advanced; round++) {
+                if (await tap(p, hazard, { settle: 900 })) {
+                    await shots.take(p, `report-1-hazard-selected-${hazard}`);
+                    if (!(await tap(p, 'Continue', { settle: 1800 }))) {
+                        note(pass, `report-1-hazard-${hazard}`, 'missing-control', 'no Continue button on the hazard screen');
+                        return;
+                    }
+                    advanced = !(await onHazardScreen());
+                }
+                if (!advanced) await scroll(p, 260);
             }
-            if (!picked) note(pass, `report-1-hazard-${hazard}`, 'missing-control', `hazard tile "${hazard}" not reachable`);
-            await shots.take(p, `report-1-hazard-selected-${hazard}`);
-            if (!(await tap(p, 'Continue', { settle: 1800 }))) {
-                note(pass, `report-1-hazard-${hazard}`, 'missing-control', 'no Continue button on the hazard screen');
+            if (!advanced) {
+                note(pass, `report-1-hazard-${hazard}`, 'missing-control', `hazard tile "${hazard}" could not be selected`);
             }
         },
     }));
@@ -360,8 +432,11 @@ async function reportWizard(pass, page, rec, shots, hazard) {
             await pickDropdown(p, 'Select State', 'Benue');
             await pickDropdown(p, 'Select LGA', 'Makurdi');
             await pickDropdown(p, 'Select Ward', 'Agan');
-            await shots.take(p, `report-3-location-filled-${hazard}`);
+            // The three pickers sit below the map, so scroll down to them
+            // before the shot — otherwise it records the step without
+            // showing what was chosen.
             await scroll(p, 500);
+            await shots.take(p, `report-3-location-filled-${hazard}`);
             if (!(await tap(p, { contains: 'Confirm & Continue' }, { settle: 2000 }))) {
                 if (!(await tap(p, { contains: 'Continue' }, { settle: 2000 }))) {
                     note(pass, `report-3-location-${hazard}`, 'missing-control', 'no Continue on the location screen');
@@ -386,9 +461,23 @@ async function reportWizard(pass, page, rec, shots, hazard) {
             await shots.take(p, `report-5-review-scrolled-${hazard}`);
             if (!(await tap(p, { contains: 'Submit Report' }, { settle: 5000 }))) {
                 note(pass, `report-5-review-${hazard}`, 'missing-control', 'no Submit Report button on the review screen');
-            } else if (!(await has(p, { contains: 'Report Submitted' }))) {
-                // The success screen is a modal dialog over the review page.
-                note(pass, `report-5-review-${hazard}`, 'submit-failed', 'no "Report Submitted" dialog after Submit');
+            } else {
+                // The success screen is a modal Dialog drawn over the review
+                // page, so the route does not change and the review page's own
+                // labels stay in the tree. Wait for the dialog to paint, and
+                // accept any of the three things it can say: the online
+                // success title, the offline "saved for later" title, or the
+                // "Return to Dashboard" button that only that dialog carries.
+                const seen = await waitFor(p, [
+                    { contains: 'Report Submitted' },
+                    { contains: 'Saved for Later' },
+                    { contains: 'Return to Dashboard' },
+                ], { timeout: 15000 });
+                if (!seen) {
+                    note(pass, `report-5-review-${hazard}`, 'submit-failed', 'no submission-result dialog after Submit');
+                } else {
+                    await shots.take(p, `report-5-submitted-${hazard}`);
+                }
             }
         },
     }));
@@ -482,7 +571,14 @@ async function languagePass(browser) {
             if (tr.length === 0) continue;
             const identical = tr.filter((t) => en.has(t) && /[a-z]/i.test(t) && t.length > 3);
             const ratio = identical.length / tr.length;
-            if (ratio > 0.8) {
+            // Nigerian Pidgin deliberately keeps about a third of the strings
+            // as their English spelling ("Home", "Alerts", "Report",
+            // "Settings", "History"), so a short screen made only of those is
+            // correct, not untranslated. Flagging it would make the report
+            // untrustworthy, so only the other three locales get the
+            // whole-screen check; Pidgin still gets the per-label record
+            // below, which is information rather than a finding.
+            if (ratio > 0.8 && lang !== 'Pidgin') {
                 note(pass, `${lang}/${screen}`, 'untranslated', `${identical.length}/${tr.length} labels identical to English`);
             } else if (identical.length > 0) {
                 results.findings.push({

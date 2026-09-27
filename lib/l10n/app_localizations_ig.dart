@@ -205,7 +205,7 @@ class AppLocalizationsIg extends AppLocalizations {
   String get onlineJustNow => 'Na ịntanetị • Ugbu a';
 
   @override
-  String get active => 'na-arụ ọrụ';
+  String get active => 'Na-arụ ọrụ';
 
   @override
   String get pending => 'Na-eche';

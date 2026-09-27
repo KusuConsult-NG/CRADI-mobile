@@ -10,6 +10,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:climate_app/core/constants/hazards.dart';
 import 'package:climate_app/core/l10n/severity_label.dart';
+import 'package:climate_app/core/theme/severity_color.dart';
 import 'package:climate_app/shared/widgets/custom_button.dart';
 import 'package:climate_app/features/verification/providers/reports_status_provider.dart';
 import 'package:climate_app/features/auth/providers/auth_provider.dart';
@@ -301,8 +302,13 @@ class _ReportReviewScreenState extends State<ReportReviewScreen> {
                             ),
                             _buildListItem(
                               icon: Icons.warning,
-                              iconColor: Colors.orange,
-                              iconBg: Colors.orange.shade50,
+                              // The icon takes the severity's own colour, so
+                              // a Critical report is not reviewed under a
+                              // calm orange one.
+                              iconColor: severityColor(provider.severity),
+                              iconBg: severityColor(
+                                provider.severity,
+                              ).withValues(alpha: 0.1),
                               label: context.l10n.severityLevelLabel,
                               value: provider.severity != null
                                   ? severityLabel(

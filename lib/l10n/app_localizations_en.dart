@@ -206,7 +206,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get onlineJustNow => 'Online • Just now';
 
   @override
-  String get active => 'active';
+  String get active => 'Active';
 
   @override
   String get pending => 'Pending';

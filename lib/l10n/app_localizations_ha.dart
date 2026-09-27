@@ -207,7 +207,7 @@ class AppLocalizationsHa extends AppLocalizations {
   String get onlineJustNow => 'Kan Layi • Yanzu';
 
   @override
-  String get active => 'mai aiki';
+  String get active => 'Mai aiki';
 
   @override
   String get pending => 'Ana Jira';

@@ -491,7 +491,7 @@ abstract class AppLocalizations {
   /// UI text on the home screen.
   ///
   /// In en, this message translates to:
-  /// **'active'**
+  /// **'Active'**
   String get active;
 
   /// UI text on the home screen, reports status screen.
