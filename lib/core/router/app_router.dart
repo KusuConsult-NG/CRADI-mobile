@@ -113,7 +113,10 @@ GoRouter createRouter(BuildContext context) {
           // says there is no code left to ask for.
           final email = state.uri.queryParameters['email'] ?? '';
           final recovery = state.uri.queryParameters['recovery'] == '1';
-          return ResetPasswordScreen(email: email, hasRecoverySession: recovery);
+          return ResetPasswordScreen(
+            email: email,
+            hasRecoverySession: recovery,
+          );
         },
       ),
       GoRoute(

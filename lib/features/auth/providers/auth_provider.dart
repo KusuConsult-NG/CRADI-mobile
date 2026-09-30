@@ -15,7 +15,8 @@ import 'package:climate_app/core/services/biometric_service.dart';
 import 'package:climate_app/core/services/device_fingerprint_service.dart';
 import 'package:climate_app/core/services/fraud_detection_service.dart';
 import 'package:climate_app/core/constants/app_config.dart';
-import 'package:climate_app/core/router/route_guard.dart' show kPasswordResetRedirect;
+import 'package:climate_app/core/router/route_guard.dart'
+    show kPasswordResetRedirect;
 import 'package:climate_app/core/utils/validators.dart';
 import 'package:climate_app/core/l10n/l10n.dart';
 
@@ -1415,7 +1416,10 @@ class AuthProvider extends ChangeNotifier {
       notifyListeners();
       await _db.auth.updateUser(sb.UserAttributes(password: newPassword));
     } on sb.AuthException catch (e) {
-      ErrorHandler.logError(e, context: 'AuthProvider.completePasswordRecovery');
+      ErrorHandler.logError(
+        e,
+        context: 'AuthProvider.completePasswordRecovery',
+      );
       if (e is sb.AuthWeakPasswordException || e.code == 'weak_password') {
         throw AuthException((l) => l.authErrorResetWeakPassword);
       }
@@ -1429,7 +1433,10 @@ class AuthProvider extends ChangeNotifier {
           throw AuthException((l) => l.authErrorResetFailed);
       }
     } on Exception catch (e) {
-      ErrorHandler.logError(e, context: 'AuthProvider.completePasswordRecovery');
+      ErrorHandler.logError(
+        e,
+        context: 'AuthProvider.completePasswordRecovery',
+      );
       throw AuthException((l) => l.authErrorResetFailed);
     } finally {
       _recovering = false;
