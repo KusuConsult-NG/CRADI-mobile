@@ -143,9 +143,10 @@ both, so one mail serves both. Do not trim it down to one half.
 | Email confirmation | `/verify-otp` → `verifyOtpAndLogin` | `auth.verifyOTP(type: signup, email, token)` | **code** | **Confirm signup** | `{{ .Token }}` |
 | Resend confirmation | `/verify-otp`, and automatically after an `email_not_confirmed` login | `auth.resend(type: signup, email)` | **code** | **Confirm signup** | `{{ .Token }}` |
 | Sign-in | `/login` | `auth.signInWithPassword(email, password)` | — | — | — |
-| Password reset — send | `/forgot-password` (app), or Supabase → Users → *Send password recovery* | `auth.resetPasswordForEmail(email)` | **code + link** | **Reset Password** | `{{ .Token }}` **and** `{{ .TokenHash }}` |
+| Password reset — send | `/forgot-password` (app), or Supabase → Users → *Send password recovery* | `auth.resetPasswordForEmail(email, redirectTo: 'cradi://reset-password')` (the app; the dashboard sends none) | **code + link** | **Reset Password** | `{{ .Token }}` **and** `{{ .ConfirmationURL }}` |
 | Password reset — confirm (mobile app) | `/reset-password` in the app | `auth.verifyOTP(type: recovery, email, token)` then `auth.updateUser(password:)` | **code** | **Reset Password** | `{{ .Token }}` |
-| Password reset — confirm (browser) | admin panel `/reset-password` | `auth.verifyOtp({token_hash, type: 'recovery'})` (or `setSession` from an `#access_token` fragment) then `auth.updateUser({password})` | **link** | **Reset Password** | `{{ .TokenHash }}` |
+| Password reset — confirm (link, in the app) | `/reset-password?recovery=1` in the app | `supabase_flutter` consumes the callback → `passwordRecovery` event → `auth.updateUser(password:)` | **link** | **Reset Password** | `{{ .ConfirmationURL }}` |
+| Password reset — confirm (browser) | admin panel `/reset-password` | `auth.verifyOtp({token_hash, type: 'recovery'})` (or `setSession` from an `#access_token` fragment) then `auth.updateUser({password})` | **link** | **Reset Password** | `{{ .ConfirmationURL }}` |
 | Change sign-in email | Profile → email → `ProfileProvider.updateEmail` | `auth.updateUser(email:)` | **link** | **Change Email Address** (plus **Confirm Email Change** while *Secure email change* is on) | `{{ .ConfirmationURL }}` (the default) |
 | Session restore / refresh | automatic (`supabase_flutter` secure storage) | `POST /token?grant_type=refresh_token` | — | — | — |
 | Biometric unlock | lock screen | re-uses the persisted session, refreshes it if expired | — | — | — |
@@ -153,11 +154,32 @@ both, so one mail serves both. Do not trim it down to one half.
 | Admin panel sign-in | `https://cradi-mobile-admin-production.up.railway.app/login` | `auth.signInWithPassword` | — | — | — |
 | Phone / SMS OTP | **disabled in code** (`AuthProvider.phoneAuthEnabled = false`) | — | — | — | — |
 
-Everything the **mobile app** does is code-based. Two flows follow a **link**,
-and both links are built from the Site URL — which is why the Site URL is not
-cosmetic: the email change, and the browser half of password recovery.
+Everything the **mobile app** does is code-based **except** the link in the
+recovery mail, which the app now handles too (see below). The email change is
+the one remaining flow whose link is built from the Site URL — which is why the
+Site URL is still not cosmetic.
 
-Neither app ever passes `redirectTo` / `emailRedirectTo`. The admin panel keeps
+**Where a recovery link lands.** `resetPasswordForEmail` used to be called
+without `redirectTo`, so GoTrue built the link from the **Site URL** — the
+admin panel. App users who tapped it were shown a staff login screen they have
+no account for. `AuthProvider.sendPasswordResetEmail` now passes
+`redirectTo: cradi://reset-password` (`kPasswordResetRedirect`), so:
+
+* reset requested **in the app** → the link opens the app, `supabase_flutter`
+  establishes the recovery session, and the router parks on the reset screen
+  with only the new-password fields (`/reset-password?recovery=1`);
+* reset sent from the **Supabase dashboard** (staff) → no `redirectTo`, so the
+  link still resolves to the Site URL and the admin panel's `/reset-password`
+  page handles it, exactly as before;
+* the mail read on a **desktop** when the app requested it → `cradi://` will not
+  open, which is why the **code** stays in the template. Typing it in the app
+  is the fallback, and it always works.
+
+This is why the template below uses `{{ .ConfirmationURL }}` rather than a
+hand-built `{{ .SiteURL }}/reset-password?token_hash=…`: the hand-built link
+ignores `redirectTo` and always points at the admin panel.
+
+The admin panel keeps
 `detectSessionInUrl: false` on its shared Supabase client (turning it on would
 make every admin page try to consume tokens from its URL); its
 `/reset-password` page instead reads `token_hash` — or an `#access_token`
@@ -190,7 +212,10 @@ own. No OAuth provider is involved anywhere.
   * **Secure email change**: leave ON. The user then gets a confirmation link at
     *both* the old and the new address and must open both.
   * **Email OTP length: 6**, **Email OTP expiry: 3600 s**. The reset screen
-    rejects anything shorter than 6 characters.
+    rejects anything shorter than 6 characters and accepts up to 10, so a
+    longer OTP length set in the dashboard still works — but the wording in
+    the app and in the template below says "code", not "6-digit code", for
+    exactly that reason. Keep the two in step if you change it.
 * **Phone**: *Disabled*. `AuthProvider.phoneAuthEnabled` is `false`, and the
   login and registration screens hide every phone control behind it. Enabling
   the provider in the dashboard alone changes nothing — the constant has to be
@@ -221,39 +246,39 @@ these as-is.
 
 This one template serves **both** audiences and must keep both halves:
 
-* the **6-digit code** (`{{ .Token }}`) — for **mobile app users**. The app's
-  "Create New Password" screen asks for six digits and calls
-  `auth.verifyOTP(type: recovery)`. **Deleting the `{{ .Token }}` half breaks
-  password reset in the mobile app completely**; there is no link handler in
-  the app.
-* the **link** — for **staff using the browser** (admins, anyone without the
-  app). It points at the admin panel's `/reset-password` page, which exchanges
-  `{{ .TokenHash }}` (the hashed form of the same code) for a recovery session
-  and then updates the password. `{{ .SiteURL }}` resolves to the Site URL set
-  in section *a*, and the path must be on the Redirect URL allow list.
+* the **code** (`{{ .Token }}`) — for **mobile app users**, and the fallback
+  whenever the link cannot open the app (mail read on a desktop, a mail client
+  that strips custom schemes). The app's "Create New Password" screen accepts
+  it and calls `auth.verifyOTP(type: recovery)`. **Deleting the `{{ .Token }}`
+  half leaves anyone in that position with no way to reset at all.**
+* the **link** (`{{ .ConfirmationURL }}`) — which now goes wherever the reset
+  was *requested from*. Requested in the app, it opens the app; sent from the
+  Supabase dashboard, it lands on the admin panel's `/reset-password` page.
+  Both destinations must be on the Redirect URL allow list in section *a*
+  (`cradi://**` and the admin `/reset-password`), and both already are.
+
+> **Do not** replace it with `{{ .SiteURL }}/reset-password?token_hash={{ .TokenHash }}`.
+> A hand-built link ignores `redirectTo` and always points at the admin panel —
+> that is precisely the bug this template change fixes.
 
 ```html
 <h2>Reset your CRADI / EWER password</h2>
 
-<p><strong>Using the CRADI mobile app?</strong><br>
-Enter this code on the "Create New Password" screen:</p>
+<p><strong>Enter this code</strong> on the "Create New Password" screen in the
+CRADI app:</p>
 <p style="font-size:28px;font-weight:700;letter-spacing:6px;margin:24px 0">{{ .Token }}</p>
 
-<p><strong>Using a web browser (admin panel)?</strong><br>
-<a href="{{ .SiteURL }}/reset-password?token_hash={{ .TokenHash }}&amp;type=recovery">Choose a new password in your browser</a></p>
-<p style="font-size:12px;color:#666">If the link does not open, copy this address into your browser:<br>
-{{ .SiteURL }}/reset-password?token_hash={{ .TokenHash }}&amp;type=recovery</p>
+<p>Or, if you are reading this on the phone the app is installed on,
+<a href="{{ .ConfirmationURL }}">tap here to set a new password</a>.</p>
 
 <p>The code and the link are two forms of the same one-hour, single-use token —
 use whichever suits you. If you did not ask for a password reset, ignore this
 email — your password has not changed.</p>
 ```
 
-`{{ .Token }}` is the 6-digit OTP; `{{ .TokenHash }}` is its hashed form and is
-the value Supabase also embeds in `{{ .ConfirmationURL }}`. Using
-`{{ .TokenHash }}` in a link of our own — rather than `{{ .ConfirmationURL }}`
-— keeps the landing page under our control and avoids the extra
-`/auth/v1/verify` redirect hop.
+`{{ .Token }}` is the OTP the app's reset screen asks for; `{{ .ConfirmationURL }}`
+is GoTrue's own verify link, which honours the `redirectTo` the request carried
+and falls back to the Site URL when it carried none.
 
 **Change Email Address** and **Confirm Email Change**: leave the defaults
 (`{{ .ConfirmationURL }}`). This is the only flow that needs a working link, so
@@ -263,10 +288,12 @@ it is also the only one that depends on the Site URL above.
 sends a magic link or an invite. `reauthentication_needed` is mapped to a
 message in `ProfileProvider.updateEmail`, but no screen collects a reauth code.
 
-> After editing a template, send yourself a real reset from the app and read the
-> mail. It must contain **both** a 6-digit code and a link that starts with the
-> Site URL and `/reset-password?token_hash=`. If the only link is a bare
-> `.../auth/v1/verify?...`, the template was not saved.
+> After editing a template, send yourself a real reset **from the app** and read
+> the mail on the phone. It must contain **both** a numeric code and a link;
+> tapping the link must open the CRADI app on "Create New Password", not a
+> browser. Then send one from **Supabase → Users → Send password recovery** and
+> check that its link opens the admin panel's `/reset-password`. Both have to
+> work — they are the two audiences this one template serves.
 
 ### e. SMTP — **Project Settings → Authentication → SMTP Settings**
 

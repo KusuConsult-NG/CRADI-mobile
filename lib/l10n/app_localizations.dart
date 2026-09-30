@@ -3089,7 +3089,7 @@ abstract class AppLocalizations {
   /// Text after the reset code was requested; {email} is the address entered.
   ///
   /// In en, this message translates to:
-  /// **'If an account exists for {email}, we have sent a 6-digit reset code.\nEnter it on the next screen to choose a new password.'**
+  /// **'If an account exists for {email}, we have sent a reset code.\nEnter it on the next screen to choose a new password.'**
   String forgotEmailSentBody(String email);
 
   /// Button that opens the reset code screen (max ~20 chars).
@@ -3749,8 +3749,14 @@ abstract class AppLocalizations {
   /// Instructions on the reset password screen.
   ///
   /// In en, this message translates to:
-  /// **'Enter the 6-digit code from the reset email and choose a new secure password.'**
+  /// **'Enter the code from the reset email and choose a new secure password.'**
   String get resetBody;
+
+  /// Instructions on the reset screen when a recovery link was opened in the app, so no code is needed.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose a new secure password for your CRADI account.'**
+  String get resetRecoveryBody;
 
   /// Label of the reset code field.
   ///

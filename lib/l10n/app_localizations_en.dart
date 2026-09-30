@@ -1730,7 +1730,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String forgotEmailSentBody(String email) {
-    return 'If an account exists for $email, we have sent a 6-digit reset code.\nEnter it on the next screen to choose a new password.';
+    return 'If an account exists for $email, we have sent a reset code.\nEnter it on the next screen to choose a new password.';
   }
 
   @override
@@ -2145,7 +2145,11 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get resetBody =>
-      'Enter the 6-digit code from the reset email and choose a new secure password.';
+      'Enter the code from the reset email and choose a new secure password.';
+
+  @override
+  String get resetRecoveryBody =>
+      'Choose a new secure password for your CRADI account.';
 
   @override
   String get resetCodeLabel => 'Reset Code';

@@ -11,6 +11,7 @@ RouteGuardState guard({
   bool verified = true,
   bool? approved = true,
   bool onboarded = true,
+  bool recovering = false,
 }) => RouteGuardState(
   isInitialized: initialized,
   isAuthenticated: authenticated,
@@ -19,6 +20,7 @@ RouteGuardState guard({
   isVerified: verified,
   isApproved: approved,
   hasCompletedOnboarding: onboarded,
+  isPasswordRecoveryPending: recovering,
 );
 
 String? go(RouteGuardState s, String location) =>
@@ -305,5 +307,54 @@ void main() {
       expect(ReportsStatusScreen.tabIndexFor(null), 0);
       expect(ReportsStatusScreen.tabIndexFor('bogus'), 0);
     });
+  });
+
+  // A recovery link used to be built from the project's Site URL, which is the
+  // admin panel — app users who tapped it landed on a staff login screen. The
+  // link now opens the app, and these pin what happens once it has.
+  group('an open recovery session', () {
+    test('parks the app on the reset screen, whatever was asked for', () {
+      final s = guard(recovering: true);
+      expect(go(s, '/dashboard'), kPasswordRecoveryLocation);
+      expect(go(s, '/login'), kPasswordRecoveryLocation);
+      expect(go(s, '/settings'), kPasswordRecoveryLocation);
+    });
+
+    test('beats the biometric lock — the user is here because they are shut out', () {
+      final s = guard(recovering: true, locked: true);
+      expect(go(s, '/dashboard'), kPasswordRecoveryLocation);
+      expect(go(s, '/login'), kPasswordRecoveryLocation);
+    });
+
+    test('beats the offline screen, and an unapproved account still gets in', () {
+      expect(go(guard(recovering: true, offline: true), '/dashboard'),
+          kPasswordRecoveryLocation);
+      expect(go(guard(recovering: true, approved: false, verified: false), '/dashboard'),
+          kPasswordRecoveryLocation);
+    });
+
+    test('the reset screen itself is left alone, so there is no loop', () {
+      final s = guard(recovering: true);
+      expect(go(s, kPasswordRecoveryLocation), isNull);
+      expect(go(s, '/reset-password'), isNull);
+    });
+
+    test('waits for initialization rather than pre-empting it', () {
+      // The flag cannot be trusted before the provider has read its session.
+      expect(go(guard(initialized: false, recovering: true), '/dashboard'),
+          startsWith('/splash'));
+    });
+
+    test('with no recovery pending nothing changes', () {
+      expect(go(guard(), '/dashboard'), isNull);
+    });
+  });
+
+  // The link in the mail has to point at the app, and at a route that exists.
+  test('the recovery redirect is a deep link the app claims', () {
+    expect(kPasswordResetRedirect, startsWith('$kDeepLinkScheme://'));
+    expect(mapCustomSchemeLink(Uri.parse(kPasswordResetRedirect)),
+        '/reset-password');
+    expect(kPublicRoutes, contains('/reset-password'));
   });
 }

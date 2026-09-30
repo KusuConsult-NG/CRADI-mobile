@@ -2181,7 +2181,7 @@
   "@forgotEmailSentTitle": {
     "description": "Title after the reset code was requested."
   },
-  "forgotEmailSentBody": "If an account exists for {email}, we have sent a 6-digit reset code.\nEnter it on the next screen to choose a new password.",
+  "forgotEmailSentBody": "If an account exists for {email}, we have sent a reset code.\nEnter it on the next screen to choose a new password.",
   "@forgotEmailSentBody": {
     "description": "Text after the reset code was requested; {email} is the address entered.",
     "placeholders": {
@@ -2720,9 +2720,13 @@
   "@resetTitle": {
     "description": "Title of the reset password screen."
   },
-  "resetBody": "Enter the 6-digit code from the reset email and choose a new secure password.",
+  "resetBody": "Enter the code from the reset email and choose a new secure password.",
   "@resetBody": {
     "description": "Instructions on the reset password screen."
+  },
+  "resetRecoveryBody": "Choose a new secure password for your CRADI account.",
+  "@resetRecoveryBody": {
+    "description": "Instructions on the reset screen when a recovery link was opened in the app, so no code is needed."
   },
   "resetCodeLabel": "Reset Code",
   "@resetCodeLabel": {
