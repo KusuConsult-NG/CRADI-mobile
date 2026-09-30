@@ -228,43 +228,43 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen>
           ),
           const SizedBox(height: 32),
           if (!widget.hasRecoverySession) ...[
-          TextFormField(
-            controller: _emailController,
-            keyboardType: TextInputType.emailAddress,
-            decoration: _decoration(
-              context.l10n.emailAddress,
-              Icons.email_outlined,
+            TextFormField(
+              controller: _emailController,
+              keyboardType: TextInputType.emailAddress,
+              decoration: _decoration(
+                context.l10n.emailAddress,
+                Icons.email_outlined,
+              ),
+              validator: _validateEmail,
             ),
-            validator: _validateEmail,
-          ),
-          const SizedBox(height: 16),
-          TextFormField(
-            controller: _codeController,
-            keyboardType: TextInputType.number,
-            inputFormatters: [
-              FilteringTextInputFormatter.digitsOnly,
-              LengthLimitingTextInputFormatter(10),
-            ],
-            decoration: _decoration(
-              context.l10n.resetCodeLabel,
-              Icons.pin_outlined,
-              suffix: TextButton(
-                onPressed: _isSendingCode ? null : _sendCode,
-                child: Text(
-                  _isSendingCode
-                      ? context.l10n.resetSendingCode
-                      : context.l10n.resetSendCode,
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _codeController,
+              keyboardType: TextInputType.number,
+              inputFormatters: [
+                FilteringTextInputFormatter.digitsOnly,
+                LengthLimitingTextInputFormatter(10),
+              ],
+              decoration: _decoration(
+                context.l10n.resetCodeLabel,
+                Icons.pin_outlined,
+                suffix: TextButton(
+                  onPressed: _isSendingCode ? null : _sendCode,
+                  child: Text(
+                    _isSendingCode
+                        ? context.l10n.resetSendingCode
+                        : context.l10n.resetSendCode,
+                  ),
                 ),
               ),
+              validator: (value) {
+                if (value == null || value.trim().length < 6) {
+                  return context.l10n.resetCodeRequired;
+                }
+                return null;
+              },
             ),
-            validator: (value) {
-              if (value == null || value.trim().length < 6) {
-                return context.l10n.resetCodeRequired;
-              }
-              return null;
-            },
-          ),
-          const SizedBox(height: 16),
+            const SizedBox(height: 16),
           ],
           TextFormField(
             controller: _passwordController,
