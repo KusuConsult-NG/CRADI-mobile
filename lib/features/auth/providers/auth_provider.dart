@@ -15,6 +15,7 @@ import 'package:climate_app/core/services/biometric_service.dart';
 import 'package:climate_app/core/services/device_fingerprint_service.dart';
 import 'package:climate_app/core/services/fraud_detection_service.dart';
 import 'package:climate_app/core/constants/app_config.dart';
+import 'package:climate_app/core/router/route_guard.dart' show kPasswordResetRedirect;
 import 'package:climate_app/core/utils/validators.dart';
 import 'package:climate_app/core/l10n/l10n.dart';
 
@@ -139,6 +140,10 @@ class AuthProvider extends ChangeNotifier {
   // updateUser → signOut); auth events are ignored meanwhile. Only that
   // method sets it, so it can never stay raised past the reset.
   bool _recovering = false;
+  // Set when a recovery link is opened in the app: the session that arrives
+  // with it is valid, but the user still has to choose a new password before
+  // anything else. Cleared by [completePasswordRecovery] / [logout].
+  bool _passwordRecoveryPending = false;
   // Set when the profile row says the account is disabled.
   bool _accountDisabled = false;
 
@@ -272,6 +277,10 @@ class AuthProvider extends ChangeNotifier {
   bool get hasCompletedOnboarding => _hasCompletedOnboarding;
   bool get isLocked => _isLocked;
 
+  /// True between opening a recovery link and setting the new password.
+  /// The router parks the app on the reset screen while it holds.
+  bool get isPasswordRecoveryPending => _passwordRecoveryPending;
+
   /// Email of the account waiting for OTP confirmation, if any.
   String? get pendingEmail => _pendingEmail ?? _currentUser?.email;
 
@@ -360,7 +369,11 @@ class AuthProvider extends ChangeNotifier {
           await _handleSignedOut();
           return;
         }
+        // Raised *after* the sign-in: _ensureSignedIn may sign a stale
+        // session out first, and that clears the flag again.
         await _ensureSignedIn(session.user);
+        _passwordRecoveryPending = true;
+        notifyListeners();
         return;
       case sb.AuthChangeEvent.signedOut:
         await _handleSignedOut();
@@ -420,6 +433,7 @@ class AuthProvider extends ChangeNotifier {
       developer.log('Ignoring stale signedOut event', name: 'AuthProvider');
       return;
     }
+    _passwordRecoveryPending = false;
     final profileSub = _profileSub;
     _profileSub = null;
     _resetUserState();
@@ -1290,7 +1304,14 @@ class AuthProvider extends ChangeNotifier {
     try {
       _isLoading = true;
       notifyListeners();
-      await _db.auth.resetPasswordForEmail(email.trim().toLowerCase());
+      await _db.auth.resetPasswordForEmail(
+        email.trim().toLowerCase(),
+        // Without this the link in the mail is built from the project's Site
+        // URL, which is the admin panel — app users who tapped it landed on a
+        // staff login screen. On web there is no app to open, so the Site URL
+        // (the browser reset page) remains the right destination.
+        redirectTo: kIsWeb ? null : kPasswordResetRedirect,
+      );
       _isLoading = false;
       notifyListeners();
     } on sb.AuthException catch (e) {
@@ -1364,6 +1385,61 @@ class AuthProvider extends ChangeNotifier {
       } on Exception catch (_) {}
       _recovering = false;
       _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  /// Abandons a recovery session without changing the password (the user
+  /// closed the reset screen). The session is dropped so the app does not
+  /// stay signed in on the strength of an email link alone.
+  Future<void> cancelPasswordRecovery() async {
+    _passwordRecoveryPending = false;
+    notifyListeners();
+    try {
+      if (_db.getCurrentUser() != null) await _db.logout();
+    } on Exception catch (e) {
+      ErrorHandler.logError(e, context: 'AuthProvider.cancelPasswordRecovery');
+    }
+  }
+
+  /// Sets a new password for a recovery session that arrived via the link in
+  /// the recovery email (rather than via a typed code).
+  ///
+  /// The session is already the user's, so there is no code to verify — only
+  /// the password to change. As with [confirmPasswordReset] the session is
+  /// dropped afterwards, so the next sign-in uses the new password.
+  Future<void> completePasswordRecovery(String newPassword) async {
+    try {
+      _isLoading = true;
+      _recovering = true;
+      notifyListeners();
+      await _db.auth.updateUser(sb.UserAttributes(password: newPassword));
+    } on sb.AuthException catch (e) {
+      ErrorHandler.logError(e, context: 'AuthProvider.completePasswordRecovery');
+      if (e is sb.AuthWeakPasswordException || e.code == 'weak_password') {
+        throw AuthException((l) => l.authErrorResetWeakPassword);
+      }
+      switch (e.code) {
+        case 'same_password':
+          throw AuthException((l) => l.authErrorResetSamePassword);
+        case 'session_not_found':
+        case 'bad_jwt':
+          throw AuthException((l) => l.authErrorResetCodeInvalid);
+        default:
+          throw AuthException((l) => l.authErrorResetFailed);
+      }
+    } on Exception catch (e) {
+      ErrorHandler.logError(e, context: 'AuthProvider.completePasswordRecovery');
+      throw AuthException((l) => l.authErrorResetFailed);
+    } finally {
+      _recovering = false;
+      _isLoading = false;
+      // Cleared whether or not the change succeeded: leaving it raised would
+      // trap the user on the reset screen with a session they cannot use.
+      _passwordRecoveryPending = false;
+      try {
+        if (_db.getCurrentUser() != null) await _db.logout();
+      } on Exception catch (_) {}
       notifyListeners();
     }
   }

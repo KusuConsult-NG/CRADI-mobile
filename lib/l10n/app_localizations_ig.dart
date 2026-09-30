@@ -1714,7 +1714,7 @@ class AppLocalizationsIg extends AppLocalizations {
 
   @override
   String forgotEmailSentBody(String email) {
-    return 'Ọ bụrụ na akaụntụ dị maka $email, anyị ezigala koodu ntọghachi nwere ọnụọgụ 6.\nTinye ya na ihuenyo na-esote ka ị họrọ paswọọdụ ọhụrụ.';
+    return 'Ọ bụrụ na akaụntụ dị maka $email, anyị ezigala koodu ntọghachi.\nTinye ya na ihuenyo na-esote ka ị họrọ paswọọdụ ọhụrụ.';
   }
 
   @override
@@ -2128,7 +2128,11 @@ class AppLocalizationsIg extends AppLocalizations {
 
   @override
   String get resetBody =>
-      'Tinye koodu nwere ọnụọgụ 6 sitere n\'imel ntọghachi ma họrọ paswọọdụ ọhụrụ siri ike.';
+      'Tinye koodu sitere n\'imel ntọghachi ma họrọ paswọọdụ ọhụrụ siri ike.';
+
+  @override
+  String get resetRecoveryBody =>
+      'Họrọ paswọọdụ ọhụrụ siri ike maka akaụntụ CRADI gị.';
 
   @override
   String get resetCodeLabel => 'Koodu Ntọghachi';

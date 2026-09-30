@@ -1739,7 +1739,7 @@ class AppLocalizationsHa extends AppLocalizations {
 
   @override
   String forgotEmailSentBody(String email) {
-    return 'Idan akwai asusu na $email, mun aika lambar sake saiti mai lambobi 6.\nShigar da ita a shafi na gaba don zaɓar sabuwar kalmar sirri.';
+    return 'Idan akwai asusu na $email, mun aika lambar sake saiti.\nShigar da ita a shafi na gaba don zaɓar sabuwar kalmar sirri.';
   }
 
   @override
@@ -2156,7 +2156,11 @@ class AppLocalizationsHa extends AppLocalizations {
 
   @override
   String get resetBody =>
-      'Shigar da lambar mai lambobi 6 daga imel ɗin sake saiti kuma zaɓi sabuwar kalmar sirri mai tsaro.';
+      'Shigar da lambar daga imel ɗin sake saiti kuma zaɓi sabuwar kalmar sirri mai tsaro.';
+
+  @override
+  String get resetRecoveryBody =>
+      'Zaɓi sabuwar kalmar sirri mai tsaro don asusunka na CRADI.';
 
   @override
   String get resetCodeLabel => 'Lambar Sake Saiti';

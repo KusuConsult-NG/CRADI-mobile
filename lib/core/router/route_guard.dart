@@ -11,6 +11,7 @@ class RouteGuardState {
     required this.isVerified,
     required this.isApproved,
     required this.hasCompletedOnboarding,
+    this.isPasswordRecoveryPending = false,
   });
 
   final bool isInitialized;
@@ -20,6 +21,10 @@ class RouteGuardState {
   final bool isVerified;
   final bool? isApproved;
   final bool hasCompletedOnboarding;
+
+  /// A recovery link was opened in the app and the new password has not been
+  /// set yet. Nothing else may be reached until it is.
+  final bool isPasswordRecoveryPending;
 }
 
 /// Routes reachable without a session.
@@ -52,6 +57,18 @@ const Set<String> kAuthEntryRoutes = {
 
 /// Custom URL scheme used by shared links (`cradi://report/<id>`).
 const String kDeepLinkScheme = 'cradi';
+
+/// Where the link in a password-recovery email sends the user.
+///
+/// Passed as `redirectTo` on `resetPasswordForEmail` so the destination is
+/// this app rather than whatever the project's Site URL happens to be — that
+/// default is the admin panel, and app users who tapped the link landed on a
+/// staff login screen they have no account for. Covered by the `cradi://**`
+/// entry in the project's redirect allow list (docs/DEPLOYMENT.md § 1a.a).
+const String kPasswordResetRedirect = '$kDeepLinkScheme://reset-password';
+
+/// Location that collects the new password once a recovery session exists.
+const String kPasswordRecoveryLocation = '/reset-password?recovery=1';
 
 /// Whether [path] stays reachable while offline.
 ///
@@ -120,6 +137,14 @@ String? _redirectOnce(RouteGuardState s, Uri uri) {
     if (path == '/splash') return null;
     if (path == '/') return '/splash';
     return _withFrom('/splash', location);
+  }
+
+  // 0a. A recovery link was opened: the only thing to do is set a new
+  //     password. This runs before the lock and offline steps — the user
+  //     arrived from an email because they cannot get in, so a biometric
+  //     lock screen would be a dead end.
+  if (s.isPasswordRecoveryPending && path != '/reset-password') {
+    return kPasswordRecoveryLocation;
   }
 
   final isPublic = kPublicRoutes.contains(path);

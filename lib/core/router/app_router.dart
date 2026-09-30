@@ -75,6 +75,7 @@ GoRouter createRouter(BuildContext context) {
         isVerified: authProvider.isVerified,
         isApproved: authProvider.isApproved,
         hasCompletedOnboarding: authProvider.hasCompletedOnboarding,
+        isPasswordRecoveryPending: authProvider.isPasswordRecoveryPending,
       ),
       state.uri,
     ),
@@ -106,10 +107,13 @@ GoRouter createRouter(BuildContext context) {
       GoRoute(
         path: '/reset-password',
         builder: (context, state) {
-          // Recovery uses the 6-digit code Supabase emails; the screen
-          // collects it together with the new password.
+          // Two ways in. Typing the code Supabase emails: the screen collects
+          // it together with the new password. Or tapping the link in the same
+          // mail, which hands the app a recovery session — `recovery=1` then
+          // says there is no code left to ask for.
           final email = state.uri.queryParameters['email'] ?? '';
-          return ResetPasswordScreen(email: email);
+          final recovery = state.uri.queryParameters['recovery'] == '1';
+          return ResetPasswordScreen(email: email, hasRecoverySession: recovery);
         },
       ),
       GoRoute(

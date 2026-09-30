@@ -11,17 +11,31 @@ import 'package:climate_app/core/utils/validators.dart';
 import 'package:climate_app/core/l10n/l10n.dart';
 import 'package:climate_app/core/utils/screen_security.dart';
 
-/// Password reset screen.
+/// Password reset screen, in either of the two shapes a recovery mail allows.
 ///
-/// Supabase emails a 6-digit recovery code (see [ForgotPasswordScreen]).
-/// The user enters that code with a new password here; the reset is
-/// completed by [AuthProvider.confirmPasswordReset]. A new code can be
-/// requested from this screen as well.
+/// **Typed code** ([hasRecoverySession] false): Supabase emails a recovery
+/// code (see [ForgotPasswordScreen]); the user enters it with a new password
+/// and [AuthProvider.confirmPasswordReset] completes the reset. A new code can
+/// be requested from here.
+///
+/// **Opened link** ([hasRecoverySession] true): the same mail's link opens the
+/// app and `supabase_flutter` establishes a recovery session from it, so the
+/// email and code fields have nothing left to ask — only the new password,
+/// which [AuthProvider.completePasswordRecovery] applies. The router parks the
+/// app here for as long as that session is unresolved.
 class ResetPasswordScreen extends StatefulWidget {
   /// Pre-filled email address (from the forgot-password step).
   final String email;
 
-  const ResetPasswordScreen({super.key, this.email = ''});
+  /// True when a recovery link already signed the user in, so there is no
+  /// code to collect.
+  final bool hasRecoverySession;
+
+  const ResetPasswordScreen({
+    super.key,
+    this.email = '',
+    this.hasRecoverySession = false,
+  });
 
   @override
   State<ResetPasswordScreen> createState() => _ResetPasswordScreenState();
@@ -100,11 +114,16 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen>
     setState(() => _isLoading = true);
 
     try {
-      await context.read<AuthProvider>().confirmPasswordReset(
-        email: _emailController.text.trim(),
-        code: _codeController.text.trim(),
-        newPassword: _passwordController.text,
-      );
+      final auth = context.read<AuthProvider>();
+      if (widget.hasRecoverySession) {
+        await auth.completePasswordRecovery(_passwordController.text);
+      } else {
+        await auth.confirmPasswordReset(
+          email: _emailController.text.trim(),
+          code: _codeController.text.trim(),
+          newPassword: _passwordController.text,
+        );
+      }
       if (mounted) {
         setState(() {
           _isSuccess = true;
@@ -145,7 +164,15 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen>
         leading: IconButton(
           tooltip: context.l10n.close,
           icon: const Icon(Icons.close, color: Colors.black),
-          onPressed: () => context.go('/login'),
+          // Leaving with a recovery session still open would bounce straight
+          // back here (the router parks on this screen while it holds), so
+          // the session is dropped first.
+          onPressed: () async {
+            if (widget.hasRecoverySession && !_isSuccess) {
+              await context.read<AuthProvider>().cancelPasswordRecovery();
+            }
+            if (context.mounted) context.go('/login');
+          },
         ),
       ),
       body: SafeArea(
@@ -190,7 +217,9 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen>
           ),
           const SizedBox(height: 12),
           Text(
-            context.l10n.resetBody,
+            widget.hasRecoverySession
+                ? context.l10n.resetRecoveryBody
+                : context.l10n.resetBody,
             style: GoogleFonts.lexend(
               fontSize: 16,
               color: Colors.grey.shade600,
@@ -198,6 +227,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen>
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 32),
+          if (!widget.hasRecoverySession) ...[
           TextFormField(
             controller: _emailController,
             keyboardType: TextInputType.emailAddress,
@@ -235,6 +265,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen>
             },
           ),
           const SizedBox(height: 16),
+          ],
           TextFormField(
             controller: _passwordController,
             obscureText: _obscurePassword,

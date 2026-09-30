@@ -1726,7 +1726,7 @@ class AppLocalizationsPcm extends AppLocalizations {
 
   @override
   String forgotEmailSentBody(String email) {
-    return 'If account dey for $email, we don send 6-digit reset code.\nPut am for di next screen to choose new password.';
+    return 'If account dey for $email, we don send reset code.\nPut am for di next screen to choose new password.';
   }
 
   @override
@@ -2139,7 +2139,11 @@ class AppLocalizationsPcm extends AppLocalizations {
 
   @override
   String get resetBody =>
-      'Put di 6-digit code wey dey di reset email and choose new strong password.';
+      'Put di code wey dey di reset email and choose new strong password.';
+
+  @override
+  String get resetRecoveryBody =>
+      'Choose new strong password for your CRADI account.';
 
   @override
   String get resetCodeLabel => 'Reset Code';
