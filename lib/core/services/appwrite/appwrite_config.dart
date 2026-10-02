@@ -20,6 +20,17 @@ class AppwriteConfig {
     defaultValue: 'cradi',
   );
 
+  /// Whether `/preview` may be used to ask for a smaller render.
+  ///
+  /// Off by default: image transformations are gated by plan on Appwrite
+  /// Cloud, and asking for one where it is not included answers with an
+  /// error instead of the image — so an unconditional `/preview` would
+  /// turn every thumbnail into a broken image. Self-hosted has no such
+  /// limit, and a paid Cloud plan can turn this on at build time.
+  static const bool imageTransformsEnabled = bool.fromEnvironment(
+    'APPWRITE_IMAGE_TRANSFORMS',
+  );
+
   static bool get isConfigured => endpoint.isNotEmpty && projectId.isNotEmpty;
 
   // ─────────────────────── Functions ──────────────────────────────────────

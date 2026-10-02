@@ -233,6 +233,39 @@ abstract interface class DataBackend {
     int quality = 85,
   });
 
+  /// Uploads the small thumbnail that belongs beside the image at
+  /// [storagePath] — the **photo's** path, not the thumbnail's.
+  ///
+  /// The backend chooses where the thumbnail lands and under what name,
+  /// because that is exactly the decision [thumbUrlFor] has to reverse.
+  /// Supabase addresses an object by its path, so a `_thumb.jpg` sibling
+  /// is recoverable from the URL; Appwrite addresses a file by a digest
+  /// id, from which no path can be recovered, so it derives the
+  /// thumbnail's id from the photo's instead. Neither convention
+  /// survives being imposed by the caller.
+  Future<String> uploadThumbnailFromPath({
+    required String bucketId,
+    required String storagePath,
+    required File file,
+    int maxDimension = 320,
+    int quality = 60,
+  });
+
+  /// The thumbnail stored beside the image at [url], or null when there
+  /// is none to derive — [url] was not written by this backend, or is
+  /// already a thumbnail.
+  ///
+  /// A thumbnail that was never uploaded 404s, so callers keep [url] as
+  /// a fallback rather than treating a non-null answer as a promise.
+  String? thumbUrlFor(String url);
+
+  /// [url], asked for at a smaller size.
+  ///
+  /// Returns [url] unchanged when the backend has no way to resize, or
+  /// has one that is not configured — so this is a delivery
+  /// optimisation and never a correctness requirement.
+  String displayUrl(String url, {int? width, int? quality});
+
   Future<void> deleteFile({
     required String bucketId,
     required String storagePath,

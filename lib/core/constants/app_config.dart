@@ -20,14 +20,6 @@ class AppConfig {
   /// Optional. Crash reporting is disabled when empty.
   static const String sentryDsn = String.fromEnvironment('SENTRY_DSN');
 
-  /// Optional. ImageKit URL endpoint (e.g. `https://ik.imagekit.io/cradi`)
-  /// used as a CDN in front of Supabase Storage. When empty — the default —
-  /// images are fetched straight from Supabase Storage and every URL is left
-  /// untouched (see `ImageUrlResolver`). Delivery only: no SDK, no uploads.
-  static const String imageKitUrlEndpoint = String.fromEnvironment(
-    'IMAGEKIT_URL_ENDPOINT',
-  );
-
   static bool get isSupabaseConfigured =>
       supabaseUrl.isNotEmpty && supabaseAnonKey.isNotEmpty;
 

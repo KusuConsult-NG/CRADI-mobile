@@ -247,6 +247,71 @@ void main() {
       expect(fetched.statusCode, 200);
     });
 
+    test('a thumbnail is reachable from the photo URL alone', () async {
+      // The whole point of deriving rather than storing: display code
+      // has the stored URL and nothing else.
+      final path = '$liveUserId/thumbed_$stamp.jpg';
+      final file = File(
+        '${Directory.systemTemp.createTempSync('thumb').path}/p.png',
+      )..writeAsBytesSync(_onePixelPng);
+      addTearDown(() => file.parent.deleteSync(recursive: true));
+
+      final photo = await backend.uploadFile(
+        bucketId: 'report-images',
+        storagePath: path,
+        fileBytes: _onePixelPng,
+      );
+      cleanup.add(
+        () => backend.deleteFile(bucketId: 'report-images', storagePath: path),
+      );
+
+      final thumbUrl = backend.thumbUrlFor(photo);
+      expect(thumbUrl, isNotNull);
+      expect(thumbUrl, isNot(photo));
+
+      // Before the thumbnail exists the derived URL 404s, which is what
+      // the image widget's fallback is for.
+      expect(await _statusOf(thumbUrl!), 404);
+
+      await backend.uploadThumbnailFromPath(
+        bucketId: 'report-images',
+        storagePath: path,
+        file: file,
+      );
+      // Not cleaned up: `deleteFile` takes a storage path and derives
+      // the id from it, and a thumbnail's id is derived from its
+      // photo's, so no path names it. Nothing in the app deletes
+      // evidence either, and this bucket grants no `delete` at all.
+
+      // ...and afterwards the same derived URL serves it.
+      expect(await _statusOf(thumbUrl), 200);
+    });
+
+    test('a /preview URL serves a smaller render', () async {
+      // `displayUrl` is off unless APPWRITE_IMAGE_TRANSFORMS is set,
+      // because transformations are plan-gated on Cloud. The URL it
+      // would produce is checked here against a server that has them,
+      // so the shape is known good when it is switched on.
+      final path = '$liveUserId/preview_$stamp.jpg';
+      final photo = await backend.uploadFile(
+        bucketId: 'report-images',
+        storagePath: path,
+        fileBytes: _onePixelPng,
+      );
+      cleanup.add(
+        () => backend.deleteFile(bucketId: 'report-images', storagePath: path),
+      );
+
+      final preview = AppwriteDataBackend.previewUrlFor(
+        photo,
+        width: 64,
+        quality: 60,
+      );
+      expect(preview, contains('/preview?'));
+      expect(preview, contains('project='), reason: '/preview needs it too');
+      expect(await _statusOf(preview), 200);
+    });
+
     test('a file id is derived from the whole path, not its tail', () async {
       // Two agents whose ids end alike must not collide; Phase 9's bug.
       final a = AppwriteDataBackend.fileIdFor(
@@ -337,6 +402,16 @@ void main() {
       );
     });
   });
+}
+
+/// The status of a plain GET, with no credential — which is all
+/// `CachedNetworkImage` sends.
+Future<int> _statusOf(String url) async {
+  final response = await HttpClient()
+      .getUrl(Uri.parse(url))
+      .then((r) => r.close());
+  await response.drain<void>();
+  return response.statusCode;
 }
 
 /// Polls until [done], or fails naming what was waited for.

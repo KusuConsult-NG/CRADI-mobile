@@ -14,6 +14,7 @@ import 'package:supabase_flutter/supabase_flutter.dart'
     as sb
     show StorageException;
 
+import 'package:climate_app/core/utils/image_url_resolver.dart';
 import 'package:climate_app/core/constants/app_config.dart';
 import 'package:climate_app/core/services/data_backend.dart';
 import 'package:climate_app/core/services/supabase_mapping.dart';
@@ -543,6 +544,33 @@ class SupabaseService implements DataBackend {
     );
     return url;
   }
+
+  /// Supabase addresses an object by its path, and the path is a
+  /// verbatim suffix of the public URL — so the `_thumb.jpg` sibling is
+  /// recoverable from the URL alone, and nothing has to be stored.
+  @override
+  Future<String> uploadThumbnailFromPath({
+    required String bucketId,
+    required String storagePath,
+    required File file,
+    int maxDimension = 320,
+    int quality = 60,
+  }) => uploadFileFromPath(
+    bucketId: bucketId,
+    storagePath: ImageUrlResolver.thumbStoragePath(storagePath),
+    file: file,
+    maxDimension: maxDimension,
+    quality: quality,
+  );
+
+  @override
+  String? thumbUrlFor(String url) => ImageUrlResolver.thumbUrlFor(url);
+
+  /// Supabase Storage serves an object as stored; there is no resize.
+  /// The thumbnail uploaded beside the photo is the only smaller copy,
+  /// and `thumbUrlFor` is what reaches it.
+  @override
+  String displayUrl(String url, {int? width, int? quality}) => url;
 
   @override
   Future<void> deleteFile({

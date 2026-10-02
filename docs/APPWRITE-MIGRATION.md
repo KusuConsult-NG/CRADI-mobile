@@ -2582,7 +2582,7 @@ things to confirm against Cloud before launch.
 The Termii SMS path; the reconciling sweep against a real gap; and the
 admin portal, which is still entirely on Supabase.
 
-Two app-level findings worth their own work, both surfaced here:
+Two app-level findings surfaced here — both fixed in Phase 18:
 
 * `ImageUrlResolver.thumbUrlFor` is built on Supabase URL shapes
   (`supabaseObjectPath`, the `/object/public/` marker). An Appwrite URL
@@ -2591,3 +2591,85 @@ Two app-level findings worth their own work, both surfaced here:
   and never read.
 * `ImageUrlResolver.resolve` routes through ImageKit by rewriting a
   Supabase object path, and is inert for the same reason.
+
+# Phase 18: thumbnails that resolve, and ImageKit removed
+
+Both image resolvers were Supabase-shaped and inert under Appwrite. The
+fix is the same insight in both cases: **where an image lives, and how a
+smaller copy of it is addressed, is a backend's business**, not a utility
+class's. Three methods moved onto `DataBackend`:
+
+```dart
+Future<String> uploadThumbnailFromPath({...});  // the PHOTO's path
+String? thumbUrlFor(String url);
+String displayUrl(String url, {int? width, int? quality});
+```
+
+## Why a thumbnail could not be found
+
+Supabase addresses an object by its path, and the path is a verbatim
+suffix of the public URL — so `uid/a.jpg` → `uid/a_thumb.jpg` is
+recoverable from the URL alone, and nothing has to be stored.
+
+Appwrite addresses a file by a 36-character id that is a **digest** of
+the path (Phase 9, so that two agents' photos cannot collide). A digest
+cannot be inverted, so from a stored URL there is no path, and from no
+path there is no sibling. `thumbUrlFor` returned null for every Appwrite
+URL, and the thumbnails being uploaded were never read.
+
+Storing a second column of thumbnail URLs would have worked and was
+rejected: it persists what can be derived, and it needs a Postgres
+migration for a database being migrated away from.
+
+Instead a thumbnail is addressed as **its photo's id plus `-t`**, which
+is derivable in the one direction that is ever needed. Two consequences,
+both now tested:
+
+* `fileIdFor` is capped at 34 characters rather than 36, so the suffix
+  fits. An id that used all 36 would have an unreachable thumbnail.
+* The caller can no longer name the thumbnail. `_uploadThumbnail` passes
+  the **photo's** path to `uploadThumbnailFromPath`, and the backend
+  decides — because the backend is what has to reverse the decision.
+
+`thumbUrlFor` rewrites the URL it was given rather than rebuilding one
+from config, so the endpoint and the `project` query survive. That
+matters: `/view` is **404 without `?project=`**, measured, so a
+regenerated URL would have to get config right or silently serve
+nothing.
+
+## ImageKit, removed
+
+`ImageUrlResolver.resolve` rewrote a Supabase public object URL to an
+ImageKit endpoint whose origin was the Supabase bucket. Under Appwrite
+it cannot work, and not only because the URL shape changed: ImageKit
+fetches from its origin by path, and an Appwrite `/view` answers **404
+without the `project` query**, which a storage origin has no way to add.
+
+Appwrite does the job natively — `/preview?width=&quality=`, verified
+200 against the local server — so ImageKit is gone, as the plan above
+already called for: `resolve`, `AppConfig.imageKitUrlEndpoint`, the
+`IMAGEKIT_URL_ENDPOINT` build define, and the dashboard origin it needed.
+
+`APPWRITE_IMAGE_TRANSFORMS` replaces it and is **off by default**, which
+is the one judgement worth stating. Transformations are gated by plan on
+Appwrite Cloud, and where they are not included the request answers with
+an error rather than the image — so a default-on flag would turn every
+thumbnail into a broken image on the wrong plan. Off, the uploaded
+thumbnail is still used, which is the bulk of the saving; the preview URL
+is the second-order one. The URL shape is tested against a server that
+has transformations, so switching it on is a configuration decision and
+not a code change.
+
+`ImageUrlResolver` keeps `thumbStoragePath` (the upload-time naming
+convention, which both backends still use) and the Supabase half of
+`thumbUrlFor`, now reached through the seam.
+
+## What Phase 18 proves
+
+Against the live server: a thumbnail's URL, derived from its photo's URL
+and nothing else, 404s before the thumbnail is uploaded and serves it
+afterwards — with no credential on the request, which is all
+`CachedNetworkImage` sends. And a `/preview` URL built from a stored
+`/view` URL serves a smaller render.
+
+20 Dart integration tests, 818 unit and widget tests.

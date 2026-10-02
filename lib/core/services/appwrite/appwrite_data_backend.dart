@@ -6,6 +6,7 @@ import 'dart:typed_data';
 
 import 'package:appwrite/appwrite.dart' as aw;
 import 'package:appwrite/enums.dart' show ExecutionMethod;
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 
 import 'package:climate_app/core/services/appwrite/appwrite_config.dart';
@@ -13,6 +14,7 @@ import 'package:climate_app/core/services/appwrite/appwrite_documents.dart';
 import 'package:climate_app/core/services/appwrite/appwrite_errors.dart';
 import 'package:climate_app/core/services/appwrite/appwrite_queries.dart';
 import 'package:climate_app/core/services/data_backend.dart';
+import 'package:climate_app/core/utils/image_url_resolver.dart';
 
 /// [DataBackend] over Appwrite.
 ///
@@ -638,7 +640,7 @@ class AppwriteDataBackend implements DataBackend {
     if (compressed.isEmpty) throw ImageEncodingException();
     return _put(
       bucketId: bucketId,
-      storagePath: storagePath,
+      fileId: fileIdFor(storagePath),
       file: aw.InputFile.fromBytes(
         bytes: compressed,
         filename: _filename(storagePath),
@@ -670,7 +672,7 @@ class AppwriteDataBackend implements DataBackend {
     }
     return _put(
       bucketId: bucketId,
-      storagePath: storagePath,
+      fileId: fileIdFor(storagePath),
       file: aw.InputFile.fromBytes(
         bytes: compressed,
         filename: _filename(storagePath),
@@ -694,21 +696,42 @@ class AppwriteDataBackend implements DataBackend {
   /// So the id is a readable prefix plus a digest of the *whole* path: the
   /// prefix keeps it debuggable in the Appwrite console, the digest makes
   /// it one-to-one.
+  ///
+  /// Capped at [_maxOwnIdLength], not Appwrite's 36, to leave room for
+  /// [thumbFileIdFor]'s suffix — see [thumbUrlFor] for why a thumbnail's
+  /// id has to be derivable from its photo's.
   static String fileIdFor(String storagePath) {
     final cleaned = storagePath.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '-');
     final digest = _fnv1a64(storagePath);
-    if (cleaned.length <= 36) {
+    if (cleaned.length <= _maxOwnIdLength) {
       return cleaned.startsWith(RegExp(r'[._-]'))
           ? 'f${cleaned.substring(1)}'
           : cleaned;
     }
-    // 19 characters of prefix + '-' + 16 hex = 36.
-    final prefix = cleaned.substring(0, 19);
+    // 17 characters of prefix + '-' + 16 hex = 34.
+    final prefix = cleaned.substring(0, _maxOwnIdLength - 17);
     final head = prefix.startsWith(RegExp(r'[._-]'))
         ? 'f${prefix.substring(1)}'
         : prefix;
     return '$head-$digest';
   }
+
+  /// Appwrite's limit on a file id.
+  static const int _maxIdLength = 36;
+
+  /// What [fileIdFor] may use, leaving [_thumbIdSuffix] room to fit.
+  static const int _maxOwnIdLength = _maxIdLength - _thumbIdSuffix.length;
+
+  /// Marks a thumbnail's id as belonging to the photo it was cut from.
+  ///
+  /// `-` and `_` are both legal in an Appwrite id and both occur inside
+  /// a derived id, so this is not a delimiter that can be parsed back
+  /// out — it does not need to be. Only one direction is ever needed:
+  /// photo id -> thumbnail id.
+  static const String _thumbIdSuffix = '-t';
+
+  /// The id of the thumbnail cut from the file at [fileId].
+  static String thumbFileIdFor(String fileId) => '$fileId$_thumbIdSuffix';
 
   /// FNV-1a, 64-bit, as 16 hex characters.
   ///
@@ -732,11 +755,10 @@ class AppwriteDataBackend implements DataBackend {
 
   Future<String> _put({
     required String bucketId,
-    required String storagePath,
+    required String fileId,
     required aw.InputFile file,
     required bool upsert,
   }) async {
-    final fileId = fileIdFor(storagePath);
     // The uploader's own rules. Buckets grant `read("any")` because the
     // image loader sends no credential; these add the owner-only rights
     // on top, so an avatar can be replaced by the person it belongs to
@@ -783,6 +805,112 @@ class AppwriteDataBackend implements DataBackend {
       '${AppwriteConfig.endpoint}/storage/buckets/$bucketId/files/$fileId/view'
       '?project=${AppwriteConfig.projectId}';
 
+  /// A thumbnail is stored under its photo's id plus a suffix.
+  ///
+  /// Not under `thumbStoragePath`'s name, which is what Supabase uses:
+  /// Appwrite addresses a file by a 36-character id that is a *digest*
+  /// of the path, and a digest cannot be inverted — so a thumbnail named
+  /// by path would be unreachable from the photo's URL, which is all the
+  /// display code has. Keying the id off the photo's id keeps the
+  /// "derived by convention, nothing persisted" property that
+  /// `reports.imageUrls` relies on.
+  ///
+  /// The object still carries the `_thumb.jpg` filename, so it is
+  /// recognisable in the console.
+  @override
+  Future<String> uploadThumbnailFromPath({
+    required String bucketId,
+    required String storagePath,
+    required File file,
+    int maxDimension = 320,
+    int quality = 60,
+  }) async {
+    final compressed = await FlutterImageCompress.compressWithFile(
+      file.absolute.path,
+      minWidth: maxDimension,
+      minHeight: maxDimension,
+      quality: quality,
+      format: CompressFormat.jpeg,
+    );
+    if (compressed == null || compressed.isEmpty) {
+      throw ImageEncodingException();
+    }
+    return _put(
+      bucketId: bucketId,
+      fileId: thumbFileIdFor(fileIdFor(storagePath)),
+      file: aw.InputFile.fromBytes(
+        bytes: compressed,
+        filename: _filename(ImageUrlResolver.thumbStoragePath(storagePath)),
+        contentType: 'image/jpeg',
+      ),
+      upsert: false,
+    );
+  }
+
+  @override
+  String? thumbUrlFor(String url) => thumbUrlForUrl(url);
+
+  /// [url] with its file id swapped for its thumbnail's.
+  ///
+  /// Rewrites the URL that was given rather than rebuilding one from
+  /// config, so the endpoint, the `project` query that `/view` is
+  /// refused without, and anything else already on it all survive.
+  @visibleForTesting
+  static String? thumbUrlForUrl(String url) {
+    final parsed = _parseFileUrl(url);
+    if (parsed == null) return null;
+    if (parsed.fileId.endsWith(_thumbIdSuffix)) return url;
+    return parsed.rewritten(url, fileId: thumbFileIdFor(parsed.fileId));
+  }
+
+  /// Appwrite renders a smaller copy itself, through `/preview`.
+  ///
+  /// Off unless `APPWRITE_IMAGE_TRANSFORMS` is set at build time, because
+  /// image transformations are a plan-gated feature on Cloud: asking for
+  /// one where it is not included answers with an error rather than the
+  /// image, and an image that does not load is worse than a large one
+  /// that does. Self-hosted has no such limit.
+  @override
+  String displayUrl(String url, {int? width, int? quality}) =>
+      AppwriteConfig.imageTransformsEnabled
+      ? previewUrlFor(url, width: width, quality: quality)
+      : url;
+
+  /// [url] served by `/preview` at [width] / [quality], or unchanged when
+  /// it is not one of this backend's file URLs or nothing was asked for.
+  @visibleForTesting
+  static String previewUrlFor(String url, {int? width, int? quality}) {
+    final wanted = <String>[
+      if (width != null && width > 0) 'width=$width',
+      if (quality != null && quality > 0) 'quality=$quality',
+    ];
+    if (wanted.isEmpty) return url;
+    final parsed = _parseFileUrl(url);
+    if (parsed == null || parsed.action != 'view') return url;
+    final asPreview = parsed.rewritten(url, action: 'preview');
+    return '$asPreview${asPreview.contains('?') ? '&' : '?'}'
+        '${wanted.join('&')}';
+  }
+
+  /// The bucket and file of one of this backend's own file URLs, or null.
+  ///
+  /// Deliberately narrow: an admin-set knowledge-base image on a third
+  /// party's site, a `data:` URI, a leftover Supabase URL and a local
+  /// path all have to come back null and be left alone.
+  static _FileUrl? _parseFileUrl(String url) {
+    final match = RegExp(
+      r'/storage/buckets/([^/]+)/files/([^/?#]+)/(view|preview)(?=[/?#]|$)',
+    ).firstMatch(url);
+    if (match == null) return null;
+    return _FileUrl(
+      bucketId: match.group(1)!,
+      fileId: match.group(2)!,
+      action: match.group(3)!,
+      start: match.start,
+      end: match.end,
+    );
+  }
+
   @override
   Future<void> deleteFile({
     required String bucketId,
@@ -808,4 +936,37 @@ class AppwriteDataBackend implements DataBackend {
   /// Exposed so the auth adapter can share this backend's client rather
   /// than opening a second connection with its own cookie jar.
   aw.Client get client => _client;
+}
+
+/// Where the bucket, file and action sit inside one of this backend's
+/// file URLs, so a rewrite can replace a part in place and leave the
+/// endpoint and query untouched.
+class _FileUrl {
+  const _FileUrl({
+    required this.bucketId,
+    required this.fileId,
+    required this.action,
+    required this.start,
+    required this.end,
+  });
+
+  final String bucketId;
+  final String fileId;
+
+  /// `view` or `preview`.
+  final String action;
+
+  /// Where the matched `/storage/buckets/.../files/.../<action>` segment
+  /// sits in the URL. Dart's `RegExpMatch` has no per-group offsets, so
+  /// the segment is rebuilt whole and spliced back in.
+  final int start;
+  final int end;
+
+  String rewritten(String url, {String? fileId, String? action}) =>
+      url.replaceRange(
+        start,
+        end,
+        '/storage/buckets/$bucketId/files/${fileId ?? this.fileId}'
+        '/${action ?? this.action}',
+      );
 }

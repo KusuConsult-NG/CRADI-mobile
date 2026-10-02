@@ -43,15 +43,28 @@ class _FakeDb implements DataBackend {
     int maxDimension = 1920,
     int quality = 85,
   }) async {
-    if (storagePath.endsWith('_thumb.jpg')) {
-      uploadedThumbPaths.add(storagePath);
-      return 'https://storage.example/$storagePath';
-    }
     final n = attemptedPaths.length;
     attemptedPaths.add(storagePath);
     if (n == failUploadAt) throw uploadError!;
     uploadedPaths.add(storagePath);
     return 'https://storage.example/$storagePath';
+  }
+
+  /// Models the Supabase convention: the thumbnail lands beside the
+  /// photo under `thumbStoragePath`. The provider now passes the
+  /// **photo's** path and lets the backend name the thumbnail, which is
+  /// what lets Appwrite key its id off the photo's instead.
+  @override
+  Future<String> uploadThumbnailFromPath({
+    required String bucketId,
+    required String storagePath,
+    required File file,
+    int maxDimension = 320,
+    int quality = 60,
+  }) async {
+    final thumb = ImageUrlResolver.thumbStoragePath(storagePath);
+    uploadedThumbPaths.add(thumb);
+    return 'https://storage.example/$thumb';
   }
 
   @override

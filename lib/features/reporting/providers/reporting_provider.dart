@@ -7,7 +7,6 @@ import 'package:climate_app/core/services/offline_storage_service.dart';
 import 'package:climate_app/core/data/mvp_locations_data.dart';
 import 'package:climate_app/core/providers/connectivity_provider.dart';
 import 'package:climate_app/core/constants/app_config.dart';
-import 'package:climate_app/core/utils/image_url_resolver.dart';
 import 'dart:developer' as developer;
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
@@ -86,20 +85,23 @@ class ReportingProvider extends ChangeNotifier {
   static const int thumbnailQuality = 70;
 
   /// Uploads the small preview that goes next to the photo at
-  /// [storagePath] (same folder, `_thumb.jpg` — see
-  /// [ImageUrlResolver.thumbStoragePath], which is also how display code
-  /// finds it again).
+  /// [storagePath] — the photo's path, not the thumbnail's.
+  ///
+  /// Where it lands is the backend's decision, because the backend is
+  /// what has to find it again from the stored URL: Supabase can name it
+  /// `_thumb.jpg` beside the photo, Appwrite has to key its id off the
+  /// photo's. See `DataBackend.uploadThumbnailFromPath`.
   ///
   /// Best effort: a report is never rejected because its thumbnail failed,
-  /// and views fall back to the full-size image. Idempotent — the path is
+  /// and views fall back to the full-size image. Idempotent — the name is
   /// deterministic and an object an earlier attempt already stored is
   /// reused (upsert is off; storage has no update policy for evidence).
   Future<void> _uploadThumbnail(File file, String storagePath) async {
     try {
       await _db
-          .uploadFileFromPath(
+          .uploadThumbnailFromPath(
             bucketId: AppConfig.reportImagesBucket,
-            storagePath: ImageUrlResolver.thumbStoragePath(storagePath),
+            storagePath: storagePath,
             file: file,
             maxDimension: thumbnailMaxDimension,
             quality: thumbnailQuality,

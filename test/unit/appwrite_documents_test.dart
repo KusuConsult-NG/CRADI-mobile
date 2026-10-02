@@ -77,12 +77,19 @@ void main() {
       );
     });
 
-    test('a long path is never longer than an Appwrite id', () {
+    test('a long path leaves room for the thumbnail suffix', () {
+      // 36 is Appwrite's limit, and a thumbnail's id is this one plus a
+      // suffix — so an id that used all 36 would have no reachable
+      // thumbnail.
       final id = AppwriteDataBackend.fileIdFor(
         '0199c0de-dead-beef-cafe-000000000001/report_1772539200000.jpg',
       );
-      expect(id.length, lessThanOrEqualTo(36));
+      expect(id.length, lessThanOrEqualTo(34));
       expect(id, matches(RegExp(r'^[A-Za-z0-9][A-Za-z0-9._-]*$')));
+      expect(
+        AppwriteDataBackend.thumbFileIdFor(id).length,
+        lessThanOrEqualTo(36),
+      );
     });
 
     test('the same path always gives the same id', () {
@@ -129,6 +136,113 @@ void main() {
         }
       }
       expect(ids, hasLength(3600));
+    });
+
+    test('a thumbnail id stays within the limit for every path', () {
+      // The short-path branch returns the cleaned path verbatim, so it is
+      // the one that can run up against the cap.
+      for (final path in [
+        'u1/a.jpg',
+        '0199c0de-dead-beef-cafe-000000000001/report_1772539200000.jpg',
+        'a' * 33,
+        'a' * 34,
+        'a' * 35,
+        'a' * 200,
+      ]) {
+        final id = AppwriteDataBackend.fileIdFor(path);
+        expect(id.length, lessThanOrEqualTo(34), reason: path);
+        expect(
+          AppwriteDataBackend.thumbFileIdFor(id).length,
+          lessThanOrEqualTo(36),
+          reason: path,
+        );
+      }
+    });
+
+    test('a thumbnail id is distinct from any photo id', () {
+      // Two photos must never collide with a third photo's thumbnail.
+      final ids = <String>{};
+      for (var n = 0; n < 500; n++) {
+        final id = AppwriteDataBackend.fileIdFor('u1/report_$n.jpg');
+        ids.add(id);
+        ids.add(AppwriteDataBackend.thumbFileIdFor(id));
+      }
+      expect(ids, hasLength(1000));
+    });
+  });
+
+  group('thumbnail URLs', () {
+    const photo =
+        'https://fra.cloud.appwrite.io/v1/storage/buckets/report-images'
+        '/files/u1-report_123.jpg/view?project=cradi';
+
+    test('name the thumbnail cut from the same file', () {
+      expect(
+        AppwriteDataBackend.thumbUrlForUrl(photo),
+        contains('/files/u1-report_123.jpg-t/view'),
+      );
+    });
+
+    test('keep the project, which /view is refused without', () {
+      expect(AppwriteDataBackend.thumbUrlForUrl(photo), contains('project='));
+    });
+
+    test('are idempotent on a thumbnail URL', () {
+      final thumb = AppwriteDataBackend.thumbUrlForUrl(photo)!;
+      expect(AppwriteDataBackend.thumbUrlForUrl(thumb), thumb);
+    });
+
+    test('are a plain substitution, so the endpoint survives', () {
+      expect(
+        AppwriteDataBackend.thumbUrlForUrl(photo),
+        'https://fra.cloud.appwrite.io/v1/storage/buckets/report-images'
+        '/files/u1-report_123.jpg-t/view?project=cradi',
+      );
+    });
+
+    test('are null for a URL this backend did not write', () {
+      for (final url in [
+        'https://cdn.example.org/a.jpg',
+        'data:image/png;base64,AAAA',
+        '/local/path.jpg',
+        '',
+        // A leftover Supabase URL, during the migration.
+        'https://abc.supabase.co/storage/v1/object/public/report-images/u/a.jpg',
+      ]) {
+        expect(AppwriteDataBackend.thumbUrlForUrl(url), isNull, reason: url);
+      }
+    });
+  });
+
+  group('preview URLs', () {
+    const photo =
+        'https://fra.cloud.appwrite.io/v1/storage/buckets/report-images'
+        '/files/u1-report_123.jpg/view?project=cradi';
+
+    test('ask /preview for a size, keeping the project', () {
+      expect(
+        AppwriteDataBackend.previewUrlFor(photo, width: 320, quality: 70),
+        'https://fra.cloud.appwrite.io/v1/storage/buckets/report-images'
+        '/files/u1-report_123.jpg/preview?project=cradi&width=320&quality=70',
+      );
+    });
+
+    test('are unchanged when nothing was asked for', () {
+      expect(AppwriteDataBackend.previewUrlFor(photo), photo);
+      expect(
+        AppwriteDataBackend.previewUrlFor(photo, width: 0, quality: 0),
+        photo,
+      );
+    });
+
+    test('leave a URL this backend did not write alone', () {
+      const foreign = 'https://cdn.example.org/a.jpg';
+      expect(AppwriteDataBackend.previewUrlFor(foreign, width: 320), foreign);
+    });
+
+    test('do not re-ask a URL that is already a preview', () {
+      final once = AppwriteDataBackend.previewUrlFor(photo, width: 320);
+      expect(AppwriteDataBackend.previewUrlFor(once, width: 640), once);
     });
   });
 }
