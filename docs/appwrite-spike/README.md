@@ -20,6 +20,10 @@ realtime, MariaDB, Redis. It is not a deployment.
 | `auth2.mjs` | Phase 2 — Appwrite's own verification/recovery are link-based |
 | `auth3.mjs` | Phase 2 — the code-based route, end to end |
 | `auth4.mjs` | Phase 2 — session expiry, refresh, listing, targeted sign-out |
+| `addscopes.mjs` | widens the spike API key to storage + messaging scopes |
+| `storage.mjs` | Phase 3 — image transformations, evidence immutability |
+| `storage2.mjs` | Phase 3 — ward-scoped files, and `preview` honouring the ACL |
+| `messaging.mjs` | Phase 3 — topics, subscribers, messageId idempotency |
 
 Run against 1.6.2. Permission and auth semantics are stable across 1.x, but
 none of this has been run against Cloud.

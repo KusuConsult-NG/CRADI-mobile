@@ -390,7 +390,164 @@ does today.
    this has not been run against Cloud — see the open items, which still
    stand.
 
+---
+
+# Phase 3: storage and messaging
+
+Status: **verified against the running Appwrite**, except the two provider
+integrations that need real credentials (FCM, Termii). Scripts:
+`docs/appwrite-spike/storage*.mjs`, `messaging.mjs`.
+
+## Storage
+
+Two buckets today, `profile-images` and `report-images`, both **public-read**,
+object paths prefixed with the uploader's user id and enforced by storage RLS.
+Report images upload with `upsert: false` because evidence must not be
+replaced.
+
+### ImageKit goes away
+
+`ImageUrlResolver` routes storage URLs through an ImageKit endpoint for CDN
+delivery and resizing. It is already optional — `IMAGEKIT_URL_ENDPOINT` is a
+`String.fromEnvironment` that is empty unless set at build time, and when
+empty every URL passes through untouched. Delivery only: no SDK, no uploads.
+
+Appwrite Storage does the same job natively. Measured on a 1600×1200 JPEG:
+
+| Request | Result |
+|---|---|
+| `/files/{id}/preview` | `200 image/jpeg` 11,538 B |
+| `/preview?width=300&height=300` | `200 image/jpeg` 830 B |
+| `/preview?width=300&quality=60&output=webp` | `200 image/webp` **210 B** |
+
+Width, height, quality and format conversion, including WebP. **Drop
+ImageKit**, and with it `ImageUrlResolver.resolve`, the
+`supabasePublicMarker` parsing and the build-time endpoint.
+
+### And possibly the second upload
+
+`ReportingProvider` uploads a thumbnail next to each photo, named by
+convention (`thumbStoragePath`) so nothing extra has to be persisted. With
+`preview?width=` available, that upload is redundant — one file per photo
+instead of two, half the storage, half the upload time on a field connection.
+
+The catch is named in `ImageUrlResolver`'s own comment: thumbnails are covered
+by the `reports.image_urls` immutability guard precisely *because* they are
+stored objects. Deriving them instead means the guard covers one URL, not two.
+Worth doing, but it is a change in what is guaranteed, not just a saving.
+
+### Evidence immutability gets stronger
+
+`upsert: false` is a convention today — the code catches the duplicate error
+and treats it as success. In Appwrite a file id can only be created once:
+
+```
+POST /storage/buckets/report-images/files  fileId=ev-001  -> 201
+POST  (same fileId again)                                 -> 409
+```
+
+Structural rather than conventional. The deterministic per-report-and-index
+path becomes a deterministic file id.
+
+### The one real decision: public-read, or ward-scoped?
+
+Today a report photo is world-readable to anyone holding the URL, while the
+report it belongs to is ward-scoped. That asymmetry is pre-existing and may be
+deliberate — an unguessable URL is not nothing — but Appwrite can close it,
+because **file permissions work exactly like document permissions**. Verified
+with a file stamped `read("team:ward-benue-makurdi-north")`:
+
+| | `view` | `preview` |
+|---|---|---|
+| EWM in that ward | `200` | `200` |
+| user in no ward team | `404` | `404` |
+
+The transformation endpoint honours the ACL too, so a thumbnail cannot be used
+to peek at an image the viewer may not see.
+
+**The cost is delivery.** An ACL'd file cannot be a plain `<img src>` to an
+unauthenticated CDN; every fetch carries the session, and shared caching gets
+harder. That is a product decision about whether evidence photos are public,
+not a technical blocker. Flagging it rather than choosing.
+
+## Messaging
+
+### Push: OneSignal's four targeting modes
+
+| Today | Appwrite |
+|---|---|
+| `sendToUsers(ids)` → `include_aliases.external_id` | `users: [...]` — verified `201` |
+| `sendToTag('lga', v)` | topic `lga-<state>-<lga>` |
+| `sendToTags({lga, state})` | one topic at the finest granularity; Appwrite has no AND of filters |
+| `sendToAll()` → segment | topic `all-users` |
+| `idempotency_key` | **the `messageId` itself** |
+
+That last row is the nicest result of this phase. OneSignal needed a
+UUID-shaped idempotency key derived from the outbox row. Appwrite refuses a
+duplicate message id outright:
+
+```
+POST /messaging/messages/push  messageId=outbox-event-92  -> 201
+POST  (same id again)                                     -> 409
+```
+
+So the outbox event id becomes the message id and double-send is impossible by
+construction, not by convention.
+
+### Tags become topics, and there are a lot of them
+
+The app sets `role, lga, state, ward, monitoring_zone` on login
+(`backend/src/tags.js`). As topics that is roughly 3 states + 53 LGAs + 584
+wards + 8 roles + zones + `all-users` — **650 or more**, maintained alongside
+the 584 ward *teams* from Phase 0. Teams carry access; topics carry delivery;
+both are driven by the same profile Function.
+
+Two structures of that size on one project is the sharpest version of the
+quota question still open.
+
+An honest alternative: if ward-level push is not actually used, drop the ward
+topics and target `users: [...]` from a Function that queries the ward team.
+Worth checking against real usage before building 584 of anything.
+
+### Email: Resend → Appwrite Messaging
+
+A provider swap, not a redesign. The 154 lines of `email/templates.js` move
+into the Function that sends them, which is where Phase 2 already puts the
+verification and recovery mail.
+
+### SMS: Termii stays
+
+Your decision, and the right one — the sender IDs and delivery rates are
+already proven in Nigeria, and Termii is not an Appwrite Messaging provider.
+SMS therefore does **not** go through Messaging: a Function calls Termii
+directly, exactly as `backend/src/sms/providers.js` does today.
+
+Consequence: `sms_deliveries` stays as the receipt log, and the SMS half keeps
+a queue of its own while push and email lose theirs.
+
+## The migration risk nobody can engineer away
+
+**OneSignal subscriptions cannot be transferred.** A push target in Appwrite
+is a device token registered by the Appwrite SDK; OneSignal player ids are
+meaningless to it. Every device must re-register on first launch of the new
+build.
+
+So on cutover, **push reaches nobody until each user opens the app at least
+once**. For an early-warning platform that is the one channel that matters,
+and the gap is as long as a user's quietest week.
+
+Mitigations, none free:
+
+- Ship the Appwrite SDK registering targets *before* cutover, so tokens exist
+  on the day. Means a release that talks to both backends.
+- Announce by SMS, which survives the cutover untouched because Termii stays.
+- Accept the gap and watch target registration climb before decommissioning
+  OneSignal.
+
+This belongs in the cutover plan (Phase 7), but it is decided here, because
+the first mitigation changes what Phase 3 builds.
+
 ## Not in scope here
 
-Storage, Messaging providers, the Termii Function, data migration and cutover.
-Those are Phases 3 and onward.
+Data migration and cutover, and the Functions runtime itself (deployment,
+secrets, local testing). Those are Phases 4 and onward.
