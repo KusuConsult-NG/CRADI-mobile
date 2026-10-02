@@ -40,11 +40,29 @@ const args = new Set(process.argv.slice(2));
 const DRY = args.has('--dry-run');
 // For a tier that allows one bucket. The previous project ran this way.
 const SINGLE = args.has('--single-bucket');
+/**
+ * Keep going past a quota refusal and report every limit at the end.
+ *
+ * Stopping is right when provisioning for real — everything after the
+ * first refusal fails the same way and buries the reason. It is wrong
+ * when the question being asked *is* "what does this plan allow",
+ * because then each limit costs a whole round trip to discover. This
+ * mode answers the whole question in one run.
+ */
+const PROBE = args.has('--probe');
 const only = [...args].find((a) => a.startsWith('--only='))?.slice(7)?.split(',');
 const wants = (step) => !only || only.includes(step);
 
+if (PROBE) {
+  console.log(
+    '# probe: continuing past quota refusals to find every limit in one run',
+  );
+}
+
 const tally = { created: 0, exists: 0, updated: 0, skipped: 0, failed: 0, extra: 0 };
 const notes = [];
+/** Every quota refusal seen, when --probe keeps going past them. */
+const limits = [];
 
 function say(state, what, detail = '') {
   tally[state] = (tally[state] ?? 0) + 1;
@@ -93,7 +111,12 @@ async function ensure(label, getPath, createPath, payload) {
   // A quota refusal is the one failure worth stopping the whole run for:
   // everything after it would fail the same way and bury the reason in
   // two hundred lines of output.
-  if (isQuota(created)) throw new QuotaExceeded(label, created);
+  if (isQuota(created)) {
+    if (!PROBE) throw new QuotaExceeded(label, created);
+    limits.push({ what: label, message: created.body?.message ?? created.status });
+    say('failed', label, `LIMIT: ${created.body?.message ?? created.status}`);
+    return { state: 'failed' };
+  }
   say('failed', label, `${created.status} ${created.body?.message ?? ''}`);
   return { state: 'failed' };
 }
@@ -174,7 +197,11 @@ async function collections() {
       );
       if (made.ok || made.dry) say('created', `  ${c.id}.${col.key}`, col.type);
       else if (made.status === 409) say('exists', `  ${c.id}.${col.key}`);
-      else if (isQuota(made)) throw new QuotaExceeded(`${c.id}.${col.key}`, made);
+      else if (isQuota(made)) {
+        if (!PROBE) throw new QuotaExceeded(`${c.id}.${col.key}`, made);
+        limits.push({ what: `${c.id}.${col.key}`, message: made.body?.message ?? made.status });
+        say('failed', `  ${c.id}.${col.key}`, `LIMIT: ${made.body?.message ?? made.status}`);
+      }
       else say('failed', `  ${c.id}.${col.key}`, `${made.status} ${made.body?.message ?? ''}`);
     }
 
@@ -214,6 +241,38 @@ async function buckets() {
       enabled: true,
     });
     say(r.state, `bucket ${b.id}`);
+  }
+}
+
+/**
+ * The two quotas no pricing page states plainly, and the two this design
+ * cannot do without: Phase 0 needs a team per ward (584) and Phase 3 a
+ * topic per targetable group (~650).
+ *
+ * Probe only. It creates one of each with an obvious throwaway id, to
+ * learn whether the plan permits any at all — it does not create 584 of
+ * anything, and it cleans up after itself.
+ */
+async function probeLimits() {
+  for (const [label, path, body] of [
+    ['team', '/teams', { teamId: 'probe-ward-delete-me', name: 'probe (delete me)' }],
+    ['topic', '/messaging/topics', { topicId: 'probe-topic-delete-me', name: 'probe (delete me)' }],
+  ]) {
+    const made = await api(path, { method: 'POST', body });
+    if (made.ok || made.status === 409) {
+      say(made.status === 409 ? 'exists' : 'created', `${label} (probe)`);
+      // Leave nothing behind: this is somebody's real project.
+      const id = Object.values(body)[0];
+      const gone = await api(`${path}/${id}`, { method: 'DELETE' });
+      if (!gone.ok && gone.status !== 404) {
+        notes.push(`probe ${label} ${id} could not be deleted — remove it by hand`);
+      }
+    } else if (isQuota(made)) {
+      limits.push({ what: label, message: made.body?.message ?? made.status });
+      say('failed', `${label} (probe)`, `LIMIT: ${made.body?.message ?? made.status}`);
+    } else {
+      say('failed', `${label} (probe)`, `${made.status} ${made.body?.message ?? ''}`);
+    }
   }
 }
 
@@ -260,6 +319,7 @@ async function main() {
     if (wants('collections')) await collections();
     if (wants('buckets')) await buckets();
     if (wants('functions')) await functions();
+    if (PROBE && wants('limits')) await probeLimits();
   } catch (e) {
     if (e instanceof QuotaExceeded) {
       console.error(`\n! stopped at ${e.label}: the project's plan refused it.`);
@@ -283,6 +343,10 @@ async function main() {
 
   console.log(`\n${Object.entries(tally).map(([k, v]) => `${k}=${v}`).join(' ')}`);
   for (const note of notes) console.log(`  note: ${note}`);
+  if (limits.length) {
+    console.log(`\n${limits.length} quota limit(s) on this plan:`);
+    for (const l of limits) console.log(`  - ${l.what}: ${l.message}`);
+  }
   // A failure must not exit 0. This project has shipped a checker that
   // reported success over twenty failures; not again.
   if (tally.failed > 0) process.exit(1);

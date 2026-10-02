@@ -36,7 +36,29 @@ The project needs, at minimum:
 | Columns | **187** |
 | Functions | **7**, three of them on a one-minute schedule |
 
-**One limit is already known, from the previous project's own config:**
+### What the plan actually allows — run the probe
+
+```
+APPWRITE_PROJECT_ID=... APPWRITE_API_KEY=... APPWRITE_DATABASE_ID=... \
+node infra/appwrite/provision.mjs --probe
+```
+
+`--probe` keeps going past a quota refusal instead of stopping, and
+lists every limit at the end. It also creates one throwaway team and one
+throwaway topic — the two quotas no pricing page states plainly and the
+two this design cannot do without — and deletes them again.
+
+Stopping is right for a real run; probing is right when the question
+*is* what the plan allows, because otherwise each limit costs a whole
+round trip to discover.
+
+**Measured on the existing project (2026-10-02):**
+
+| | |
+|---|---|
+| Databases | **1** — `The maximum number of databases allowed for the selected plan has reached.` The project already has one, so pass `APPWRITE_DATABASE_ID` and provision into it. |
+
+**One more limit is known from the previous project's own config:**
 
 > Due to Appwrite free tier limits (max 1 bucket), Profile Photos and
 > Report Images currently share the same bucket but are logically

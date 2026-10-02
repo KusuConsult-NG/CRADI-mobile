@@ -1916,9 +1916,44 @@ failure mode is a file nobody can see rather than one everybody can. What
 it costs is independent retention and deletion, and the fact that a bug
 in the evidence path now writes into the same bucket as avatars.
 
-What the one-bucket limit does *not* tell us is whether 584 teams and
-~650 topics are allowed. The provisioner stops on the first refusal and
-names it, so running it answers the rest.
+## The provisioner ran, and refused at the first step
+
+The owner ran it against the existing Frankfurt project. It got exactly
+as far as the first object and stopped, which is what it is for:
+
+```
+# https://fra.cloud.appwrite.io/v1 project 6941cdb400050e7249d5
+
+! stopped at database cradi: the project's plan refused it.
+  The maximum number of databases allowed for the selected plan has reached.
+```
+
+**The plan allows one database**, and the project already has one — the
+old Appwrite build's, `6941e2c2003705bb5a25`. Not fatal: the plan's
+database id is already `process.env.APPWRITE_DATABASE_ID ?? 'cradi'`, so
+provisioning into the existing one is a variable, not a change.
+
+Two things this run established beyond the limit itself. The endpoint,
+the project id and the key all work — this is the first contact anything
+in twelve phases has made with a real Appwrite — and the stop-and-name
+behaviour earned its keep immediately, because the message is the whole
+answer and would have been the first of two hundred lines otherwise.
+
+## `--probe`, because each limit was costing a round trip
+
+Stopping is right for a real provisioning run. It is wrong when the
+question *is* what the plan allows, because then every limit costs a
+full round trip to discover — and this one is being discovered by a
+person pasting output back.
+
+So `--probe` keeps going past quota refusals and lists every one at the
+end. It also creates a single throwaway team and topic, and deletes
+them: those are the two quotas no pricing page states plainly, and the
+two Phase 0 and Phase 3 cannot do without. It does not create 584 of
+anything.
+
+Still unanswered after this run: teams, topics, and buckets beyond the
+one the old config already documented.
 
 ## What is left
 
