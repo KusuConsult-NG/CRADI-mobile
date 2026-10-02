@@ -547,7 +547,112 @@ Mitigations, none free:
 This belongs in the cutover plan (Phase 7), but it is decided here, because
 the first mitigation changes what Phase 3 builds.
 
+---
+
+# Phase 4: Functions, and the write path
+
+Status: **built and executed**, not designed. Phases 1–3 each concluded "this
+becomes a Function" without anything proving Functions work. They do.
+
+A numbering note: the original sketch had the client data layer at Phase 3 and
+notifications at Phase 4. Storage and messaging were merged into Phase 3
+instead, so the data-layer swap is now Phase 5.
+
+## What was built
+
+`docs/appwrite-spike/fn/create-report` is a real deployed Function standing in
+for `reports_insert`'s `WITH CHECK` and the `reports_before_insert` trigger.
+It reads the caller's profile, refuses a disabled account, fixes `status`,
+`verification_count` and `escalated` itself, resolves the ward to a team id,
+and creates the document with the ACL Phase 0 designed.
+
+## The write path, proven
+
+| | Result |
+|---|---|
+| Client writes `reports` directly | **`401`** — the collection is closed |
+| Client calls the Function | `201` — `status: "pending"`, stamped `ward-benue-makurdi-north` |
+| Client sends `status:"approved", verification_count:99, escalated:true` | `201` — and the stored document is still **`status: "pending"`** |
+| EWM in that ward reads it | `200` |
+| `ewv` label reads it | `200` |
+| Owner reads it | `200` |
+| Outsider: no team, no label, not the owner | **`404`**, and `listDocuments` returns **0** |
+
+The third row is the one that matters. It is the `WITH CHECK` the database
+used to enforce, now enforced in code the client cannot reach — and the
+client's attempt to pre-approve its own report changed nothing.
+
+## Event Functions replace the AFTER triggers
+
+A Function registered on
+`databases.cradi.collections.reports.documents.*.create` fired on the write
+above:
+
+```
+trigger=event  status=completed
+EVENT databases.cradi.collections.reports.documents.6abf…28.create
+      doc=6abf…28 ward=North status=pending
+```
+
+The whole document arrives in the body and the event name in
+`x-appwrite-event`. That is the mapping for all nine AFTER triggers
+(`reports_after_insert`, `reports_after_status_change`, `verifications_after_*`
+and the rest).
+
+The same Function accepted `schedule: "*/15 * * * *"` alongside its events,
+which is the shape the escalation cron needs. **The schedule was accepted, not
+observed firing** — a fifteen-minute wait was not spent. Worth confirming
+before Phase 6 depends on it.
+
+## Latency, measured
+
+| | |
+|---|---|
+| Cold start | **735 ms** |
+| Warm | **34–39 ms** function, 71 ms round trip |
+
+Report submission is now a Function call rather than a direct insert, so a
+field user's write carries that cost. Warm is negligible. Cold is not nothing,
+and runtimes are scaled down after an inactivity threshold — on a quiet night
+in a quiet ward, the first report of the morning pays it.
+
+Measured on an idle local box with no network between client and API. A real
+Nigerian mobile connection adds its own round trip to both numbers; these are
+a floor, not a forecast.
+
+## Operational findings
+
+None of this applies to Appwrite Cloud, which runs the plumbing for you. All
+of it applies if self-hosting is chosen after the region question is settled —
+and each cost real time here:
+
+1. **The executor listens on port 80**, not 3000. `_APP_EXECUTOR_HOST` must be
+   `http://exc1/v1`.
+2. **The API, the builds worker and the functions worker must share
+   `/storage/functions` and `/storage/builds`** with the executor. Without it
+   the build fails with a bare `File Not Found`, which names nothing.
+3. **The runtimes network must be shared and named exactly `runtimes`.** The
+   executor attaches runtime containers through the Docker socket to a network
+   of that literal name; Compose otherwise creates `<project>_runtimes`, the
+   runtime lands where the executor cannot reach it, and every execution dies
+   with `Function timed out during cold start` **while the runtime's own log
+   says `HTTP server successfully started!`**. That contradiction is the
+   signature of this bug and it cost the most time of anything in this spike.
+4. **Give MariaDB a volume.** `docker compose down` on a volumeless MariaDB
+   destroys the project, its collections, its users and every deployed
+   Function. It did, here, and the only reason it was cheap is that the spike
+   is scripted — `setup.mjs`, `addscopes.mjs`, `spike.mjs`, `deployfn.mjs`
+   rebuilt the whole thing, and Phase 0's eight assertions passed again
+   afterwards, which is a reproducibility check nobody planned.
+
+## What this leaves
+
+The design of every phase so far now rests on something executed rather than
+assumed. What is still unproven: the scheduled trigger actually firing, and
+anything at all about Cloud — region, quotas, and whether 584 teams and ~650
+topics are allowed on the tier you buy.
+
 ## Not in scope here
 
-Data migration and cutover, and the Functions runtime itself (deployment,
-secrets, local testing). Those are Phases 4 and onward.
+The client data-layer swap (Phase 5), the worker's outbox and escalation jobs
+(Phase 6), and data migration and cutover (Phase 7).

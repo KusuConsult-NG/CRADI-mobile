@@ -24,6 +24,18 @@ realtime, MariaDB, Redis. It is not a deployment.
 | `storage.mjs` | Phase 3 — image transformations, evidence immutability |
 | `storage2.mjs` | Phase 3 — ward-scoped files, and `preview` honouring the ACL |
 | `messaging.mjs` | Phase 3 — topics, subscribers, messageId idempotency |
+| `deployfn.mjs` | Phase 4 — deploys `fn/create-report` and waits for the build |
+| `execfn.mjs` | Phase 4 — the guarded write: direct 401, Function 201, client overruled |
+| `events.mjs` | Phase 4 — an event-triggered Function fires on document create |
+| `fn/` | the Function sources: the guarded write, an event handler, a runtime probe |
 
 Run against 1.6.2. Permission and auth semantics are stable across 1.x, but
 none of this has been run against Cloud.
+
+Four things about this compose cost real time and are worth keeping:
+the executor listens on **port 80**; the API and both workers must share
+`/storage/functions` and `/storage/builds` with it; the runtimes network must
+be external and named exactly `runtimes` (otherwise every execution reports
+`timed out during cold start` while the runtime's own log says it started
+fine); and MariaDB needs a volume, or `docker compose down` destroys the
+project, the collections, the users and every deployed Function.
