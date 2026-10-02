@@ -52,11 +52,19 @@ Stopping is right for a real run; probing is right when the question
 *is* what the plan allows, because otherwise each limit costs a whole
 round trip to discover.
 
-**Measured on the existing project (2026-10-02):**
+**Measured on the existing Frankfurt project, 2026-10-02 — the plan
+refuses four things, and one of them is fatal:**
 
 | | |
 |---|---|
-| Databases | **1** — `The maximum number of databases allowed for the selected plan has reached.` The project already has one, so pass `APPWRITE_DATABASE_ID` and provision into it. |
+| Databases | one, already used by the old build. Pass `APPWRITE_DATABASE_ID` to provision into it. |
+| **Functions** | **none available — all seven refused.** Every write, auth's token minting and the whole worker are Functions. There is no version of this design that runs without them. |
+| Buckets | none available, so even the one-bucket fallback needs a slot freed. |
+| Columns per table | capped; `reports` alone needs 37. |
+
+So this is a billing decision before it is an engineering one: a paid
+Cloud plan, or self-hosting. See *Phase 12* in
+`../../docs/APPWRITE-MIGRATION.md`.
 
 **One more limit is known from the previous project's own config:**
 

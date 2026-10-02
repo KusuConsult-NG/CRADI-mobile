@@ -1952,8 +1952,63 @@ them: those are the two quotas no pricing page states plainly, and the
 two Phase 0 and Phase 3 cannot do without. It does not create 584 of
 anything.
 
-Still unanswered after this run: teams, topics, and buckets beyond the
-one the old config already documented.
+## The answer, after twelve phases: not on this plan
+
+`--probe` run against the existing Frankfurt project, 2026-10-02. The
+plan refuses, in order:
+
+| | What it said |
+|---|---|
+| **Databases** | `The maximum number of databases allowed for the selected plan has reached.` The project's one slot is taken by the old build. |
+| **Functions** | `The maximum number of functions allowed for the selected plan has reached.` **All seven refused.** |
+| **Buckets** | `The maximum number of buckets allowed for the selected plan has reached.` Both refused. |
+| **Columns** | `The maximum number or size of columns for table '<x>' has been reached.` Hit on `reports`, `alerts`, `authorities`, `contacts`, `ndpa_consents`, `knowledge_base`, `news_links`, `sms_deliveries` and both quarantine tables. |
+
+**The Functions row ends the question.** This is not a quota to design
+around. Phase 1 found 14 of 19 collections have a rule an ACL cannot
+express, so every report, vote, alert and profile change is a Function
+call; Phase 2 puts token minting in one because the API key cannot ship
+in the app; Phases 10 and 11 put the entire worker in four more. Zero
+Functions means no reports, no registration, and no warnings. There is
+no reduced version of this design that fits.
+
+The buckets row kills the mitigation too: `--single-bucket` was written
+on the evidence that the old project ran on one, but the plan allows no
+*new* bucket at all, so even one is unavailable without freeing the
+existing one.
+
+The columns row is the mildest and still real: `reports` alone needs 37.
+
+### What this does and does not mean
+
+It does **not** mean Appwrite is the wrong choice. Everything Phases 0–6
+proved about the design — ward teams as ACL subjects, typed-code auth,
+message idempotency, the deterministic-id lock — was proved against a
+real Appwrite and still holds.
+
+It means the **free plan cannot host it**, which is a billing decision,
+not an engineering one. Two routes:
+
+1. **A paid Cloud plan.** Needs enough Functions (7), buckets (1–2),
+   databases (1 free slot, or delete the old one), and the per-table
+   column cap lifted above 37. Teams and topics still need checking at
+   584 and ~650.
+2. **Self-hosting**, which has no quotas at all — and brings back every
+   operational trap Phase 4 recorded, plus the ones Phase 6 found for
+   scheduled Functions. The region question would reopen as a server
+   choice.
+
+### Two things that were cheap and paid off here
+
+The provisioner names a quota refusal rather than reporting it as a
+generic failure, and `--probe` collects every one in a single run. The
+alternative — discovering four limits one round trip at a time, each
+costing a person a paste — would have taken this conversation four more
+exchanges to reach the same conclusion.
+
+And it never deletes. Pointed at a project holding the old build, it
+created what it could, reported what it could not, and left everything
+else untouched.
 
 ## What is left
 
