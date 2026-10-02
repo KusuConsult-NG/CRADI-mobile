@@ -2673,3 +2673,113 @@ afterwards — with no credential on the request, which is all
 `/view` URL serves a smaller render.
 
 20 Dart integration tests, 818 unit and widget tests.
+
+# Phase 19: the admin portal
+
+`CRADI-Mobile-Admin` was still entirely on Supabase — 23 files, and the
+one part of the system no phase had touched. Porting it found five bugs
+in work that was already "done", every one of them silent.
+
+## What the panel's access model is
+
+Reads go straight to the database: the collections carry the ACLs for it
+(`read("any")` on the reference tables, `read("label:admin")` on
+`profiles` and `reports`), so an admin reads with their session and
+nothing else.
+
+**Every write goes through the `write` Function**, because Phase 1
+closed those collections to clients. The Function re-checks the caller's
+role from their profile, so the panel's own admin guard is a convenience
+and not the enforcement. That is the single most important difference
+from the Supabase version, where RLS let the browser write directly and
+filtered the row away in silence when it should not.
+
+Server routes keep an API key, as they kept the service-role key. Two
+things there had to be decided rather than translated: the pinned
+("compare-and-set") profile update was a Postgres `WHERE` clause, and
+`updateRows` with queries is the same thing in one call; and ban/unban
+has no Appwrite counterpart with a duration, so `users.updateStatus`
+replaces `ban_duration`. Deleting an account no longer cascades to its
+profile row either — there are no foreign keys — so the route deletes
+it, after the account, because an orphaned profile is visible and
+fixable while an account with no profile can sign in and reach nothing.
+
+## Five bugs in already-migrated work
+
+**`app_settings` keys were camelCased.** They are row *values* in the
+`key` column, not column names, so the camel/snake translation the rest
+of the migration did does not apply to them. `settings
+.escalationTimeoutMinutes` found nothing and fell back silently — the
+escalation timeout set in the panel did nothing, and the fallback was
+wrong too (60 where Postgres defaulted to 30). Both SMS budgets had it.
+
+**`notifyApproved` filtered `authorities` on `isActive`,** a column in
+neither schema. Appwrite refuses a query naming an attribute it does not
+have, so this did not narrow the list — it failed the whole send, on
+every approved report.
+
+**No alert could be created.** `alerts` carried `requiresLocation`,
+which sends `assertLocation` looking for `state`, `lga` and `ward`. An
+alert has none of those; it targets by `targetState`/`targetLga` and has
+no ward at all. Every attempt was refused with "Unknown state:
+undefined". The rule was right and reading the wrong fields;
+`assertTarget` now carries over the `alerts_target_lga_needs_state`
+check.
+
+**No report could be approved.** `status` is server-owned at creation —
+that is what stops a reporter filing a report already approved — but
+`strip` removed server-owned fields from updates too, so an approval
+sent `status`, the Function dropped it, wrote nothing and answered 200.
+
+**Nothing replaced `guard_report_update()`.** With `status` writable
+again, the rules Postgres enforced had to come too, and they are three
+different rules: ownership and escalation are an admin's to change; the
+peer tally is counted by confirmations and never set by hand; and
+deciding needs a reviewing role and is refused on your own report unless
+you are an admin. `isAlert` came with them — Postgres derived it from
+the severity on insert *and* update, so a report raised to critical
+never became an alert.
+
+Four of the five are the same shape: a name that is wrong somewhere
+nothing validates. So one of the fixes is a test that validates the
+place — `query-attributes.test.mjs` reads the committed column list and
+checks every attribute the Functions query against it. Writing it was
+instructive twice over: matching only string literals saw 4 of the 17
+attributes and would have passed while blind, and the assertion that
+caught *that* was a lower bound on how much it had found.
+
+## The end-to-end suite
+
+The panel's fourteen Playwright specs ran against an in-memory
+PostgREST. `e2e/mock-appwrite.mjs` replaces it and keeps the `__mock/*`
+control surface, so the specs changed where they assert on requests and
+not in how they are written.
+
+It deliberately does not re-implement the `write` Function's
+authorisation, for the same reason the old one did not implement RLS:
+those rules live in the server, are tested there against a real
+Appwrite, and a second copy here would drift into tests that pass while
+the product is broken.
+
+Its first run was a lesson in the thing this phase keeps finding. The
+Web SDK sends queries indexed — `queries[0]=…` — and the mock read only
+`queries[]=…`, so it answered **every request unfiltered, unordered and
+unpaged**. The alerts spec caught it by counting cards on screen. Both
+spellings are accepted now, and anything else that looks like a query
+parameter is an error rather than a third spelling nobody notices.
+
+## What Phase 19 proves
+
+The panel builds, typechecks and lints against Appwrite alone;
+`@supabase/supabase-js` is gone from it. On the mobile side: 154
+Function unit tests and four end-to-end suites against a real server,
+with the alert, approval and compare-and-set paths verified live.
+
+## Still open
+
+The Termii SMS path has still never run end to end — the `isActive`
+fix was verified against the schema and the unit tests, not against
+Termii. The reconciling sweep has still never run against a real gap.
+And `minimum_peer_confirmations` is read by nothing: the trigger that
+counted peer confirmations and flipped a report to `verified` has no
+Appwrite counterpart yet, so that threshold currently does nothing.
