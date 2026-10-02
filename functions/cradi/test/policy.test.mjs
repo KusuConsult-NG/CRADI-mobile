@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 
-import { RULES, WRITABLE, assertLocation, assertTarget } from '../src/lib/policy.js';
+import { RULES, WRITABLE, assertCoverage, assertLocation, assertTarget } from '../src/lib/policy.js';
 import { wardTeam } from '../src/lib/appwrite.js';
 import { strip } from '../src/write.js';
 
@@ -189,6 +189,43 @@ describe('location validation', () => {
       /Unknown ward/,
     );
   });
+});
+
+describe('authority coverage', () => {
+    it('accepts an LGA of the named state', () => {
+        assert.doesNotThrow(() => assertCoverage({ coverageState: 'Benue', coverageLga: 'Makurdi' }));
+        // Both halves of the ambiguous pair.
+        assert.doesNotThrow(() => assertCoverage({ coverageState: 'Benue', coverageLga: 'Obi' }));
+        assert.doesNotThrow(() => assertCoverage({ coverageState: 'Nasarawa', coverageLga: 'Obi' }));
+    });
+
+    it('refuses an LGA with no state', () => {
+        // The `authorities_coverage_lga_needs_state` CHECK, carried over:
+        // Appwrite has no CHECK and `coverageState` is not a required
+        // column, so nothing but this stood between a contact and being
+        // texted about the wrong Obi.
+        assert.throws(() => assertCoverage({ coverageLga: 'Obi' }), /must name its state/);
+        assert.throws(
+            () => assertCoverage({ coverageState: '   ', coverageLga: 'Makurdi' }),
+            /must name its state/,
+        );
+    });
+
+    it('refuses a contact that covers nothing', () => {
+        assert.throws(() => assertCoverage({}), /must cover an LGA/);
+        assert.throws(() => assertCoverage({ coverageState: 'Benue' }), /must cover an LGA/);
+    });
+
+    it('refuses a state or LGA that is not on the list', () => {
+        assert.throws(() => assertCoverage({ coverageState: 'Atlantis', coverageLga: 'Obi' }), /Unknown state/);
+        // An LGA of a *different* state is the mistake the rule exists for.
+        assert.throws(() => assertCoverage({ coverageState: 'Benue', coverageLga: 'Lafia' }), /Unknown LGA/);
+    });
+
+    it('is what the authorities rule asks for', () => {
+        assert.equal(RULES.authorities.requiresCoverage, true);
+        assert.ok(!RULES.authorities.requiresLocation);
+    });
 });
 
 describe('alert targeting', () => {

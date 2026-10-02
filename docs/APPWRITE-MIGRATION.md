@@ -2783,3 +2783,62 @@ Termii. The reconciling sweep has still never run against a real gap.
 And `minimum_peer_confirmations` is read by nothing: the trigger that
 counted peer confirmations and flipped a report to `verified` has no
 Appwrite counterpart yet, so that threshold currently does nothing.
+
+# Phase 20 — running the panel's suite
+
+Phase 19 left the panel building, typechecking and linting. Phase 20
+ran its fourteen Playwright specs end to end, which is a different
+question: 22 of 98 failed. The split was roughly even between
+assertions still written against PostgREST and product code that had
+been ported by eye.
+
+## What the mock caught
+
+Three bugs in the panel, each silent in the browser and each fatal to
+the feature:
+
+- `reports` wrote `updated_by`. Every approve, reject and verify came
+  back `Invalid document structure: Unknown attribute`. The column is
+  `updatedBy`; nothing but a round trip would have found it, because
+  the field is assembled in one object literal that reads fine.
+- `app_settings.value` is a **string** column in Appwrite where it was
+  `jsonb` in Postgres. The panel wrote the number `45` and the boolean
+  `false`, and the server refused all of it. They are stored as `"45"`
+  and `"false"` now, which is what every reader already parses — the
+  backend's `positiveInt`, the app's `_getInt` / `_getBool`. A setting
+  cleared back to empty removes its row instead of storing `""`, since
+  `value` is required and "no value" is the absence of the row.
+- The reports page decided whether to reload the list by comparing
+  Postgres SQLSTATEs (`22023`, `42501`, `P0002`). Under Appwrite those
+  never match, so an admin told "that report is already pending" kept
+  looking at the stale card. It branches on the refusal's status now.
+
+The mock itself was wrong twice, in the direction that matters least
+and most: it had no Storage route at all (so every report image 404ed
+in the tests while working in production), and it required
+`news_links.source`, which the real schema does not — a lie that
+refuses a write production accepts. Its required-column list is now
+checked against `infra/appwrite/columns.json` rather than remembered.
+
+## A constraint that did not survive the move
+
+`authorities_coverage_lga_needs_state` was a Postgres CHECK: an SMS
+contact covering an LGA must name the LGA's state, because six LGA
+names exist in two states (Obi is in both Benue and Nasarawa, and the
+contact texted for the wrong one is a contact that never arrives).
+Appwrite has no CHECK, `coverageState` is not a required column, and
+nothing in the `write` Function enforced it — so between Phase 1 and
+now, the only thing standing in the way was the admin panel's own form.
+The panel's own test said "even from a tampered DOM".
+
+`assertCoverage` in `policy.js` is that constraint, checked on create
+and on update against the row the patch would produce — an edit that
+moves the LGA without resending the state is the case a patch-only
+check would miss. `alerts` already had its counterpart
+(`assertTarget`); this is the other half.
+
+## What Phase 20 proves
+
+98 panel specs green against the mock, 162 Function unit tests green.
+The three product bugs above were all in code that compiled, passed
+review and would have failed on the first click.

@@ -142,7 +142,10 @@ export const RULES = {
     acl: () => ['read("any")'],
   },
 
-  authorities: { roles: ADMIN, acl: () => ['read("any")'] },
+  // `requiresCoverage` replaces the Postgres CHECK constraint
+  // `authorities_coverage_lga_needs_state`, which Appwrite has no equivalent
+  // of; see `assertCoverage`.
+  authorities: { roles: ADMIN, acl: () => ['read("any")'], requiresCoverage: true },
   knowledge_base: { roles: ADMIN, acl: () => ['read("any")'] },
   news_links: { roles: ADMIN, acl: () => ['read("any")'] },
   app_settings: { roles: ADMIN, acl: () => ['read("any")'] },
@@ -255,6 +258,32 @@ export function assertTarget({ targetState, targetLga }) {
     throw invalid(`Unknown state: ${state}`, ErrorType.argument);
   }
   if (everywhere) return;
+  if (!locations[state][lga]) {
+    throw invalid(`Unknown LGA for ${state}: ${lga}`, ErrorType.argument);
+  }
+}
+
+/**
+ * An SMS contact's coverage: an LGA, and the state that LGA belongs to.
+ *
+ * Six LGA names exist in two states — Obi is in both Benue and Nasarawa —
+ * so a contact naming only the LGA would be texted about reports from the
+ * wrong half of the country. Postgres refused that with the CHECK
+ * constraint `authorities_coverage_lga_needs_state`; Appwrite has no CHECK
+ * and `coverageState` is not a required column, so the rule lives here.
+ */
+export function assertCoverage({ coverageState, coverageLga }) {
+  const lga = (coverageLga ?? '').trim();
+  const state = (coverageState ?? '').trim();
+  if (!lga) {
+    throw invalid('An authority must cover an LGA', ErrorType.argument);
+  }
+  if (!state) {
+    throw invalid('An authority covering an LGA must name its state', ErrorType.argument);
+  }
+  if (!locations[state]) {
+    throw invalid(`Unknown state: ${state}`, ErrorType.argument);
+  }
   if (!locations[state][lga]) {
     throw invalid(`Unknown LGA for ${state}: ${lga}`, ErrorType.argument);
   }

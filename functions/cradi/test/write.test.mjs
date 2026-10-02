@@ -249,6 +249,56 @@ describe('profiles', () => {
   });
 });
 
+describe('authorities', () => {
+  it('refuses a contact whose LGA names no state', async () => {
+    const fake = fakeAppwrite({ rows: { profiles: { u1: profile({ role: 'admin' }) } } });
+    const ctx = context({
+      op: 'create', collection: 'authorities', documentId: 'a1',
+      data: { name: 'Obi Desk', phone: '+2348031234567', coverageLga: 'Obi' },
+    });
+    await write(ctx);
+
+    assert.equal(ctx.captured.status, 400);
+    assert.match(ctx.captured.body.message, /must name its state/);
+    assert.equal(fake.store.authorities?.a1, undefined);
+  });
+
+  it('refuses an edit that moves the LGA out of the stored state', async () => {
+    // The patch alone looks fine — it is the row it would produce that is
+    // wrong, so the check runs against current + patch.
+    const fake = fakeAppwrite({
+      rows: {
+        profiles: { u1: profile({ role: 'admin' }) },
+        authorities: {
+          a1: { $id: 'a1', name: 'Obi Desk', phone: '+2348031234567', coverageState: 'Benue', coverageLga: 'Obi' },
+        },
+      },
+    });
+    const ctx = context({
+      op: 'update', collection: 'authorities', documentId: 'a1',
+      data: { coverageLga: 'Lafia' },
+    });
+    await write(ctx);
+
+    assert.equal(ctx.captured.status, 400);
+    assert.match(ctx.captured.body.message, /Unknown LGA/);
+    assert.equal(fake.store.authorities.a1.coverageLga, 'Obi');
+  });
+
+  it('accepts the same LGA name in either of its states', async () => {
+    const fake = fakeAppwrite({ rows: { profiles: { u1: profile({ role: 'admin' }) } } });
+    for (const [documentId, coverageState] of [['a1', 'Benue'], ['a2', 'Nasarawa']]) {
+      const ctx = context({
+        op: 'create', collection: 'authorities', documentId,
+        data: { name: 'Obi Desk', phone: '+2348031234567', coverageState, coverageLga: 'Obi' },
+      });
+      await write(ctx);
+      assert.equal(ctx.captured.status, 200, coverageState);
+      assert.equal(fake.store.authorities[documentId].coverageState, coverageState);
+    }
+  });
+});
+
 describe('updates', () => {
   it('refuses to move a report to another ward', async () => {
     const fake = fakeAppwrite({

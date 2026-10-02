@@ -37,6 +37,7 @@ import {
   WRITABLE,
   assertLocation,
   assertRole,
+  assertCoverage,
   assertTarget,
   isAdmin,
 } from './lib/policy.js';
@@ -120,6 +121,9 @@ export default handler(async ({ req, log }) => {
     const clean = strip(data, rule, { keepImmutable: false, allow: rule.decidable });
     rule.guardUpdate?.({ role, userId, current: current.body, data: clean });
     rule.derive?.(clean, { ...current.body, ...clean });
+    // Checked against the row as it will be, not against the patch: an edit
+    // that moves the LGA without resending the state must not slip through.
+    if (rule.requiresCoverage) assertCoverage({ ...current.body, ...clean });
     if (collection === 'reports' && 'status' in clean) {
       // Appwrite's event payload is the document, with no "before", so
       // the event Function cannot tell a status change from any other
@@ -159,6 +163,7 @@ export default handler(async ({ req, log }) => {
   // create / upsert
   const stamped = { ...strip(data, rule, { keepImmutable: true }), ...(rule.create?.(context) ?? {}) };
   if (rule.requiresTarget) assertTarget(stamped);
+  if (rule.requiresCoverage) assertCoverage(stamped);
   if (rule.requiresLocation) {
     assertLocation(stamped);
     // The ACL names a team, so the team has to exist before the document
