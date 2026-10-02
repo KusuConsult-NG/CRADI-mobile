@@ -15,6 +15,7 @@ import {
   createRow,
   deleteRow,
   getRow,
+  listRows,
   Query,
   setAccountLabels,
   updateRow,
@@ -32,7 +33,11 @@ import {
   notFound,
   readJson,
 } from './lib/http.js';
-import { escalationTimeoutMinutes, getSettings } from './lib/settings.js';
+import {
+  escalationTimeoutMinutes,
+  getSettings,
+  minimumPeerConfirmations,
+} from './lib/settings.js';
 import {
   RULES,
   WRITABLE,
@@ -109,10 +114,16 @@ export default handler(async ({ req, log }) => {
     // the app deletes a report or a vote; an admin clearing test data
     // does.
     if (!isAdmin(role)) throw forbidden('Only an administrator may delete this');
+    // Read it first, because after the delete there is nothing left to
+    // say which report the vote belonged to.
+    const before = collection === 'verifications' ? await getRow(collection, documentId) : null;
     const deleted = await deleteRow(collection, documentId);
     if (deleted.status === 404) throw notFound();
     if (!deleted.ok) throw new Error(`delete failed: ${deleted.status}`);
     log(`deleted ${collection}/${documentId} by ${userId}`);
+    if (before?.ok && before.body.reportId) {
+      await countConfirmations(before.body.reportId, log);
+    }
     return {};
   }
 
@@ -189,6 +200,9 @@ export default handler(async ({ req, log }) => {
   if (!written.ok) refuseWrite(op, written);
   if (collection === 'reports' && op !== 'update') {
     await scheduleEscalation(written.body, log);
+  }
+  if (collection === 'verifications') {
+    await countConfirmations(written.body.reportId, log);
   }
 
   log(`${op}d ${collection}/${written.body.$id} by ${userId} in ${databaseId()}`);
@@ -325,6 +339,82 @@ async function syncLabels(documentId, patch, document, log) {
       `(${result.status} ${result.body?.message ?? ''}). It now says ` +
       `${JSON.stringify(labels)} and the account does not — that account reads ` +
       'nothing those labels grant.',
+  );
+}
+
+/**
+ * Counts a report's confirmations and verifies it once enough peers agree.
+ *
+ * This is `verifications_after_insert`, which had no Appwrite
+ * counterpart: between Phase 1 and Phase 23 a vote was stored and
+ * nothing read it, so `reports.verificationCount` stayed 0, no report
+ * ever reached `verified` on its own, and `minimum_peer_confirmations`
+ * — a setting the admin panel offers and explains — did nothing at all.
+ *
+ * Counted rather than incremented, for the same reason the trigger
+ * counted: an increment is only correct if every vote it ever saw was
+ * applied exactly once, and this runs after a network call that can be
+ * retried. A count is idempotent and self-repairing.
+ *
+ * The flip to `verified` is a compare-and-set on `status = 'pending'`,
+ * which is the trigger's `where id = ... and status = 'pending'` and
+ * carries the same two properties: it happens exactly once however many
+ * votes arrive after the threshold, and it never overwrites a decision
+ * an admin has already made.
+ *
+ * Postgres serialised concurrent confirmations with `for update`;
+ * Appwrite has no row lock, so two votes landing together can both read
+ * the lower count. The count is self-correcting on the next vote, and
+ * `reconcile.js` repairs a report left short of its own votes.
+ */
+async function countConfirmations(reportId, log) {
+  if (!reportId) return;
+  const counted = await listRows('verifications', [
+    Query.equal('reportId', reportId),
+    Query.equal('isConfirmed', true),
+    Query.limit(1),
+  ]);
+  if (!counted.ok) {
+    // The vote is already stored. Failing the call now would tell the
+    // verifier their confirmation did not land, and they would send it
+    // again — against a unique index, so the retry would be refused too.
+    log(`WARNING: could not count confirmations for ${reportId}: ${counted.status}`);
+    return;
+  }
+  const confirmed = counted.body.total ?? 0;
+  const updated = await updateRow('reports', reportId, { verificationCount: confirmed });
+  if (!updated.ok) {
+    log(`WARNING: could not store verificationCount=${confirmed} for ${reportId}: ${updated.status}`);
+    return;
+  }
+
+  const settings = await getSettings();
+  const threshold = minimumPeerConfirmations(settings);
+  if (confirmed < threshold) {
+    log(`report ${reportId}: ${confirmed}/${threshold} confirmations`);
+    return;
+  }
+
+  const verified = await updateRowsWhere(
+    'reports',
+    [Query.equal('$id', reportId), Query.equal('status', 'pending')],
+    {
+      status: 'verified',
+      verifiedAt: new Date().toISOString(),
+      autoValidated: true,
+      // So the event Function can tell this was a status change and
+      // announce it; Appwrite's event payload has no "before".
+      previousStatus: 'pending',
+    },
+  );
+  if (!verified.ok) {
+    log(`WARNING: could not verify ${reportId} at ${confirmed}/${threshold}: ${verified.status}`);
+    return;
+  }
+  log(
+    (verified.body?.total ?? 0) > 0
+      ? `report ${reportId} verified by ${confirmed} peers (threshold ${threshold})`
+      : `report ${reportId} reached ${confirmed}/${threshold} but was already decided`,
   );
 }
 

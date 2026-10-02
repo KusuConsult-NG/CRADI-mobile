@@ -36,6 +36,17 @@ export async function getSettings() {
 export const escalationTimeoutMinutes = (settings) =>
   positiveInt(settings.escalation_timeout_minutes, 30);
 
+/**
+ * How many peers must confirm a report before it is verified on its own.
+ *
+ * Postgres read this in `verifications_after_insert` and nothing in
+ * Appwrite read it at all, so between Phase 1 and Phase 23 the setting
+ * the admin panel offers did nothing whatsoever. The fallback is 2,
+ * which is what `setting_int('minimum_peer_confirmations', 2)` used.
+ */
+export const minimumPeerConfirmations = (settings) =>
+  positiveInt(settings.minimum_peer_confirmations, 2);
+
 export function positiveInt(value, fallback) {
   const n = Number.parseInt(value ?? '', 10);
   return Number.isFinite(n) && n > 0 ? n : fallback;

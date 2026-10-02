@@ -16,7 +16,20 @@ process.env.APPWRITE_DATABASE_ID = 'cradi';
 
 export function fakeAppwrite({ rows = {}, users = [], fail = {} } = {}) {
   const calls = [];
+  // Seeded rows get a `$createdAt` of now unless the fixture sets one.
+  // The real server always has one, and the sweeps filter on it: a row
+  // without it matches no window, which made the reconcile test pass
+  // against an empty result for a while.
+  const now = new Date().toISOString();
   const store = structuredClone(rows);
+  for (const table of Object.values(store)) {
+    for (const seeded of Object.values(table ?? {})) {
+      if (seeded && typeof seeded === 'object') {
+        seeded.$createdAt ??= now;
+        seeded.$updatedAt ??= now;
+      }
+    }
+  }
   const sentMessages = {};
 
   globalThis.fetch = async (url, init = {}) => {
@@ -25,8 +38,14 @@ export function fakeAppwrite({ rows = {}, users = [], fail = {} } = {}) {
     const body = init.body ? JSON.parse(init.body) : undefined;
     calls.push({ path, method, body });
 
+    // `fail` keys are path substrings, optionally prefixed with a method
+    // — `'PATCH /tables/reports/rows/r1'` — because a read and a write
+    // of the same row share a path, and failing both when the test meant
+    // one of them is a different test from the one that was written.
     for (const [pattern, response] of Object.entries(fail)) {
-      if (path.includes(pattern)) return json(response.status, response.body);
+      const [verb, rest] = pattern.includes(' ') ? pattern.split(/ +/, 2) : [null, pattern];
+      if (verb && verb !== method) continue;
+      if (path.includes(rest)) return json(response.status, response.body);
     }
 
     // rows: /tablesdb/{db}/tables/{table}/rows[/{id}]
@@ -41,8 +60,25 @@ export function fakeAppwrite({ rows = {}, users = [], fail = {} } = {}) {
           : json(404, { message: 'not found', type: 'document_not_found' });
       }
       if (method === 'GET') {
-        const all = Object.values(store[table]);
-        return json(200, { total: all.length, rows: all });
+        // Queries are honoured, because a fake that answers every list
+        // with every row makes the test that counts a report's
+        // confirmations count the whole table and pass for the wrong
+        // reason. `total` ignores limit/offset, as the real server's
+        // does — the confirmation count reads exactly that.
+        const queries = [...new URLSearchParams(String(url).split('?')[1] ?? '')]
+          .filter(([key]) => key.startsWith('queries'))
+          .map(([, value]) => JSON.parse(value));
+        let rows = Object.entries(store[table])
+          .filter(([key, value]) => queries.every((q) => matches(q, key, value)))
+          .map(([, value]) => value);
+        const total = rows.length;
+        for (const q of queries) {
+          if (q.method === 'orderAsc') rows = sortBy(rows, q.attribute, 1);
+          if (q.method === 'orderDesc') rows = sortBy(rows, q.attribute, -1);
+        }
+        const offset = queries.find((q) => q.method === 'offset')?.values[0] ?? 0;
+        const limit = queries.find((q) => q.method === 'limit')?.values[0] ?? 25;
+        return json(200, { total, rows: rows.slice(offset, offset + limit) });
       }
       if (method === 'POST') {
         const key = body.rowId === 'unique()' ? `gen-${Object.keys(store[table]).length}` : body.rowId;
@@ -58,21 +94,17 @@ export function fakeAppwrite({ rows = {}, users = [], fail = {} } = {}) {
       // optimistic-lock test vacuous — and is exactly what the real
       // server does when the queries are put in the query string.
       if (method === 'PATCH' && !id) {
-        const matches = Object.entries(store[table]).filter(([key, value]) =>
-          (body.queries ?? []).every((raw) => {
-            const q = typeof raw === 'string' ? JSON.parse(raw) : raw;
-            const actual = q.attribute === '$id' ? key : value[q.attribute];
-            if (q.method === 'isNull') return actual === null || actual === undefined;
-            if (q.method === 'equal') return q.values.includes(actual);
-            throw new Error(`fake: unsupported bulk query ${q.method}`);
-          }),
+        const hit = Object.entries(store[table]).filter(([key, value]) =>
+          (body.queries ?? []).every((raw) =>
+            matches(typeof raw === 'string' ? JSON.parse(raw) : raw, key, value),
+          ),
         );
-        for (const [key, value] of matches) {
+        for (const [key, value] of hit) {
           store[table][key] = stamp(key, { ...value, ...body.data });
         }
         return json(200, {
-          total: matches.length,
-          rows: matches.map(([key]) => store[table][key]),
+          total: hit.length,
+          rows: hit.map(([key]) => store[table][key]),
         });
       }
       if (method === 'PUT' || method === 'PATCH') {
@@ -150,6 +182,48 @@ const stamp = (id, data, permissions) => ({
   ...(permissions ? { $permissions: permissions } : {}),
   ...data,
 });
+
+/** Whether one Appwrite query matches a stored row. */
+function matches(q, key, value) {
+  const actual = q.attribute === '$id' ? key : value[q.attribute];
+  switch (q.method) {
+    case 'equal':
+      return q.values.includes(actual);
+    case 'notEqual':
+      return !q.values.includes(actual);
+    case 'isNull':
+      return actual === null || actual === undefined;
+    case 'isNotNull':
+      return actual !== null && actual !== undefined;
+    case 'lessThan':
+      return actual < q.values[0];
+    case 'lessThanEqual':
+      return actual <= q.values[0];
+    case 'greaterThan':
+      return actual > q.values[0];
+    case 'greaterThanEqual':
+      return actual >= q.values[0];
+    case 'limit':
+    case 'offset':
+    case 'orderAsc':
+    case 'orderDesc':
+      return true;
+    default:
+      // Louder than ignoring it: an unsupported query that silently
+      // matches everything turns a filtered read into an unfiltered one
+      // while the test still passes.
+      throw new Error(`fake: unsupported query ${q.method}`);
+  }
+}
+
+function sortBy(rows, attribute, direction) {
+  return [...rows].sort((a, b) => {
+    const x = a[attribute];
+    const y = b[attribute];
+    if (x === y) return 0;
+    return (x > y ? 1 : -1) * direction;
+  });
+}
 
 const json = (status, body) =>
   // `null`, not `''`: a 204 may not carry a body at all and `Response`

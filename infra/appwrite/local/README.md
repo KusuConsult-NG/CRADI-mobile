@@ -13,14 +13,21 @@ node infra/appwrite/provision.mjs
 node infra/appwrite/local/deploy.mjs
 ```
 
-Then the four end-to-end suites:
+Then the end-to-end suites:
 
 ```
 node infra/appwrite/local/e2e.mjs             # a hazard report, filed to delivered
 node infra/appwrite/local/e2e-auth.mjs        # typed codes, recovery, enumeration
 node infra/appwrite/local/e2e-escalation.mjs  # the cron, firing on its own
 node infra/appwrite/local/e2e-operation.mjs   # reopen_report, and who may run it
+node infra/appwrite/local/e2e-sms.mjs         # authority SMS, against a stand-in Termii
+node infra/appwrite/cloud-check.mjs           # the behaviour a Cloud run must also show
 ```
+
+`e2e-sms.mjs` starts its own HTTP server and points `TERMII_BASE_URL` at
+it, so the whole send path runs — the numbers, the text, both caps, the
+deterministic claim and the bookkeeping — without texting anyone. What
+it cannot prove is Termii's own API contract.
 
 and the Dart adapters:
 
@@ -38,6 +45,13 @@ flutter test \
 
 Without those defines the integration tests **skip**, so `flutter test`
 stays green in CI.
+
+Pass them to `test/integration` and not to the whole tree. Several unit
+tests assert what the app does when **no** backend is configured, and
+`--dart-define=APPWRITE_ENDPOINT=…` is exactly the thing that makes it
+configured — so `flutter test <defines> test` fails nine of them for a
+reason that has nothing to do with the code under test. (Pre-existing;
+noted here because it reads like a regression and is not one.)
 
 ## Which server version
 

@@ -3030,3 +3030,150 @@ panel's 12 live specs and `cloud-check.mjs` all pass against 1.9.6, and
 the Cloud sequence is one command list the owner can run. The two bugs
 above were found by writing the Cloud check and testing it locally,
 which is the most the container allows.
+
+# Phase 23 — closing the gaps instead of waiting for Cloud
+
+Phase 22 ended with a list of things that "needed Cloud". Most of them
+did not. They needed somebody to try.
+
+## `minimum_peer_confirmations` did nothing
+
+The setting the admin panel offers, explains and validates was read by
+no code at all. `verifications_after_insert` counted a report's
+confirmations, stored the count and flipped the report to `verified` at
+the threshold; it had no Appwrite counterpart, so a vote was stored and
+nothing happened. Peer verification — the mechanism the whole EWM role
+exists for — was decoration.
+
+It lives in `write.js` now, after the vote is written: count the
+confirmations (count, not increment, because an increment is only right
+if every vote it ever saw was applied exactly once, and this runs after
+a network call that can be retried), store the count, and flip to
+`verified` with a compare-and-set on `status = 'pending'` — which is
+the trigger's `where ... and status = 'pending'`, and carries the same
+two properties: it happens once however many votes arrive after the
+threshold, and it never overwrites a decision an admin already made.
+
+Beside it, a second thing Postgres had and Appwrite did not:
+`unique (report_id, verifier_id)`. Without it one monitor could confirm
+the same report twice — and with a count feeding a threshold, that is
+one person verifying a report alone, which is precisely what peer
+verification is for. Now a unique index, and the second vote is a 409.
+
+Postgres serialised concurrent confirmations with `for update` and
+Appwrite has no row lock, so two votes landing together can both read
+the lower count. `reconcile.js` repairs it: every five minutes it
+compares each recent pending report's stored count against its votes,
+and verifies one that has the votes and was left behind. That also
+gives the reconciling sweep its second job, and a real gap to find.
+
+## The Flutter client could not sign in, and it was not HTTPS
+
+`signInWithPassword` had been the oldest open gap since Phase 16: the
+session was created and the next call was a guest. The standing
+explanation was the local stack's plain HTTP, and the standing plan was
+to try it on Cloud. Both were wrong, and measuring took half an hour.
+
+Two things in the SDK combine:
+
+1. `createEmailPasswordSession`'s response body has `secret: ''`.
+   Appwrite fills it only for a privileged caller — one sending an API
+   key — so there is nothing in the parsed `Session` to hold. (Every
+   script in `infra/appwrite/local` *does* send a key, which is why
+   they all worked and the app did not.)
+2. The cookie is never stored. Appwrite sends two `Set-Cookie` headers;
+   `package:http` joins repeated headers with `", "`, and the SDK's
+   `CookieManager` splits them on `,(?=[^ ])` — a comma **not** followed
+   by a space. That never matches the join, so two cookies arrive as one
+   malformed string, `Cookie.fromSetCookieValue` rejects it, and the
+   rejection is swallowed by a `catchError` that returns the response
+   unchanged. The jar ends up empty and nothing says so.
+
+Every Appwrite cookie carries `expires=Sat, 02-Oct-2027`, so the
+comma-space is always there. **Cloud sends the same headers.** The
+assumption that HTTPS would fix it was wrong, and had the Cloud run
+happened first it would have failed there too.
+
+The sign-in is one plain request now, and the session secret — read out
+of the cookie, which is where it actually is — goes on the client with
+`setSession`. That is the mechanism `_establish` already used after a
+typed code, which is why sign-up and recovery worked all along.
+`appwrite_sign_in_live_test.dart` is four tests that say so.
+
+## `callOperation` did not need 2.3 either
+
+The other "needs Cloud" item. `Execution.fromMap` reads `resourceId`
+and `resourceType` with `map['...']!`, and those arrived in Appwrite
+2.3 — so against 1.8 or 1.9 it threw `Bad state: No element` before the
+response body was read. True, and not a reason to wait: the app does
+not only target Cloud, and a client that cannot call a Function on the
+server this repository ships a compose file for is broken rather than
+blocked.
+
+`appwrite_execution.dart` reads the three fields the adapters want —
+the status code, the body, whether it completed — out of the execution
+the server sent. All three have been there since 1.x. The two skipped
+tests run, and so does every `auth` Function call from Dart, which had
+the same bug and no test at all.
+
+One trap on the way: `setProject` writes only to `config`, and each
+generated service method puts `X-Appwrite-Project` on its own call. A
+hand-rolled request that forgets it is not answered with "no project" —
+it is answered with `Invalid Origin. Register your new client …`, which
+sends you to the platform list instead of the missing header.
+
+And one test that was passing for the wrong reason: while the group was
+skipped, "an unknown operation is refused" asserted
+`isA<AppwriteException>()` alone, so when it ran again it passed on the
+origin error above — a refusal from a different layer, for a request
+that never reached the Function.
+
+## The SMS path would have failed on its first send
+
+`notifyApproved` writes `error` on every claim and every refusal.
+`sms_deliveries` had no such column — Postgres had none either — so
+Appwrite answered the **first claim of the first real send** with
+`Unknown attribute: "error"` and the whole path died at its first line.
+Nothing caught it: the Function's fake does not validate attributes,
+and the only way to run the real thing was to text a real local
+authority.
+
+`TERMII_BASE_URL` makes that last part untrue. `e2e-sms.mjs` starts a
+server, points the sender at it, and runs the real `notifyApproved`
+against the real database: the numbers chosen, the text, both caps, the
+deterministic claim that makes a duplicate impossible, the bookkeeping
+after a success and after a provider error that arrives as a 200. The
+`error` column is kept rather than dropped, because "this authority was
+not warned, and here is what the provider said" is the question
+somebody asks after a flood.
+
+It does not prove Termii's API contract or that a deployed Function can
+reach them. Both stay in `docs/CLOUD-VERIFICATION.md` rather than being
+quietly implied by a green run.
+
+## One more fake that was lying
+
+The Function tests' fake answered every list with every row, ignoring
+queries. The confirmation count would have counted the whole table and
+passed. It honours queries now — `equal`, the comparisons, `isNull`,
+ordering, limit and offset, with `total` ignoring the page as the real
+server's does — and throws on a query shape it does not know, because a
+query that silently matches everything is how a filtered read becomes
+an unfiltered one with the test still green. Fixing it immediately
+failed the reconcile test, whose fixture had no `$createdAt` and so
+matched no window.
+
+## What Phase 23 proves
+
+181 Function unit tests, 836 Dart tests, six end-to-end suites and
+`cloud-check.mjs`, all against a real Appwrite 1.9.6. Four of the five
+things Phase 22 listed as open are closed, and three of them were bugs
+that would have reached production: a peer-verification threshold that
+did nothing, a sign-in that could not hold a session on any server, and
+an SMS path that failed at its first write.
+
+## Still open
+
+The tier's real limits, which only Cloud can answer, and Termii's own
+API, which needs an account. `docs/CLOUD-VERIFICATION.md` is still the
+sequence for the first.

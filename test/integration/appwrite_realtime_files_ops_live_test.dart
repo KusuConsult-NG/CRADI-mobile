@@ -325,80 +325,122 @@ void main() {
     });
   });
 
-  // Both of these run the adapter's `_execute`, which parses the SDK's
+  // These were skipped for a long time, and the reason was real: both
+  // run the adapter's `_execute`, which used to parse the SDK's
   // `Execution` model. SDK 26 replaced that model's `functionId` with
-  // `resourceId` and `resourceType` once executions grew to cover sites,
-  // and a self-hosted server below 2.0 still answers with the old shape —
-  // so `Execution.fromMap` throws `Bad state: No element` before the
-  // response body is ever read. Appwrite Cloud is 2.3, which the SDK
-  // targets, so this is a property of the local stack and not of the
-  // adapter.
+  // `resourceId` and `resourceType` once executions grew to cover
+  // sites, and it reads them with `map['...']!` — so against a server
+  // below 2.0, which answers with the old shape, `Execution.fromMap`
+  // throws `Bad state: No element` before the response body is ever
+  // read. Nothing in this repository was at fault, and nothing in this
+  // repository could run.
   //
-  // 2.3 self-hosted cannot stand in: from 2.0 a deployment is built
-  // through the `open-runtimes/orchestrator` image, which this
-  // environment's network policy will not let us pull, so no Function
-  // can be deployed there to execute.
-  //
-  // The operation Function itself is covered end-to-end over HTTP by
-  // `infra/appwrite/local/e2e-operation.mjs`; what stays unverified
-  // here is only the SDK's parse of a real execution.
-  const callOperationSkip =
-      'needs an Appwrite 2.x server: the SDK cannot parse a pre-2.0 '
-      'execution (see the comment above this group)';
-
-  group('callOperation', skip: callOperationSkip, () {
+  // Waiting for Cloud was the wrong answer. The app does not only
+  // target Cloud — the whole point of `infra/appwrite/local` is that it
+  // can be self-hosted — and a client that cannot call a Function on
+  // the server the project ships a compose file for is broken, not
+  // blocked. `appwrite_execution.dart` reads the three fields the
+  // adapter actually wants out of the execution the server sent, and
+  // every server since 1.x has all three.
+  group('callOperation', () {
     test('reopens a report through the operation Function', () async {
-      // Also exercises the adapter's Function routing: `reports` is not
-      // client-writable, so createDocument goes through `write`.
-      final reportId = 'op-$stamp'.substring(
-        0,
-        36.clamp(0, 'op-$stamp'.length),
+      // Somebody else's report, seeded by `prep-dart.mjs`: a reviewer
+      // may not decide their own, so one filed here could never reach
+      // the operation.
+      expect(
+        liveForeignReport,
+        isNotEmpty,
+        reason: 'run prep-dart.mjs; see live_appwrite.dart',
       );
-      final report = await backend.createDocument(
+
+      // Close it first, so reopening is a visible change. This also
+      // exercises the adapter's Function routing — `reports` is not
+      // client-writable, so the update goes through `write`.
+      await backend.updateDocument(
         collectionId: 'reports',
-        documentId: reportId,
+        documentId: liveForeignReport,
+        data: {'status': 'approved'},
+      );
+      final approved = await backend.getDocument(
+        collectionId: 'reports',
+        documentId: liveForeignReport,
+      );
+      expect(approved['status'], 'approved');
+
+      await backend.callOperation(
+        'reopen_report',
+        params: {'p_report_id': liveForeignReport},
+      );
+
+      final after = await backend.getDocument(
+        collectionId: 'reports',
+        documentId: liveForeignReport,
+      );
+      expect(after['status'], 'pending');
+      expect(after['verificationCount'], 0);
+      expect(after['escalated'], false);
+      expect(
+        after['approvedAt'],
+        isNull,
+        reason: 'the reopen clears the decision it is undoing',
+      );
+    });
+
+    test('a report that is already pending is refused, not reopened', () async {
+      // The Function checks the state before it checks who is asking,
+      // so this is the refusal a client can actually reach: a reviewer
+      // cannot approve their own report, so they cannot get one of
+      // their own into a state where reopening it would be allowed.
+      // Who may reopen whose report is covered by the Function's unit
+      // tests and by `infra/appwrite/local/e2e-operation.mjs`, which
+      // has a key and can set that up.
+      final mine = 'op-own-$stamp'.substring(
+        0,
+        36.clamp(0, 'op-own-$stamp'.length),
+      );
+      await backend.createDocument(
+        collectionId: 'reports',
+        documentId: mine,
         data: {
           'hazardType': 'flood',
-          'description': 'For the reopen test',
+          'description': 'Filed by the caller',
           'state': 'Benue',
           'lga': 'Makurdi',
           'ward': 'North Bank I',
           'severity': 'high',
         },
       );
-      expect(
-        report['status'],
-        'pending',
-        reason: 'the write Function stamps this',
-      );
-      expect(report['userId'], liveUserId);
-
-      // Close it, so reopening is a visible change.
-      await backend.updateDocument(
-        collectionId: 'reports',
-        documentId: reportId,
-        data: {'status': 'approved'},
+      cleanup.add(
+        () => backend.deleteDocument(collectionId: 'reports', documentId: mine),
       );
 
-      await backend.callOperation(
-        'reopen_report',
-        params: {'p_report_id': reportId},
+      await expectLater(
+        backend.callOperation('reopen_report', params: {'p_report_id': mine}),
+        throwsA(
+          isA<aw.AppwriteException>().having(
+            (e) => e.message,
+            'message',
+            contains('already pending'),
+          ),
+        ),
       );
-
-      final after = await backend.getDocument(
-        collectionId: 'reports',
-        documentId: reportId,
-      );
-      expect(after['status'], 'pending');
-      expect(after['verificationCount'], 0);
-      expect(after['escalated'], false);
-      expect(after['reopenedBy'], liveUserId);
     });
 
     test('an unknown operation is refused, not silently ignored', () async {
+      // Matched on the message, not just the type: while this group was
+      // skipped the assertion was `isA<AppwriteException>()` alone, and
+      // once it ran again it passed on `Invalid Origin` — a refusal
+      // from a different layer entirely, for a request that never
+      // reached the Function.
       await expectLater(
         backend.callOperation('drop_everything'),
-        throwsA(isA<aw.AppwriteException>()),
+        throwsA(
+          isA<aw.AppwriteException>().having(
+            (e) => e.message,
+            'message',
+            contains('Unknown operation'),
+          ),
+        ),
       );
     });
   });

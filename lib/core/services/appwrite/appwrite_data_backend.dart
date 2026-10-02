@@ -5,13 +5,13 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:appwrite/appwrite.dart' as aw;
-import 'package:appwrite/enums.dart' show ExecutionMethod;
 import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 
 import 'package:climate_app/core/services/appwrite/appwrite_config.dart';
 import 'package:climate_app/core/services/appwrite/appwrite_documents.dart';
 import 'package:climate_app/core/services/appwrite/appwrite_errors.dart';
+import 'package:climate_app/core/services/appwrite/appwrite_execution.dart';
 import 'package:climate_app/core/services/appwrite/appwrite_queries.dart';
 import 'package:climate_app/core/services/data_backend.dart';
 import 'package:climate_app/core/utils/image_url_resolver.dart';
@@ -41,7 +41,6 @@ class AppwriteDataBackend implements DataBackend {
     : _client = client ?? _defaultClient() {
     _tables = aw.TablesDB(_client);
     _storage = aw.Storage(_client);
-    _functions = aw.Functions(_client);
     _account = aw.Account(_client);
   }
 
@@ -52,7 +51,6 @@ class AppwriteDataBackend implements DataBackend {
   final aw.Client _client;
   late final aw.TablesDB _tables;
   late final aw.Storage _storage;
-  late final aw.Functions _functions;
   late final aw.Account _account;
 
   aw.Realtime? _realtime;
@@ -440,33 +438,29 @@ class AppwriteDataBackend implements DataBackend {
     String functionId,
     Map<String, dynamic> payload,
   ) async {
-    final execution = await _functions.createExecution(
-      functionId: functionId,
-      body: jsonEncode(payload),
-      xasync: false,
-      method: ExecutionMethod.pOST,
-      headers: {'content-type': 'application/json'},
-    );
+    final execution = await createExecution(_client, functionId, payload);
 
-    final status = execution.responseStatusCode;
-    final body = _decode(execution.responseBody);
+    final status = (execution['responseStatusCode'] as num?)?.toInt() ?? 0;
+    final responseBody = execution['responseBody']?.toString() ?? '';
+    final body = _decode(responseBody);
 
     if (status >= 400) {
       throw aw.AppwriteException(
         body['message']?.toString() ?? 'The request was refused',
         status,
         body['type']?.toString(),
-        execution.responseBody,
+        responseBody,
       );
     }
     // An execution that never ran — a cold-start timeout, a crash — has no
     // response at all. It must not read as success.
-    if (execution.status.name != 'completed') {
+    final state = execution['status']?.toString() ?? 'unknown';
+    if (state != 'completed') {
       throw aw.AppwriteException(
-        'Function $functionId did not complete (${execution.status.name})',
+        'Function $functionId did not complete ($state)',
         503,
         'function_incomplete',
-        execution.errors,
+        execution['errors']?.toString(),
       );
     }
     return body;

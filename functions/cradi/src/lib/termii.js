@@ -208,10 +208,25 @@ export function isPermanentSmsError(error) {
   );
 }
 
+/** Termii's API, unless something points this somewhere else. */
+export const TERMII_BASE_URL = 'https://api.ng.termii.com';
+
+/**
+ * Where the SMS actually goes.
+ *
+ * Overridable so the path can be exercised end to end against a stand-in
+ * that records what it was sent — the caps, the dedupe claim and the
+ * payload are all testable that way, and none of them were, because the
+ * only way to run this was to text a real authority. `TERMII_BASE_URL`
+ * is unset in production and the default is Termii.
+ */
+export const termiiBaseUrl = () =>
+  String(process.env.TERMII_BASE_URL || TERMII_BASE_URL).replace(/\/+$/, '');
+
 /** Sends one message through Termii. */
 export async function termiiSender({ apiKey, senderId, fetchImpl = fetch }) {
   return async (to, sms) => {
-    const response = await fetchImpl('https://api.ng.termii.com/api/sms/send', {
+    const response = await fetchImpl(`${termiiBaseUrl()}/api/sms/send`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({

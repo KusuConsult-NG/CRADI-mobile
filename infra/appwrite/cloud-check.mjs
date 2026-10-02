@@ -21,7 +21,9 @@
  *   5. `expect` is a real compare-and-set, and a bulk update with
  *      queries in the body touches exactly the rows they match
  *   6. `app_settings.value` round-trips as a string
- *   7. the `operation` Function's execution carries what the Flutter
+ *   7. peer confirmations are counted, one per verifier, and a report
+ *      verifies itself at the threshold
+ *   8. the `operation` Function's execution carries what the Flutter
  *      SDK parses (`resourceId`/`resourceType`, 2.3+)
  *
  * Everything it creates is named `cloudchk-<stamp>` and **deleted at the
@@ -320,7 +322,86 @@ async function main() {
   assert.ok(r.code >= 400, `a number should be refused, got ${r.code} ${JSON.stringify(r.body).slice(0, 160)}`);
   ok(`a number is refused: ${String(r.body.message).slice(0, 80)}`);
 
-  // ── 7. the execution shape the Flutter SDK parses ──────────────────
+  // ── 7. peer confirmations ──────────────────────────────────────────
+  step('two peers confirm a report, and it verifies itself');
+  const voterA = await makeUser('ewm-a', 'ewm');
+  const voterB = await makeUser('ewm-b', 'ewm');
+  const voterC = await makeUser('ewm-c', 'ewm');
+  const peerReportId = name('peer');
+  const peerReport = await call(row('reports'), {
+    method: 'POST',
+    body: {
+      rowId: peerReportId,
+      data: {
+        userId: adminUser.id, reporterName: 'Cloud check', hazardType: 'Flooding',
+        severity: 'medium', description: `Cloud check peer report ${stamp}`,
+        state: 'Benue', lga: 'Makurdi', ward: 'North Bank I',
+        status: 'pending', verificationCount: 0, isAlert: false,
+        escalated: false, autoValidated: false,
+        submittedAt: new Date().toISOString(), imageUrls: [],
+      },
+      permissions: ['read("label:admin")', 'read("label:ewm")'],
+    },
+  });
+  assert.ok(peerReport.ok, `peer report: ${peerReport.status} ${JSON.stringify(peerReport.body).slice(0, 200)}`);
+  track('reports', peerReportId);
+
+  const sessionA = await sessionFor(voterA.email);
+  const voteA = name('vote-a');
+  r = await runFunction('write', sessionA, {
+    op: 'create', collection: 'verifications', documentId: voteA,
+    data: { reportId: peerReportId, isConfirmed: true, comment: 'Seen it' },
+  });
+  assert.equal(r.code, 200, `first vote: ${JSON.stringify(r.body).slice(0, 200)}`);
+  track('verifications', voteA);
+  stored = (await call(row('reports', peerReportId))).body;
+  assert.equal(stored.verificationCount, 1, `count after one vote: ${stored.verificationCount}`);
+  assert.equal(stored.status, 'pending', 'one vote is below the default threshold of 2');
+  ok('one confirmation counted, still pending');
+
+  step('the same monitor cannot confirm twice');
+  const voteAgain = name('vote-a2');
+  r = await runFunction('write', sessionA, {
+    op: 'create', collection: 'verifications', documentId: voteAgain,
+    data: { reportId: peerReportId, isConfirmed: true, comment: 'Again' },
+  });
+  assert.ok(r.code >= 400, `a second vote from the same verifier should be refused, got ${r.code}`);
+  stored = (await call(row('reports', peerReportId))).body;
+  assert.equal(stored.verificationCount, 1, 'and the count did not move');
+  ok(`refused (${r.code}): one monitor cannot reach the threshold alone`);
+
+  step('a dispute does not count toward the threshold');
+  const sessionC = await sessionFor(voterC.email);
+  const voteC = name('vote-c');
+  r = await runFunction('write', sessionC, {
+    op: 'create', collection: 'verifications', documentId: voteC,
+    data: { reportId: peerReportId, isConfirmed: false, comment: 'Not what I see' },
+  });
+  assert.equal(r.code, 200, `dispute: ${JSON.stringify(r.body).slice(0, 200)}`);
+  track('verifications', voteC);
+  stored = (await call(row('reports', peerReportId))).body;
+  assert.equal(stored.verificationCount, 1, `a dispute must not count: ${stored.verificationCount}`);
+  assert.equal(stored.status, 'pending');
+  ok('dispute recorded, count unchanged');
+
+  step('the second confirmation verifies the report');
+  const sessionB = await sessionFor(voterB.email);
+  const voteB = name('vote-b');
+  r = await runFunction('write', sessionB, {
+    op: 'create', collection: 'verifications', documentId: voteB,
+    data: { reportId: peerReportId, isConfirmed: true, comment: 'Confirmed' },
+  });
+  assert.equal(r.code, 200, `second vote: ${JSON.stringify(r.body).slice(0, 200)}`);
+  track('verifications', voteB);
+  stored = (await call(row('reports', peerReportId))).body;
+  assert.equal(stored.verificationCount, 2, `count: ${stored.verificationCount}`);
+  assert.equal(stored.status, 'verified', `status: ${stored.status}`);
+  assert.equal(stored.autoValidated, true);
+  assert.equal(stored.previousStatus, 'pending', 'so the event Function announces it');
+  assert.ok(typeof stored.verifiedAt === 'string' && stored.verifiedAt, 'verifiedAt is set');
+  ok(`verified by ${stored.verificationCount} peers, autoValidated`);
+
+  // ── 8. the execution shape the Flutter SDK parses ──────────────────
   step('the operation Function, and what its execution carries');
   r = await runFunction('operation', adminSession, {
     operation: 'reopen_report',

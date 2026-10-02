@@ -114,6 +114,18 @@ export const COLLECTIONS = [
     indexes: [
       { key: 'by_report', type: 'key', attributes: ['reportId'] },
       { key: 'by_verifier', type: 'key', attributes: ['verifierId'] },
+      // `unique (report_id, verifier_id)` in Postgres, and missing here
+      // until Phase 23. One monitor could confirm the same report twice,
+      // and once confirmations are counted toward a threshold that is
+      // one person reaching it alone — which is the whole thing peer
+      // verification exists to prevent.
+      {
+        key: 'one_vote_per_verifier',
+        type: 'unique',
+        attributes: ['reportId', 'verifierId'],
+      },
+      // `verifications_report_idx`: the count reads exactly these two.
+      { key: 'by_report_confirmed', type: 'key', attributes: ['reportId', 'isConfirmed'] },
     ],
     permissions: [],
     documentSecurity: true,
@@ -230,7 +242,21 @@ export const COLLECTIONS = [
   {
     id: 'sms_deliveries',
     name: 'SMS deliveries',
-    columns: cols('sms_deliveries'),
+    columns: cols('sms_deliveries', [
+      // Why a number was not texted. Postgres had no such column, and
+      // `termii.js` writes one on every claim and every refusal — so
+      // Appwrite answered the *first* claim of the first real send with
+      // `Unknown attribute: "error"` and the whole SMS path failed at
+      // its first line. Nothing caught it: the Function's fake does not
+      // validate attributes, and until `e2e-sms.mjs` the only way to
+      // run this was to text a real local authority.
+      //
+      // Kept rather than dropped, because "this authority was not
+      // warned, and here is what the provider said" is the question
+      // somebody asks after a flood, and `rejected` on its own does not
+      // answer it. 500 to match the slice in `termii.js`.
+      { key: 'error', type: 'string', size: 500, required: false },
+    ]),
     indexes: [
       { key: 'by_report', type: 'key', attributes: ['reportId'] },
       // The daily cap counts from here, keyed by (state, lga) because

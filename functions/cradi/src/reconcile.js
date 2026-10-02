@@ -34,9 +34,10 @@
  *    that was handled collides with a 409. That is why the sweep is safe
  *    to run as often as you like.
  */
-import { Query, listRowsOrThrow } from './lib/appwrite.js';
+import { Query, listRows, listRowsOrThrow, updateRowsWhere } from './lib/appwrite.js';
 import { handler } from './lib/http.js';
 import { COLLECTION as OUTBOX, enqueue, eventId } from './lib/outbox.js';
+import { getSettings, minimumPeerConfirmations } from './lib/settings.js';
 
 /** How far back to look. Four passes at a five-minute schedule. */
 export const WINDOW_MINUTES = 20;
@@ -77,12 +78,86 @@ export default handler(async ({ log, error }) => {
     }
   }
 
+  Object.assign(summary, await repairConfirmationCounts(since, error));
+
   // Logged every run, including the quiet ones: "0 missing" is the
   // evidence that the sweep ran at all, and a sweep that silently stops
   // running looks exactly like a system with no gaps.
   log(`reconcile ${JSON.stringify(summary)} window=${WINDOW_MINUTES}m`);
   return summary;
 });
+
+/**
+ * Repairs a pending report whose confirmation count is behind its votes.
+ *
+ * `write.js` counts and stores the count in the same call that stores
+ * the vote, which is one network call after another and can stop in
+ * between: Postgres did both in one transaction and had `for update` to
+ * serialise them, and Appwrite has neither. Two confirmations arriving
+ * together can also both read the lower count.
+ *
+ * The consequence is specific and bad — a report that has the votes to
+ * be verified and sits at `pending` until it escalates — so it is worth
+ * a second look every five minutes. Like the rest of the sweep it is
+ * idempotent: it writes only when the stored count differs from the
+ * votes, and the flip to `verified` is the same compare-and-set on
+ * `status = 'pending'` that `write.js` makes.
+ */
+async function repairConfirmationCounts(since, error) {
+  const repaired = { countsChecked: 0, countsRepaired: 0, verified: 0 };
+  const reports = await listRowsOrThrow('reports', [
+    Query.equal('status', 'pending'),
+    Query.greaterThanEqual('$createdAt', since),
+    Query.orderAsc('$createdAt'),
+    Query.limit(BATCH),
+  ]);
+  if (reports.length === 0) return repaired;
+
+  const threshold = minimumPeerConfirmations(await getSettings());
+  for (const report of reports) {
+    repaired.countsChecked += 1;
+    // `total`, not the page: the page is capped and the count is not.
+    const confirmed = await countConfirmed(report.$id);
+    if (confirmed === (report.verificationCount ?? 0)) continue;
+
+    repaired.countsRepaired += 1;
+    error(
+      `reconcile: report ${report.$id} stored ${report.verificationCount} ` +
+        `confirmations and has ${confirmed}; the vote that was not counted ` +
+        'means a write Function stopped between two calls',
+    );
+    await updateRowsWhere(
+      'reports',
+      [Query.equal('$id', report.$id)],
+      { verificationCount: confirmed },
+    );
+    if (confirmed < threshold) continue;
+
+    const flipped = await updateRowsWhere(
+      'reports',
+      [Query.equal('$id', report.$id), Query.equal('status', 'pending')],
+      {
+        status: 'verified',
+        verifiedAt: new Date().toISOString(),
+        autoValidated: true,
+        previousStatus: 'pending',
+      },
+    );
+    if ((flipped.body?.total ?? 0) > 0) repaired.verified += 1;
+  }
+  return repaired;
+}
+
+/** How many confirmations a report has, from `total` rather than a page. */
+async function countConfirmed(reportId) {
+  const result = await listRows('verifications', [
+    Query.equal('reportId', reportId),
+    Query.equal('isConfirmed', true),
+    Query.limit(1),
+  ]);
+  if (!result.ok) throw new Error(`verification count failed: ${result.status}`);
+  return result.body?.total ?? 0;
+}
 
 /** What each collection owes the outbox at creation time. */
 export const SWEEPS = [

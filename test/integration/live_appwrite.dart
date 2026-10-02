@@ -43,6 +43,15 @@ const String liveEmail = String.fromEnvironment('DART_TEST_EMAIL');
 const String livePassword = String.fromEnvironment('DART_TEST_PASSWORD');
 const String liveUserId = String.fromEnvironment('DART_TEST_USER_ID');
 
+/// A pending report filed by **another** account, from `prep-dart.mjs`.
+///
+/// A reviewer may not decide their own report, so a test that files its
+/// own can never reach `reopen_report` — it is refused one step earlier,
+/// correctly.
+const String liveForeignReport = String.fromEnvironment(
+  'DART_TEST_FOREIGN_REPORT',
+);
+
 /// A session secret minted server-side by `prep-dart.mjs`.
 const String liveSession = String.fromEnvironment('DART_TEST_SESSION');
 

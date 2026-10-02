@@ -3,12 +3,13 @@ import 'dart:convert';
 import 'dart:developer' as developer;
 
 import 'package:appwrite/appwrite.dart' as aw;
-import 'package:appwrite/enums.dart' show ExecutionMethod;
+import 'package:http/http.dart' as http;
 import 'package:appwrite/models.dart' as awm;
 
 import 'package:climate_app/core/services/appwrite/appwrite_config.dart';
 import 'package:climate_app/core/services/appwrite/appwrite_data_backend.dart';
 import 'package:climate_app/core/services/appwrite/appwrite_errors.dart';
+import 'package:climate_app/core/services/appwrite/appwrite_execution.dart';
 import 'package:climate_app/core/services/auth_backend.dart';
 
 /// [AuthBackend] over Appwrite.
@@ -49,7 +50,6 @@ class AppwriteAuthBackend implements AuthBackend {
     : _data = data,
       _client = client ?? data?.client ?? _defaultClient() {
     _account = aw.Account(_client);
-    _functions = aw.Functions(_client);
   }
 
   static aw.Client _defaultClient() => aw.Client()
@@ -59,7 +59,6 @@ class AppwriteAuthBackend implements AuthBackend {
   final aw.Client _client;
   final AppwriteDataBackend? _data;
   late final aw.Account _account;
-  late final aw.Functions _functions;
 
   final StreamController<AuthChange> _changes =
       StreamController<AuthChange>.broadcast();
@@ -187,13 +186,11 @@ class AppwriteAuthBackend implements AuthBackend {
     required String password,
   }) async {
     try {
-      final session = await _account.createEmailPasswordSession(
-        email: email,
-        password: password,
-      );
+      final session = await _createSession(email: email, password: password);
+      _client.setSession(session.secret);
       final user = await _account.get();
       _adopt(user);
-      _sessionId = session.$id;
+      _sessionId = session.id;
       _emit(AuthEvent.signedIn, _cached);
 
       // Appwrite signs an unverified account in; GoTrue refuses it. The
@@ -347,6 +344,124 @@ class AppwriteAuthBackend implements AuthBackend {
 
   void dispose() => unawaited(_changes.close());
 
+  // ───────────────────────── sessions ─────────────────────────────────
+
+  /// Signs in and returns the session **secret**, read from the cookie
+  /// the server set.
+  ///
+  /// Not `account.createEmailPasswordSession`, which is the obvious
+  /// call, because the session it creates does not survive it. Two
+  /// things in the SDK combine, and both are invisible:
+  ///
+  /// 1. The response body's `secret` is empty. Appwrite fills it only
+  ///    for a privileged caller (one sending an API key); an ordinary
+  ///    client is expected to use the cookie. So there is nothing in
+  ///    the parsed [aw.Session] to hold on to.
+  /// 2. The cookie is never stored. Appwrite sends two `Set-Cookie`
+  ///    headers; `package:http` joins repeated headers with `", "`, and
+  ///    the SDK's `CookieManager` splits them on `,(?=[^ ])` — a comma
+  ///    *not* followed by a space. That never matches the join, so the
+  ///    two cookies arrive as one malformed string, `Cookie.fromSet‑
+  ///    CookieValue` rejects it, and the failure is swallowed by a
+  ///    `catchError` that returns the response unchanged. The jar ends
+  ///    up empty and nothing says so.
+  ///
+  /// Measured against Appwrite 1.9.6: after a successful sign-in the
+  /// SDK's own cookie jar holds nothing, and the next call is a guest.
+  /// The `expires=Sat, 02-Oct-2027` attribute means every Appwrite
+  /// cookie contains a comma-space, so this is not specific to the
+  /// local stack — Cloud sends the same headers, and the earlier
+  /// assumption that HTTPS would fix it was wrong.
+  ///
+  /// So the sign-in is one plain request, and the secret goes onto the
+  /// client as a header with `setSession` — the same mechanism
+  /// [_establish] uses after a typed code is redeemed, which is the
+  /// path sign-up and recovery already take and the reason those work.
+  Future<({String secret, String? id})> _createSession({
+    required String email,
+    required String password,
+  }) async {
+    const endpoint = AppwriteConfig.endpoint;
+    const project = AppwriteConfig.projectId;
+    http.Response response;
+    try {
+      response = await http.post(
+        Uri.parse('$endpoint/account/sessions/email'),
+        headers: {
+          'content-type': 'application/json',
+          'x-appwrite-project': project,
+          'x-appwrite-response-format': _responseFormat,
+        },
+        body: jsonEncode({'email': email, 'password': password}),
+      );
+    } on Object catch (e) {
+      throw aw.AppwriteException('Could not reach the server: $e', 503);
+    }
+
+    final body = _decodeBody(response.body);
+    if (response.statusCode >= 400) {
+      // Re-raised as the SDK's own exception so the one error table in
+      // `appwrite_errors.dart` keeps translating it — a wrong password
+      // must still arrive as `invalidCredentials`.
+      throw aw.AppwriteException(
+        body['message'] as String? ?? 'Sign-in failed',
+        response.statusCode,
+        body['type'] as String?,
+        response.body,
+      );
+    }
+
+    final secret =
+        _sessionCookie(response, project) ?? (body['secret'] as String? ?? '');
+    if (secret.isEmpty) {
+      // Better than returning a session that is not one. The caller
+      // would otherwise look signed in until its first read came back
+      // empty, which is the failure this whole path exists to end.
+      throw aw.AppwriteException(
+        'Signed in, but the server returned no session to hold on to.',
+        500,
+        'user_session_not_found',
+      );
+    }
+    return (secret: secret, id: body[r'$id'] as String?);
+  }
+
+  /// The session cookie's value, out of however many cookies were set.
+  ///
+  /// Only this one is wanted — `a_session_<project>`, whose value is
+  /// exactly what `X-Appwrite-Session` takes. The `_legacy` cookie
+  /// beside it holds a JSON envelope and is not interchangeable, and the
+  /// name match excludes it because `a_session_<project>_legacy` has no
+  /// `=` where this pattern needs one.
+  ///
+  /// The header is read rather than split into cookies: `package:http`
+  /// joins repeated headers, and separating them again is the step the
+  /// SDK gets wrong. One value is all this needs.
+  static String? _sessionCookie(http.Response response, String project) {
+    final raw = response.headers['set-cookie'];
+    if (raw == null || raw.isEmpty) return null;
+    final match = RegExp(
+      'a_session_${RegExp.escape(project)}=([^;,]+)',
+    ).firstMatch(raw);
+    final value = match?.group(1);
+    if (value == null || value.isEmpty) return null;
+    return Uri.decodeComponent(value);
+  }
+
+  static Map<String, dynamic> _decodeBody(String body) {
+    if (body.isEmpty) return const {};
+    try {
+      final parsed = jsonDecode(body);
+      return parsed is Map<String, dynamic> ? parsed : const {};
+    } on FormatException {
+      return const {};
+    }
+  }
+
+  /// The response format the SDK pins, so this request is answered the
+  /// same way every other one is.
+  static const String _responseFormat = '1.8.0';
+
   // ───────────────────────── the Function ─────────────────────────────
 
   static String _secretOf(Map<String, dynamic> body) {
@@ -369,32 +484,31 @@ class AppwriteAuthBackend implements AuthBackend {
     String action,
     Map<String, dynamic> payload,
   ) async {
-    final awm.Execution execution;
+    final Map<String, dynamic> execution;
     try {
-      execution = await _functions.createExecution(
-        functionId: AppwriteConfig.authFunctionId,
-        body: jsonEncode({'action': action, ...payload}),
-        xasync: false,
-        method: ExecutionMethod.pOST,
-        headers: {'content-type': 'application/json'},
+      execution = await createExecution(
+        _client,
+        AppwriteConfig.authFunctionId,
+        {'action': action, ...payload},
       );
     } on aw.AppwriteException catch (e) {
       throw toAuthBackendException(e);
     }
 
-    final body = _decode(execution.responseBody);
-    final status = execution.responseStatusCode;
+    final responseBody = execution['responseBody']?.toString() ?? '';
+    final body = _decode(responseBody);
+    final status = (execution['responseStatusCode'] as num?)?.toInt() ?? 0;
     if (status >= 400) {
       throw toAuthBackendException(
         aw.AppwriteException(
           body['message']?.toString(),
           status,
           body['type']?.toString(),
-          execution.responseBody,
+          responseBody,
         ),
       );
     }
-    if (execution.status.name != 'completed') {
+    if (execution['status']?.toString() != 'completed') {
       // A cold-start timeout or a crash leaves no response at all. It must
       // not read as a successful registration.
       throw const AuthBackendException(

@@ -249,6 +249,176 @@ describe('profiles', () => {
   });
 });
 
+describe('the peer confirmation threshold', () => {
+  const pending = {
+    $id: 'r1', status: 'pending', verificationCount: 0,
+    state: 'Benue', lga: 'Makurdi', ward: 'North Bank I',
+  };
+  const vote = (id, over = {}) => ({
+    $id: id, reportId: 'r1', isConfirmed: true, verifierId: `v-${id}`, ...over,
+  });
+  const cast = (documentId, over = {}) =>
+    context({
+      op: 'create', collection: 'verifications', documentId,
+      data: { reportId: 'r1', isConfirmed: true, comment: 'Seen it', ...over },
+    });
+
+  it('counts the confirmations onto the report', async () => {
+    // `verifications_after_insert`, which had no Appwrite counterpart:
+    // the vote was stored and nothing read it, so the count stayed 0.
+    const fake = fakeAppwrite({
+      rows: {
+        profiles: { u1: profile({ role: 'ewm' }) },
+        reports: { r1: { ...pending } },
+        verifications: {},
+        app_settings: { minimum_peer_confirmations: { $id: 'minimum_peer_confirmations', key: 'minimum_peer_confirmations', value: '3' } },
+      },
+    });
+    const ctx = cast('v1');
+    await write(ctx);
+
+    assert.equal(ctx.captured.status, 200);
+    assert.equal(fake.store.reports.r1.verificationCount, 1);
+    // Below the threshold, so still pending.
+    assert.equal(fake.store.reports.r1.status, 'pending');
+  });
+
+  it('verifies the report once the threshold is reached', async () => {
+    const fake = fakeAppwrite({
+      rows: {
+        profiles: { u1: profile({ role: 'ewm' }) },
+        reports: { r1: { ...pending, verificationCount: 1 } },
+        verifications: { v1: vote('v1') },
+        app_settings: {},
+      },
+    });
+    const ctx = cast('v2');
+    await write(ctx);
+
+    assert.equal(ctx.captured.status, 200);
+    const report = fake.store.reports.r1;
+    assert.equal(report.verificationCount, 2, 'the default threshold is 2');
+    assert.equal(report.status, 'verified');
+    assert.equal(report.autoValidated, true);
+    assert.equal(typeof report.verifiedAt, 'string');
+    // So the event Function can tell this was a status change; Appwrite's
+    // payload carries no "before".
+    assert.equal(report.previousStatus, 'pending');
+  });
+
+  it('honours the configured threshold', async () => {
+    const fake = fakeAppwrite({
+      rows: {
+        profiles: { u1: profile({ role: 'ewm' }) },
+        reports: { r1: { ...pending, verificationCount: 2 } },
+        verifications: { v1: vote('v1'), v2: vote('v2') },
+        app_settings: { k: { $id: 'k', key: 'minimum_peer_confirmations', value: '3' } },
+      },
+    });
+    await write(cast('v3'));
+
+    assert.equal(fake.store.reports.r1.verificationCount, 3);
+    assert.equal(fake.store.reports.r1.status, 'verified');
+  });
+
+  it('does not count a dispute toward the threshold', async () => {
+    const fake = fakeAppwrite({
+      rows: {
+        profiles: { u1: profile({ role: 'ewm' }) },
+        reports: { r1: { ...pending } },
+        verifications: { v1: vote('v1', { isConfirmed: false }) },
+        app_settings: {},
+      },
+    });
+    await write(cast('v2', { isConfirmed: false }));
+
+    assert.equal(fake.store.reports.r1.verificationCount, 0);
+    assert.equal(fake.store.reports.r1.status, 'pending');
+  });
+
+  it('counts only this report\'s votes', async () => {
+    const fake = fakeAppwrite({
+      rows: {
+        profiles: { u1: profile({ role: 'ewm' }) },
+        reports: {
+          r1: { ...pending },
+          r2: { ...pending, $id: 'r2' },
+        },
+        verifications: { other: vote('other', { reportId: 'r2' }) },
+        app_settings: {},
+      },
+    });
+    await write(cast('v1'));
+
+    assert.equal(fake.store.reports.r1.verificationCount, 1);
+    assert.equal(fake.store.reports.r2.verificationCount, 0, 'untouched');
+  });
+
+  it('never overwrites a decision an admin already made', async () => {
+    // The trigger's `where id = ... and status = 'pending'`: a report
+    // approved while the votes were coming in stays approved.
+    const fake = fakeAppwrite({
+      rows: {
+        profiles: { u1: profile({ role: 'ewm' }) },
+        reports: { r1: { ...pending, status: 'pending' } },
+        verifications: { v1: vote('v1'), v2: vote('v2') },
+        app_settings: {},
+      },
+    });
+    // The vote is accepted while the report is pending; the approval
+    // lands between the vote being stored and the count being applied.
+    const ctx = cast('v3');
+    const original = globalThis.fetch;
+    globalThis.fetch = async (url, init) => {
+      const result = await original(url, init);
+      if (String(url).includes('/verifications/rows') && init?.method === 'POST') {
+        fake.store.reports.r1.status = 'approved';
+      }
+      return result;
+    };
+    await write(ctx);
+    globalThis.fetch = original;
+
+    assert.equal(ctx.captured.status, 200);
+    assert.equal(fake.store.reports.r1.status, 'approved', 'the admin decision stands');
+    assert.equal(fake.store.reports.r1.verificationCount, 3, 'but the count is still true');
+  });
+
+  it('recounts when a vote is deleted', async () => {
+    const fake = fakeAppwrite({
+      rows: {
+        profiles: { u1: profile({ role: 'admin' }) },
+        reports: { r1: { ...pending, verificationCount: 2 } },
+        verifications: { v1: vote('v1'), v2: vote('v2') },
+        app_settings: {},
+      },
+    });
+    await write(context({ op: 'delete', collection: 'verifications', documentId: 'v2', data: {} }));
+
+    assert.equal(fake.store.reports.r1.verificationCount, 1);
+  });
+
+  it('does not fail the vote when the count cannot be stored', async () => {
+    // The vote is already written. Telling the verifier it failed would
+    // have them send it again — into a unique index, which refuses it.
+    const fake = fakeAppwrite({
+      rows: {
+        profiles: { u1: profile({ role: 'ewm' }) },
+        reports: { r1: { ...pending } },
+        verifications: {},
+        app_settings: {},
+      },
+      fail: { 'PATCH /tables/reports/rows/r1': { status: 503, body: { message: 'upstream' } } },
+    });
+    const ctx = cast('v1');
+    await write(ctx);
+
+    assert.equal(ctx.captured.status, 200);
+    assert.ok(fake.store.verifications.v1, 'the vote is stored');
+    assert.match(ctx.logs.join('\n'), /WARNING: could not store verificationCount/);
+  });
+});
+
 describe('a refusal from the database', () => {
   it('reaches the caller with the reason, not as a server fault', async () => {
     // Appwrite answers a bad payload with 400 and names the column:
