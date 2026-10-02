@@ -51,12 +51,16 @@ node infra/appwrite/local/deploy.mjs      # endpoint comes from the env
 # 4. Behaviour. Creates `cloudchk-*` rows and deletes them, including
 #    after a failure. Writes nothing it did not create.
 node infra/appwrite/cloud-check.mjs
+
+# 5. The SMS path, against a stand-in rather than Termii. Safe on a real
+#    project: it texts nobody and removes its own rows.
+node infra/appwrite/local/e2e-sms.mjs
 ```
 
 Then, in the `CRADI-Mobile-Admin` checkout:
 
 ```bash
-# 5. The admin panel, in a browser, against Cloud.
+# 6. The admin panel, in a browser, against Cloud.
 npm run test:e2e:live:seed
 NEXT_PUBLIC_APPWRITE_ENDPOINT=$APPWRITE_ENDPOINT \
 NEXT_PUBLIC_APPWRITE_PROJECT_ID=$APPWRITE_PROJECT_ID \
@@ -73,8 +77,11 @@ for a local run; the Railway domain for the deployed one.
 And the Flutter adapters:
 
 ```bash
-# 6. The client. Needs a session for a seeded account; prep-dart.mjs
-#    mints one against whatever endpoint is configured.
+# 7. The client. prep-dart.mjs seeds the accounts and a report filed by
+#    somebody else, and prints the defines. Pass them to
+#    test/integration and NOT to the whole tree: several unit tests
+#    assert what the app does with no backend configured, and these
+#    defines configure one.
 eval "$(node infra/appwrite/local/prep-dart.mjs)"
 flutter test \
   --dart-define=APPWRITE_ENDPOINT="$APPWRITE_ENDPOINT" \
@@ -86,47 +93,54 @@ flutter test \
   test/integration
 ```
 
-## The three things only Cloud can answer
+`appwrite_sign_in_live_test.dart` is the one to watch: it signs in the
+way a returning user does, which went unexercised for most of the
+migration.
 
-Everything else in the list above has passed against 1.9.6. These have
-not, and cannot.
+## What only Cloud can answer
 
-### 1. `signInWithPassword` on the Flutter client
+Two things. Everything else on the list above passes against 1.9.6 —
+including the two that were on this list in Phase 22 and are not any
+more, which are worth recording because the reason they came off it was
+not "Cloud said yes".
 
-The headline gap, open since Phase 16.
-`AppwriteAuthBackend.signInWithPassword` relies on the Flutter SDK's
-cookie jar. Against the local stack the session is created — 201 with
-three `Set-Cookie` headers — and **the next call is a guest**. Not a
-timing race; a 250 ms wait does not help. The fallback header Appwrite
-exposes for exactly this case is browser-only in the SDK.
+### Closed in Phase 23, not by Cloud
 
-Plain HTTP, the `.local` suffix and the local cookie attributes are all
-candidates, and every Appwrite Flutter app in the world signs in this way
-over HTTPS, so it very likely works on Cloud. **"Very likely" is not a
-test.** Until step 6 passes, sign-up and recovery are the only verified
-paths to a session (they go through `_establish` with a server-minted
-secret, which does work).
+**`signInWithPassword`** was blamed on the local stack's plain HTTP and
+deferred here. It was a bug in the SDK's cookie handling that Cloud
+shares: `package:http` joins repeated `Set-Cookie` headers with `", "`,
+the SDK splits them on a comma *not* followed by a space, the result is
+unparseable, and the failure is swallowed. Every Appwrite cookie carries
+`expires=Sat, …`, so the join is always there. Had this run on Cloud
+first it would have failed there too. The adapter reads the secret from
+the cookie and sets it explicitly now, and
+`test/integration/appwrite_sign_in_live_test.dart` covers it.
 
-The admin panel's result does **not** transfer. Phase 21 proved the
-panel's session survives — but by measuring that the browser holds *no
-cookie at all* and the Web SDK falls back to `localStorage`. That
-fallback is the thing the Flutter SDK does not have.
+**`callOperation`** was blamed on `Execution.fromMap` needing 2.3, which
+was true. Waiting was still wrong: the app does not only target Cloud,
+and a client that cannot call a Function on the server this repository
+ships a compose file for is broken rather than blocked.
+`appwrite_execution.dart` reads the three fields the adapters want, all
+of which have been there since 1.x, and the two skipped tests run.
 
-### 2. `DataBackend.callOperation`
+`cloud-check.mjs` still reports whether the execution carries
+`resourceId`/`resourceType`, because knowing which server shape you are
+on is worth a line either way.
 
-The Flutter SDK (27.x) parses an execution with `resourceId` and
-`resourceType`, which arrived in Appwrite **2.3**. Neither 1.8 nor 1.9
-sends them, so `Execution.fromMap` throws `Bad state: No element` before
-the response body is read — in the SDK's model, not in our code. Two
-integration tests are skipped with that reason; `cloud-check.mjs` step 7
-reports which keys the execution actually carried, and says so when they
-are missing. On Cloud those two tests should be un-skipped.
+### 1. Termii
 
-The Function itself is covered over HTTP by
-`infra/appwrite/local/e2e-operation.mjs` and by `cloud-check.mjs`, so
-what is unverified is the adapter, not the operation.
+The SMS path now runs end to end against a stand-in
+(`infra/appwrite/local/e2e-sms.mjs`): the numbers chosen, the text,
+both caps, the deterministic claim and the bookkeeping. What that
+cannot prove is Termii's own API contract — that a real key and sender
+id are accepted, and that the response shape is what the sender reads —
+and that a deployed Function can reach `api.ng.termii.com` at all.
 
-### 3. The tier's real limits
+Both need an account and a deploy. Send one message to a number you
+own, with `TERMII_BASE_URL` unset, and check `sms_deliveries` says
+`sent` with a provider id.
+
+### 2. The tier's real limits
 
 584 teams, ~650 messaging topics, 19 collections, 187 columns, 7
 Functions with three on a one-minute schedule. The one-database and
