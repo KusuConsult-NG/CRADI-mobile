@@ -197,7 +197,9 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen>
                   label: context.l10n.otpSecureCode,
                   controller: _otpController,
                   hint: context.l10n.otpCodeHint,
-                  keyboardType: TextInputType.number,
+                  // See reset_password_screen: Appwrite's token is
+                  // alphanumeric, and a numeric keypad offers no letters.
+                  keyboardType: TextInputType.visiblePassword,
                   prefixIcon: const Icon(Icons.password),
                   validator: (value) {
                     if (value == null || value.isEmpty) {

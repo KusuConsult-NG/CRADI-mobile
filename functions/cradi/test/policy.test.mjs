@@ -68,6 +68,25 @@ describe('the rules agree with themselves', () => {
     }
   });
 
+  it('no ACL names a label Appwrite will reject', () => {
+    // Appwrite labels are alphanumeric only — no underscores, 36 chars.
+    // Phase 7's migration already converts `tech_support` to
+    // `techSupport`; the Functions' own ACLs did not, and the result was
+    // every registration failing at the profile write with
+    // "Role \"label\" identifier value is invalid".
+    const sources = ['src/auth.js', 'src/lib/policy.js', 'src/write.js'];
+    for (const file of sources) {
+      const text = readFileSync(resolve(here, '..', file), 'utf8');
+      for (const [, label] of text.matchAll(/label:([A-Za-z0-9_]+)/g)) {
+        assert.match(
+          label,
+          /^[A-Za-z0-9]{1,36}$/,
+          `${file} uses label "${label}" — alphanumeric only`,
+        );
+      }
+    }
+  });
+
   it('every Function-written collection has an ACL', () => {
     for (const collection of WRITABLE) {
       assert.ok(RULES[collection]?.acl, `${collection} would be written with no permissions`);

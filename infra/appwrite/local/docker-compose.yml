@@ -24,6 +24,16 @@ services:
       timeout: 5s
       retries: 30
 
+  # A mail catcher, so the typed-code flows can be tested the way a user
+  # experiences them: the code has to actually arrive in an email. Reading
+  # it from a Function log would test the mint and not the delivery, and
+  # would mean logging live auth codes.
+  mailpit:
+    image: axllent/mailpit:latest
+    restart: unless-stopped
+    ports:
+      - "8025:8025"
+
   redis:
     image: redis:7.2.4-alpine
     healthcheck:
@@ -85,6 +95,18 @@ services:
   appwrite-worker-databases:
     image: appwrite/appwrite:1.8.0
     entrypoint: worker-databases
+    depends_on:
+      - appwrite
+    environment: *appwrite_env
+
+  # Without this nothing is ever *sent*. Appwrite accepts a message and
+  # leaves it `processing` forever, so an outbox drain reports success,
+  # a push shows up in the console, and no device or inbox ever sees it.
+  # The spike never needed it and the gap is invisible until you check
+  # a mailbox rather than the API.
+  appwrite-worker-messaging:
+    image: appwrite/appwrite:1.8.0
+    entrypoint: worker-messaging
     depends_on:
       - appwrite
     environment: *appwrite_env

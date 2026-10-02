@@ -102,7 +102,7 @@ async function signUp({ email, password, metadata }, { log }) {
       permissions: [
         `read("user:${userId}")`,
         'read("label:admin")',
-        'read("label:tech_support")',
+        'read("label:techSupport")',
       ],
     },
   });

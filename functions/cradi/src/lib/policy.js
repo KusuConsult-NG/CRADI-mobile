@@ -137,7 +137,7 @@ export const RULES = {
     acl: ({ documentId }) => [
       `read("user:${documentId}")`,
       'read("label:admin")',
-      'read("label:tech_support")',
+      'read("label:techSupport")',
     ],
   },
 };

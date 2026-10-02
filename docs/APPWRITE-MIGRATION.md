@@ -2216,3 +2216,93 @@ still never run against a server.
 
 And none of it is on Cloud, where the plan refuses seven Functions and
 both buckets (Phase 12).
+
+---
+
+# Phase 15: auth flows and the escalation cron
+
+Status: **both PASS**, on Appwrite 1.8.0, against real email delivery
+and a schedule nobody triggered.
+
+```
+AUTH END TO END: PASS          ESCALATION CRON: PASS
+```
+
+`e2e-auth.mjs` registers an account, reads the code **out of a real
+mailbox**, redeems it, recovers a password and signs in with the new
+one. `e2e-escalation.mjs` plants an overdue report and then calls
+nothing — it waits for the cron, and asserts `trigger=schedule`.
+
+## The finding that reaches the app
+
+**Appwrite's token is not six digits. It is six alphanumeric
+characters** — `9592e8`, `88add5`, `fea844`. Phase 2 recorded
+`{"secret": "251152"}` from one call and the design has said "6-digit
+code" in every phase since; that sample happened to be all digits.
+
+The app could not accept one. `reset_password_screen` used
+`TextInputType.number` **and** `FilteringTextInputFormatter.digitsOnly`,
+so the code could not be typed and a pasted one was silently stripped to
+nothing; `otp_verification_screen` used a numeric keypad, which offers
+no letters. Both now accept alphanumeric, which digits are a subset of,
+so it is correct on either backend.
+
+This is the clearest example of why the fake was not enough: every unit
+test passed, the Function worked, the mail arrived — and a user would
+have sat in front of a keypad that could not type their code.
+
+## Three more, all in delivery
+
+**Nothing was ever sent.** The compose had no `appwrite-worker-messaging`.
+Appwrite accepts a message, marks it `sent`, and delivers nothing; the
+drain reports success and the console looks healthy. Phase 14's "push ->
+7 monitors" proved a message was **created**, not delivered — that claim
+is corrected here.
+
+**Appwrite addresses recipients by Bcc**, not To, so a mailbox search on
+`to:` finds nothing even when the mail is sitting there.
+
+**Labels cannot contain underscores.** `read("label:tech_support")` is
+rejected outright, which failed every registration at the profile write.
+Phase 7's migration already knew this and converted `tech_support` to
+`techSupport`; the Functions' own ACLs never got the same treatment. A
+test now rejects any label that is not alphanumeric.
+
+## What the auth run proves
+
+- registration creates the account and the profile, records the
+  **requested** role, and withholds approval — `isApproved: false`
+  whatever the client sent;
+- the code arrives by email with our own wording and template;
+- a wrong code is `401 user_invalid_token`;
+- **an address with no account answers identically** — same status, same
+  body. Phase 2 named this as a property to preserve and it is
+  preserved;
+- recovery is equally silent, and mails nothing to an address that does
+  not exist;
+- the recovery session sets a new password, the old one stops working,
+  and a weak one is refused as `general_password_weak`.
+
+One test ordering mistake worth recording: the weak-password check
+originally ran *after* the successful change and failed with a 401.
+Setting a password revokes the sessions that could set it, so the second
+attempt was using a dead session and said nothing about the policy. The
+check now runs first.
+
+## What the cron run proves
+
+The schedule fires — `trigger=schedule`, not an invocation — and the
+Function does its job: the report is flagged `escalated` with the
+auto-escalation reason, **stays `pending`** because escalation is a flag
+and not a decision, the escalation row closes as `processed`, and the
+LGA coordinator is notified while the reporter is not.
+
+A second run notifies nobody twice. There is no conditional update in
+Appwrite; what stands in for it is Appwrite refusing a duplicate
+`messageId`, and that now has a test rather than an argument.
+
+## Still untested
+
+The Termii SMS path, the reconciling sweep against a real gap, phone
+OTP (not migrated), and **the Dart adapters**, which have still never
+run against a server.
