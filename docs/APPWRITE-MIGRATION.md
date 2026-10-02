@@ -1819,3 +1819,81 @@ is missing is a place to put it:
 2. **The tier quotas** — 584 teams, ~650 topics, more than one bucket.
 
 Eleven phases, and those two have been open since the first.
+
+---
+
+# Phase 12: provisioning
+
+Status: **written; not run against a project, because there is no route
+to one from here.** The environment's network policy answers 403 at the
+gateway for `cloud.appwrite.io`, `fra.cloud.appwrite.io` and
+`appwrite.io`. 116 Node tests (107 before, +9), 819 Dart, clean.
+
+`infra/appwrite/` turns "set up the project" into one idempotent command.
+
+| | |
+|---|---|
+| `extract-schema.mjs` | derives the Appwrite columns from `supabase/migrations/` |
+| `columns.json` | the generated output, committed |
+| `plan.mjs` | the declared target: 19 collections, 187 columns, 2 buckets, 7 Functions |
+| `provision.mjs` | makes a project match it — `--dry-run` works offline |
+| `verify.mjs` | read-only; reports where a live project differs |
+
+A dry run prints **237 objects**.
+
+## The columns are generated, and that is the point
+
+Hand-writing 19 collections' worth of columns would have been faster and
+would have created a second source of truth for a schema that already has
+one. `supabase/migrations/` *is* the live database. So the extractor
+reads it, maps Postgres types onto Appwrite's five, converts snake_case
+to the camelCase the app uses, and a test fails when the committed file
+falls behind.
+
+The failure that avoids is specific: a column added to Postgres and
+forgotten here is a write the server rejects — in production, with the
+field agent's report already typed in. As a red CI run it costs a minute.
+
+## Three things the provisioner refuses to do
+
+**It never deletes.** A column in the project that is not in the plan is
+printed with a `?` and left alone. Dropping a column drops its data, and
+this will be run against a project holding live reports. A provisioner
+that converges by deletion is a provisioner that eventually deletes
+something it should not.
+
+**It stops on a quota refusal** rather than carrying on. Everything after
+the first `402` would fail the same way and bury the reason in two
+hundred lines. It says plainly that this is the tier question the doc has
+been asking since Phase 1 — so running it is also how that question gets
+answered, if the pricing page cannot.
+
+**It does not exit 0 on failure.** Stated because this project shipped a
+checker that reported success over twenty failures, and a reconciler that
+read a `400` as "zero rows". The verifier is written the same way: an
+unreadable project is a *failure*, not an empty diff, and it checks three
+states a bare existence check calls fine — a column stuck in `processing`
+(present, rejects every write), a Function created but never deployed
+(500s on every call, looks healthy in the console), and a schedule that
+silently does not match.
+
+## What is still a decision, not a task
+
+The project itself, its **region**, and its **API key** are console
+actions, and only the first two are hard:
+
+1. **The region** is a compliance question about real people's hazard
+   reports, locations and phone numbers under the NDPA — and it cannot be
+   changed later without migrating everything a second time. The old
+   project was Frankfurt. If in-country residency is required, Cloud is
+   out and the plan moves to self-hosting, which changes Phases 2, 4 and
+   6 and brings back all four of Phase 4's operational traps.
+2. **The tier** has to allow 584 teams, ~650 topics, 2 buckets, 19
+   collections, 187 columns and 7 Functions, three of them on a
+   one-minute schedule.
+
+Twelve phases. Everything that can be built without those answers is
+built: the client adapters, the three Functions the client calls, the
+four that replace the worker, the migration pipeline, and now the
+provisioning. What is left needs a project, and a project needs those two
+answers first.
