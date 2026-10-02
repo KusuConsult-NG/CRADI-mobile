@@ -2021,3 +2021,84 @@ two from the previous project are in public git history — and a route to
 `fra.cloud.appwrite.io`, which this container does not have: the
 environment's network policy answers 403 at the gateway for it, for
 `cloud.appwrite.io` and for `appwrite.io`.
+
+
+---
+
+# Phase 13: a real Appwrite, locally — and three bugs that were mine
+
+Status: **the whole project provisions clean against Appwrite 1.8.0.**
+`created=11 exists=228 failed=0`, 239 objects, all seven Functions, both
+buckets, and the independent verifier agrees. Nothing is deployed yet.
+
+The Cloud plan will not host this (Phase 12), but self-hosted has no
+quotas — so the question "does any of this actually work" could be
+answered before spending money, and it needed to be: Phases 9 to 12
+wrote roughly two thousand lines that had never met a server.
+
+`infra/appwrite/local/` is the stack. It is the Phase 4 spike's compose
+at 1.8.0 with executor 0.7.22, carrying all four of that phase's traps
+forward intact, on ports 8090/8091 so the 1.6.2 spike keeps running
+beside it — that one still holds the Phase 0 to 6 proofs and tearing it
+down to reuse a port would have been the Phase 4 mistake twice.
+
+## Three bugs, and two of them were being blamed on the tier
+
+**1. Column sizes, which Phase 12 misattributed.** The first local run
+died at the fourth column of the first collection:
+
+```
+! stopped at profiles.email: The maximum number or size of columns
+  for this table has been reached.
+```
+
+Not a quota. Appwrite stores a sized string as a MariaDB `VARCHAR`, and
+**MariaDB caps a row at 65,535 bytes** — four per character under
+utf8mb4. My extractor gave every unsized Postgres `text` a generous 8192
+characters, which is 32KB of row budget each, so four of them filled it.
+
+That message is word-for-word what Cloud returned for ten collections,
+which means **Phase 12 blamed the tier for my bug**. The real Cloud
+limits are databases, functions and buckets; the column failures were
+mine. Corrected above.
+
+The sizes are now small for ordinary fields and large for long ones,
+because the middle is the expensive place to be: above ~16,000
+characters Appwrite switches to `TEXT`, stored off-row at almost no
+cost. `reports` went from refusing its fourth column to 42KB of a 64KB
+budget across 37.
+
+**2. `double` is `float`.** The route is `/columns/float`; the plan said
+`double`, which is the Postgres name. A 404 reading "Route not found",
+naming neither the column nor the reason.
+
+**3. Function events are rooted at `databases`, not `tablesdb`.** This
+one was not guessable. Realtime *channels* are
+`tablesdb.<db>.tables.<t>.rows` — the Flutter SDK's own channel builder
+produces exactly that, which is why Phase 11 used it — but Function
+*events* are `databases.<db>.tables.<t>.rows.*.create`. Two namespaces
+for the same objects, and only `app/config/events.php` inside the server
+image says so.
+
+A 400 at provisioning time is the good failure here. The bad one was
+available: an event name that is merely *unmatched* rather than invalid
+would have subscribed `on-write` to nothing, and the first anyone would
+know is a hazard report that never notified a verifier.
+
+## What the run settles
+
+- **Teams and topics are accepted.** Both probes created and deleted
+  cleanly. Open since Phase 1, and the answer on self-hosted is yes.
+  Cloud's per-plan ceiling at 584 and ~650 is still unmeasured.
+- **The provisioner is idempotent in practice, not just by design** —
+  the second run reported `exists=228` and created only the 11 objects
+  the fixes added.
+- **The verifier fails when it should.** It found all seven Functions
+  created but never deployed, which is the state that answers every call
+  with a 500 and looks healthy in the console, and it exited 1.
+
+## Not yet done
+
+The Function code is not pushed, so nothing has been *executed* — only
+created. That is the next thing, and it is what turns 116 tests against
+a fake into evidence.

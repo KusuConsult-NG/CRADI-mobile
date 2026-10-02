@@ -146,10 +146,20 @@ async function database() {
   say(r.state, `database ${DATABASE_ID}`);
 }
 
+/**
+ * The plan's column type -> Appwrite's route segment.
+ *
+ * `double` is the Postgres name and the one the plan uses; Appwrite's
+ * route is `/columns/float`. Mapping it wrong is a 404 that reads
+ * "Route not found", which says nothing about which column or why.
+ */
 const columnPath = (type) =>
   ({
-    string: 'string', integer: 'integer', double: 'double',
-    boolean: 'boolean', datetime: 'datetime',
+    string: 'string',
+    integer: 'integer',
+    double: 'float',
+    boolean: 'boolean',
+    datetime: 'datetime',
   })[type];
 
 async function collections() {

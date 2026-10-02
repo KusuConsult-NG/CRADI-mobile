@@ -17,6 +17,42 @@ import { join } from 'node:path';
 
 const DIR = 'supabase/migrations';
 
+/**
+ * How long a string column may be.
+ *
+ * This is not cosmetic, and getting it wrong is how the first real run
+ * of the provisioner failed. Appwrite stores a sized string as a
+ * MariaDB `VARCHAR`, and **MariaDB caps a whole row at 65,535 bytes** —
+ * four bytes per character under utf8mb4. An unsized Postgres `text`
+ * mapped to a generous 8192 therefore costs 32KB of the row budget, and
+ * four such columns exhaust it:
+ *
+ *     ! stopped at profiles.email: The maximum number or size of
+ *       columns for this table has been reached.
+ *
+ * Above roughly 16,000 characters Appwrite switches to `TEXT`, which is
+ * stored away from the row and costs it almost nothing. So the sizes
+ * below are deliberately **small for ordinary fields and large for long
+ * ones** — the middle is the expensive place to be.
+ *
+ * `reports` has 34 columns, which is what makes this tight enough to
+ * matter.
+ */
+export function stringSize(name) {
+  // Long prose and lists: big enough to become TEXT, which frees the row.
+  if (/description|content|message|comment|reason|image_urls|urls|payload|note|monitoring_zone|location_details/.test(name)) {
+    return 65535;
+  }
+  if (/url|link/.test(name)) return 2048;
+  // Enumerations and short codes.
+  if (/^(role|status|severity|type|category|action|method|platform|kind|key)$/.test(name)) {
+    return 64;
+  }
+  if (/_id$|^id$|fingerprint/.test(name)) return 64;
+  // Names, addresses, places, contact details.
+  return 255;
+}
+
 /** Postgres type -> Appwrite column type. */
 export function toAppwrite(pgType, name) {
   const t = pgType.toLowerCase();
@@ -24,15 +60,15 @@ export function toAppwrite(pgType, name) {
   if (/^(timestamptz|timestamp|date)\b/.test(t)) return { type: 'datetime' };
   if (/^(double precision|numeric|real|float)/.test(t)) return { type: 'double' };
   if (/^(int|integer|bigint|smallint)\b/.test(t)) return { type: 'integer' };
-  // jsonb has no Appwrite counterpart; it is stored as text and parsed by
-  // whoever wrote it. Only `app_settings.value` and the outbox payload use
-  // it, and both are already read as opaque.
+  // jsonb has no Appwrite counterpart; it is stored as text and parsed
+  // by whoever wrote it. Only `app_settings.value` and the outbox
+  // payload use it, and both are already read as opaque.
   if (/^jsonb?\b/.test(t)) return { type: 'string', size: 65535 };
   if (/^uuid\b/.test(t)) return { type: 'string', size: 36 };
-  // An unsized `text` could be anything. 8k is generous for every field
-  // this app stores except a description or a URL list, which get more.
-  const big = /description|content|message|comment|reason|image_urls|urls|payload/.test(name);
-  return { type: 'string', size: big ? 65535 : 8192 };
+  // An explicit varchar(n) says what it needs; honour it.
+  const sized = /^(?:varchar|character varying)\((\d+)\)/.exec(t);
+  if (sized) return { type: 'string', size: Number(sized[1]) };
+  return { type: 'string', size: stringSize(name) };
 }
 
 const required = (def) => /\bnot null\b/.test(def) && !/\bdefault\b/.test(def);

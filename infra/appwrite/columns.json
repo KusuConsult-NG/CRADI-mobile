@@ -3,7 +3,7 @@
     {
       "key": "key",
       "type": "string",
-      "size": 8192,
+      "size": 64,
       "required": false
     },
     {
@@ -22,7 +22,7 @@
     {
       "key": "address",
       "type": "string",
-      "size": 8192,
+      "size": 255,
       "required": false
     },
     {
@@ -38,7 +38,7 @@
     {
       "key": "email",
       "type": "string",
-      "size": 8192,
+      "size": 255,
       "required": false
     },
     {
@@ -64,55 +64,55 @@
     {
       "key": "legacyFirebaseUid",
       "type": "string",
-      "size": 8192,
+      "size": 255,
       "required": false
     },
     {
       "key": "lga",
       "type": "string",
-      "size": 8192,
+      "size": 255,
       "required": false
     },
     {
       "key": "monitoringZone",
       "type": "string",
-      "size": 8192,
+      "size": 65535,
       "required": false
     },
     {
       "key": "name",
       "type": "string",
-      "size": 8192,
+      "size": 255,
       "required": false
     },
     {
       "key": "phone",
       "type": "string",
-      "size": 8192,
+      "size": 255,
       "required": false
     },
     {
       "key": "profileImageUrl",
       "type": "string",
-      "size": 8192,
+      "size": 2048,
       "required": false
     },
     {
       "key": "registrationCode",
       "type": "string",
-      "size": 8192,
+      "size": 255,
       "required": false
     },
     {
       "key": "role",
       "type": "string",
-      "size": 8192,
+      "size": 64,
       "required": false
     },
     {
       "key": "state",
       "type": "string",
-      "size": 8192,
+      "size": 255,
       "required": false
     },
     {
@@ -123,7 +123,7 @@
     {
       "key": "ward",
       "type": "string",
-      "size": 8192,
+      "size": 255,
       "required": false
     }
   ],
@@ -146,13 +146,13 @@
     {
       "key": "eventType",
       "type": "string",
-      "size": 8192,
+      "size": 255,
       "required": true
     },
     {
       "key": "lastError",
       "type": "string",
-      "size": 8192,
+      "size": 255,
       "required": false
     },
     {
@@ -171,7 +171,7 @@
     {
       "key": "address",
       "type": "string",
-      "size": 8192,
+      "size": 255,
       "required": false
     },
     {
@@ -219,13 +219,13 @@
     {
       "key": "escalationStatus",
       "type": "string",
-      "size": 8192,
+      "size": 255,
       "required": false
     },
     {
       "key": "hazardType",
       "type": "string",
-      "size": 8192,
+      "size": 255,
       "required": true
     },
     {
@@ -247,25 +247,25 @@
     {
       "key": "legacyFirebaseId",
       "type": "string",
-      "size": 8192,
+      "size": 64,
       "required": false
     },
     {
       "key": "lga",
       "type": "string",
-      "size": 8192,
+      "size": 255,
       "required": true
     },
     {
       "key": "location",
       "type": "string",
-      "size": 8192,
+      "size": 255,
       "required": false
     },
     {
       "key": "locationDetails",
       "type": "string",
-      "size": 8192,
+      "size": 65535,
       "required": false
     },
     {
@@ -287,25 +287,25 @@
     {
       "key": "reporterName",
       "type": "string",
-      "size": 8192,
+      "size": 255,
       "required": false
     },
     {
       "key": "severity",
       "type": "string",
-      "size": 8192,
+      "size": 64,
       "required": false
     },
     {
       "key": "state",
       "type": "string",
-      "size": 8192,
+      "size": 255,
       "required": false
     },
     {
       "key": "status",
       "type": "string",
-      "size": 8192,
+      "size": 64,
       "required": false
     },
     {
@@ -321,7 +321,7 @@
     {
       "key": "type",
       "type": "string",
-      "size": 8192,
+      "size": 64,
       "required": false
     },
     {
@@ -354,7 +354,7 @@
     {
       "key": "ward",
       "type": "string",
-      "size": 8192,
+      "size": 255,
       "required": false
     }
   ],
@@ -389,7 +389,7 @@
     {
       "key": "status",
       "type": "string",
-      "size": 8192,
+      "size": 64,
       "required": false
     },
     {
@@ -442,7 +442,7 @@
     {
       "key": "action",
       "type": "string",
-      "size": 8192,
+      "size": 64,
       "required": true
     },
     {
@@ -501,31 +501,31 @@
     {
       "key": "severity",
       "type": "string",
-      "size": 8192,
+      "size": 64,
       "required": false
     },
     {
       "key": "targetLga",
       "type": "string",
-      "size": 8192,
+      "size": 255,
       "required": false
     },
     {
       "key": "targetLgaCanonical",
       "type": "string",
-      "size": 8192,
+      "size": 255,
       "required": false
     },
     {
       "key": "targetState",
       "type": "string",
-      "size": 8192,
+      "size": 255,
       "required": false
     },
     {
       "key": "title",
       "type": "string",
-      "size": 8192,
+      "size": 255,
       "required": true
     },
     {
@@ -538,7 +538,7 @@
     {
       "key": "chatId",
       "type": "string",
-      "size": 8192,
+      "size": 64,
       "required": false
     },
     {
@@ -566,7 +566,7 @@
     {
       "key": "senderName",
       "type": "string",
-      "size": 8192,
+      "size": 255,
       "required": false
     },
     {
@@ -577,7 +577,7 @@
     {
       "key": "type",
       "type": "string",
-      "size": 8192,
+      "size": 64,
       "required": false
     },
     {
@@ -590,7 +590,7 @@
     {
       "key": "category",
       "type": "string",
-      "size": 8192,
+      "size": 64,
       "required": false
     },
     {
@@ -606,31 +606,31 @@
     {
       "key": "lga",
       "type": "string",
-      "size": 8192,
+      "size": 255,
       "required": false
     },
     {
       "key": "name",
       "type": "string",
-      "size": 8192,
+      "size": 255,
       "required": true
     },
     {
       "key": "organization",
       "type": "string",
-      "size": 8192,
+      "size": 255,
       "required": false
     },
     {
       "key": "phone",
       "type": "string",
-      "size": 8192,
+      "size": 255,
       "required": true
     },
     {
       "key": "role",
       "type": "string",
-      "size": 8192,
+      "size": 64,
       "required": false
     },
     {
@@ -649,7 +649,7 @@
     {
       "key": "category",
       "type": "string",
-      "size": 8192,
+      "size": 64,
       "required": false
     },
     {
@@ -666,31 +666,31 @@
     {
       "key": "hazardType",
       "type": "string",
-      "size": 8192,
+      "size": 255,
       "required": false
     },
     {
       "key": "imageUrl",
       "type": "string",
-      "size": 8192,
+      "size": 2048,
       "required": false
     },
     {
       "key": "legacyFirebaseId",
       "type": "string",
-      "size": 8192,
+      "size": 64,
       "required": false
     },
     {
       "key": "source",
       "type": "string",
-      "size": 8192,
+      "size": 255,
       "required": false
     },
     {
       "key": "title",
       "type": "string",
-      "size": 8192,
+      "size": 255,
       "required": true
     },
     {
@@ -703,13 +703,13 @@
     {
       "key": "coverageLga",
       "type": "string",
-      "size": 8192,
+      "size": 255,
       "required": true
     },
     {
       "key": "coverageState",
       "type": "string",
-      "size": 8192,
+      "size": 255,
       "required": false
     },
     {
@@ -720,19 +720,19 @@
     {
       "key": "name",
       "type": "string",
-      "size": 8192,
+      "size": 255,
       "required": false
     },
     {
       "key": "organization",
       "type": "string",
-      "size": 8192,
+      "size": 255,
       "required": false
     },
     {
       "key": "phone",
       "type": "string",
-      "size": 8192,
+      "size": 255,
       "required": true
     },
     {
@@ -750,13 +750,13 @@
     {
       "key": "deviceFingerprint",
       "type": "string",
-      "size": 8192,
+      "size": 64,
       "required": true
     },
     {
       "key": "deviceName",
       "type": "string",
-      "size": 8192,
+      "size": 255,
       "required": false
     },
     {
@@ -785,13 +785,13 @@
     {
       "key": "deviceFingerprint",
       "type": "string",
-      "size": 8192,
+      "size": 64,
       "required": false
     },
     {
       "key": "deviceName",
       "type": "string",
-      "size": 8192,
+      "size": 255,
       "required": false
     },
     {
@@ -825,25 +825,25 @@
     {
       "key": "dataResidency",
       "type": "string",
-      "size": 8192,
+      "size": 255,
       "required": false
     },
     {
       "key": "method",
       "type": "string",
-      "size": 8192,
+      "size": 64,
       "required": false
     },
     {
       "key": "platform",
       "type": "string",
-      "size": 8192,
+      "size": 64,
       "required": false
     },
     {
       "key": "policyVersion",
       "type": "string",
-      "size": 8192,
+      "size": 255,
       "required": true
     },
     {
@@ -872,13 +872,13 @@
     {
       "key": "source",
       "type": "string",
-      "size": 8192,
+      "size": 255,
       "required": false
     },
     {
       "key": "title",
       "type": "string",
-      "size": 8192,
+      "size": 255,
       "required": true
     },
     {
@@ -889,7 +889,7 @@
     {
       "key": "url",
       "type": "string",
-      "size": 8192,
+      "size": 2048,
       "required": true
     }
   ],
@@ -902,13 +902,13 @@
     {
       "key": "lga",
       "type": "string",
-      "size": 8192,
+      "size": 255,
       "required": false
     },
     {
       "key": "phone",
       "type": "string",
-      "size": 8192,
+      "size": 255,
       "required": true
     },
     {
@@ -920,13 +920,13 @@
     {
       "key": "state",
       "type": "string",
-      "size": 8192,
+      "size": 255,
       "required": false
     },
     {
       "key": "status",
       "type": "string",
-      "size": 8192,
+      "size": 64,
       "required": false
     }
   ],
@@ -934,7 +934,7 @@
     {
       "key": "name",
       "type": "string",
-      "size": 8192,
+      "size": 255,
       "required": false
     }
   ],
@@ -942,13 +942,13 @@
     {
       "key": "lga",
       "type": "string",
-      "size": 8192,
+      "size": 255,
       "required": true
     },
     {
       "key": "state",
       "type": "string",
-      "size": 8192,
+      "size": 255,
       "required": true
     }
   ],
@@ -995,25 +995,25 @@
     {
       "key": "severity",
       "type": "string",
-      "size": 8192,
+      "size": 64,
       "required": false
     },
     {
       "key": "targetLga",
       "type": "string",
-      "size": 8192,
+      "size": 255,
       "required": false
     },
     {
       "key": "targetState",
       "type": "string",
-      "size": 8192,
+      "size": 255,
       "required": false
     },
     {
       "key": "title",
       "type": "string",
-      "size": 8192,
+      "size": 255,
       "required": true
     },
     {
@@ -1026,13 +1026,13 @@
     {
       "key": "coverageLga",
       "type": "string",
-      "size": 8192,
+      "size": 255,
       "required": true
     },
     {
       "key": "coverageState",
       "type": "string",
-      "size": 8192,
+      "size": 255,
       "required": false
     },
     {
@@ -1043,19 +1043,19 @@
     {
       "key": "name",
       "type": "string",
-      "size": 8192,
+      "size": 255,
       "required": false
     },
     {
       "key": "organization",
       "type": "string",
-      "size": 8192,
+      "size": 255,
       "required": false
     },
     {
       "key": "phone",
       "type": "string",
-      "size": 8192,
+      "size": 255,
       "required": true
     },
     {

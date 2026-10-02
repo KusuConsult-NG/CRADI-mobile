@@ -336,12 +336,20 @@ export const FUNCTIONS = [
   {
     id: 'on-write', name: 'On write', entrypoint: 'src/on-write.js', execute: [],
     scopes: ['documents.write'],
+    // `databases.`, not `tablesdb.`. The two namespaces differ and the
+    // difference is not guessable: Realtime channels are
+    // `tablesdb.<db>.tables.<t>.rows`, which is what the Flutter SDK's
+    // channel builder produces, while Function *events* are rooted at
+    // `databases` — `app/config/events.php` in the server image is the
+    // only place that says so. A wrong event name is a 400 at
+    // provisioning time, which is the good failure; silently subscribing
+    // to nothing would have been the bad one.
     events: [
-      `tablesdb.${DATABASE_ID}.tables.reports.rows.*.create`,
-      `tablesdb.${DATABASE_ID}.tables.reports.rows.*.update`,
-      `tablesdb.${DATABASE_ID}.tables.verifications.rows.*.create`,
-      `tablesdb.${DATABASE_ID}.tables.alerts.rows.*.create`,
-      `tablesdb.${DATABASE_ID}.tables.profiles.rows.*.update`,
+      `databases.${DATABASE_ID}.tables.reports.rows.*.create`,
+      `databases.${DATABASE_ID}.tables.reports.rows.*.update`,
+      `databases.${DATABASE_ID}.tables.verifications.rows.*.create`,
+      `databases.${DATABASE_ID}.tables.alerts.rows.*.create`,
+      `databases.${DATABASE_ID}.tables.profiles.rows.*.update`,
     ],
   },
   {
