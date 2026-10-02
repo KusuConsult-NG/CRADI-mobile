@@ -1,9 +1,10 @@
 import 'package:climate_app/core/services/secure_storage_service.dart';
+import 'package:climate_app/core/services/auth_backend.dart';
+import 'package:climate_app/core/services/supabase_auth_backend.dart';
 import 'package:climate_app/core/services/supabase_service.dart';
 import 'package:climate_app/core/services/offline_storage_service.dart';
 import 'package:climate_app/core/constants/app_config.dart';
 import 'package:climate_app/core/utils/input_sanitizer.dart';
-import 'package:supabase_flutter/supabase_flutter.dart' as sb;
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
@@ -12,18 +13,21 @@ import 'dart:developer' as developer;
 import 'package:climate_app/core/l10n/l10n.dart';
 import 'package:climate_app/core/utils/error_handler.dart' show AuthException;
 
-/// Provider for managing user profile data (Supabase `profiles` row).
+/// Provider for managing user profile data (the `profiles` row).
 class ProfileProvider extends ChangeNotifier {
   ProfileProvider({
     SupabaseService? supabaseService,
+    AuthBackend? auth,
     Connectivity? connectivity,
   }) : _db = supabaseService ?? SupabaseService(),
+       _auth = auth ?? SupabaseAuthBackend(supabaseService),
        _connectivity = connectivity ?? Connectivity() {
     loadProfile();
   }
 
   final SecureStorageService _storage = SecureStorageService();
   final SupabaseService _db;
+  final AuthBackend _auth;
   final OfflineStorageService _offlineStorage = OfflineStorageService();
   Map<String, dynamic>? _userProfile;
   final Connectivity _connectivity;
@@ -58,7 +62,7 @@ class ProfileProvider extends ChangeNotifier {
 
   /// Get current user's reports as a realtime stream.
   Stream<List<Map<String, dynamic>>> getUserReportsStream() {
-    final user = _db.getCurrentUser();
+    final user = _auth.currentUser;
     if (user == null) return const Stream.empty();
 
     return _db.subscribeToCollection(
@@ -86,7 +90,7 @@ class ProfileProvider extends ChangeNotifier {
 
   Future<void> loadProfile() async {
     final gen = ++_loadGen;
-    final user = _db.getCurrentUser();
+    final user = _auth.currentUser;
     final uid = user?.id;
     bool stale() => gen != _loadGen || _db.currentUserId != uid;
 
@@ -113,7 +117,7 @@ class ProfileProvider extends ChangeNotifier {
           if (stale()) return;
           _name = (cachedName != null && cachedName.isNotEmpty)
               ? cachedName
-              : _metadataName(user);
+              : (user.metadataName ?? '');
           _phone = phone ?? '';
           _profileImagePath = image;
           _state = state;
@@ -127,9 +131,9 @@ class ProfileProvider extends ChangeNotifier {
           // fetching from the server to refresh.
           notifyListeners();
         } else {
-          _name = _metadataName(user);
+          _name = user.metadataName ?? '';
         }
-        _registrationDate = parseTimestamp(user.createdAt);
+        _registrationDate = user.createdAt;
 
         // Load the profiles row (source of truth)
         try {
@@ -289,7 +293,7 @@ class ProfileProvider extends ChangeNotifier {
   /// retry queue for profile edits, so callers must report the failure.
   Future<LocalizedText?> _syncToServer(Map<String, dynamic> data) async {
     try {
-      final user = _db.getCurrentUser();
+      final user = _auth.currentUser;
       if (user == null) return (AppLocalizations l) => l.profileErrorSignedOut;
 
       final connectivityResults = await _connectivity.checkConnectivity();
@@ -359,7 +363,7 @@ class ProfileProvider extends ChangeNotifier {
   /// [email] is unchanged. Never throws.
   Future<LocalizedText?> updateEmail(String email) async {
     final newEmail = email.trim();
-    final user = _db.getCurrentUser();
+    final user = _auth.currentUser;
     if (newEmail.isEmpty ||
         newEmail.toLowerCase() == (user?.email ?? _email).toLowerCase()) {
       return null;
@@ -369,24 +373,23 @@ class ProfileProvider extends ChangeNotifier {
     }
 
     try {
-      await _db.auth.updateUser(sb.UserAttributes(email: newEmail));
+      await _auth.updateEmail(newEmail);
       developer.log(
         'Email change confirmation sent to $newEmail',
         name: 'ProfileProvider',
       );
       return (AppLocalizations l) => l.profileEmailConfirmationSent(newEmail);
-    } on sb.AuthException catch (e) {
+    } on AuthBackendException catch (e) {
       developer.log(
-        'updateEmail error: ${e.code} ${e.message}',
+        'updateEmail failure: ${e.failure.name} (${e.code} ${e.message})',
         name: 'ProfileProvider',
       );
-      switch (e.code) {
-        case 'reauthentication_needed':
+      switch (e.failure) {
+        case AuthFailure.reauthenticationNeeded:
           return (AppLocalizations l) => l.profileErrorEmailReauth;
-        case 'validation_failed':
-        case 'email_address_invalid':
+        case AuthFailure.invalidEmail:
           return (AppLocalizations l) => l.validation_invalidEmail;
-        case 'email_exists':
+        case AuthFailure.accountExists:
           return (AppLocalizations l) => l.profileErrorEmailInUse;
         default:
           return (AppLocalizations l) => l.profileErrorEmailUpdateFailed;
@@ -430,7 +433,7 @@ class ProfileProvider extends ChangeNotifier {
       _isLoading = true;
       notifyListeners();
 
-      final user = _db.getCurrentUser();
+      final user = _auth.currentUser;
       if (user == null) {
         throw AuthException((l) => l.authErrorNotLoggedIn);
       }
@@ -496,7 +499,7 @@ class ProfileProvider extends ChangeNotifier {
       return (AppLocalizations l) => l.profileErrorLocationIncomplete;
     }
 
-    final user = _db.getCurrentUser();
+    final user = _auth.currentUser;
     if (user == null) {
       return (AppLocalizations l) => l.profileErrorLocationSignedOut;
     }
@@ -552,14 +555,9 @@ class ProfileProvider extends ChangeNotifier {
   /// written only by AuthProvider.setBiometricEnabled.
   Future<void> refreshBiometricsEnabled() async {
     _biometricsEnabled = await _storage.isBiometricEnabled(
-      forUserId: _db.currentUserId,
+      forUserId: _auth.currentUser?.id,
     );
     notifyListeners();
-  }
-
-  static String _metadataName(sb.User user) {
-    final n = user.userMetadata?['name'];
-    return (n is String && n.trim().isNotEmpty) ? n : '';
   }
 }
 

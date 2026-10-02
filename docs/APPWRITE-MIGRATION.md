@@ -1135,3 +1135,182 @@ fail loudly when it cannot tell.
 The auth half of the client swap (Phase 2 maps it; Phase 5 explains why it
 waits), and the production cutover and decommission themselves, which need
 the Cloud project and a completed migration respectively.
+
+---
+
+# Phase 5b: the auth half of the client swap
+
+Status: **built, in `main`-shaped code, and now under test**. 747 tests pass
+(679 before, +68 new), `dart analyze` is clean, `dart format` is clean, and
+no behaviour changed except one message, noted below.
+
+Phase 5 deliberately stopped at the data layer and said why: `auth_provider.dart`
+is the largest and most security-sensitive file in the app, and rewriting it
+against an Appwrite the app cannot yet reach was not worth the risk. That
+reasoning covered *rewriting* it. It did not cover *decoupling* it, which is
+the part that is worth doing whether or not Appwrite ever happens.
+
+## What the coupling was, precisely
+
+116 references to `sb.User`, `sb.AuthException`, `sb.AuthState`,
+`sb.OtpType`, `sb.UserAttributes` and `sb.AuthResponse` — and underneath
+them, **nine `switch (e.code)` blocks branching on GoTrue's string error
+codes**:
+
+```dart
+switch (e.code) {
+  case 'over_email_send_rate_limit':
+  case 'over_request_rate_limit':
+    throw AuthException((l) => l.authErrorTooManyAttempts);
+```
+
+This is the same defect Phase 5 found in the data layer, in a different
+dialect. `otp_expired`, `email_not_confirmed`, `over_sms_send_rate_limit`,
+`bad_jwt` are GoTrue's vocabulary. Appwrite has none of them — it answers
+with HTTP statuses and its own `type` strings. Left alone, every one of
+those `switch` statements would fall through to `default` after the
+migration, and the app would answer *"Registration failed. Please try
+again."* to a user whose real problem is a rate limit, and *"Login failed"*
+to one whose address is simply unconfirmed. Silently, and only in
+production.
+
+## The seam
+
+`lib/core/services/auth_backend.dart` — an **interface**, not a registry.
+That is the one structural difference from Phase 5: `backend_failure.dart`
+is a set of pluggable functions because its call sites are pure functions
+with nowhere to hold a service. The auth call sites all hold a reference
+already, so an injected adapter is the honest seam.
+
+Three types:
+
+- **`AuthUser`** — `id`, `email`, `phone`, `emailConfirmedAt`,
+  `phoneConfirmedAt`, `createdAt`, `metadata`. Everything here has a
+  counterpart in both backends. What does not — GoTrue's `identities`,
+  `appMetadata`, `aud` — stays inside the adapter.
+- **`AuthChange`** / **`AuthEvent`** — the six session transitions the
+  provider acts on. `AuthChange.user` is null exactly when there is no
+  session, which is the only property of the session object the provider
+  ever read.
+- **`AuthFailure`** — fifteen conditions, one per *server condition* rather
+  than per call site.
+
+| `AuthFailure` | GoTrue today |
+|---|---|
+| `network` | `AuthRetryableFetchException` |
+| `invalidCredentials` | `invalid_credentials`, `user_not_found` |
+| `emailNotConfirmed` | `email_not_confirmed` |
+| `accountExists` | `user_already_exists`, `email_exists`, `phone_exists` |
+| `accountBanned` | `user_banned` |
+| `invalidEmail` | `email_address_invalid`, `validation_failed` |
+| `providerDisabled` | `signup_disabled`, `email_provider_disabled`, `phone_provider_disabled` |
+| `deliveryFailed` | `sms_send_failed` |
+| `otpDisabled` | `otp_disabled` |
+| `rateLimited` | `over_email_send_rate_limit`, `over_sms_send_rate_limit`, `over_request_rate_limit` |
+| `otpExpired` | `otp_expired` |
+| `weakPassword` | `AuthWeakPasswordException`, `weak_password` |
+| `samePassword` | `same_password` |
+| `sessionExpired` | `session_not_found`, `bad_jwt` |
+| `reauthenticationNeeded` | `reauthentication_needed` |
+| `unknown` | anything else — never guessed at |
+
+One condition, several sentences: `providerDisabled` means the same thing
+during sign-up and during a phone OTP, but the user is told *"Registration
+is currently disabled"* in one and *"SMS is unavailable"* in the other.
+Choosing the sentence stays in the flow that knows the context; naming the
+condition is the adapter's job. That split is what makes the table above
+translatable to a backend with entirely different codes.
+
+`AuthBackendException` carries the server's `code` and `message` too — for
+the log line only. No control flow may read them, or the coupling returns
+through the back door.
+
+## Three things the move surfaced
+
+**1. One Supabase behaviour is not an error and means the same as one.**
+With email confirmations on, signing up with an address that is already
+registered returns **200 and an obfuscated user with no identities** —
+deliberately, so the response cannot be used to enumerate accounts. The
+provider was reading `response.user?.identities` and inferring the refusal
+itself. That is GoTrue trivia sitting in a registration flow; it now lives
+in the adapter, which raises `accountExists` like any other refusal. Phase 2
+notes that Appwrite answers a duplicate with a 409 instead — the provider
+will not need to care.
+
+**2. `reloadCurrentUser` was an auth call hiding in the data service.**
+`SupabaseService.reloadCurrentUser()` is `GET /account` with extra steps,
+and `ProfileProvider` depended on it. It is now `AuthBackend.reloadUser()`.
+
+**3. The recovery `redirectTo` belongs to the adapter.** The fix we shipped
+last month — `redirectTo: kIsWeb ? null : kPasswordResetRedirect`, so the
+link opens the app rather than the admin portal — is a property of
+*link-based* recovery. Phase 2's design has no link in it at all, so this
+whole parameter disappears on Appwrite. Keeping it in the provider would
+have made a Supabase workaround look like an app requirement. It is now
+three lines inside `SupabaseAuthBackend.sendPasswordResetCode`, and the
+Appwrite adapter will simply not have them.
+
+## The one behaviour change
+
+Sign-up had two near-identical messages for the same situation:
+`authErrorEmailRegistered` ("Email is already registered") for the
+obfuscated path and `authErrorAccountRegistered` ("This account is already
+registered") for an explicit `email_exists`. The split was an artifact of
+*how* the duplicate was detected, not of anything the user did differently.
+Both paths now say "This account is already registered. Please login."
+`authErrorEmailRegistered` is left in the five `.arb` files — removing it
+churns every locale and the generated code for no benefit.
+
+## Tests: the real payoff
+
+68 new tests, and they cover ground that **had no test at all** before.
+
+- `test/unit/auth_backend_test.dart` — all 23 GoTrue codes, both exception
+  subtypes that outrank a code, the timestamp parsing (GoTrue returns these
+  as strings, not `DateTime`), and the rule that an unrecognised code is
+  `unknown` rather than guessed at.
+- `test/unit/auth_provider_backend_test.dart` — a `_FakeAuthBackend` the
+  tests steer, driving every refusal branch of sign-up, sign-in, OTP
+  verification and both password-reset flows to the exact sentence the user
+  sees.
+
+None of this was reachable before: the flows went straight into
+`supabase_flutter`, so the nine `switch` blocks that decide what a user is
+told after a failed sign-in, a refused code or a password that will not set
+were untested. They are the app's worst moments to get wrong.
+
+Four of the new tests are not about wording at all, and matter more:
+
+- a `verifyOTP` that answers with a user and **no session** must be refused,
+  not treated as a sign-in;
+- a sign-in whose outcome carries no user must not half-apply;
+- a **refused** reset code must leave an existing session alone (the reset
+  screen is reachable while signed in — a typo must not log the user out);
+- an **accepted** reset code must always end in a sign-out, *including when
+  the password change then fails*.
+
+Each of those is a one-line regression away, and each would have been found
+in production.
+
+## Result
+
+| | after Phase 5 | now |
+|---|---|---|
+| Files importing `supabase_flutter` | 4 | **2** — both adapters |
+| Vendor auth types in feature code | 116 refs | **0** |
+| `switch (e.code)` on GoTrue strings | 9 | **0** |
+| Tests over the auth flows | 0 | **68** |
+
+The two remaining importers are `supabase_service.dart` and
+`supabase_auth_backend.dart`. Writing the Appwrite half is now writing two
+files against two interfaces, not archaeology across the feature tree —
+which is exactly what Phase 5 claimed the data seam was worth, now true of
+auth as well.
+
+## Still not done, and still deliberately
+
+This decouples; it does not migrate. There is no `AppwriteAuthBackend`,
+because there is still no Appwrite project to point one at — the region and
+Cloud-quota questions from Phase 1 remain open, and this container cannot
+reach Appwrite Cloud. When those are answered, Phase 2's call-by-call map
+and this interface are the same list, in the same order.
