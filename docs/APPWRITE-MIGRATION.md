@@ -1314,3 +1314,146 @@ because there is still no Appwrite project to point one at — the region and
 Cloud-quota questions from Phase 1 remain open, and this container cannot
 reach Appwrite Cloud. When those are answered, Phase 2's call-by-call map
 and this interface are the same list, in the same order.
+
+---
+
+# Phase 5c: the data half, and the four files that went around it
+
+Status: **built, in `main`-shaped code**. 752 tests pass (747 before, +5),
+`dart analyze` clean, `dart format` clean, no behaviour change.
+
+## What was still wrong after 5 and 5b
+
+Phase 5 took the engine's error codes out of feature code; Phase 5b did the
+same for auth. Both left the same thing behind, and the number is the
+tell:
+
+- files importing `supabase_flutter`: **2** — correct, they are the adapters;
+- files naming `SupabaseService` **by type**: **22**.
+
+So the vocabulary was clean and the wiring was not. "Swap the backend"
+still meant editing every provider, every admin screen and five core
+services. A seam that only the error messages pass through is half a seam.
+
+Worse, **four files reached straight past the service into the raw
+PostgREST client**:
+
+| | call | why |
+|---|---|---|
+| `reports_status_provider` | `client.rpc('reopen_report', …)` | no RPC on the service |
+| `remote_config_service` | `client.from('app_settings').select('key, value')` | a two-column projection |
+| `peer_verification_service` | `client.from(…).select('*, verifier:profiles!verifier_id(name)')` | a join |
+
+Those are not stylistic. An RPC and a join are the two things Appwrite
+*cannot do the same way at all* — Phase 4 turns the first into a Function
+and Phase 1 denormalises the second — so they were exactly the calls that
+had to be named before anything could be swapped, and exactly the ones
+hidden from any audit that greps for `supabase_flutter`.
+
+## The seam
+
+`lib/core/services/data_backend.dart` — `DataBackend`, the documents,
+realtime and files surface, implemented by `SupabaseService` today.
+Nothing in it is Postgres-shaped. Two operations earned explicit names:
+
+**`callOperation(name, params)`** — a named server-side operation. Postgres:
+a `SECURITY DEFINER` function over RPC. Appwrite: a Function execution,
+which is where Phase 4 already puts every guarded write.
+
+**`RelatedFields`** — fields pulled in from a related collection, and the
+only place in this interface with a deliberate *best-effort* contract:
+
+> An adapter that cannot honour this must return the plain documents rather
+> than fail.
+
+Postgres does it as a PostgREST embed — one round trip, under the same RLS
+as the base rows. Appwrite cannot join at all. Phase 1 denormalises the one
+field this app embeds, and until then the fallback is the behaviour the
+call site already had: a verification whose verifier profile is unreadable
+shows no name. The retry-on-failure that used to sit in
+`peer_verification_service` now sits in the adapter, where the contract is
+written down.
+
+`lib/core/services/backend.dart` is the composition root — a plain locator
+(`backend`, `authBackend`, `initializeBackend`) and **the only file in the
+app that names a vendor**. It re-exports `DataBackend`, `AuthBackend`, the
+query vocabulary and the failure vocabulary, so a caller needs one import
+and names no backend to read a document, build a filter or ask why a write
+was refused.
+
+## Three things the move surfaced
+
+**1. The three refusal predicates never got converted.** `backend_failure.dart`
+has had `BackendFailure.refused`, `.duplicate` and `.rateLimited` since
+Phase 5, and eight call sites were still asking the Supabase adapter
+directly — `SupabaseService.isPermissionDenied(e)`. They are now
+`isRefusal(e)`, `isDuplicate(e)`, `isRateLimited(e)` on the vocabulary
+itself. The mapping is identical, code for code; it just stops naming the
+engine.
+
+**2. `ReportVerification.fromRow` read column names.** `verifier_id`,
+`is_confirmed`, `submitted_at` — snake_case is Postgres's convention, and
+the mapping layer had already been normalising every other read to
+camelCase for a year. It is `fromDocument` now and reads fields.
+
+**3. Two exceptions and one were in the wrong file.**
+`DocumentNotFoundException`, `BackendNotConfiguredException` and
+`ImageEncodingException` are thrown at six feature call sites and say
+nothing about Postgres. They lived in `supabase_service.dart`, so catching
+"this document is gone" meant importing the vendor's adapter. They are in
+`data_backend.dart` now.
+
+## The two changes that were reasoning, not observation — and how they were checked
+
+Replacing a hand-written PostgREST string with a generated one is the kind
+of change that passes every test and fails in production, because the
+server parses the string and the client never validates it. A typo in the
+embed does not throw at the call site: it throws inside the adapter, hits
+the best-effort fallback **by design**, and every verifier name quietly
+disappears from the UI with nothing logged as an error.
+
+So both were verified against the real mapping layer rather than argued
+from the code:
+
+```
+users    -> profiles          fk    -> verifier_id
+verif    -> verifications     field -> name
+filters  -> [report_id]       orders -> [submitted_at asc=false]   limit -> 200
+```
+
+which makes the generated projection `*, verifier:profiles!verifier_id(name)`
+— byte-for-byte the string that was there before — and the query plan
+identical to the `.eq().order().limit()` chain it replaced. Both are now
+pinned by tests in `test/unit/data_backend_test.dart`, along with the
+`app_settings` read, where the mapper adds `$id`/`id` keys that the caller
+happens not to iterate.
+
+That is the standing rule from Phase 7 applied before the fact rather than
+after: **a check that cannot fail is not a check.** A silent degradation
+needs a test that fails loudly, because nothing else will.
+
+## Result
+
+| | after Phase 5b | now |
+|---|---|---|
+| Files importing `supabase_flutter` | 2 | 2 — the adapters |
+| Files naming `SupabaseService` in code | 22 | **1** — the composition root |
+| Feature code reaching the raw client | 4 | **0** |
+| Vendor types in test fakes | 3 | **0** |
+
+`chat_screen` is worth a line of its own, since it had the last of both
+problems: it held a `SupabaseService` field *and* built its own
+`SupabaseAuthBackend()` to ask who was signed in — a second source of
+session truth inside a widget. It reads `AuthProvider` now, like every
+other screen.
+
+## What this does and does not buy
+
+Writing the Appwrite half is now: implement two interfaces, change three
+lines in `backend.dart`. It is not a pass over the feature tree, and the
+compiler finds everything.
+
+It buys nothing on the questions that actually gate the migration — the
+Cloud **region** against the NDPA residency position, and the **tier
+quotas** for 584 teams and more than one bucket. Those have been open since
+Phase 1 and no amount of client refactoring closes them.

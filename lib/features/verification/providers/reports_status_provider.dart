@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:climate_app/core/services/supabase_service.dart';
+import 'package:climate_app/core/services/backend.dart';
 import 'package:climate_app/core/services/peer_verification_service.dart';
 import 'package:climate_app/features/verification/models/verification_report_model.dart';
 import 'package:climate_app/core/constants/app_config.dart';
@@ -13,7 +13,6 @@ import 'package:climate_app/features/reporting/providers/reporting_provider.dart
     show normalizeSeverity;
 import 'package:climate_app/core/constants/hazards.dart';
 import 'package:climate_app/core/utils/error_handler.dart';
-import 'package:climate_app/core/services/backend_failure.dart';
 import 'package:climate_app/core/l10n/l10n.dart';
 
 export 'package:climate_app/core/services/offline_storage_service.dart'
@@ -88,7 +87,7 @@ class _ListKey {
 }
 
 class ReportsStatusProvider extends ChangeNotifier {
-  final SupabaseService _db = SupabaseService();
+  final DataBackend _db = backend;
   final OfflineStorageService _offlineStorage = OfflineStorageService();
   ProfileProvider? _profileProvider;
 
@@ -383,7 +382,7 @@ class ReportsStatusProvider extends ChangeNotifier {
   /// Loads the ids of reports the signed-in user already voted on (one
   /// query, cached per user). Failures leave the previous set in place.
   Future<void> loadMyVotes({bool force = false}) {
-    final uid = SupabaseService.isReady ? _db.currentUserId : null;
+    final uid = backend.isConfigured ? _db.currentUserId : null;
     if (uid == null) {
       _votedReportIds = {};
       _votesUserId = null;
@@ -478,7 +477,7 @@ class ReportsStatusProvider extends ChangeNotifier {
   /// list, read with [toVerifyReports]), with a larger page than the
   /// default lists.
   Future<void> fetchToVerify() {
-    final uid = SupabaseService.isReady ? _db.currentUserId : null;
+    final uid = backend.isConfigured ? _db.currentUserId : null;
     if (uid == null) return Future.value();
     return fetchReports(
       status: ReportStatus.pending,
@@ -861,7 +860,10 @@ class ReportsStatusProvider extends ChangeNotifier {
   /// its peer votes, sets it back to pending and reschedules escalation.
   Future<void> moveBackToPending(String reportId) async {
     try {
-      await _db.client.rpc('reopen_report', params: {'p_report_id': reportId});
+      await _db.callOperation(
+        'reopen_report',
+        params: {'p_report_id': reportId},
+      );
       developer.log('Report reopened: $reportId');
       // Votes were cleared, including the user's own.
       _votedReportIds = {..._votedReportIds}..remove(reportId);

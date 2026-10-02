@@ -1,9 +1,8 @@
 import 'package:climate_app/core/widgets/admin_menu_entry.dart';
 import 'package:climate_app/core/constants/app_config.dart';
-import 'package:climate_app/core/services/supabase_service.dart';
+import 'package:climate_app/core/services/backend.dart';
 import 'package:climate_app/core/widgets/location_selector_widget.dart';
 import 'package:flutter/material.dart';
-import 'package:climate_app/core/services/backend_failure.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:climate_app/core/theme/app_colors.dart';
 import 'dart:developer' as developer;
@@ -23,8 +22,7 @@ String adminUserWriteErrorMessage(Object error, AppLocalizations l10n) {
   if (isUnconfirmedApprovalError(error)) {
     return l10n.adminUsersApproveUnconfirmed;
   }
-  if (SupabaseService.isPermissionDenied(error) ||
-      error is DocumentNotFoundException) {
+  if (isRefusal(error) || error is DocumentNotFoundException) {
     return l10n.adminUsersNoPermission;
   }
   return l10n.adminUsersUpdateFailed;
@@ -87,7 +85,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen>
       _error = null;
     });
     try {
-      final page = await SupabaseService().listDocuments(
+      final page = await backend.listDocuments(
         collectionId: AppConfig.usersCollection,
         queries: [
           if (_roleFilter != 'all') FQuery.equal('role', _roleFilter),
@@ -174,7 +172,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen>
   }
 
   Future<void> _update(String uid, Map<String, dynamic> data) async {
-    final updated = await SupabaseService().updateDocument(
+    final updated = await backend.updateDocument(
       collectionId: AppConfig.usersCollection,
       documentId: uid,
       data: data,

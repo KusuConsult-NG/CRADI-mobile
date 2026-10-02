@@ -1,7 +1,5 @@
 import 'package:climate_app/core/services/secure_storage_service.dart';
-import 'package:climate_app/core/services/auth_backend.dart';
-import 'package:climate_app/core/services/supabase_auth_backend.dart';
-import 'package:climate_app/core/services/supabase_service.dart';
+import 'package:climate_app/core/services/backend.dart';
 import 'package:climate_app/core/services/offline_storage_service.dart';
 import 'package:climate_app/core/constants/app_config.dart';
 import 'package:climate_app/core/utils/input_sanitizer.dart';
@@ -16,17 +14,17 @@ import 'package:climate_app/core/utils/error_handler.dart' show AuthException;
 /// Provider for managing user profile data (the `profiles` row).
 class ProfileProvider extends ChangeNotifier {
   ProfileProvider({
-    SupabaseService? supabaseService,
+    DataBackend? db,
     AuthBackend? auth,
     Connectivity? connectivity,
-  }) : _db = supabaseService ?? SupabaseService(),
-       _auth = auth ?? SupabaseAuthBackend(supabaseService),
+  }) : _db = db ?? backend,
+       _auth = auth ?? authBackend,
        _connectivity = connectivity ?? Connectivity() {
     loadProfile();
   }
 
   final SecureStorageService _storage = SecureStorageService();
-  final SupabaseService _db;
+  final DataBackend _db;
   final AuthBackend _auth;
   final OfflineStorageService _offlineStorage = OfflineStorageService();
   Map<String, dynamic>? _userProfile;
@@ -510,8 +508,7 @@ class ProfileProvider extends ChangeNotifier {
         data: {'state': s, 'lga': l, 'ward': w},
       );
     } on Exception catch (e) {
-      if (SupabaseService.isPermissionDenied(e) ||
-          e is DocumentNotFoundException) {
+      if (isRefusal(e) || e is DocumentNotFoundException) {
         return (AppLocalizations l) => l.profileErrorLocationManaged;
       }
       developer.log('Location sync failed: $e', name: 'ProfileProvider');

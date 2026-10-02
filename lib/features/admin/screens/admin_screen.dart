@@ -1,4 +1,4 @@
-import 'package:climate_app/core/services/supabase_service.dart';
+import 'package:climate_app/core/services/backend.dart';
 import 'package:climate_app/features/auth/providers/auth_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter/material.dart';
@@ -29,7 +29,7 @@ class _AdminScreenState extends State<AdminScreen> {
   /// Exact row count of [table] (column names are database names). Errors
   /// propagate so the dashboard can show them instead of a misleading 0.
   Future<int> _count(String table, {Map<String, Object>? where}) =>
-      SupabaseService().countDocumentsOrThrow(
+      backend.countDocumentsOrThrow(
         collectionId: table,
         queries: [
           for (final e in (where ?? const <String, Object>{}).entries)

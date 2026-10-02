@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:climate_app/core/services/supabase_service.dart';
+import 'package:climate_app/core/services/backend.dart';
 import 'package:climate_app/core/services/offline_storage_service.dart';
 import 'package:climate_app/core/constants/app_config.dart';
 import 'dart:developer' as developer;
@@ -9,7 +9,7 @@ import 'package:climate_app/core/utils/error_handler.dart';
 import 'package:climate_app/core/l10n/l10n.dart';
 
 class AlertsProvider extends ChangeNotifier {
-  final SupabaseService _db = SupabaseService();
+  final DataBackend _db = backend;
   final OfflineStorageService _offlineStorage = OfflineStorageService();
 
   List<Map<String, dynamic>> _alerts = [];

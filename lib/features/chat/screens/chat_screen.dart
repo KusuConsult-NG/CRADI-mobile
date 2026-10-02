@@ -1,10 +1,8 @@
 import 'dart:async';
 
 import 'package:climate_app/core/theme/app_colors.dart';
-import 'package:climate_app/core/services/auth_backend.dart';
-import 'package:climate_app/core/services/supabase_auth_backend.dart';
-import 'package:climate_app/core/services/supabase_service.dart';
-import 'package:climate_app/core/services/backend_failure.dart';
+import 'package:climate_app/core/services/backend.dart';
+import 'package:climate_app/features/auth/providers/auth_provider.dart';
 import 'package:climate_app/core/constants/app_config.dart';
 import 'package:climate_app/core/utils/error_handler.dart';
 import 'package:climate_app/features/chat/providers/chat_provider.dart';
@@ -40,7 +38,9 @@ class ChatScreen extends StatelessWidget {
       ),
       body: Builder(
         builder: (context) {
-          final user = SupabaseAuthBackend().currentUser;
+          // The session comes from AuthProvider, which is the app's one
+          // source of it — not from a second backend handle built here.
+          final user = context.watch<AuthProvider>().currentUser;
           if (user == null) {
             return Center(child: Text(context.l10n.chatLoginRequired));
           }
@@ -62,7 +62,7 @@ class _ChatView extends StatefulWidget {
 class _ChatViewState extends State<_ChatView> {
   static const String _chatId = 'general';
 
-  final SupabaseService _db = SupabaseService();
+  final DataBackend _db = backend;
   late final ChatProvider _chat;
   late final InMemoryChatController _chatController;
   StreamSubscription<List<Map<String, dynamic>>>? _subscription;

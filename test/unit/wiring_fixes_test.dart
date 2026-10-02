@@ -6,7 +6,7 @@ import 'package:climate_app/features/auth/providers/auth_provider.dart';
 import 'package:climate_app/features/knowledge_base/knowledge_categories.dart';
 import 'package:climate_app/features/verification/models/verification_report_model.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:climate_app/core/services/supabase_service.dart';
+import 'package:climate_app/core/services/backend.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' show PostgrestException;
 
 VerificationReport _report(String hazard, {String id = 'r'}) =>
@@ -15,7 +15,7 @@ VerificationReport _report(String hazard, {String id = 'r'}) =>
 void main() {
   // The error vocabulary is the backend's, and these tests call the pure
   // classifiers directly, with no live client to install it.
-  setUpAll(SupabaseService.installErrorVocabulary);
+  setUpAll(installBackendErrorVocabulary);
 
   group('Alerts hazard filter', () {
     test('every hazard filters its own reports, legacy spellings included', () {

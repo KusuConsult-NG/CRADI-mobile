@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'package:climate_app/core/services/backend_failure.dart';
 import 'dart:developer' as developer;
 import 'dart:io';
 
@@ -9,7 +8,7 @@ import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 
 import 'package:climate_app/core/services/hive_encryption_service.dart';
-import 'package:climate_app/core/services/supabase_service.dart';
+import 'package:climate_app/core/services/backend.dart';
 import 'package:climate_app/core/utils/error_handler.dart'
     show ValidationException;
 import 'package:climate_app/core/l10n/l10n.dart';
@@ -393,7 +392,7 @@ class OfflineStorageService {
 
   /// Whether a sync failure should consume one of the item's retries.
   static bool failureCountsAsRetry(Object error) =>
-      !isTransientNetworkError(error) && !SupabaseService.isRateLimited(error);
+      !isTransientNetworkError(error) && !isRateLimited(error);
 
   /// Mark queue item as failed.
   ///
@@ -486,9 +485,7 @@ class OfflineStorageService {
   }
 
   Future<Map<String, int>> _doSyncPendingReports() async {
-    final currentUserId = SupabaseService.isReady
-        ? SupabaseService().currentUserId
-        : null;
+    final currentUserId = backend.isConfigured ? backend.currentUserId : null;
     if (!isInitialized) {
       developer.log(
         'syncPendingReports: not initialized, skipping',
@@ -525,7 +522,7 @@ class OfflineStorageService {
       name: 'OfflineStorageService',
     );
 
-    final db = SupabaseService();
+    final db = backend;
     int successCount = 0;
     int failCount = 0;
     int rejectedCount = 0;
@@ -590,7 +587,7 @@ class OfflineStorageService {
         await markAsSynced(queueId);
         successCount++;
       } on Exception catch (e) {
-        if (SupabaseService.isUniqueViolation(e)) {
+        if (isDuplicate(e)) {
           // Already inserted by an earlier attempt.
           await markAsSynced(queueId);
           successCount++;

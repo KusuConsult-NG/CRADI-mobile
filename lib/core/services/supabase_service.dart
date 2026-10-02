@@ -3,6 +3,7 @@ import 'dart:developer' as developer;
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -14,38 +15,10 @@ import 'package:supabase_flutter/supabase_flutter.dart'
     show StorageException;
 
 import 'package:climate_app/core/constants/app_config.dart';
-import 'package:climate_app/core/services/backend_failure.dart';
+import 'package:climate_app/core/services/data_backend.dart';
 import 'package:climate_app/core/services/supabase_mapping.dart';
-import 'package:climate_app/core/utils/error_handler.dart' show SecureException;
 
-export 'package:climate_app/core/services/supabase_mapping.dart'
-    show
-        FQuery,
-        QueryFilter,
-        WhereFilter,
-        // Re-exported so a caller can build a filter without importing the
-        // mapping layer, which is where the backend-specific names live.
-        FilterOp,
-        OrderByFilter,
-        LimitFilter,
-        parseTimestamp;
-
-/// Thrown when a picked image can't be re-encoded (so its metadata can't be
-/// stripped); it is not uploaded.
-class ImageEncodingException extends SecureException {
-  ImageEncodingException() : super((l) => l.reportErrorPhotoProcessing);
-}
-
-/// Thrown by [SupabaseService.getDocument] / [SupabaseService.updateDocument]
-/// when no row matches (or RLS hides it).
-class DocumentNotFoundException implements Exception {
-  const DocumentNotFoundException(this.table, this.id);
-  final String table;
-  final String id;
-
-  @override
-  String toString() => 'DocumentNotFoundException: $id not found in $table';
-}
+export 'package:climate_app/core/services/data_backend.dart';
 
 /// Persists the Supabase session (incl. refresh token) in the platform
 /// keystore/keychain instead of SharedPreferences. The biometric lock reuses
@@ -75,24 +48,13 @@ class SecureSessionStorage extends LocalStorage {
       _storage.write(key: _key, value: persistSessionString);
 }
 
-/// Thrown when the backend is used before [SupabaseService.initialize]
-/// succeeded (e.g. missing env.json, or in unit tests).
-class BackendNotConfiguredException implements Exception {
-  const BackendNotConfiguredException();
-
-  @override
-  String toString() =>
-      'BackendNotConfiguredException: Supabase is not '
-      'initialised (check SUPABASE_URL / SUPABASE_ANON_KEY).';
-}
-
 /// Central data service backed by Supabase (Postgres + Storage + Realtime).
 ///
 /// Exposes a document-style API: maps use camelCase keys and carry the
 /// primary key as `$id`.
 /// Conversion to snake_case rows happens here, at the boundary (see
 /// `supabase_mapping.dart`).
-class SupabaseService {
+class SupabaseService implements DataBackend {
   static final SupabaseService _instance = SupabaseService._internal();
   factory SupabaseService() => _instance;
   SupabaseService._internal();
@@ -100,6 +62,9 @@ class SupabaseService {
   /// Set once [initialize] succeeds. Everything else is inert until then so
   /// widgets/providers can be constructed in tests without a backend.
   static bool isReady = false;
+
+  @override
+  bool get isConfigured => isReady;
 
   /// Initialise the Supabase client. Called once from `main()`.
   static Future<void> initialize() async {
@@ -142,9 +107,11 @@ class SupabaseService {
   /// The signed-in user, or null.
   User? getCurrentUser() => isReady ? auth.currentUser : null;
 
+  @override
   String? get currentUserId => getCurrentUser()?.id;
 
   /// The current access token (JWT) for calling the Railway backend.
+  @override
   String? get accessToken => isReady ? auth.currentSession?.accessToken : null;
 
   /// Fetch the latest user record from the auth server.
@@ -206,6 +173,7 @@ class SupabaseService {
 
   /// Create a row. [documentId] sets the primary key (must be a UUID for
   /// uuid-keyed tables); otherwise the database generates one.
+  @override
   Future<Map<String, dynamic>> createDocument({
     required String collectionId,
     required Map<String, dynamic> data,
@@ -226,6 +194,7 @@ class SupabaseService {
 
   /// Insert-or-update by primary key. With [ignoreDuplicates] an existing row
   /// is left untouched (idempotent replay) and null may be returned.
+  @override
   Future<Map<String, dynamic>?> upsertDocument({
     required String collectionId,
     required Map<String, dynamic> data,
@@ -245,6 +214,7 @@ class SupabaseService {
   }
 
   /// Get one row by primary key. Throws [DocumentNotFoundException].
+  @override
   Future<Map<String, dynamic>> getDocument({
     required String collectionId,
     required String documentId,
@@ -261,15 +231,45 @@ class SupabaseService {
 
   /// List rows matching [queries]. Pagination is offset based: pass the
   /// number of rows already loaded as [offset].
+  @override
   Future<List<Map<String, dynamic>>> listDocuments({
     required String collectionId,
     List<QueryFilter>? queries,
     int? limitCount,
     int offset = 0,
+    RelatedFields? related,
   }) async {
+    if (related != null) {
+      try {
+        return await _listDocuments(
+          collectionId,
+          queries,
+          limitCount,
+          offset,
+          related,
+        );
+      } on Exception catch (e) {
+        // The embed is best-effort by contract: a relationship that is not
+        // exposed must degrade to plain documents, not fail the read.
+        developer.log(
+          'Embed of ${related.alias} failed, loading plain documents: $e',
+          name: 'SupabaseService',
+        );
+      }
+    }
+    return _listDocuments(collectionId, queries, limitCount, offset, null);
+  }
+
+  Future<List<Map<String, dynamic>>> _listDocuments(
+    String collectionId,
+    List<QueryFilter>? queries,
+    int? limitCount,
+    int offset,
+    RelatedFields? related,
+  ) async {
     final plan = QueryPlan.build(collectionId, queries);
     PostgrestTransformBuilder<List<Map<String, dynamic>>> q = _applyFilters(
-      client.from(plan.table).select(),
+      client.from(plan.table).select(selectionFor(related)),
       plan.filters,
     );
     for (final o in plan.orders) {
@@ -285,6 +285,18 @@ class SupabaseService {
     return rows.map((r) => fromRow(plan.table, r)).toList();
   }
 
+  /// PostgREST's projection for [related] — an embedded resource named for
+  /// the foreign key, so the join is one round trip under the same RLS as
+  /// the base rows. Null selects every column.
+  @visibleForTesting
+  static String selectionFor(RelatedFields? related) {
+    if (related == null) return '*';
+    final table = SupabaseSchema.table(related.collectionId);
+    final fk = camelToSnake(related.foreignKey);
+    final fields = related.fields.map(camelToSnake).join(', ');
+    return '*, ${related.alias}:$table!$fk($fields)';
+  }
+
   /// Count rows matching [queries] (ordering/limit are ignored).
   /// Exact row count, swallowing failures as 0.
   ///
@@ -292,6 +304,7 @@ class SupabaseService {
   /// on: a dashboard that cannot reach the backend should say so rather than
   /// report nothing to do. Callers that need the difference use
   /// [countDocumentsOrThrow].
+  @override
   Future<int> countDocuments({
     required String collectionId,
     List<QueryFilter>? queries,
@@ -308,6 +321,7 @@ class SupabaseService {
   }
 
   /// Exact row count, letting failures reach the caller.
+  @override
   Future<int> countDocumentsOrThrow({
     required String collectionId,
     List<QueryFilter>? queries,
@@ -322,6 +336,7 @@ class SupabaseService {
 
   /// Partial update. Throws [DocumentNotFoundException] when no row was
   /// updated (missing, or not permitted by RLS).
+  @override
   Future<Map<String, dynamic>> updateDocument({
     required String collectionId,
     required String documentId,
@@ -341,6 +356,7 @@ class SupabaseService {
 
   /// Delete a row. Throws [DocumentNotFoundException] when nothing was
   /// deleted (missing, or refused by RLS — which reports no error).
+  @override
   Future<void> deleteDocument({
     required String collectionId,
     required String documentId,
@@ -360,6 +376,7 @@ class SupabaseService {
   /// limit. The server filter is only ever an equality on an immutable
   /// column (see [QueryPlan.streamServerFilter]); every filter, the full
   /// ordering and the limit are (re)applied on the client.
+  @override
   Stream<List<Map<String, dynamic>>> subscribeToCollection({
     required String collectionId,
     List<QueryFilter>? queries,
@@ -392,6 +409,7 @@ class SupabaseService {
   }
 
   /// Realtime view of a single row (null when it does not exist).
+  @override
   Stream<Map<String, dynamic>?> subscribeToDocument({
     required String collectionId,
     required String documentId,
@@ -421,6 +439,7 @@ class SupabaseService {
 
   /// Upload image bytes (re-encoded as JPEG, max 1920px @ 85%, without
   /// EXIF metadata) and return the public URL.
+  @override
   Future<String> uploadFile({
     required String bucketId,
     required String storagePath,
@@ -451,6 +470,7 @@ class SupabaseService {
   /// without EXIF metadata (camera GPS position, device details); an image
   /// that can't be re-encoded is refused rather than uploaded with its
   /// metadata.
+  @override
   Future<String> uploadFileFromPath({
     required String bucketId,
     required String storagePath,
@@ -524,6 +544,7 @@ class SupabaseService {
     return url;
   }
 
+  @override
   Future<void> deleteFile({
     required String bucketId,
     required String storagePath,
@@ -531,7 +552,18 @@ class SupabaseService {
     await client.storage.from(bucketId).remove([storagePath]);
   }
 
+  /// A `SECURITY DEFINER` function, called over PostgREST's RPC endpoint.
+  /// Appwrite runs these as Functions instead — see Phase 4.
+  @override
+  Future<void> callOperation(
+    String name, {
+    Map<String, dynamic>? params,
+  }) async {
+    await client.rpc(name, params: params);
+  }
+
   /// Connectivity check against the database.
+  @override
   Future<bool> ping() async {
     if (!isReady) return false;
     try {

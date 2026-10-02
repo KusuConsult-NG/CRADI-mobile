@@ -146,3 +146,24 @@ void resetBackendDiagnosticReader() {
 }
 
 String? backendDiagnosticOf(Object error) => _diagnosticReader(error);
+
+// ───────────────────── shorthands for the common three ──────────────────
+//
+// These three refusals are tested at a dozen call sites, each of which used
+// to ask the Supabase adapter directly (`SupabaseService.isPermissionDenied`
+// and friends). Phrased against the vocabulary instead, they survive a
+// change of backend; phrased against the adapter, they are a dozen more
+// edits during the migration.
+
+/// A guard said no. Shows as "you do not have permission".
+bool isRefusal(Object error) =>
+    backendFailureOf(error) == BackendFailure.refused;
+
+/// Uniqueness violated — usually a replayed write that already landed, so
+/// most callers treat it as success.
+bool isDuplicate(Object error) =>
+    backendFailureOf(error) == BackendFailure.duplicate;
+
+/// Too many requests, too quickly. Retrying later can succeed.
+bool isRateLimited(Object error) =>
+    backendFailureOf(error) == BackendFailure.rateLimited;

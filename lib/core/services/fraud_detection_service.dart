@@ -1,5 +1,5 @@
 import 'dart:developer' as developer;
-import 'package:climate_app/core/services/supabase_service.dart';
+import 'package:climate_app/core/services/backend.dart';
 import 'package:climate_app/core/constants/app_config.dart';
 
 /// Risk levels for fraud detection
@@ -35,7 +35,7 @@ class FraudDetectionService {
   factory FraudDetectionService() => _instance;
   FraudDetectionService._internal();
 
-  final SupabaseService _db = SupabaseService();
+  final DataBackend _db = backend;
 
   Future<FraudAssessment> assessLoginRisk({
     required String userId,
@@ -129,7 +129,7 @@ class FraudDetectionService {
       );
     } on Exception catch (e) {
       // Already registered (unique per user + fingerprint).
-      if (SupabaseService.isUniqueViolation(e)) return;
+      if (isDuplicate(e)) return;
       developer.log('Error registering trusted device: $e');
       rethrow;
     }

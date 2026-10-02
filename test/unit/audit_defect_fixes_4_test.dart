@@ -65,12 +65,14 @@ void main() {
       );
     });
 
-    test('ReportVerification.fromRow reads votes with embedded name', () {
-      final v = ReportVerification.fromRow({
-        'verifier_id': 'u1',
-        'is_confirmed': false,
+    test('ReportVerification reads votes with the embedded name', () {
+      // Document fields, not column names: the mapping layer has already
+      // turned `verifier_id` into `verifierId` by the time this runs.
+      final v = ReportVerification.fromDocument({
+        'verifierId': 'u1',
+        'isConfirmed': false,
         'comment': ' Not flooded ',
-        'submitted_at': '2026-09-20T10:00:00Z',
+        'submittedAt': '2026-09-20T10:00:00Z',
         'verifier': {'name': 'Ada'},
       });
       expect(v.isConfirmed, isFalse);
@@ -79,9 +81,9 @@ void main() {
       expect(v.submittedAt, isNotNull);
 
       // Profile not readable: no name.
-      final hidden = ReportVerification.fromRow({
-        'verifier_id': 'u2',
-        'is_confirmed': true,
+      final hidden = ReportVerification.fromDocument({
+        'verifierId': 'u2',
+        'isConfirmed': true,
         'verifier': null,
       });
       expect(hidden.verifierName, isNull);

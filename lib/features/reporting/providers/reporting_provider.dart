@@ -1,7 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:climate_app/core/services/supabase_service.dart';
+import 'package:climate_app/core/services/backend.dart';
 import 'package:climate_app/core/utils/error_handler.dart';
 import 'package:climate_app/core/services/offline_storage_service.dart';
 import 'package:climate_app/core/data/mvp_locations_data.dart';
@@ -10,7 +10,6 @@ import 'package:climate_app/core/constants/app_config.dart';
 import 'package:climate_app/core/utils/image_url_resolver.dart';
 import 'dart:developer' as developer;
 import 'package:provider/provider.dart';
-import 'package:climate_app/core/services/backend_failure.dart';
 import 'package:uuid/uuid.dart';
 import 'package:climate_app/core/l10n/l10n.dart';
 
@@ -42,11 +41,9 @@ bool isAlertSeverity(Object? raw) {
 }
 
 class ReportingProvider extends ChangeNotifier {
-  ReportingProvider({
-    SupabaseService? db,
-    OfflineStorageService? offlineStorage,
-  }) : _db = db ?? SupabaseService(),
-       _offline = offlineStorage ?? OfflineStorageService();
+  ReportingProvider({DataBackend? db, OfflineStorageService? offlineStorage})
+    : _db = db ?? backend,
+      _offline = offlineStorage ?? OfflineStorageService();
 
   /// Upper bound for one photo upload; a stalled upload is treated like a
   /// lost connection (the report is kept for offline sync).
@@ -120,7 +117,7 @@ class ReportingProvider extends ChangeNotifier {
   /// address fields at 500 characters).
   static const int maxLocationDetailsLength = 500;
 
-  final SupabaseService _db;
+  final DataBackend _db;
   final OfflineStorageService _offline;
   final ImagePicker _picker = ImagePicker();
 

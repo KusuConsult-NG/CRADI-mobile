@@ -4,7 +4,7 @@ import 'package:climate_app/core/constants/app_config.dart';
 import 'package:climate_app/core/data/mvp_locations_data.dart';
 import 'package:climate_app/features/alerts/providers/alerts_provider.dart';
 import 'package:provider/provider.dart';
-import 'package:climate_app/core/services/supabase_service.dart';
+import 'package:climate_app/core/services/backend.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:climate_app/core/theme/app_colors.dart';
@@ -56,7 +56,7 @@ class _AdminAlertsScreenState extends State<AdminAlertsScreen> {
     // is_active is mutable, so it must not be a realtime server filter (a
     // dismissed row would never leave the filtered stream). Subscribe to the
     // newest rows and filter on the client instead.
-    _alertsStream = SupabaseService().subscribeToCollection(
+    _alertsStream = backend.subscribeToCollection(
       collectionId: AppConfig.alertsCollection,
       queries: [FQuery.orderDesc('createdAt'), FQuery.limit(100)],
     );
@@ -123,7 +123,7 @@ class _AdminAlertsScreenState extends State<AdminAlertsScreen> {
     try {
       // created_by defaults to auth.uid(); the backend pushes the alert
       // from the resulting alert_created event.
-      await SupabaseService().createDocument(
+      await backend.createDocument(
         collectionId: AppConfig.alertsCollection,
         data: {
           'title': _titleCtrl.text.trim(),
@@ -177,7 +177,7 @@ class _AdminAlertsScreenState extends State<AdminAlertsScreen> {
 
   Future<void> _dismissAlert(String id) async {
     try {
-      await SupabaseService().updateDocument(
+      await backend.updateDocument(
         collectionId: AppConfig.alertsCollection,
         documentId: id,
         data: {'isActive': false},

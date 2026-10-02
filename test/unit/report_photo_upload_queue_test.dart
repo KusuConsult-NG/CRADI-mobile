@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:climate_app/core/l10n/l10n.dart';
 import 'package:climate_app/core/providers/connectivity_provider.dart';
 import 'package:climate_app/core/services/offline_storage_service.dart';
-import 'package:climate_app/core/services/supabase_service.dart';
+import 'package:climate_app/core/services/backend.dart';
 import 'package:climate_app/core/utils/image_url_resolver.dart';
 import 'package:climate_app/features/reporting/providers/reporting_provider.dart';
 import 'package:flutter/material.dart';
@@ -15,7 +15,7 @@ import 'package:provider/provider.dart';
 
 /// Records uploads / writes; the upload number [failUploadAt] (0-based)
 /// fails with [uploadError].
-class _FakeDb implements SupabaseService {
+class _FakeDb implements DataBackend {
   _FakeDb({this.failUploadAt, this.uploadError});
 
   final int? failUploadAt;

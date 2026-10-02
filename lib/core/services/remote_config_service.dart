@@ -7,7 +7,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:climate_app/core/constants/app_config.dart';
-import 'package:climate_app/core/services/supabase_service.dart';
+import 'package:climate_app/core/services/backend.dart';
 
 /// Server-side configurable parameters, read from the `app_settings` table
 /// (key → jsonb value).
@@ -143,7 +143,7 @@ class RemoteConfigService {
     bool force = false,
     Duration maxAge = _refreshInterval,
   }) {
-    if (!SupabaseService.isReady) return Future<void>.value();
+    if (!backend.isConfigured) return Future<void>.value();
     if (!isRefreshDue(
       lastFetch: _lastFetch,
       now: DateTime.now(),
@@ -168,9 +168,9 @@ class RemoteConfigService {
 
   Future<void> _fetch() async {
     try {
-      final rows = await SupabaseService().client
-          .from(AppConfig.appSettingsCollection)
-          .select('key, value');
+      final rows = await backend.listDocuments(
+        collectionId: AppConfig.appSettingsCollection,
+      );
       final fresh = <String, Object?>{
         for (final row in rows) row['key'] as String: row['value'],
       };

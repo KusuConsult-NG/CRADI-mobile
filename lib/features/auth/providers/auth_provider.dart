@@ -5,9 +5,8 @@ export 'package:climate_app/core/utils/error_handler.dart'
     show AuthException, EmailNotConfirmedException;
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:climate_app/core/services/auth_backend.dart';
 import 'package:climate_app/core/services/supabase_auth_backend.dart';
-import 'package:climate_app/core/services/supabase_service.dart';
+import 'package:climate_app/core/services/backend.dart';
 import 'package:climate_app/core/services/notification_service.dart';
 import 'package:climate_app/core/services/secure_storage_service.dart';
 import 'package:climate_app/core/services/session_manager.dart';
@@ -118,7 +117,7 @@ class AuthProvider extends ChangeNotifier {
   static const bool phoneAuthEnabled = false;
 
   final AuthBackend _auth;
-  final SupabaseService _db = SupabaseService();
+  final DataBackend _db = backend;
   bool _isAuthenticated = false;
   UserRole? _userRole;
   String? _phoneNumber;
