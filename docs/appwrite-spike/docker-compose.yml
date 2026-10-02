@@ -127,6 +127,21 @@ services:
       - appwrite-builds:/storage/builds:rw
     environment: *appwrite_env
 
+  # Without these two nothing scheduled ever runs, and a cron Function looks
+  # like it simply does not work. schedule-functions watches for Functions
+  # with a cron; schedule-executions runs what it queues.
+  appwrite-task-scheduler-functions:
+    image: appwrite/appwrite:1.6.2
+    entrypoint: schedule-functions
+    depends_on: [appwrite]
+    environment: *appwrite_env
+
+  appwrite-task-scheduler-executions:
+    image: appwrite/appwrite:1.6.2
+    entrypoint: schedule-executions
+    depends_on: [appwrite]
+    environment: *appwrite_env
+
   appwrite-worker-builds:
     image: appwrite/appwrite:1.6.2
     entrypoint: worker-builds

@@ -763,7 +763,135 @@ where a reviewer can find it, and it is the difference between a swap that is
 mechanical and one that is archaeology. Auth should follow the same shape,
 once there is something to point it at.
 
+---
+
+# Phase 6: the worker
+
+Status: **the two questions this phase existed to answer are answered**, both
+by experiment. The verdict is less convenient than hoped.
+
+## 1. Scheduled Functions fire
+
+Phase 4 accepted a cron schedule but never watched one run, and said so.
+Watched now:
+
+```
+08:24:00  trigger=event     completed
+08:24:37  trigger=event     completed
+08:43:00  trigger=schedule  completed      <- on the minute
+```
+
+The escalation cron has a home. One caveat for self-hosting: this needs the
+`schedule-functions` and `schedule-executions` services. My minimal stack
+lacked both, so schedules silently never fired — which looks exactly like
+"Appwrite cron does not work". Two minutes of waiting would have produced a
+confident wrong answer.
+
+## 2. Event Functions are fire-and-forget, and that is the whole problem
+
+A Function registered on document-create that throws every time, given one
+event, watched for three minutes:
+
+```
+t+0s …  t+170s   executions=1   08:43:40 event/failed
+```
+
+**One execution. No retry. Ever.** The event is gone.
+
+That settles the outbox's fate, because at-least-once delivery is the only
+reason it exists.
+
+## What `claim_outbox_events` actually guarantees
+
+```sql
+update notification_outbox o
+   set attempts = o.attempts + 1,
+       available_at = now() + make_interval(mins => least(60, power(2, o.attempts)::int))
+ where processed_at is null and available_at <= now() and attempts < 8
+ limit p_limit
+   for update skip locked
+```
+
+Four properties, and Appwrite provides none of them:
+
+| Property | Appwrite |
+|---|---|
+| Atomic claim (`for update skip locked`) | no equivalent |
+| Exponential backoff, capped at 60 min | ours to write |
+| Give up after 8 attempts | ours to write |
+| At-least-once | **event Functions are at-most-once** |
+
+So **the outbox is not deleted. It is rebuilt**, as an Appwrite collection
+drained by a scheduled Function.
+
+## The shape
+
+```
+report written by a Function
+      │
+      ├─ event Function  ──>  writes ONE outbox document (nothing else)
+      │
+scheduled Function (every minute)
+      ├─ reads outbox documents that are due
+      ├─ sends push/email via Messaging, SMS via Termii
+      └─ marks processed, or backs off and increments attempts
+```
+
+The five handlers — `report_created`, `report_status_changed`,
+`report_disputed`, `user_access_changed`, `alert_created` — move from
+`backend/src/outbox.js` into the drain Function essentially unchanged. They
+are already written against a `repo` and a `push` interface.
+
+### Why the claim stops mattering, mostly
+
+Two scheduled runs could overlap and claim the same row, and there is no
+`skip locked`. For **push and email it does not matter**: Phase 3 showed
+Appwrite refuses a duplicate `messageId` with `409`, so the outbox id becomes
+the message id and the second send is refused by the server. Idempotency
+replaces locking.
+
+**SMS is different.** Termii has no such protection and would send twice —
+and a duplicate flood warning to an authority is not a harmless retry. So
+`sms_deliveries` becomes the claim: a document whose id is deterministic per
+outbox event and recipient, inserted *before* the send. Verified:
+
+```
+first  insert of a deterministic id -> 201
+second insert of the same id       -> 409   (the claim is taken)
+```
+
+A unique document id is the lock primitive this design rests on, and it is
+the same one that makes evidence files immutable in Phase 3.
+
+## The loss that has no clean mitigation
+
+Today the outbox row is written **by a trigger, inside the same transaction
+as the report**. Either both exist or neither does.
+
+In Appwrite the event Function runs *after* the write commits, and can fail —
+cold start timeout, runtime crash, a bad deploy. When it does, there is a
+report in the database with no outbox row, no notification, and **nothing
+that will ever notice**. The suite of guarantees that made the outbox
+trustworthy started one step earlier than the outbox.
+
+The honest mitigation is a reconciling sweep: a scheduled Function that looks
+for reports created in the last N minutes with no corresponding outbox
+document and writes the missing ones. It is not free, it is not exact, and it
+has to be built — but without it the platform can silently fail to warn
+somebody, which is the one failure this system exists to prevent.
+
+This should be weighed against the hosting decision. A trigger that is
+transactional with the write is a real property of the current design, and
+losing it is a cost that does not appear in any feature comparison.
+
+## What is now proven, end to end
+
+Everything the design depends on has been executed rather than assumed:
+ward-scoped reads and lists, Realtime filtering, typed-code auth, image
+transformation, file ACLs, message idempotency, closed-collection writes
+through a Function, event triggers, scheduled triggers, the absence of event
+retries, and the deterministic-id lock.
+
 ## Not in scope here
 
-The auth half of the client swap, the worker's outbox and escalation jobs
-(Phase 6), and data migration and cutover (Phase 7).
+The auth half of the client swap, and data migration and cutover (Phase 7).
