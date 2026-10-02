@@ -23,9 +23,18 @@ export async function getSettings() {
   }
 }
 
-/** Minutes a report may stay pending before it escalates. */
+/**
+ * Minutes a report may stay pending before it escalates.
+ *
+ * The key is `escalation_timeout_minutes`, as stored — these are row
+ * *values* in the `key` column, not column names, so the camel/snake
+ * translation the rest of the migration did does not apply to them. Read
+ * as `settings.escalationTimeoutMinutes` this silently found nothing and
+ * fell back on every run, which made the admin panel's setting do
+ * nothing. The fallback was wrong too: Postgres defaulted to 30.
+ */
 export const escalationTimeoutMinutes = (settings) =>
-  positiveInt(settings.escalationTimeoutMinutes, 60);
+  positiveInt(settings.escalation_timeout_minutes, 30);
 
 export function positiveInt(value, fallback) {
   const n = Number.parseInt(value ?? '', 10);

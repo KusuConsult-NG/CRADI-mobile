@@ -137,7 +137,12 @@ const again = await call('/functions/escalate/executions', {
   method: 'POST', body: { body: '{}', async: false, method: 'POST' },
 });
 assert.equal(again.body.status, 'completed');
-const sameAgain = await call(`/messaging/messages?${q({ method: 'limit', values: [25] })}`);
+// Newest first: an unordered page of 25 stopped containing this run's
+// message once the stack had sent more than 25, which read as "the
+// coordinator was notified 0 times" — the opposite of what it checks.
+const sameAgain = await call(
+  `/messaging/messages?${q({ method: 'orderDesc', attribute: '$createdAt' }, { method: 'limit', values: [100] })}`,
+);
 const copies = (sameAgain.body?.messages ?? []).filter((m) => (m.users ?? []).includes(coordinatorId));
 assert.equal(copies.length, 1, `the coordinator was notified ${copies.length} times`);
 ok('still exactly one notification');

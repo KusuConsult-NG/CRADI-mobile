@@ -70,6 +70,21 @@ const positiveInt = (value, fallback) => {
 };
 
 /**
+ * How many texts one alert may send, and how many an LGA may receive in a
+ * day.
+ *
+ * Its own function so the two stored keys are testable without sending
+ * anything. They are snake_case because they are row *values* in
+ * `app_settings.key`, not column names — see the note in lib/settings.js.
+ */
+export function smsBudget(settings = {}) {
+  return {
+    perEvent: positiveInt(settings.max_sms_per_alert_event, DEFAULT_MAX_SMS_PER_ALERT_EVENT),
+    perLgaDay: positiveInt(settings.max_sms_per_lga_per_day, DEFAULT_MAX_SMS_PER_LGA_PER_DAY),
+  };
+}
+
+/**
  * Texts the authorities covering [report]'s LGA.
  *
  * Returns a summary rather than throwing on a per-number failure: one bad
@@ -77,14 +92,17 @@ const positiveInt = (value, fallback) => {
  * what did not land because only those claims were released.
  */
 export async function notifyApproved(report, { settings = {}, send, now = Date.now, log }) {
-  const perEvent = positiveInt(settings.maxSmsPerAlertEvent, DEFAULT_MAX_SMS_PER_ALERT_EVENT);
-  const perLgaDay = positiveInt(settings.maxSmsPerLgaPerDay, DEFAULT_MAX_SMS_PER_LGA_PER_DAY);
+  const { perEvent, perLgaDay } = smsBudget(settings);
   const lga = smsArea(report.lga);
   const state = smsArea(report.state);
 
+  // Coverage only. There is no `isActive` on `authorities` — there never
+  // was one in Postgres either — and Appwrite refuses a query naming an
+  // attribute that is not in the schema ("Attribute not found in schema:
+  // isActive", 400), so this filter did not narrow the list, it failed
+  // the whole send.
   const authorities = await listRowsOrThrow('authorities', [
     Query.equal('coverageLga', report.lga),
-    Query.equal('isActive', true),
     Query.limit(perEvent * 2),
   ]);
   const numbers = [

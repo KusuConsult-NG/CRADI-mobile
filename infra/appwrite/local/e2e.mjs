@@ -33,6 +33,8 @@ async function call(path, { method = 'GET', body, headers = admin, raw = false }
 }
 
 const row = (table, id = '') => `/tablesdb/${DB}/tables/${table}/rows${id ? `/${id}` : ''}`;
+/** Appwrite queries as a query string: `q({method:'limit',values:[5]}, …)`. */
+const q = (...parts) => parts.map((p) => `queries[]=${encodeURIComponent(JSON.stringify(p))}`).join('&');
 const step = (m) => console.log(`\n── ${m}`);
 const ok = (m) => console.log(`   ✓ ${m}`);
 
@@ -161,9 +163,15 @@ ok(`escalateAt ${esc.body.escalateAt}`);
 step('the event Function wrote an outbox document');
 let outbox = null;
 for (let i = 0; i < 20; i++) {
+  // Newest first, and deliberately not the default page. Asking for 25
+  // rows in no particular order found nothing once the outbox had more
+  // than 25 rows in it — which it does after a few runs against the same
+  // stack, so this passed early and failed later for a reason that had
+  // nothing to do with the Function.
   const found = await call(
-    `${row('notification_outbox')}?queries[]=${encodeURIComponent(
-      JSON.stringify({ method: 'limit', values: [25] }),
+    `${row('notification_outbox')}?${q(
+      { method: 'orderDesc', attribute: '$createdAt' },
+      { method: 'limit', values: [100] },
     )}`,
   );
   outbox = (found.body?.rows ?? []).find((r) => (r.payload ?? '').includes(reportId));

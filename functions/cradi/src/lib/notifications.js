@@ -14,7 +14,7 @@ export const ESCALATION_LGA_ROLES = ['ldp_coordinator', 'ewr'];
 export const ESCALATION_GLOBAL_ROLES = ['project_staff', 'ewv'];
 export const RECIPIENT_LIMIT = 50;
 
-// Worded without a duration: the timeout is app_settings.escalationTimeoutMinutes.
+// Worded without a duration: the timeout is app_settings.escalation_timeout_minutes.
 export const ESCALATION_REASON =
   'Auto-escalation: Not verified within the escalation timeout';
 export const DISPUTE_REASON = 'Disputed by a peer monitor';
