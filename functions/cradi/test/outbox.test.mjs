@@ -119,6 +119,18 @@ describe('claim', () => {
 describe('what a document event owes the outbox', () => {
   const E = 'tablesdb.cradi.tables.';
 
+  it('matches the name Appwrite DELIVERS, not only the one it accepts', () => {
+    // Subscribed as `...tables.reports.rows.*.create`; delivered as
+    // `...collections.reports.documents.<id>.create`. Matching only the
+    // first is silent — the Function logs a success and writes nothing.
+    const delivered = `${E.replace('tables.', 'collections.')}`;
+    assert.deepEqual(
+      eventsFor('databases.cradi.collections.reports.documents.r1.create', { $id: 'r1' }),
+      [{ eventType: 'report_created', key: 'r1', payload: { reportId: 'r1' } }],
+    );
+    assert.ok(delivered);
+  });
+
   it('a new report owes one verification request', () => {
     assert.deepEqual(eventsFor(`${E}reports.rows.r1.create`, { $id: 'r1' }), [
       { eventType: 'report_created', key: 'r1', payload: { reportId: 'r1' } },

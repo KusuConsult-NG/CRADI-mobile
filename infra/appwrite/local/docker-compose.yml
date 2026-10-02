@@ -47,7 +47,16 @@ services:
       _APP_ENV: development
       _APP_LOCALE: en
       _APP_OPENSSL_KEY_V1: spike-only-key-not-a-secret
-      _APP_DOMAIN: localhost
+      # Appwrite routes by Host. A Function calling `http://appwrite/v1`
+      # sends `Host: appwrite`, which matches no configured domain, and
+      # router protection answers with the console's HTML instead of the
+      # API — a 200 full of markup, which `getRow` reads as "not found"
+      # and the write Function reports as "Your account is not set up
+      # yet". Disabled here because the stack is local and reachable
+      # only from this machine; on Cloud the injected public endpoint is
+      # correct and this does not arise.
+      _APP_OPTIONS_ROUTER_PROTECTION: "disabled"
+      _APP_DOMAIN: appwrite
       _APP_DOMAIN_FUNCTIONS: localhost
       _APP_DOMAIN_TARGET: localhost
       _APP_CONSOLE_WHITELIST_ROOT: disabled
@@ -69,7 +78,7 @@ services:
       _APP_FUNCTIONS_MEMORY: "512"
       _APP_FUNCTIONS_CPUS: "1"
       _APP_FUNCTIONS_RUNTIMES: node-22,node-20.0
-      _APP_FUNCTIONS_RUNTIMES_NETWORK: runtimes
+      _APP_FUNCTIONS_RUNTIMES_NETWORK: runtimes18
       _APP_FUNCTIONS_INACTIVE_THRESHOLD: "600"
       _APP_FUNCTIONS_MAINTENANCE_INTERVAL: "3600"
 
@@ -110,9 +119,17 @@ services:
     environment:
       OPR_EXECUTOR_ENV: development
       OPR_EXECUTOR_SECRET: spike-executor-secret
-      OPR_EXECUTOR_RUNTIMES: node-20.0
-      OPR_EXECUTOR_RUNTIME_VERSIONS: v2,v4
-      OPR_EXECUTOR_NETWORK: runtimes
+      OPR_EXECUTOR_RUNTIMES: node-22,node-20.0
+      # Appwrite 1.8 creates every Function with runtime contract v5 and
+      # will not let you choose otherwise — the `version` field is
+      # ignored on create and immutable on update. The executor has to be
+      # told to accept it. Inherited from the 1.6.2 spike as `v2,v4`,
+      # this produced seven identical build failures reading
+      # "Invalid `version` param: Value must be one of (v2, v4)" — which
+      # names the executor's allow-list, not the function, and sounds
+      # like the function is wrong.
+      OPR_EXECUTOR_RUNTIME_VERSIONS: v5
+      OPR_EXECUTOR_NETWORK: runtimes18
       OPR_EXECUTOR_INACTIVE_TRESHOLD: "600"
       OPR_EXECUTOR_MAINTENANCE_INTERVAL: "3600"
       OPR_EXECUTOR_STORAGE_DEVICE: local
@@ -163,9 +180,17 @@ networks:
   default:
   runtimes:
     external: true
-    # Explicit, because the executor attaches runtime containers to a network
-    # named literally `runtimes` through the Docker socket. Left to Compose it
-    # becomes `<project>_runtimes`, the runtimes land somewhere the executor
-    # cannot reach, and every execution dies with "timed out during cold
-    # start" while the runtime's own log says the server started fine.
-    name: runtimes
+    # Explicit, because the executor attaches runtime containers to this
+    # network through the Docker socket, by the literal name below. Left
+    # to Compose it becomes `<project>_runtimes`, the runtimes land
+    # somewhere the executor cannot reach, and every execution dies with
+    # "timed out during cold start" while the runtime's own log says the
+    # server started fine.
+    #
+    # `runtimes18`, not `runtimes`, because the 1.6.2 spike stack is
+    # still running and owns that name. Sharing it put two containers
+    # answering to the alias `appwrite` on one network, so a Function
+    # resolving `http://appwrite/v1` got whichever Docker felt like —
+    # usually the wrong project, and `fetch failed` when it was the one
+    # that had gone away. `OPR_EXECUTOR_NETWORK` below must match.
+    name: runtimes18

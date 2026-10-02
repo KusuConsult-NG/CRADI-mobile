@@ -55,9 +55,23 @@ export default handler(async ({ req, log }) => {
   }
   if (!documentId) throw invalid('documentId is required', ErrorType.argument);
 
+  // One line, before anything can fail, naming who and what. Appwrite
+  // only shows a Function's logs to an API key, so this is not visible
+  // to the caller — and without it a refusal is indistinguishable from
+  // a misrouted request.
+  log(`write ${op} ${collection}/${documentId} by ${userId}`);
+
   // is_enabled_user(): the profile decides, never the client.
   const profileResponse = await getRow('profiles', userId);
   if (profileResponse.status === 404) {
+    // Says which database and what the server replied: a 404 here is
+    // "no such profile", "no such table" and "wrong database" alike,
+    // and the caller-facing message deliberately does not distinguish
+    // them.
+    log(
+      `profile ${userId} not found in ${databaseId()}: ` +
+        `${JSON.stringify(profileResponse.body).slice(0, 200)}`,
+    );
     throw forbidden('Your account is not set up yet');
   }
   if (!profileResponse.ok) {

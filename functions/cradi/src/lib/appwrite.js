@@ -13,8 +13,24 @@
 // runtime; capturing them in a top-level const also makes the module
 // untestable, because the import is evaluated before any test can set
 // them.
+/**
+ * An explicitly set `APPWRITE_ENDPOINT` wins over Appwrite's injected
+ * `APPWRITE_FUNCTION_API_ENDPOINT`.
+ *
+ * That order looks backwards and is not. Appwrite injects the project's
+ * **public** endpoint — `https://localhost/v1` on a self-hosted stack,
+ * built from `_APP_DOMAIN` — and a Function runs in a container on the
+ * runtimes network, where that name does not resolve and port 443 is
+ * nothing. Every call failed with `connect ECONNREFUSED 127.0.0.1:443`.
+ *
+ * Overriding the injected variable does not work: Appwrite reserves the
+ * name and sets it after any Function variable of the same name. So the
+ * override has to be a different variable, and it has to take
+ * precedence. On Cloud nothing sets `APPWRITE_ENDPOINT` and the injected
+ * value is used, which is correct there.
+ */
 const endpoint = () =>
-  process.env.APPWRITE_FUNCTION_API_ENDPOINT ?? process.env.APPWRITE_ENDPOINT;
+  process.env.APPWRITE_ENDPOINT ?? process.env.APPWRITE_FUNCTION_API_ENDPOINT;
 const project = () =>
   process.env.APPWRITE_FUNCTION_PROJECT_ID ?? process.env.APPWRITE_PROJECT;
 
@@ -22,16 +38,28 @@ export const databaseId = () => process.env.APPWRITE_DATABASE_ID ?? 'cradi';
 
 /** One API call. Never throws on a 4xx — the caller decides. */
 export async function api(path, { method = 'GET', body, headers } = {}) {
-  const response = await fetch(`${endpoint()}${path}`, {
-    method,
-    headers: {
-      'content-type': 'application/json',
-      'x-appwrite-project': project(),
-      'x-appwrite-key': process.env.APPWRITE_API_KEY,
-      ...(headers ?? {}),
-    },
-    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-  });
+  const url = `${endpoint()}${path}`;
+  let response;
+  try {
+    response = await fetch(url, {
+      method,
+      headers: {
+        'content-type': 'application/json',
+        'x-appwrite-project': project(),
+        'x-appwrite-key': process.env.APPWRITE_API_KEY,
+        ...(headers ?? {}),
+      },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    });
+  } catch (cause) {
+    // `fetch` throws a bare "TypeError: fetch failed" with no URL, which
+    // in a Function's error log is indistinguishable between a wrong
+    // endpoint, a DNS failure and a dead API. Naming the URL turns a
+    // whole debugging session into one line.
+    const e = new Error(`${method} ${url} did not complete: ${cause?.cause?.message ?? cause?.message ?? cause}`);
+    e.cause = cause;
+    throw e;
+  }
   const text = await response.text();
   let parsed = null;
   if (text) {

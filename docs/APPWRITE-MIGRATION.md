@@ -2102,3 +2102,117 @@ know is a hazard report that never notified a verifier.
 The Function code is not pushed, so nothing has been *executed* — only
 created. That is the next thing, and it is what turns 116 tests against
 a fake into evidence.
+
+---
+
+# Phase 14: a hazard report, end to end
+
+Status: **PASS.** A real report, filed by a real session, through the
+real write Function, on Appwrite 1.8.0 — refused where it should be,
+stamped where it should be, queued, picked up by the event Function,
+drained, and delivered as a push addressed to the ward's monitors and
+not to the reporter.
+
+```
+✓ refused with 401 — the collection is closed
+✓ report created
+✓ status=pending verificationCount=0 escalated=false userId=<the caller>
+✓ read("user:…") read("team:ward-benue-makurdi-north-bank-i") read("label:ewv") …
+✓ escalateAt 2026-10-02T12:33:30
+✓ report-created-14085f20a2a45f15 (report_created)
+✓ claimed=1 processed=1 failed=0
+✓ processedAt 2026-10-02T11:33:32
+✓ push -> 7 monitor(s), no location or hazard text
+END TO END: PASS
+```
+
+**Phase 4's central claim is now a fact rather than a fake.** The client
+sent `status:"approved", verificationCount:99, escalated:true,
+userId:"somebody-else"` and the stored document reads `pending`, `0`,
+`false`, and the caller's own id — taken from the session header, never
+the body.
+
+`infra/appwrite/local/e2e.mjs` is the test. It asserts and exits
+non-zero; a script that prints what happened and exits 0 is not a test.
+
+## Six defects, every one invisible to the fake
+
+The 117 unit tests pass against a stub that behaves the way these
+Functions *assume* Appwrite behaves. Every bug below lived in the gap
+between that assumption and the server.
+
+**1. The runtime contract version.** Appwrite 1.8 creates every Function
+as `v5` and ignores the `version` field on create and on update; the
+executor pinned by 1.8's *own* compose template accepts `v2, v4` unless
+told otherwise by `OPR_EXECUTOR_RUNTIME_VERSIONS`. Seven identical build
+failures naming the executor's allow-list, which sounds like the
+Function is wrong.
+
+**2. Two stacks, one network.** The 1.6.2 spike still owns the external
+network named `runtimes`, so both projects' API containers answered to
+the alias `appwrite` and a Function resolving `http://appwrite/v1` got
+whichever Docker felt like. The new stack is on `runtimes18`.
+
+**3. Function variables outlive their Function.** Delete and recreate a
+Function and its variables become project-scoped orphans; the key stays
+reserved, every later write answers 409, and `PUT .../variables/<key>`
+silently does nothing because a variable is addressed by its generated
+`$id`. Seven Functions ran with **no configuration at all** and reported
+only `fetch failed`. No API key can purge them — `projects.read` is
+console-only — so the local fix was a new project, and `deploy.mjs` now
+deletes by `$id` before setting and fails loudly if a variable does not
+take.
+
+**4. `fetch failed` named nothing.** `lib/appwrite.js` now names the URL
+and the cause on a transport failure. That single change turned the next
+two bugs from guesswork into one line each, and it is worth having in
+production for exactly that reason.
+
+**5. Appwrite routes by `Host`.** The injected
+`APPWRITE_FUNCTION_API_ENDPOINT` is the project's **public** endpoint —
+`https://localhost/v1` — which a runtime container cannot reach. Pointing
+at `http://appwrite/v1` instead got a **200 full of console HTML**,
+because an unrecognised Host falls through to the web route; `getRow`
+read that as "not found" and the Function reported *"Your account is not
+set up yet"*. A wrong answer with a success status is the worst shape a
+failure can take. Fixed by making the whole stack agree on one hostname.
+On Cloud the injected endpoint is correct and none of this arises.
+
+**6. The event name Appwrite delivers is not the one it accepts.** This
+is the one that matters most. A subscription must be written
+
+```
+databases.cradi.tables.reports.rows.*.create
+```
+
+and the event arrives as
+
+```
+databases.cradi.collections.reports.documents.<id>.create
+```
+
+`tables`/`rows` for subscribing, `collections`/`documents` for
+delivering. The 400 on the wrong subscription form was loud; **this was
+silent**. The Function fired, matched nothing, logged
+`-> 0 outbox document(s)`, and returned 200. A hazard report would have
+been filed, stored correctly, escalation-queued — and never reached a
+verifier, with every component reporting success.
+
+`collectionOf()` now accepts both, and a test covers the delivered form
+explicitly.
+
+## What this does and does not prove
+
+Proven on 1.8.0: the closed collection, the Function write path and its
+overwrite of client-chosen fields, ward-team ACLs, the escalation queue,
+the event Function, the outbox drain, message idempotency by `messageId`,
+and the push privacy rule — no location names, no hazard text, no
+descriptions, only generic wording and an id.
+
+Not yet exercised: the auth Function's typed-code flows, recovery, the
+Termii path, the escalation cron actually firing on its schedule, the
+reconciling sweep against a real gap, and the Dart adapters — which have
+still never run against a server.
+
+And none of it is on Cloud, where the plan refuses seven Functions and
+both buckets (Phase 12).

@@ -51,16 +51,37 @@ export default async ({ req, res, log, error }) => {
   return res.json({ enqueued }, 200);
 };
 
+/**
+ * Which collection an event concerns, whichever name Appwrite used.
+ *
+ * Appwrite 1.8 takes a **subscription** written as
+ * `databases.<db>.tables.<t>.rows.*.create` and **delivers** it as
+ * `databases.<db>.collections.<t>.documents.<id>.create`. The two
+ * namespaces are not interchangeable — one is rejected with a 400
+ * where the other is required — and nothing says so.
+ *
+ * Matching only the subscribed form is silent: the Function runs, logs
+ * a success, writes nothing, and the first anyone knows is a hazard
+ * report that never reached a verifier. So both are accepted, and a
+ * test covers both.
+ */
+export function collectionOf(event) {
+  const m = /\.(?:tables|collections)\.([^.]+)\.(?:rows|documents)\./.exec(event);
+  return m ? m[1] : null;
+}
+
 /** Which outbox events a document event produces. Pure, and tested. */
 export function eventsFor(event, doc) {
   const id = doc.$id;
   if (!id) return [];
+  const collection = collectionOf(event);
+  if (!collection) return [];
 
-  if (event.includes('.reports.rows.') && event.endsWith('.create')) {
+  if (collection === 'reports' && event.endsWith('.create')) {
     return [{ eventType: 'report_created', key: id, payload: { reportId: id } }];
   }
 
-  if (event.includes('.reports.rows.') && event.endsWith('.update')) {
+  if (collection === 'reports' && event.endsWith('.update')) {
     // Appwrite hands over the document, not the change. The write
     // Function stamps `previousStatus` whenever it writes `status`, so
     // its *absence* means this edit did not touch the status — a
@@ -81,7 +102,7 @@ export function eventsFor(event, doc) {
     ];
   }
 
-  if (event.includes('.verifications.rows.') && event.endsWith('.create')) {
+  if (collection === 'verifications' && event.endsWith('.create')) {
     // Only a dispute escalates early; a confirmation is counted by the
     // write Function and needs no notification of its own.
     if (doc.isConfirmed !== false) return [];
@@ -94,11 +115,11 @@ export function eventsFor(event, doc) {
     ];
   }
 
-  if (event.includes('.alerts.rows.') && event.endsWith('.create')) {
+  if (collection === 'alerts' && event.endsWith('.create')) {
     return [{ eventType: 'alert_created', key: id, payload: { alertId: id } }];
   }
 
-  if (event.includes('.profiles.rows.') && event.endsWith('.update')) {
+  if (collection === 'profiles' && event.endsWith('.update')) {
     return [
       {
         eventType: 'user_access_changed',

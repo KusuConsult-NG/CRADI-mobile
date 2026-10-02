@@ -29,6 +29,7 @@ import {
   DATABASE_NAME,
   ENDPOINT as PLANNED_ENDPOINT,
   FUNCTIONS,
+  FUNCTION_VERSION,
   SINGLE_BUCKET,
 } from './plan.mjs';
 
@@ -292,6 +293,7 @@ async function functions() {
       functionId: f.id,
       name: f.name,
       runtime: 'node-22',
+      version: FUNCTION_VERSION,
       execute: f.execute,
       events: f.events ?? [],
       schedule: f.schedule ?? '',

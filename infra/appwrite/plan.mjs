@@ -318,6 +318,18 @@ export const BUCKETS = [
   },
 ];
 
+/**
+ * The open-runtimes contract version.
+ *
+ * Appwrite 1.8 defaults a new Function to `v5`, and executor 0.7.22 —
+ * which is the version 1.8's own compose template pins — rejects it:
+ * *"Invalid `version` param: Value must be one of (v2, v4)"*. The
+ * mismatch is between two components of the same release, and it
+ * surfaces only at build time, as seven identical failures with no
+ * mention of the word "function".
+ */
+export const FUNCTION_VERSION = process.env.APPWRITE_FUNCTION_VERSION ?? 'v4';
+
 /** Phases 10 and 11. */
 export const FUNCTIONS = [
   {

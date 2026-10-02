@@ -15,6 +15,15 @@ import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 
 const EP = process.env.LOCAL_ENDPOINT ?? 'http://localhost:8090/v1';
+/**
+ * Overridable because a Function's variables are keyed project-wide and
+ * **outlive the Function that owned them**. Delete and recreate a
+ * Function and its variables become orphans that no API key can purge —
+ * `projects.read` is console-only — and every later attempt to set that
+ * key answers 409 while the Function runs with no configuration at all.
+ * On a throwaway stack the cheapest fix is a new project.
+ */
+const PROJECT_ID = process.env.LOCAL_PROJECT_ID ?? 'cradi';
 const here = dirname(fileURLToPath(import.meta.url));
 const jar = {};
 
@@ -59,9 +68,14 @@ if (!team.ok) throw new Error(`team failed: ${JSON.stringify(team.body).slice(0,
 
 const project = await call('/projects', {
   method: 'POST',
-  body: { projectId: 'cradi', name: 'CRADI', teamId: team.body.$id, region: 'default' },
+  body: {
+    projectId: PROJECT_ID,
+    name: 'CRADI',
+    teamId: team.body.$id,
+    region: 'default',
+  },
 });
-const projectId = project.ok ? project.body.$id : 'cradi';
+const projectId = project.ok ? project.body.$id : PROJECT_ID;
 console.log(`project: ${projectId}${project.ok ? '' : ' (existing)'}`);
 
 const key = await call(`/projects/${projectId}/keys`, {
