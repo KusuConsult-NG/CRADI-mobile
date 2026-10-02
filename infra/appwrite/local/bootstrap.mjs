@@ -14,7 +14,12 @@ import { writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 
-const EP = process.env.LOCAL_ENDPOINT ?? 'http://localhost:8090/v1';
+// `appwrite`, not `localhost`: the stack sets `_APP_DOMAIN: appwrite`
+// so that a Function on the runtimes network can reach the API, and
+// Appwrite routes by Host — a request arriving as `localhost:8090` gets
+// the console's HTML instead of the API. The host side reaches the same
+// name through `127.0.0.1 appwrite` in /etc/hosts; see the README.
+const EP = process.env.LOCAL_ENDPOINT ?? 'http://appwrite.local:8090/v1';
 /**
  * Overridable because a Function's variables are keyed project-wide and
  * **outlive the Function that owned them**. Delete and recreate a
@@ -24,6 +29,23 @@ const EP = process.env.LOCAL_ENDPOINT ?? 'http://localhost:8090/v1';
  * On a throwaway stack the cheapest fix is a new project.
  */
 const PROJECT_ID = process.env.LOCAL_PROJECT_ID ?? 'cradi';
+
+/** Every identifier a CRADI client reports. */
+const PLATFORMS = [
+  {
+    type: 'flutter-android',
+    name: 'Android',
+    key: 'com.westgatestratagem.climate_app.climate_app',
+  },
+  {
+    type: 'flutter-ios',
+    name: 'iOS',
+    key: 'com.westgatestratagem.climateapp.climateApp',
+  },
+  // What a `flutter test` VM reports, from the stub in
+  // `test/integration/live_appwrite.dart`.
+  { type: 'flutter-linux', name: 'Linux (integration tests)', key: 'com.cradi.test' },
+];
 const here = dirname(fileURLToPath(import.meta.url));
 const jar = {};
 
@@ -77,6 +99,27 @@ const project = await call('/projects', {
 });
 const projectId = project.ok ? project.body.$id : PROJECT_ID;
 console.log(`project: ${projectId}${project.ok ? '' : ' (existing)'}`);
+
+/**
+ * Appwrite refuses a client it does not recognise:
+ *
+ *   general_unknown_origin: Invalid Origin. Register your new client
+ *   (com.cradi.test) as a new Linux platform on your project console
+ *
+ * So every identifier the app ships under has to be registered, and so
+ * does the one a Flutter test VM reports. This needs a console session
+ * — `platforms.write` is not an API-key scope — which is why it lives
+ * here and not in `provision.mjs`. On Cloud it is a console step.
+ */
+for (const platform of PLATFORMS) {
+  const made = await call(`/projects/${projectId}/platforms`, {
+    method: 'POST',
+    body: platform,
+  });
+  console.log(
+    `platform ${platform.type} ${platform.key}: ${made.ok ? 'created' : made.status}`,
+  );
+}
 
 const key = await call(`/projects/${projectId}/keys`, {
   method: 'POST',

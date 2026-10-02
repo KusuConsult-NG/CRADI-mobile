@@ -44,7 +44,16 @@ services:
 
   appwrite:
     image: appwrite/appwrite:1.8.0
-    networks: [default, runtimes]
+    networks:
+      default:
+      runtimes:
+        # A dotted alias, because the session cookie is issued for
+        # `domain=.<_APP_DOMAIN>` and a cookie jar rejects a
+        # single-label domain like `.appwrite` outright. Without it
+        # the Flutter SDK never stored the session and every call
+        # after sign-in came back as a guest.
+        aliases:
+          - appwrite.local
     ports:
       - "8090:80"
     volumes:
@@ -66,7 +75,7 @@ services:
       # only from this machine; on Cloud the injected public endpoint is
       # correct and this does not arise.
       _APP_OPTIONS_ROUTER_PROTECTION: "disabled"
-      _APP_DOMAIN: appwrite
+      _APP_DOMAIN: appwrite.local
       _APP_DOMAIN_FUNCTIONS: localhost
       _APP_DOMAIN_TARGET: localhost
       _APP_CONSOLE_WHITELIST_ROOT: disabled

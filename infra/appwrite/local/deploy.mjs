@@ -49,7 +49,7 @@ console.log(`packaged ${(readFileSync(tarball).length / 1024).toFixed(0)}KB`);
 
 /**
  * Inside a Function, Appwrite is reachable on the compose network, not
- * on the host port. `http://appwrite/v1` is the service name — the
+ * on the host port. `http://appwrite.local/v1` is the service name — the
  * localhost URL the provisioner uses would resolve to the Function's
  * own container.
  */
@@ -59,8 +59,8 @@ const VARIABLES = {
   // reach, because it is on the runtimes network and the domain
   // resolves outside it. `lib/appwrite.js` prefers the injected one,
   // correctly, since on Cloud it is right. So override it here.
-  APPWRITE_FUNCTION_API_ENDPOINT: 'http://appwrite/v1',
-  APPWRITE_ENDPOINT: 'http://appwrite/v1',
+  APPWRITE_FUNCTION_API_ENDPOINT: 'http://appwrite.local/v1',
+  APPWRITE_ENDPOINT: 'http://appwrite.local/v1',
   APPWRITE_PROJECT: PROJECT,
   APPWRITE_API_KEY: KEY,
   APPWRITE_DATABASE_ID: process.env.APPWRITE_DATABASE_ID ?? 'cradi',

@@ -2306,3 +2306,91 @@ Appwrite; what stands in for it is Appwrite refusing a duplicate
 The Termii SMS path, the reconciling sweep against a real gap, phone
 OTP (not migrated), and **the Dart adapters**, which have still never
 run against a server.
+
+---
+
+# Phase 16: the Dart adapters, against a real server
+
+Status: **12 integration tests pass** against Appwrite 1.8.0 — the first
+time any Dart written in Phase 9 has met a server. One real gap found
+and left open, named below rather than worked around quietly.
+
+`test/integration/` runs only when pointed at a live stack; without the
+`--dart-define`s it skips, so `flutter test` stays green in CI. 819 unit
+tests + 1 skipped group.
+
+## Getting a Flutter test to talk to a server at all
+
+Two obstacles, both properties of the harness rather than of the code,
+and both worth writing down because they make an integration test look
+like a passing one:
+
+- `TestWidgetsFlutterBinding` installs an `HttpOverrides` that answers
+  **every request 400 without touching the network**. A suite written
+  against it exercises nothing and says so only in a warning.
+- The SDK's IO client builds a cookie jar and user-agent from
+  `path_provider`, `device_info_plus` and `package_info_plus`, none of
+  which exist in a test VM.
+
+`live_appwrite.dart` clears the override and stubs the three channels,
+so the test drives the client the app actually ships.
+
+## What the adapter tests prove
+
+- a document round-trips, and `fromAppwriteRow` exposes the key under
+  both `$id` and `id` as the call sites expect;
+- a missing document raises `DocumentNotFoundException`, not a leaked
+  404;
+- `upsertDocument(ignoreDuplicates: true)` leaves the first write alone
+  and answers **null** — the contract the NDPA consent path depends on;
+- **the two not-equals really differ on a server.** `notEqual` is sent
+  as `and(isNotNull, notEqual)` and `distinctFrom` as
+  `or(isNull, notEqual)`, written that way because Appwrite does not
+  document how a bare `notEqual` treats nulls. Until now that was a
+  careful guess; it is now a passing test;
+- **an empty `IN` matches nothing.** The dangerous direction — an empty
+  `equal` reading as *no constraint* and returning the whole collection
+  — does not happen;
+- `countDocumentsOrThrow` throws where `countDocuments` would answer 0,
+  so a dashboard that cannot reach the backend says so;
+- a real duplicate classifies as `BackendFailure.duplicate` and
+  `isBackendPermanent`, and a missing collection does **not** classify
+  as permanent — retrying a deploy that had not finished must not throw
+  a field agent's report away.
+
+## Two more findings
+
+**Appwrite refuses an unregistered client.**
+`general_unknown_origin: Register your new client (com.cradi.test) as a
+new Linux platform`. Every identifier the app ships under has to exist
+on the project — Android, iOS, and whatever a test VM reports. It needs
+a console session (`platforms.write` is not an API-key scope), so it
+lives in `bootstrap.mjs` and is a manual console step on Cloud. Nothing
+in twelve phases had mentioned it.
+
+**`contacts.phone` is required**, which the extractor got right from the
+migrations and my test fixtures did not.
+
+## The gap, left open
+
+`AppwriteAuthBackend.signInWithPassword` depends on the SDK's cookie
+jar. Against this stack the session is created — 201, three
+`Set-Cookie` headers — and **the next call is a guest**. It is not a
+timing race; a 250 ms wait changes nothing. The fallback header Appwrite
+exposes for precisely this case is browser-only in the SDK.
+
+Candidates are plain HTTP, the `.local` suffix, and the local cookie
+attributes, and every Appwrite Flutter app signs in this way over HTTPS,
+so it very likely works on Cloud. **Very likely is not a test**, and
+this is the app's main sign-in path, so it is recorded as something to
+verify on Cloud before launch rather than assumed away.
+
+The tests therefore authenticate with `Client.setSession` and a
+server-minted secret — the same mechanism `_establish` uses after a
+typed code is redeemed, which is the path sign-up and recovery take.
+
+## What has still never run
+
+`AppwriteDataBackend`'s realtime subscriptions, file upload, and
+`callOperation`; the Termii path; and the reconciling sweep against a
+real gap.
