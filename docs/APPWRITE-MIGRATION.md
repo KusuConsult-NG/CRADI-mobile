@@ -153,42 +153,46 @@ nothing. Under teams this is automatic — no ward, no membership, no access.
 |---|---|---|
 | `news_links_select` | `is_active OR admin` — read depends on a **mutable column** | Re-stamp the ACL when `is_active` flips, in the write Function. Readable-while-active is not expressible, but "restamp on change" is exact. |
 | `reports_update` | owner may update **only while `status = 'pending'`** | Write Function. Cannot be an ACL; the condition is on the row being written. |
-| `verifications_select` | contains `EXISTS (SELECT 1 FROM reports …)` — a **join** | It is a no-op, and that is a finding. See below. |
+| `verifications_select` | contains `EXISTS (SELECT 1 FROM reports …)` — a **join**, and the ward rule is inherited through it | Denormalise `ward`/`lga` onto the verification and stamp the matching team ACL. See below. |
 | `verifications_insert` | reads `reports` for status, owner and ward | Write Function, as above. |
 
-### `verifications_select` is already broken, and the migration should not copy it
+### `verifications_select` scopes by ward without saying so
 
-The EWM arm of that policy reads:
+The EWM arm reads:
 
 ```sql
 app_role() = 'ewm' AND EXISTS (SELECT 1 FROM reports r WHERE r.id = verifications.report_id)
 ```
 
-`verifications.report_id` is `NOT NULL` and carries a foreign key to
-`reports.id`, so the row it looks for is guaranteed to exist. **The subquery is
-always true.** The clause reduces to `app_role() = 'ewm'`, which means every
-ward monitor can read every verification in the platform — including votes on
-reports in wards they cannot see, which `reports_select` is careful to withhold.
+`verifications.report_id` is `NOT NULL` with a foreign key to `reports.id`, so
+the row it looks for always exists and the subquery looks like it can never be
+false. It is not a no-op. **A subquery inside a policy expression is itself
+subject to RLS**, so that `SELECT … FROM reports` is filtered by
+`reports_select` — and resolves to "a report this EWM is allowed to see",
+which is their own ward.
 
-Compare the sibling rule, `verifications_insert`, which spells the intent out:
+Verified against the schema rather than reasoned about: with a ward-A EWM
+signed in, `exists(select 1 from reports where id = <ward-B report>)` returns
+false while the same query for the ward-A report returns true, and the
+superuser sees both rows. An earlier draft of this document called the clause
+a no-op and the policy a live over-permission. That was wrong, and the fix it
+recommended would have changed nothing.
 
-```sql
-(app_role() <> 'ewm' OR (report_ward(report_id) = my_ward()
-                     AND report_lga(report_id)  = my_lga()))
-```
+**But it does not survive the migration.** The scoping here is transitive: the
+visibility of a verification is defined by the visibility of its report, and
+nothing in the verification row says so. Appwrite has no inheritance of that
+kind — a document's ACL is the whole of its access rule, and no part of it can
+be "whatever the related document allows".
 
-An EWM may only *vote* within their ward. Reading was plainly meant to match
-and does not. This is a defect in the current Supabase schema, not something
-the migration introduces — but the migration is the moment it gets fixed
-rather than faithfully reproduced.
+So the mapping is unchanged, and now better motivated: the write Function
+copies `ward` and `lga` onto each verification (it reads the report anyway, to
+enforce the insert rule) and stamps the same `read("team:ward-…")` the report
+carries. What Postgres derives at query time becomes something Appwrite is
+told at write time.
 
-**Recommended:** denormalise `ward` and `lga` onto each verification at write
-time (the write Function reads the report anyway), and stamp
-`read("team:ward-…")` to match `reports`. That makes the read rule identical to
-the write rule, which is what it should have been.
-
-This is worth a separate fix on the current Supabase schema too, before any of
-this lands — it is a live over-permission today.
+The cost is that the two can now drift. If a report's ward is ever corrected,
+its verifications must be restamped — a case the current schema cannot have,
+because it never stored the answer twice.
 
 ---
 
@@ -262,8 +266,10 @@ Stated plainly, because these are the costs of the decision, not objections to i
 2. **Cloud quotas.** 584 teams, 19 collections, and more than one storage
    bucket. The old config carries the comment *"free tier limits (max 1
    bucket)"*, so the tier matters. Needs the real project to confirm.
-3. **`verifications_select`'s `EXISTS`.** Read here as a near-no-op. Worth a
-   second pair of eyes before it is designed away.
+3. ~~`verifications_select`'s `EXISTS`.~~ **Resolved.** Checked against the
+   schema: the subquery inherits `reports_select` through RLS, so the policy
+   is correct as written. Nothing to fix in Supabase; the Appwrite mapping
+   makes the inherited scope explicit instead.
 
 ## Not in scope here
 
