@@ -892,6 +892,141 @@ transformation, file ACLs, message idempotency, closed-collection writes
 through a Function, event triggers, scheduled triggers, the absence of event
 retries, and the deterministic-id lock.
 
+---
+
+# Phase 7: data migration and cutover
+
+Status: **the pipeline is built and run end to end** against the real schema
+(all 14 migrations applied to Postgres) and a real Appwrite. Only the
+endpoint changes for Cloud. Scripts: `docs/appwrite-spike/migrate/`.
+
+This phase was listed as blocked on the Cloud answers. The *real run* still
+is — there is nothing to export into. The pipeline is not, and building it
+first turned up four defects that would each have been found at 2am during a
+cutover window instead.
+
+## Shape
+
+```
+export (SQL)  ->  transform + stamp ACLs  ->  import (REST)  ->  reconcile
+```
+
+Identities first, always: `seed-identities.mjs` creates a user per profile, a
+team per ward, a label per role. Then `migrate.mjs` writes profiles, reports
+and verifications, each stamped with the ACL that reproduces the RLS policy
+it used to live under. Every document keeps its Postgres uuid as its Appwrite
+id, so a re-run collides with `409` rather than duplicating — the same
+property Phase 6 uses for the SMS claim.
+
+Result on the fixture: 6 profiles, 4 reports, 2 verifications, 3 ward teams,
+0 orphans.
+
+## Reconciliation is not row counts
+
+Row counts are the obvious check and they are nearly worthless here. The
+difficulty of this migration is access control, so the only question worth
+asking is:
+
+> does each user see exactly what Postgres would have shown them?
+
+`reconcile.mjs` answers it by querying the live RLS policy **as that user**
+(`set_config('request.jwt.claim.sub')`, `set role authenticated`) and the
+Appwrite collection **with that user's session**, then diffing the id lists.
+
+```
+user                      role   postgres  appwrite  verdict
+EWM Centre               ewm           1         1  match
+EWM North                ewm           2         2  match
+EWV State                ewv           4         4  match
+Citizen Centre           user          1         1  match
+Citizen North            user          2         2  match
+Citizen Obi              user          1         1  match
+```
+
+Both directions matter. Granting too much is worse than granting too little
+and both are silent.
+
+**Proven to detect a breach, not just to pass.** Granting one ward's team
+read on another ward's report — a plausible slip — moves EWM Centre from 1 to
+2 and the run exits `1`. Reverted, it exits `0`. It belongs in CI for the
+cutover.
+
+## Four defects the pipeline found
+
+Each was silent. Each would have produced a migration that looked complete.
+
+**1. Appwrite labels cannot contain underscores.** `ldp_coordinator` and
+`project_staff` are rejected (`400`); `ldpCoordinator` and `projectStaff` are
+accepted. So every role with an underscore needs a second spelling, and
+`roleLabel()` must be the *only* one — used by the migrator, the identity
+sync and the write Functions alike. If any two disagree, the ACL names a
+label nobody holds, **Appwrite accepts it without complaint**, and that role
+silently sees nothing. It reads as empty data, not as a permissions bug.
+
+**2. An id transformation in one place and not the other.** The first draft
+stripped dashes from the uuid when creating users and kept them when stamping
+`read("user:…")`. Every row migrated perfectly and **nobody could read
+anything**. The fix was to delete the transformation: a Postgres uuid is 36
+characters and Appwrite allows dashes after the first, so it is a valid user
+id verbatim. `appwriteUserId()` exists as the identity function purely so
+there is one place for anybody tempted to transform it again.
+
+**3. Synthesised email addresses collide.** Deriving a local part from
+`id.slice(0,8)` gave every profile the same address, and five of six users
+failed to create — counted, not reported, because the first version of the
+script only counted `201`s. Addresses come from `auth.users` and nowhere
+else.
+
+**4. Appwrite validates emails more strictly than Postgres stores them.**
+A single-label domain is refused. A real export will contain addresses
+Appwrite will not accept, and those users cannot be created at all. **This
+needs a pre-flight pass over `auth.users` before any cutover window opens**,
+not a discovery inside one.
+
+## And one in the checker itself
+
+The first reconciler asked for `queries[]=limit(100)`, which this version
+rejects as a syntax error, and then read `body.documents ?? []`. It turned a
+`400` into "this user can see nothing" and **reported a total migration
+failure for a migration that was correct**.
+
+A reconciler that reads an error as an empty result is worse than no
+reconciler, because its verdict is confident. It now throws on any non-OK
+response and paginates with the JSON query form.
+
+That is the second time in this project a swallowed error produced a
+confident wrong answer — the first was `browser-test.sh` exiting 0 with
+twenty failures. Worth a standing rule: **a checker may not treat a failed
+request as a negative result.**
+
+## Cutover
+
+Order follows the dependencies the pipeline exposed:
+
+1. **Pre-flight** — validate every `auth.users` email; list the ones Appwrite
+   will refuse and fix them in Supabase first.
+2. **Identities** — users, ward teams, role labels. Nothing may be stamped
+   before the thing it names exists.
+3. **Freeze writes** (or dual-write; see below).
+4. **Data** — profiles, reports, verifications, then the rest.
+5. **Reconcile** — per-user visibility, exit non-zero on any difference.
+6. **Switch the app**, then decommission.
+
+Two things from earlier phases land here:
+
+- **Push reaches nobody until each user opens the app** (Phase 3). OneSignal
+  subscriptions cannot be transferred. For an early-warning platform this is
+  the sharpest cutover cost, and the mitigation — shipping the Appwrite SDK
+  registering targets before cutover — has to happen *before* this phase, not
+  during it.
+- **The reconciling sweep for reports with no outbox row** (Phase 6) should
+  exist before go-live, not after.
+
+The freeze window is the open question the fixture cannot answer: it depends
+on row counts nobody has measured against the production database, and on
+whether a dual-write period is acceptable. Both need the Cloud project.
+
 ## Not in scope here
 
-The auth half of the client swap, and data migration and cutover (Phase 7).
+The auth half of the client swap (Phase 2 maps it; Phase 5 explains why it
+waits), and the production cutover itself, which needs the Cloud project.
