@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:climate_app/core/theme/app_colors.dart';
 import 'package:climate_app/core/services/supabase_service.dart';
+import 'package:climate_app/core/services/backend_failure.dart';
 import 'package:climate_app/core/constants/app_config.dart';
 import 'package:climate_app/core/utils/error_handler.dart';
 import 'package:climate_app/features/chat/providers/chat_provider.dart';
@@ -192,8 +193,8 @@ class _ChatViewState extends State<_ChatView> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              e is sb.PostgrestException && SupabaseService.isRateLimited(e)
-                  ? context.l10n.chatRateLimited(e.message)
+              backendFailureOf(e) == BackendFailure.rateLimited
+                  ? context.l10n.chatRateLimited(backendMessageOf(e) ?? '')
                   : context.l10n.chatSendFailed(
                       ErrorHandler.getUserMessage(e, context.l10n),
                     ),

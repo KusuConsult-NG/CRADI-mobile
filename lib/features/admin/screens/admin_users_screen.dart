@@ -3,7 +3,7 @@ import 'package:climate_app/core/constants/app_config.dart';
 import 'package:climate_app/core/services/supabase_service.dart';
 import 'package:climate_app/core/widgets/location_selector_widget.dart';
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart' show PostgrestException;
+import 'package:climate_app/core/services/backend_failure.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:climate_app/core/theme/app_colors.dart';
 import 'dart:developer' as developer;
@@ -12,12 +12,11 @@ import 'package:climate_app/features/auth/providers/auth_provider.dart';
 import 'package:climate_app/core/utils/screen_security.dart';
 
 /// Whether the database refused to approve an account because it has not
-/// confirmed its email / phone yet (errcode 42501 from the profiles
-/// approval trigger).
+/// confirmed its email / phone yet: the profiles approval guard refuses, and
+/// says so in the message it raises.
 bool isUnconfirmedApprovalError(Object error) =>
-    error is PostgrestException &&
-    error.code == '42501' &&
-    error.message.toLowerCase().contains('not confirmed');
+    backendFailureOf(error) == BackendFailure.refused &&
+    (backendMessageOf(error) ?? '').toLowerCase().contains('not confirmed');
 
 /// Snack-bar text for a failed profile update on the users screen.
 String adminUserWriteErrorMessage(Object error, AppLocalizations l10n) {

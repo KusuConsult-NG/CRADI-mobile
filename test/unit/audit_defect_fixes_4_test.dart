@@ -24,6 +24,10 @@ import 'package:supabase_flutter/supabase_flutter.dart'
 import 'package:climate_app/core/l10n/l10n.dart';
 
 void main() {
+  // The error vocabulary is the backend's, and these tests call the pure
+  // classifiers directly, with no live client to install it.
+  setUpAll(SupabaseService.installErrorVocabulary);
+
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('M1 rejection reason on VerificationReport', () {

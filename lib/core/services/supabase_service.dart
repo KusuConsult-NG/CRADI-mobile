@@ -6,8 +6,15 @@ import 'dart:typed_data';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+// Aliased as well, because `StorageException` is also the name of this
+// app's own neutral type in error_handler.dart, and an unqualified
+// reference is ambiguous.
+import 'package:supabase_flutter/supabase_flutter.dart'
+    as sb
+    show StorageException;
 
 import 'package:climate_app/core/constants/app_config.dart';
+import 'package:climate_app/core/services/backend_failure.dart';
 import 'package:climate_app/core/services/supabase_mapping.dart';
 import 'package:climate_app/core/utils/error_handler.dart' show SecureException;
 
@@ -16,6 +23,9 @@ export 'package:climate_app/core/services/supabase_mapping.dart'
         FQuery,
         QueryFilter,
         WhereFilter,
+        // Re-exported so a caller can build a filter without importing the
+        // mapping layer, which is where the backend-specific names live.
+        FilterOp,
         OrderByFilter,
         LimitFilter,
         parseTimestamp;
@@ -93,6 +103,7 @@ class SupabaseService {
 
   /// Initialise the Supabase client. Called once from `main()`.
   static Future<void> initialize() async {
+    installErrorVocabulary();
     if (isReady) return;
     if (!AppConfig.isSupabaseConfigured) {
       developer.log(
@@ -275,20 +286,38 @@ class SupabaseService {
   }
 
   /// Count rows matching [queries] (ordering/limit are ignored).
+  /// Exact row count, swallowing failures as 0.
+  ///
+  /// Right for a badge beside a menu item, wrong for a figure somebody acts
+  /// on: a dashboard that cannot reach the backend should say so rather than
+  /// report nothing to do. Callers that need the difference use
+  /// [countDocumentsOrThrow].
   Future<int> countDocuments({
     required String collectionId,
     List<QueryFilter>? queries,
   }) async {
     try {
-      final plan = QueryPlan.build(collectionId, queries);
-      return await _applyFilters(
-        client.from(plan.table).count(CountOption.exact),
-        plan.filters,
+      return await countDocumentsOrThrow(
+        collectionId: collectionId,
+        queries: queries,
       );
     } on Exception catch (e) {
       developer.log('countDocuments error: $e', name: 'SupabaseService');
       return 0;
     }
+  }
+
+  /// Exact row count, letting failures reach the caller.
+  Future<int> countDocumentsOrThrow({
+    required String collectionId,
+    List<QueryFilter>? queries,
+    Duration timeout = const Duration(seconds: 10),
+  }) {
+    final plan = QueryPlan.build(collectionId, queries);
+    return _applyFilters(
+      client.from(plan.table).count(CountOption.exact),
+      plan.filters,
+    ).timeout(timeout);
   }
 
   /// Partial update. Throws [DocumentNotFoundException] when no row was
@@ -522,8 +551,123 @@ class SupabaseService {
   /// True when the database refused a write for exceeding a per-user rate
   /// limit (errcode 54000; e.g. chat messages per minute, reports per
   /// hour). Its message is user-facing; retrying later can succeed.
+  /// Teaches `backend_failure.dart` how THIS backend reports refusals.
+  ///
+  /// Separate from [initialize] and callable on its own, because the call
+  /// sites are pure functions — `isPermanentSyncError`, `reportActionError`,
+  /// the submission failure map — that tests exercise with a hand-built
+  /// exception and no live client. Registering only inside [initialize]
+  /// looked tidier and quietly made every one of those classifications
+  /// answer "unknown" under test, which is how five existing tests caught
+  /// it.
+  ///
+  /// When an Appwrite adapter arrives it installs its own vocabulary here
+  /// instead, and those same tests assert Appwrite's codes.
+  static void installErrorVocabulary() {
+    registerBackendFailureClassifier(_classifyPostgrest);
+    registerBackendMessageReader(_postgrestMessage);
+    registerBackendTransientPredicate(_isTransient);
+    registerBackendPermanentPredicate(_isPermanent);
+    registerBackendDiagnosticReader(_postgrestDiagnostic);
+  }
+
+  /// Postgres' refusal vocabulary, as the migrations use it.
+  ///
+  /// These codes are chosen deliberately in the SQL, not inherited: `42501`
+  /// is what 41 separate guards raise to mean "refused", and `54000` is the
+  /// chat rate limit. See `backend_failure.dart` for why this mapping exists
+  /// in one place rather than at each call site.
+  static BackendFailure _classifyPostgrest(Object error) {
+    if (error is! PostgrestException) return BackendFailure.unknown;
+    switch (error.code) {
+      case '42501':
+      case 'PGRST301':
+        return BackendFailure.refused;
+      case '54000':
+        return BackendFailure.rateLimited;
+      case 'P0002':
+        return BackendFailure.notFound;
+      case '22023':
+        return BackendFailure.invalidState;
+      case '23505':
+        return BackendFailure.duplicate;
+      case '23514':
+      case '23503':
+        return BackendFailure.constraint;
+      default:
+        return BackendFailure.unknown;
+    }
+  }
+
+  /// The server's wording, when a person wrote it.
+  ///
+  /// Two cases qualify. The rate limit ("You are sending messages too
+  /// quickly") is written in the migration for a reader. A trigger refusal
+  /// carries the reason the guard gives, which is more use than "not
+  /// permitted" — but a bare RLS denial does not: PostgREST fills that in
+  /// with "new row violates row-level security policy…", which tells a field
+  /// agent nothing. Distinguishing them means recognising that sentence, and
+  /// that is Postgres-specific knowledge, so it lives here rather than at the
+  /// call site that shows the message.
+  static String? _postgrestMessage(Object error) {
+    if (error is! PostgrestException) return null;
+    final message = error.message;
+    if (message.isEmpty) return null;
+    switch (error.code) {
+      case '54000':
+        return message;
+      case '42501':
+      case 'PGRST301':
+        return message.toLowerCase().contains('row-level') ? null : message;
+      default:
+        return null;
+    }
+  }
+
+  /// Postgres codes that fail the same way on every retry: permissions,
+  /// constraint and type violations, unknown columns. Moved here from
+  /// `offline_storage_service.dart`, which had no business knowing them —
+  /// this set decides whether a queued field report is retried or dropped.
+  static const Set<String> _permanentPostgresCodes = {
+    '42501', // insufficient_privilege / RLS
+    '23502', // not_null_violation
+    '23503', // foreign_key_violation
+    '23514', // check_violation
+    '22P02', // invalid_text_representation
+    '22001', // string_data_right_truncation
+    '22007', // invalid_datetime_format
+    '42703', // undefined_column
+    'PGRST204', // unknown column in payload
+  };
+
+  /// An auth refresh that could not reach the server. Transport failures
+  /// (socket, DNS, timeout) are recognised without the adapter's help.
+  static bool _isTransient(Object error) =>
+      error is AuthRetryableFetchException;
+
+  /// A refusal retrying cannot change: a permanent Postgres code, or a
+  /// storage upload rejected 4xx — but not a timeout, conflict or rate
+  /// limit, each of which may succeed next time.
+  static bool _isPermanent(Object error) {
+    if (error is PostgrestException) {
+      return _permanentPostgresCodes.contains(error.code);
+    }
+    if (error is sb.StorageException) {
+      final status = int.tryParse(error.statusCode ?? '');
+      return status != null &&
+          status >= 400 &&
+          status < 500 &&
+          !const {408, 409, 429}.contains(status);
+    }
+    return false;
+  }
+
+  /// Everything the server said, for the rejection record.
+  static String? _postgrestDiagnostic(Object error) =>
+      error is PostgrestException ? error.message : null;
+
   static bool isRateLimited(Object error) =>
-      error is PostgrestException && error.code == '54000';
+      backendFailureOf(error) == BackendFailure.rateLimited;
 
   /// True when a storage upload failed because the object already exists.
   static bool isStorageDuplicate(Object error) =>

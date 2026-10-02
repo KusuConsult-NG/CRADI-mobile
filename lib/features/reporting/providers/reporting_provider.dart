@@ -10,7 +10,7 @@ import 'package:climate_app/core/constants/app_config.dart';
 import 'package:climate_app/core/utils/image_url_resolver.dart';
 import 'dart:developer' as developer;
 import 'package:provider/provider.dart';
-import 'package:supabase_flutter/supabase_flutter.dart' show PostgrestException;
+import 'package:climate_app/core/services/backend_failure.dart';
 import 'package:uuid/uuid.dart';
 import 'package:climate_app/core/l10n/l10n.dart';
 
@@ -458,8 +458,9 @@ class ReportingProvider extends ChangeNotifier {
         // Rate-limit refusals carry a readable reason written by the
         // database (not translated); everything else is localised.
         'message': (AppLocalizations l) =>
-            (e is PostgrestException && SupabaseService.isRateLimited(e))
-            ? e.message
+            backendFailureOf(e) == BackendFailure.rateLimited
+            ? (backendMessageOf(e) ??
+                  ErrorHandler.handleError(e, l, context: 'Report Submission'))
             : ErrorHandler.handleError(e, l, context: 'Report Submission'),
       };
     }

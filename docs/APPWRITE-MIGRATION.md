@@ -652,7 +652,118 @@ assumed. What is still unproven: the scheduled trigger actually firing, and
 anything at all about Cloud — region, quotas, and whether 584 teams and ~650
 topics are allowed on the tier you buy.
 
+---
+
+# Phase 5: the client data layer
+
+Status: **the seam is built and in `main`-shaped code**, not a spike. 679
+tests pass, `dart format` is clean, and no behaviour changed.
+
+## What the coupling actually was
+
+Nine Dart files imported `supabase_flutter`. The obvious reading is "nine
+files to edit". The real finding is worse and more interesting: the app's
+**business logic was branching on Postgres SQLSTATEs**.
+
+```dart
+if (error is PostgrestException) {
+  switch (error.code) {
+    case '22023': return l10n.reportActionErrorAlreadyPending;
+    case 'P0002': return l10n.reportActionErrorGone;
+    case '42501': …
+```
+
+Those codes are not incidental. The migrations raise them deliberately —
+`42501` appears **41 times** as the guards' way of saying "refused", `54000`
+is the chat rate limit, `22023` means "that report is no longer pending". The
+database's error vocabulary *was* the app's error vocabulary.
+
+Under Appwrite none of those codes exist. A Function answers 403, or returns
+a shape we choose. So this had to be named before anything could be swapped.
+
+## The seam
+
+`lib/core/services/backend_failure.dart` — a vocabulary of what happened,
+not of which engine said so:
+
+| `BackendFailure` | Postgres today | Meaning |
+|---|---|---|
+| `refused` | `42501`, `PGRST301` | a guard said no |
+| `rateLimited` | `54000` | too fast |
+| `notFound` | `P0002` | the row is gone |
+| `invalidState` | `22023` | exists, but not in a state that allows this |
+| `duplicate` | `23505` | uniqueness |
+| `constraint` | `23514`, `23503` | CHECK or foreign key |
+| `unknown` | anything else | treat generically; do not guess |
+
+Four pluggable readers sit beside it, each answering a question only the
+adapter can:
+
+- `backendFailureOf` — which of the above.
+- `backendMessageOf` — is there wording worth showing a field agent? Narrow
+  on purpose (see below).
+- `backendDiagnosticOf` — what exactly did the server say, for the record
+  stored against a rejected report.
+- `isBackendTransient` / `isBackendPermanent` — is a queued write worth
+  retrying?
+
+`SupabaseService.installErrorVocabulary()` registers all of them. An Appwrite
+adapter installs its own, and every call site is untouched.
+
+## Three things the move surfaced
+
+**1. The "row-level" heuristic was in the wrong place.** `reportActionError`
+showed the server's message for a trigger refusal but hid it for a bare RLS
+denial, by testing whether the text contained `row-level`. That is
+Postgres-specific knowledge sitting in a feature file. It now lives in the
+adapter, which returns `null` for messages not worth showing — so the call
+site reads `backendMessageOf(error) ?? l10n.reportActionErrorNoPermission`
+and knows nothing about PostgREST's phrasing.
+
+**2. The retry policy was the most consequential leak.** `isPermanentSyncError`
+decided whether a field agent's queued report is retried or **marked rejected
+and never sent**, and it decided it from a set of nine SQLSTATEs and a range
+of storage HTTP statuses, in `offline_storage_service.dart`. On another
+backend that set means nothing, the predicate silently answers "not
+permanent", and reports retry forever — or worse, the inverse. It is now the
+adapter's, where a new backend must consciously answer the same question.
+
+**3. `admin_screen` was bypassing the service entirely**, building
+`client.from(table).count(...)` by hand — and deliberately, because
+`countDocuments` swallows errors as `0` and the dashboard's comment says a
+misleading zero is worse than an error. That is correct, and it is the same
+bug this project shipped once in the admin operations panel. So the service
+gained `countDocumentsOrThrow`, and `countDocuments` now delegates to it; the
+screen keeps its behaviour and loses the raw client.
+
+## Result
+
+| | before | after |
+|---|---|---|
+| Files importing `supabase_flutter` | 9 | **4** |
+| SQLSTATEs in feature code | 4 sites | **0** |
+| Postgres codes outside the adapter | several | **0** (one doc comment) |
+
+The four remaining are the adapter itself, and three files coupled to **auth**
+types (`sb.User`, `sb.AuthException`, `sb.UserAttributes`) rather than to
+data: `auth_provider.dart` (116 references), `profile_provider.dart` and
+`chat_screen.dart`.
+
+## Why auth is deliberately not done here
+
+`auth_provider.dart` is the largest and most security-sensitive file in the
+app, Phase 2 already maps all eleven of its backend calls, and rewriting it
+means replacing sessions, OTP verification, recovery and biometric unlock at
+once — against an Appwrite instance the app cannot yet talk to, for a
+migration whose hosting question is still open.
+
+The data seam is worth having regardless of whether Appwrite proceeds: it
+removes engine-specific codes from business logic, it puts the retry policy
+where a reviewer can find it, and it is the difference between a swap that is
+mechanical and one that is archaeology. Auth should follow the same shape,
+once there is something to point it at.
+
 ## Not in scope here
 
-The client data-layer swap (Phase 5), the worker's outbox and escalation jobs
+The auth half of the client swap, the worker's outbox and escalation jobs
 (Phase 6), and data migration and cutover (Phase 7).

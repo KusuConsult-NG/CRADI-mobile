@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:climate_app/core/services/backend_failure.dart';
 import 'dart:developer' as developer;
 import 'dart:io';
 
@@ -6,8 +7,6 @@ import 'package:hive_flutter/hive_flutter.dart';
 import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
-import 'package:supabase_flutter/supabase_flutter.dart'
-    show AuthRetryableFetchException, PostgrestException, StorageException;
 
 import 'package:climate_app/core/services/hive_encryption_service.dart';
 import 'package:climate_app/core/services/supabase_service.dart';
@@ -30,20 +29,6 @@ class OfflineQueuedException implements Exception {
   String toString() => message(englishL10n);
 }
 
-/// Postgres error codes that will fail the same way on every retry
-/// (permissions, constraint / type violations, unknown columns).
-const Set<String> _permanentPostgresCodes = {
-  '42501', // insufficient_privilege / RLS
-  '23502', // not_null_violation
-  '23503', // foreign_key_violation
-  '23514', // check_violation
-  '22P02', // invalid_text_representation
-  '22001', // string_data_right_truncation
-  '22007', // invalid_datetime_format
-  '42703', // undefined_column
-  'PGRST204', // unknown column in payload
-};
-
 /// True for connectivity failures worth retrying later (no network, DNS,
 /// timeouts, dropped connections, auth refresh that could not reach the
 /// server).
@@ -52,25 +37,15 @@ bool isTransientNetworkError(Object error) =>
     error is TimeoutException ||
     error is HandshakeException ||
     error is http.ClientException ||
-    error is AuthRetryableFetchException;
+    // The backend's own retryable failures; the adapter knows which.
+    isBackendTransient(error);
 
 /// True when the server rejected the payload and retrying cannot succeed:
 /// a permanent Postgres error, a storage upload refused with a 4xx status
 /// (e.g. file too large, wrong type, not permitted — but not a timeout,
 /// conflict or rate limit), or an image that can't be processed.
-bool isPermanentSyncError(Object error) {
-  if (error is PostgrestException) {
-    return _permanentPostgresCodes.contains(error.code);
-  }
-  if (error is StorageException) {
-    final status = int.tryParse(error.statusCode ?? '');
-    return status != null &&
-        status >= 400 &&
-        status < 500 &&
-        !const {408, 409, 429}.contains(status);
-  }
-  return error is ImageEncodingException;
-}
+bool isPermanentSyncError(Object error) =>
+    isBackendPermanent(error) || error is ImageEncodingException;
 
 /// Service for storing draft reports offline using Hive
 /// Allows users to create reports without internet and sync later
@@ -622,10 +597,7 @@ class OfflineStorageService {
           continue;
         }
         if (isPermanentSyncError(e)) {
-          await markAsRejected(
-            queueId,
-            e is PostgrestException ? e.message : e.toString(),
-          );
+          await markAsRejected(queueId, backendDiagnosticOf(e) ?? e.toString());
           rejectedCount++;
         } else {
           await markAsFailed(
