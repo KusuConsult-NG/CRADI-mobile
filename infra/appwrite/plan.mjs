@@ -13,7 +13,18 @@ import { dirname, resolve } from 'node:path';
 const here = dirname(fileURLToPath(import.meta.url));
 const columns = JSON.parse(readFileSync(resolve(here, 'columns.json'), 'utf8'));
 
-export const DATABASE_ID = 'cradi';
+/**
+ * The project the migration targets.
+ *
+ * Frankfurt, which is both where the previous Appwrite project lived and
+ * the region chosen for this one. Recording the choice here rather than
+ * only in a shell history, because moving an Appwrite Cloud project
+ * between regions means migrating everything a second time.
+ */
+export const ENDPOINT =
+  process.env.APPWRITE_ENDPOINT ?? 'https://fra.cloud.appwrite.io/v1';
+
+export const DATABASE_ID = process.env.APPWRITE_DATABASE_ID ?? 'cradi';
 export const DATABASE_NAME = 'CRADI';
 
 /**
@@ -249,6 +260,39 @@ export const COLLECTIONS = [
  * Phase 3. Evidence is immutable: a bucket whose files are created and
  * never updated, with the ACL on each file.
  */
+export const SINGLE_BUCKET_ID = 'cradi-files';
+
+/**
+ * One bucket instead of two, for a project whose tier allows only one.
+ *
+ * The previous Appwrite project ran this way — its config says so: *"Due
+ * to Appwrite free tier limits (max 1 bucket), Profile Photos and Report
+ * Images currently share the same bucket"*.
+ *
+ * It is not a security compromise **provided `fileSecurity` stays on**.
+ * With per-file ACLs, evidence still carries its ward-team reads and a
+ * profile image still carries `read("any")`; what is shared is the size
+ * cap, the extension list and the antivirus setting, and those are the
+ * same for both anyway. A file written with no permissions falls back to
+ * the bucket's, which grant no reads — so the failure mode is a file
+ * nobody can see, not a file everybody can.
+ *
+ * What it does cost: the two cannot be given different retention or
+ * deleted independently, and a bug in the evidence path can now write
+ * into the same bucket as avatars.
+ */
+export const SINGLE_BUCKET = {
+  id: SINGLE_BUCKET_ID,
+  name: 'CRADI files',
+  permissions: ['create("users")'],
+  fileSecurity: true,
+  maximumFileSize: 10 * 1024 * 1024,
+  allowedFileExtensions: ['jpg', 'jpeg', 'png', 'webp'],
+  compression: 'none',
+  encryption: true,
+  antivirus: true,
+};
+
 export const BUCKETS = [
   {
     id: 'report-images',

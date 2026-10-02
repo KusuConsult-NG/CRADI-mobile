@@ -22,14 +22,24 @@
  * and this is a tool that will be run against a project holding live
  * reports.
  */
-import { BUCKETS, COLLECTIONS, DATABASE_ID, DATABASE_NAME, FUNCTIONS } from './plan.mjs';
+import {
+  BUCKETS,
+  COLLECTIONS,
+  DATABASE_ID,
+  DATABASE_NAME,
+  ENDPOINT as PLANNED_ENDPOINT,
+  FUNCTIONS,
+  SINGLE_BUCKET,
+} from './plan.mjs';
 
-const ENDPOINT = process.env.APPWRITE_ENDPOINT;
+const ENDPOINT = process.env.APPWRITE_ENDPOINT ?? PLANNED_ENDPOINT;
 const PROJECT = process.env.APPWRITE_PROJECT_ID;
 const KEY = process.env.APPWRITE_API_KEY;
 
 const args = new Set(process.argv.slice(2));
 const DRY = args.has('--dry-run');
+// For a tier that allows one bucket. The previous project ran this way.
+const SINGLE = args.has('--single-bucket');
 const only = [...args].find((a) => a.startsWith('--only='))?.slice(7)?.split(',');
 const wants = (step) => !only || only.includes(step);
 
@@ -190,7 +200,7 @@ async function collections() {
 }
 
 async function buckets() {
-  for (const b of BUCKETS) {
+  for (const b of SINGLE ? [SINGLE_BUCKET] : BUCKETS) {
     const r = await ensure(`bucket ${b.id}`, `/storage/buckets/${b.id}`, '/storage/buckets', {
       bucketId: b.id,
       name: b.name,
@@ -230,10 +240,12 @@ async function functions() {
 // ───────────────────────────── run ──────────────────────────────────────
 
 async function main() {
-  if (!DRY && (!ENDPOINT || !PROJECT || !KEY)) {
+  if (!DRY && (!PROJECT || !KEY)) {
     console.error(
-      'Set APPWRITE_ENDPOINT, APPWRITE_PROJECT_ID and APPWRITE_API_KEY, ' +
-        'or pass --dry-run to print the plan.',
+      'Set APPWRITE_PROJECT_ID and APPWRITE_API_KEY (and APPWRITE_ENDPOINT to\n' +
+        `override ${PLANNED_ENDPOINT}), or pass --dry-run to print the plan.\n\n` +
+        'The key must be a FRESH server key. Two keys from the previous\n' +
+        'project are in public git history and must not be reused.',
     );
     process.exit(2);
   }
@@ -256,6 +268,14 @@ async function main() {
         '\n  This is the tier question the migration doc has been asking since\n' +
           '  Phase 1. Nothing after this point would have succeeded either.',
       );
+      if (/bucket/i.test(e.label)) {
+        console.error(
+          '\n  The previous Appwrite project hit this exact limit — its config\n' +
+            '  says "Due to Appwrite free tier limits (max 1 bucket)". Re-run\n' +
+            '  with --single-bucket to provision one shared bucket instead,\n' +
+            '  which is safe while file-level permissions stay on.',
+        );
+      }
       process.exit(3);
     }
     throw e;

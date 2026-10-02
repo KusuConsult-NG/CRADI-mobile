@@ -65,7 +65,20 @@ class AppConfig {
 
   // ─────────────────────── Storage buckets ─────────────────────────────────
   // Object paths must start with the uploader's user id (storage RLS).
+  //
+  // Overridable at build time because an Appwrite tier that allows only
+  // one bucket makes both of these the same bucket, separated by the
+  // path prefix. The previous Appwrite project ran exactly that way —
+  // its config says "Due to Appwrite free tier limits (max 1 bucket)".
+  // Safe there as long as file-level permissions stay on; see
+  // `infra/appwrite/plan.mjs`.
 
-  static const String profileImagesBucket = 'profile-images';
-  static const String reportImagesBucket = 'report-images';
+  static const String profileImagesBucket = String.fromEnvironment(
+    'PROFILE_IMAGES_BUCKET',
+    defaultValue: 'profile-images',
+  );
+  static const String reportImagesBucket = String.fromEnvironment(
+    'REPORT_IMAGES_BUCKET',
+    defaultValue: 'report-images',
+  );
 }

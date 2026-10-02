@@ -1,31 +1,29 @@
 # Setting up the Appwrite project
 
-Three commands, two decisions. The commands are here; **the decisions are
-not mine to make** and both have been open since Phase 1 of the migration.
+Three commands. The region is settled (Frankfurt); the tier is the one
+thing still to confirm, and the provisioner answers it by running.
 
 ---
 
-## The two decisions, first
+## The region: decided
 
-### 1. Which region
+**Frankfurt — `https://fra.cloud.appwrite.io/v1`.** The default
+everywhere in this directory.
 
-The endpoint carries it — `https://fra.cloud.appwrite.io/v1` is
-Frankfurt, which is where the old project was. Whether that is lawful
-under the NDPA for Nigerian citizens' hazard reports, locations and phone
-numbers is a **compliance question about personal data belonging to real
-people**, and it is not one to settle from a provisioning script.
+Chosen on latency: of the Appwrite Cloud regions, Frankfurt is much the
+closest to Nigeria (Lagos–Frankfurt ≈ 4,500 km, against ≈ 8,500 km to
+New York). It is also where the previous Appwrite project ran.
 
-It is also not a detail that can be changed later: moving an Appwrite
-Cloud project between regions means a second migration of everything this
-one migrates.
+Recorded because it cannot be changed later without migrating everything
+a second time, and because the alternative was a data-residency
+position. The owner's decision, 2026-10-02, is that NDPA in-country
+residency is not a constraint on this deployment. If that is ever
+revisited, Cloud is out and the plan moves to self-hosting — which
+changes Phases 2, 4 and 6 and brings back the four operational traps
+Phase 4 recorded (the executor's port, the shared `/storage` volumes,
+the `runtimes` network name, and giving MariaDB a volume).
 
-If in-country residency is required, Cloud is out and the whole plan moves
-to self-hosting — which changes Phases 2, 4 and 6 materially, and brings
-back the four operational traps Phase 4 recorded (the executor's port, the
-shared `/storage` volumes, the `runtimes` network name, and giving MariaDB
-a volume).
-
-### 2. Which tier
+## The one decision left: which tier
 
 The project needs, at minimum:
 
@@ -38,10 +36,21 @@ The project needs, at minimum:
 | Columns | **187** |
 | Functions | **7**, three of them on a one-minute schedule |
 
+**One limit is already known, from the previous project's own config:**
+
+> Due to Appwrite free tier limits (max 1 bucket), Profile Photos and
+> Report Images currently share the same bucket but are logically
+> separated by folder paths.
+
+So on that tier the two-bucket plan fails. `--single-bucket` provisions
+one shared bucket instead, which is safe while file-level permissions
+stay on — see `SINGLE_BUCKET` in `plan.mjs` for what it does and does
+not cost. The app follows with `--dart-define PROFILE_IMAGES_BUCKET=...`
+and `REPORT_IMAGES_BUCKET=...`.
+
 `provision.mjs` stops the moment the plan refuses something and says so,
 rather than burying it in two hundred lines — so running it is also how
-this question gets answered, if nobody can answer it from the pricing
-page.
+the rest of this question gets answered.
 
 ---
 
@@ -80,11 +89,18 @@ create (237 of them) against an imagined empty project.
 ### 2. Apply it
 
 ```
-APPWRITE_ENDPOINT=https://<region>.cloud.appwrite.io/v1 \
-APPWRITE_PROJECT_ID=... \
-APPWRITE_API_KEY=... \
+APPWRITE_PROJECT_ID=... APPWRITE_API_KEY=... \
 node infra/appwrite/provision.mjs
 ```
+
+The endpoint defaults to Frankfurt; `APPWRITE_ENDPOINT` overrides it.
+The previous project was `6941cdb400050e7249d5` with database
+`6941e2c2003705bb5a25` — reuse or replace, but set
+`APPWRITE_DATABASE_ID` if you keep the old database id rather than
+`cradi`.
+
+**The API key must be a fresh one.** Two server keys from the previous
+project are in public git history.
 
 **Idempotent**: every step checks before it writes and prints
 `created` / `exists`. A half-finished run is resumed by running it again,

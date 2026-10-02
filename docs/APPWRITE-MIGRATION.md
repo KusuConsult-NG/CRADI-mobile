@@ -1877,23 +1877,57 @@ states a bare existence check calls fine — a column stuck in `processing`
 (500s on every call, looks healthy in the console), and a schedule that
 silently does not match.
 
-## What is still a decision, not a task
+## The region, settled
 
-The project itself, its **region**, and its **API key** are console
-actions, and only the first two are hard:
+**Frankfurt.** `https://fra.cloud.appwrite.io/v1`, now the default
+throughout `infra/appwrite/`.
 
-1. **The region** is a compliance question about real people's hazard
-   reports, locations and phone numbers under the NDPA — and it cannot be
-   changed later without migrating everything a second time. The old
-   project was Frankfurt. If in-country residency is required, Cloud is
-   out and the plan moves to self-hosting, which changes Phases 2, 4 and
-   6 and brings back all four of Phase 4's operational traps.
-2. **The tier** has to allow 584 teams, ~650 topics, 2 buckets, 19
-   collections, 187 columns and 7 Functions, three of them on a
-   one-minute schedule.
+Chosen on latency — of the Appwrite Cloud regions, Frankfurt is much the
+closest to Nigeria (Lagos–Frankfurt ≈ 4,500 km against ≈ 8,500 km to New
+York) — and it is where the previous project ran. The owner's decision,
+2026-10-02, is that NDPA in-country residency is not a constraint on this
+deployment. Recorded here because the alternative was a data-residency
+position on real people's hazard reports, locations and phone numbers,
+and because the choice cannot be revisited later without migrating
+everything a second time.
 
-Twelve phases. Everything that can be built without those answers is
-built: the client adapters, the three Functions the client calls, the
-four that replace the worker, the migration pipeline, and now the
-provisioning. What is left needs a project, and a project needs those two
-answers first.
+This closes the question that had been open since Phase 1.
+
+## One quota answer, from the project's own history
+
+The other open question was the tier. Part of it is already answered, and
+not from a pricing page — from the previous Appwrite project's committed
+config:
+
+> Due to Appwrite free tier limits (max 1 bucket), Profile Photos and
+> Report Images currently share the same bucket but are logically
+> separated by folder paths.
+
+So the tier that project ran on allows **one** bucket, and Phase 3's
+design wants two with different ACLs. `provision.mjs --single-bucket`
+provisions one instead, and the app's bucket ids became
+`String.fromEnvironment` so the same code works either way.
+
+That is not a security compromise **provided `fileSecurity` stays on**:
+with per-file ACLs, evidence still carries its ward-team reads and a
+profile image still carries `read("any")`. A file written with no
+permissions falls back to the bucket's, which grant no reads — so the
+failure mode is a file nobody can see rather than one everybody can. What
+it costs is independent retention and deletion, and the fact that a bug
+in the evidence path now writes into the same bucket as avatars.
+
+What the one-bucket limit does *not* tell us is whether 584 teams and
+~650 topics are allowed. The provisioner stops on the first refusal and
+names it, so running it answers the rest.
+
+## What is left
+
+Twelve phases, and everything that can be built without a live project is
+built: the client adapters, the three Functions the client calls, the four
+that replace the worker, the migration pipeline, and the provisioning.
+
+What remains is not design work. It needs a project, a fresh server key —
+two from the previous project are in public git history — and a route to
+`fra.cloud.appwrite.io`, which this container does not have: the
+environment's network policy answers 403 at the gateway for it, for
+`cloud.appwrite.io` and for `appwrite.io`.
