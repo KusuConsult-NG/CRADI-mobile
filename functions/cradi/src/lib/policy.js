@@ -66,6 +66,22 @@ export const RULES = {
       escalated: false,
     }),
     immutable: ['userId', 'state', 'lga', 'ward'],
+    /**
+     * Server-owned at creation, but a reviewer decides them afterwards.
+     * `guardUpdate` below says who, field by field.
+     */
+    decidable: [
+      'status', 'approvedAt', 'rejectedAt', 'rejectionReason',
+      'verifiedAt', 'verificationCount', 'autoValidated',
+      'escalated', 'escalatedAt', 'escalationStatus',
+      'updatedBy', 'severity', 'isAlert',
+    ],
+    guardUpdate: guardReportUpdate,
+    derive: (clean, merged) => {
+      // Postgres set this on insert *and* update; nothing else does, so
+      // without it a report raised to `critical` never became an alert.
+      if ('severity' in clean) clean.isAlert = ALERT_SEVERITIES.includes(merged.severity);
+    },
     requiresLocation: true,
     acl: ({ userId, data }) => [
       `read("user:${userId}")`,
@@ -146,6 +162,54 @@ export const RULES = {
     ],
   },
 };
+
+/** Severities that make a report an alert, as `reports_before_insert` had it. */
+export const ALERT_SEVERITIES = ['high', 'critical'];
+
+/** Roles that may approve, reject or reopen a report. */
+const DECIDERS = ['ewv', 'ewr', 'ldp_coordinator', 'project_staff', ...ADMIN];
+
+const changed = (data, current, field) =>
+  field in data && data[field] !== (current[field] ?? null);
+
+/**
+ * `guard_report_update()`, carried over.
+ *
+ * Three separate rules, and they are not the same rule:
+ *
+ *  - ownership and escalation are an admin's to change;
+ *  - the peer-verification tally is counted by confirmations, never set
+ *    by hand, so only an admin may touch it or move a report to
+ *    `verified` directly;
+ *  - approving, rejecting and reopening need a reviewing role, and
+ *    nobody but an admin may decide their own report.
+ */
+export function guardReportUpdate({ role, userId, current, data }) {
+  const admin = isAdmin(role);
+
+  if (['userId', 'escalated', 'escalationStatus', 'escalatedAt'].some((f) => changed(data, current, f))) {
+    if (!admin) throw forbidden('Only an admin can change report ownership or escalation');
+  }
+
+  const touchesTally =
+    ['verificationCount', 'verifiedAt', 'autoValidated'].some((f) => changed(data, current, f)) ||
+    (data.status === 'verified' && current.status !== 'verified');
+  if (touchesTally && !admin) {
+    throw forbidden('Reports are verified by peer confirmations');
+  }
+
+  const decides = ['status', 'approvedAt', 'rejectedAt', 'rejectionReason'].some((f) =>
+    changed(data, current, f),
+  );
+  if (decides) {
+    if (!DECIDERS.includes(role)) {
+      throw forbidden('Your role cannot approve, reject or reopen reports');
+    }
+    if (!admin && current.userId === userId) {
+      throw forbidden('You cannot approve or reject your own report');
+    }
+  }
+}
 
 export const isStaff = (role) => STAFF.includes(role) || ADMIN.includes(role);
 export const isAdmin = (role) => ADMIN.includes(role);

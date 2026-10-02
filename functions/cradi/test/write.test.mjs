@@ -279,3 +279,208 @@ describe('updates', () => {
     assert.equal(ctx.captured.status, 403);
   });
 });
+
+describe('the optimistic lock', () => {
+    const world = () => ({
+        rows: {
+            profiles: { admin1: profile({ role: 'admin' }) },
+            reports: {
+                r1: {
+                    $id: 'r1',
+                    status: 'pending',
+                    userId: 'someone',
+                    state: 'Benue',
+                    lga: 'Makurdi',
+                    ward: 'North Bank I',
+                },
+            },
+        },
+    });
+
+    const decide = (expect) => ({
+        op: 'update',
+        collection: 'reports',
+        documentId: 'r1',
+        data: { status: 'approved' },
+        ...(expect ? { expect } : {}),
+    });
+
+    it('applies the edit when the expected value still holds', async () => {
+        const fake = fakeAppwrite(world());
+        const ctx = context(decide({ status: 'pending' }), { userId: 'admin1' });
+        await write(ctx);
+        assert.equal(ctx.captured.status, 200);
+        assert.equal(fake.store.reports.r1.status, 'approved');
+    });
+
+    it('refuses, and changes nothing, when it does not', async () => {
+        // Somebody else decided the report while the card was on screen.
+        const w = world();
+        w.rows.reports.r1.status = 'rejected';
+        const fake = fakeAppwrite(w);
+        const ctx = context(decide({ status: 'pending' }), { userId: 'admin1' });
+        await write(ctx);
+        assert.equal(ctx.captured.status, 409);
+        assert.equal(fake.store.reports.r1.status, 'rejected');
+    });
+
+    it('matches a null expectation', async () => {
+        const fake = fakeAppwrite(world());
+        const ctx = context(
+            { ...decide({ status: 'pending', rejectionReason: null }) },
+            { userId: 'admin1' },
+        );
+        await write(ctx);
+        assert.equal(ctx.captured.status, 200);
+        assert.equal(fake.store.reports.r1.status, 'approved');
+    });
+
+    it('is off unless asked for', async () => {
+        const fake = fakeAppwrite(world());
+        const ctx = context(decide(null), { userId: 'admin1' });
+        await write(ctx);
+        assert.equal(ctx.captured.status, 200);
+        assert.equal(fake.store.reports.r1.status, 'approved');
+    });
+
+    it('pins a profile edit to the values the admin reviewed', async () => {
+        const w = world();
+        w.rows.profiles.u2 = profile({ role: 'user', lga: 'Makurdi', ward: 'North Bank I' });
+        const fake = fakeAppwrite(w);
+        const promote = (expected) => ({
+            op: 'update',
+            collection: 'profiles',
+            documentId: 'u2',
+            data: { role: 'ewm' },
+            expect: expected,
+        });
+
+        const stale = context(promote({ role: 'ewr' }), { userId: 'admin1' });
+        await write(stale);
+        assert.equal(stale.captured.status, 409);
+        assert.equal(fake.store.profiles.u2.role, 'user');
+
+        const fresh = context(promote({ role: 'user' }), { userId: 'admin1' });
+        await write(fresh);
+        assert.equal(fresh.captured.status, 200);
+        assert.equal(fake.store.profiles.u2.role, 'ewm');
+    });
+});
+
+describe('deciding a report', () => {
+    // `guard_report_update()`, carried over from Postgres. Each clause is a
+    // different rule, so each gets its own case.
+    const world = (role, overrides = {}) => ({
+        rows: {
+            profiles: { me: profile({ role }) },
+            reports: {
+                r1: {
+                    $id: 'r1',
+                    status: 'pending',
+                    userId: 'someone-else',
+                    severity: 'low',
+                    state: 'Benue',
+                    lga: 'Makurdi',
+                    ward: 'North Bank I',
+                    ...overrides,
+                },
+            },
+        },
+    });
+
+    const edit = (data) => ({ op: 'update', collection: 'reports', documentId: 'r1', data });
+
+    async function run(role, data, overrides) {
+        const fake = fakeAppwrite(world(role, overrides));
+        const ctx = context(edit(data), { userId: 'me' });
+        await write(ctx);
+        return { status: ctx.captured.status, row: fake.store.reports.r1, body: ctx.captured.body };
+    }
+
+    it('lets a reviewer approve, and actually writes the status', async () => {
+        // The bug this covers: `status` is server-owned at creation, and
+        // stripping it from updates too made every approval a silent no-op
+        // that still answered 200.
+        for (const role of ['ewv', 'ewr', 'ldp_coordinator', 'project_staff', 'admin']) {
+            const { status, row } = await run(role, { status: 'approved' });
+            assert.equal(status, 200, role);
+            assert.equal(row.status, 'approved', role);
+        }
+    });
+
+    it('refuses a role that may not decide', async () => {
+        for (const role of ['user', 'ewm']) {
+            const { status, row } = await run(role, { status: 'approved' });
+            assert.equal(status, 403, role);
+            assert.equal(row.status, 'pending', role);
+        }
+    });
+
+    it('refuses deciding your own report unless you are an admin', async () => {
+        const mine = { userId: 'me' };
+        const refused = await run('ewr', { status: 'approved' }, mine);
+        assert.equal(refused.status, 403);
+        assert.equal(refused.row.status, 'pending');
+
+        const allowed = await run('admin', { status: 'approved' }, mine);
+        assert.equal(allowed.status, 200);
+        assert.equal(allowed.row.status, 'approved');
+    });
+
+    it('keeps the peer tally out of reach', async () => {
+        for (const data of [
+            { verificationCount: 9 },
+            { verifiedAt: '2026-01-01T00:00:00.000Z' },
+            { autoValidated: true },
+            { status: 'verified' },
+        ]) {
+            const { status } = await run('ewr', data);
+            assert.equal(status, 403, JSON.stringify(data));
+        }
+        const { status } = await run('admin', { verificationCount: 9 });
+        assert.equal(status, 200);
+    });
+
+    it('keeps ownership and escalation for admins', async () => {
+        for (const data of [{ escalated: true }, { escalationStatus: 'processed' }]) {
+            assert.equal((await run('ewr', data)).status, 403, JSON.stringify(data));
+            assert.equal((await run('admin', data)).status, 200, JSON.stringify(data));
+        }
+    });
+
+    it('re-derives isAlert from the severity, as the trigger did', async () => {
+        const raised = await run('admin', { severity: 'critical' });
+        assert.equal(raised.row.isAlert, true);
+
+        const lowered = await run('admin', { severity: 'low' }, { severity: 'critical', isAlert: true });
+        assert.equal(lowered.row.isAlert, false);
+    });
+
+    it('still refuses a claimed status at creation', async () => {
+        // The create path must keep stripping it: `decidable` is about
+        // updates only.
+        const fake = fakeAppwrite({ rows: { profiles: { me: profile({ role: 'user' }) } } });
+        const ctx = context(
+            {
+                op: 'create',
+                collection: 'reports',
+                documentId: 'r2',
+                data: {
+                    hazardType: 'flood',
+                    description: 'x',
+                    state: 'Benue',
+                    lga: 'Makurdi',
+                    ward: 'North Bank I',
+                    severity: 'high',
+                    status: 'approved',
+                    verificationCount: 99,
+                },
+            },
+            { userId: 'me' },
+        );
+        await write(ctx);
+        assert.equal(ctx.captured.status, 200);
+        assert.equal(fake.store.reports.r2.status, 'pending');
+        assert.equal(fake.store.reports.r2.verificationCount, 0);
+    });
+});

@@ -132,6 +132,22 @@ export const updateRow = (table, rowId, data, permissions) =>
     body: { data, ...(permissions ? { permissions } : {}) },
   });
 
+/**
+ * Updates the row only while [queries] still match it, and reports how
+ * many rows that was.
+ *
+ * The atomic compare-and-set a Postgres `WHERE` clause gave us, which
+ * `updateRow` cannot do: an admin deciding a report must not overwrite a
+ * decision somebody else made while the page was open.
+ *
+ * The queries go in the **body**. Passed as `?queries[]=` they are
+ * silently ignored and *every row in the table* is updated — measured on
+ * 1.9.6, and the kind of mistake that is invisible until it is a
+ * disaster.
+ */
+export const updateRowsWhere = (table, queries, data) =>
+  api(rowsPath(table), { method: 'PATCH', body: { queries, data } });
+
 export const deleteRow = (table, rowId) =>
   api(`${rowsPath(table)}/${encodeURIComponent(rowId)}`, { method: 'DELETE' });
 

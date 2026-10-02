@@ -52,6 +52,29 @@ export function fakeAppwrite({ rows = {}, users = [], fail = {} } = {}) {
         store[table][key] = stamp(key, body.data, body.permissions);
         return json(201, store[table][key]);
       }
+      // Bulk PATCH: `{ queries, data }` with no id, which is the atomic
+      // compare-and-set `write.js` uses for `expect`. A fake that ignored
+      // the queries and updated everything would make every
+      // optimistic-lock test vacuous — and is exactly what the real
+      // server does when the queries are put in the query string.
+      if (method === 'PATCH' && !id) {
+        const matches = Object.entries(store[table]).filter(([key, value]) =>
+          (body.queries ?? []).every((raw) => {
+            const q = typeof raw === 'string' ? JSON.parse(raw) : raw;
+            const actual = q.attribute === '$id' ? key : value[q.attribute];
+            if (q.method === 'isNull') return actual === null || actual === undefined;
+            if (q.method === 'equal') return q.values.includes(actual);
+            throw new Error(`fake: unsupported bulk query ${q.method}`);
+          }),
+        );
+        for (const [key, value] of matches) {
+          store[table][key] = stamp(key, { ...value, ...body.data });
+        }
+        return json(200, {
+          total: matches.length,
+          rows: matches.map(([key]) => store[table][key]),
+        });
+      }
       if (method === 'PUT' || method === 'PATCH') {
         const key = decodeURIComponent(id);
         const base = store[table][key];

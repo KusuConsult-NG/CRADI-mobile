@@ -15,7 +15,9 @@ import {
   createRow,
   deleteRow,
   getRow,
+  Query,
   updateRow,
+  updateRowsWhere,
   upsertRow,
 } from './lib/appwrite.js';
 import {
@@ -49,6 +51,8 @@ export default handler(async ({ req, log }) => {
   const collection = payload.collection;
   const documentId = payload.documentId;
   const data = payload.data ?? {};
+  // Optional optimistic lock on `update`; see where it is applied below.
+  const expect = payload.expect ?? null;
 
   if (!OPS.has(op)) throw invalid(`Unknown op: ${op}`, ErrorType.argument);
   if (!WRITABLE.has(collection)) {
@@ -91,7 +95,7 @@ export default handler(async ({ req, log }) => {
   const context = { userId, profile, role, documentId, collection };
 
   if (collection === 'profiles') {
-    return writeProfile({ ...context, op, data, log });
+    return writeProfile({ ...context, op, data, expect, log });
   }
 
   assertRole(role, rule.roles, `write ${collection}`);
@@ -113,7 +117,9 @@ export default handler(async ({ req, log }) => {
     if (current.status === 404) throw notFound();
     if (!current.ok) throw new Error(`read failed: ${current.status}`);
     assertUnchanged(rule.immutable, current.body, data);
-    const clean = strip(data, rule, { keepImmutable: false });
+    const clean = strip(data, rule, { keepImmutable: false, allow: rule.decidable });
+    rule.guardUpdate?.({ role, userId, current: current.body, data: clean });
+    rule.derive?.(clean, { ...current.body, ...clean });
     if (collection === 'reports' && 'status' in clean) {
       // Appwrite's event payload is the document, with no "before", so
       // the event Function cannot tell a status change from any other
@@ -121,6 +127,29 @@ export default handler(async ({ req, log }) => {
       // `on-write.js`. Postgres got this from the trigger's OLD row.
       clean.previousStatus = current.body.status ?? null;
     }
+    // `expect` is an optimistic lock: apply this edit only while the
+    // named fields still hold the values the caller saw. The admin panel
+    // decides a report from a card that may be minutes old, and
+    // overwriting somebody else's decision silently is the failure this
+    // prevents. Checked by the server in one call rather than against
+    // the row read above, which would be a race with its own name.
+    if (expect && Object.keys(expect).length > 0) {
+      const queries = [
+        Query.equal('$id', documentId),
+        ...Object.entries(expect).map(([field, value]) =>
+          value === null ? Query.isNull(field) : Query.equal(field, value),
+        ),
+      ];
+      const applied = await updateRowsWhere(collection, queries, clean);
+      if (!applied.ok) throw new Error(`update failed: ${applied.status}`);
+      if ((applied.body?.total ?? 0) === 0) {
+        throw conflict('That changed since you loaded it — reload and try again.');
+      }
+      log(`updated ${collection}/${documentId} by ${userId} (expected ${JSON.stringify(expect)})`);
+      const after = await getRow(collection, documentId);
+      return { document: after.ok ? after.body : { ...current.body, ...clean } };
+    }
+
     const updated = await updateRow(collection, documentId, clean);
     if (!updated.ok) throw new Error(`update failed: ${updated.status}`);
     log(`updated ${collection}/${documentId} by ${userId}`);
@@ -214,7 +243,7 @@ async function stampReportLocation(data) {
 }
 
 /** Fields nobody but an admin may edit on a profile. */
-function writeProfile({ op, userId, documentId, data, role, log }) {
+async function writeProfile({ op, userId, documentId, data, expect, role, log }) {
   if (op === 'delete') throw forbidden('Profiles are not deleted here');
   const rule = RULES.profiles;
   const own = documentId === userId;
@@ -230,21 +259,48 @@ function writeProfile({ op, userId, documentId, data, role, log }) {
     // must not get a 200 and believe it worked.
     throw forbidden(`You may not change: ${rejected.join(', ')}`);
   }
-  return updateRow('profiles', documentId, data).then((updated) => {
-    if (updated.status === 404) throw notFound();
-    if (!updated.ok) throw new Error(`profile update failed: ${updated.status}`);
-    log(`profile ${documentId} updated by ${userId}`);
-    return { document: updated.body };
-  });
+  // The same optimistic lock the other collections get: the admin panel
+  // pins the role, LGA and ward it reviewed, so a profile edited in
+  // another tab is refused rather than silently overwritten.
+  if (expect && Object.keys(expect).length > 0) {
+    const queries = [
+      Query.equal('$id', documentId),
+      ...Object.entries(expect).map(([field, value]) =>
+        value === null ? Query.isNull(field) : Query.equal(field, value),
+      ),
+    ];
+    const applied = await updateRowsWhere('profiles', queries, data);
+    if (!applied.ok) throw new Error(`profile update failed: ${applied.status}`);
+    if ((applied.body?.total ?? 0) === 0) {
+      const exists = await getRow('profiles', documentId);
+      if (exists.status === 404) throw notFound();
+      throw conflict('That changed since you loaded it — reload and try again.');
+    }
+    log(`profile ${documentId} updated by ${userId} (expected ${JSON.stringify(expect)})`);
+    const after = await getRow('profiles', documentId);
+    return { document: after.ok ? after.body : { $id: documentId, ...data } };
+  }
+
+  const updated = await updateRow('profiles', documentId, data);
+  if (updated.status === 404) throw notFound();
+  if (!updated.ok) throw new Error(`profile update failed: ${updated.status}`);
+  log(`profile ${documentId} updated by ${userId}`);
+  return { document: updated.body };
 }
 
 /** Removes the fields the server owns, so a round-tripped document is safe. */
-export function strip(data, rule, { keepImmutable }) {
+export function strip(data, rule, { keepImmutable, allow }) {
   const owned = new Set(rule.serverOwned ?? []);
+  // Fields the server owns *at creation* but a reviewer may change
+  // afterwards — a report's status is stamped `pending` and no client may
+  // claim otherwise, yet approving one is the whole job of the panel.
+  // Without this they were stripped from the update too, so an approval
+  // returned 200 and changed nothing.
+  const allowed = new Set(allow ?? []);
   const out = {};
   for (const [key, value] of Object.entries(data)) {
     if (key.startsWith('$') || key === 'id') continue;
-    if (owned.has(key)) continue;
+    if (owned.has(key) && !allowed.has(key)) continue;
     if (!keepImmutable && rule.immutable?.includes(key)) continue;
     out[key] = value;
   }
