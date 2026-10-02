@@ -29,6 +29,7 @@ import {
   notFound,
   readJson,
 } from './lib/http.js';
+import { escalationTimeoutMinutes, getSettings } from './lib/settings.js';
 import {
   RULES,
   WRITABLE,
@@ -98,6 +99,13 @@ export default handler(async ({ req, log }) => {
     if (!current.ok) throw new Error(`read failed: ${current.status}`);
     assertUnchanged(rule.immutable, current.body, data);
     const clean = strip(data, rule, { keepImmutable: false });
+    if (collection === 'reports' && 'status' in clean) {
+      // Appwrite's event payload is the document, with no "before", so
+      // the event Function cannot tell a status change from any other
+      // edit. Recording what it was is the only way it can — see
+      // `on-write.js`. Postgres got this from the trigger's OLD row.
+      clean.previousStatus = current.body.status ?? null;
+    }
     const updated = await updateRow(collection, documentId, clean);
     if (!updated.ok) throw new Error(`update failed: ${updated.status}`);
     log(`updated ${collection}/${documentId} by ${userId}`);
@@ -128,9 +136,43 @@ export default handler(async ({ req, log }) => {
   if (!written.ok) {
     throw new Error(`${op} failed: ${written.status} ${written.body?.message}`);
   }
+  if (collection === 'reports' && op !== 'update') {
+    await scheduleEscalation(written.body, log);
+  }
+
   log(`${op}d ${collection}/${written.body.$id} by ${userId} in ${databaseId()}`);
   return { document: written.body };
 });
+
+/**
+ * Queues the report's escalation deadline.
+ *
+ * A Postgres trigger inserted this row in the same transaction as the
+ * report. Here it is one more call in the write Function — which is the
+ * right place despite not being transactional: the alternative is the
+ * event Function, and Phase 6 measured that those run once and are never
+ * retried. A failure here fails the whole write and the client retries,
+ * which is far better than a report that quietly never escalates.
+ *
+ * The id is the report's, so a retried write collides rather than
+ * queueing the same deadline twice.
+ */
+async function scheduleEscalation(report, log) {
+  const settings = await getSettings();
+  const minutes = escalationTimeoutMinutes(settings);
+  const created = await createRow('scheduled_escalations', report.$id, {
+    reportId: report.$id,
+    escalateAt: new Date(Date.now() + minutes * 60_000).toISOString(),
+    status: 'pending',
+    reason: null,
+    processedAt: null,
+  });
+  if (created.status === 409) return;
+  if (!created.ok) {
+    throw new Error(`escalation schedule failed: ${created.status}`);
+  }
+  log(`escalation for ${report.$id} queued in ${minutes}m`);
+}
 
 /**
  * A verification's ward comes from the report, not from the client.

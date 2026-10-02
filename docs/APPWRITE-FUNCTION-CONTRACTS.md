@@ -190,3 +190,108 @@ denormalisation lands, which is exactly what it already shows for a profile
 the caller may not read. **Denormalising `verifierName` onto the
 verification in the `write` Function removes that gap**, and the read path
 needs no change when it does.
+
+---
+
+# The worker: four more Functions, nobody calls
+
+The three above answer the client. These four replace the Railway
+service, and nothing invokes them — Appwrite does, on events and on a
+schedule.
+
+## The collections they need
+
+| Collection | | |
+|---|---|---|
+| `notification_outbox` | `eventType`, `payload` (JSON text), `attempts`, `availableAt`, `processedAt`, `note` | rebuilt, not dropped — see below |
+| `scheduled_escalations` | `reportId`, `escalateAt`, `status`, `reason`, `processedAt` | one per report, id = the report's |
+| `sms_deliveries` | `reportId`, `phone`, `lga`, `state`, `status`, `error` | id is the claim |
+
+Indexes that matter: `notification_outbox` on `(processedAt, availableAt,
+attempts)`, `scheduled_escalations` on `(status, escalateAt)`, and
+`sms_deliveries` on `(lga, state, $createdAt)` for the daily cap.
+
+## `on-write` — the event hook
+
+Subscribed to five document events. It writes **one outbox document and
+nothing else**, and that restraint is the whole design: Phase 6 watched
+an event Function that throws, given one event, for three minutes. It ran
+**once**. No retry, ever; the event is gone. Everything this Function
+does is work that can silently not happen, so it does as little as
+possible and leaves the rest to a schedule.
+
+It cannot see a *change*, only the document — Appwrite's payload has no
+"before". The `write` Function therefore stamps `previousStatus` whenever
+it writes `status`, and the **absence** of that field means the edit did
+not touch the status. Without that rule every description fix
+re-announces the report.
+
+## `drain` — the outbox, every minute
+
+Claims due documents, bumps `attempts`, pushes `availableAt` forward by
+`min(60, 2^attempts)` minutes, and gives up at 8 — the same curve
+`claim_outbox_events` had.
+
+**There is no atomic claim.** `FOR UPDATE SKIP LOCKED` has no Appwrite
+equivalent, so two overlapping runs can claim the same document. What
+stands in for it, per Phase 6, is that **Appwrite refuses a duplicate
+`messageId` with 409**: the outbox id becomes the message id, and the
+second send is refused by the server. Idempotency replaces locking.
+
+That argument does not cover SMS. Termii has no such protection and a
+duplicate flood warning to a local authority is not a harmless retry, so
+`sms_deliveries` carries the lock instead — a document whose id is
+deterministic per `(report, phone)`, written **before** the send. Phase 6
+verified the primitive: first insert `201`, second `409`. A crash between
+claiming and sending leaves the claim, so that number is skipped rather
+than texted twice. A retryable failure deletes the claim so the retry
+re-sends only that number; a number the provider rejects keeps its claim
+and is recorded.
+
+Without `TERMII_API_KEY` the SMS path is **off**, not broken.
+
+## `escalate` — the deadline, every minute
+
+Reports still `pending` at `escalateAt` are flagged `escalated` (the
+status stays `pending`) and coordinators and staff are notified.
+
+Postgres made this safe with conditional updates — the report update
+applied only `where escalated = false`. Appwrite has no conditional
+update, so it is read-then-write with a window. The push message id is
+`escalation:<id>`, so two overlapping runs cost a wasted read rather than
+a second notification; marking a report escalated twice is already
+idempotent. Failures are counted in `reason` as `attempt N:` — the
+collection has no attempts column, and did not in Postgres either — and
+give up after 5.
+
+The row itself is created by the `write` Function when the report is
+created, not by this one. That is one more non-transactional call, and
+the alternative was the event Function, which runs once and is never
+retried.
+
+## `reconcile` — the sweep, every five minutes
+
+The honest mitigation for the one loss with no clean fix.
+
+In Postgres the outbox row was written by a trigger **inside the report's
+transaction**: both or neither. Here the event Function runs after the
+commit and can fail, leaving a report with no outbox document, no
+notification, and nothing that will ever notice. That is the single
+failure this system exists to prevent.
+
+So this compares recent reports, alerts and disputes against the outbox
+documents that should exist, and enqueues what is missing. Three honest
+limits:
+
+1. **Creates only.** A missed `report_status_changed` is invisible,
+   because nothing records which transitions were announced. Catching
+   those needs an announcement log, which is a second outbox.
+2. **The window is a guess** — 20 minutes against a 5-minute schedule, so
+   four passes before a gap is lost.
+3. **It cannot double-notify**, which is the part that *is* exact: outbox
+   ids are deterministic, so re-enqueueing something already handled
+   collides with a 409.
+
+It logs every run, including quiet ones. "0 missing" is the evidence it
+ran at all — a sweep that silently stops looks exactly like a system with
+no gaps.

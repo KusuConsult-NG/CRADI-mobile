@@ -54,7 +54,7 @@ const VERIFIER = ['ewm', 'ewv', 'ewr', 'admin'];
 export const RULES = {
   reports: {
     serverOwned: ['userId', 'userName', 'userRole', 'status',
-                  'verificationCount', 'escalated'],
+                  'verificationCount', 'escalated', 'previousStatus'],
     create: ({ userId, profile }) => ({
       userId,
       // Denormalised at creation, per Phase 1: the report list shows who

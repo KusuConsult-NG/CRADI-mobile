@@ -73,7 +73,18 @@ export const getRow = (table, rowId) =>
   api(`${rowsPath(table)}/${encodeURIComponent(rowId)}`);
 
 export const listRows = (table, queries = []) =>
-  api(`${rowsPath(table)}?${queries.map((q) => `queries[]=${encodeURIComponent(q)}`).join('&')}`);
+  api(
+    `${rowsPath(table)}?${queries
+      .map((query) => `queries[]=${encodeURIComponent(query)}`)
+      .join('&')}`,
+  );
+
+/** As [listRows], but throws rather than letting a failure read as "none". */
+export async function listRowsOrThrow(table, queries = []) {
+  const result = await listRows(table, queries);
+  if (!result.ok) throw new ApiError(result);
+  return result.body?.rows ?? [];
+}
 
 export const createRow = (table, rowId, data, permissions) =>
   api(rowsPath(table), {
@@ -98,10 +109,22 @@ export const deleteRow = (table, rowId) =>
 
 // ───────────────────────────── queries ──────────────────────────────────
 
+const q = (method, attribute, values) =>
+  JSON.stringify({ method, ...(attribute ? { attribute } : {}), values });
+
 export const Query = {
-  equal: (attribute, values) =>
-    JSON.stringify({ method: 'equal', attribute, values: [].concat(values) }),
-  limit: (value) => JSON.stringify({ method: 'limit', values: [value] }),
+  equal: (attribute, values) => q('equal', attribute, [].concat(values)),
+  notEqual: (attribute, value) => q('notEqual', attribute, [value]),
+  lessThan: (attribute, value) => q('lessThan', attribute, [value]),
+  lessThanEqual: (attribute, value) => q('lessThanEqual', attribute, [value]),
+  greaterThan: (attribute, value) => q('greaterThan', attribute, [value]),
+  greaterThanEqual: (attribute, value) => q('greaterThanEqual', attribute, [value]),
+  isNull: (attribute) => q('isNull', attribute, []),
+  isNotNull: (attribute) => q('isNotNull', attribute, []),
+  orderAsc: (attribute) => q('orderAsc', attribute, []),
+  orderDesc: (attribute) => q('orderDesc', attribute, []),
+  limit: (value) => q('limit', null, [value]),
+  offset: (value) => q('offset', null, [value]),
 };
 
 // ───────────────────────────── teams ────────────────────────────────────

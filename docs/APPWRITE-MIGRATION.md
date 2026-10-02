@@ -1729,3 +1729,93 @@ on a local box.
 And the two questions from Phase 1, now ten phases old: **which Cloud
 region** is lawful under the NDPA, and **whether the tier allows** 584
 teams, ~650 topics and more than one bucket.
+
+---
+
+# Phase 11: the worker
+
+Status: **written and tested against a fake.** 107 Node tests (63 before,
++44), 819 Dart, analyze and format clean. Still nothing against a real
+Appwrite.
+
+Four Functions, nobody calls them: `on-write` (document events), `drain`
+and `escalate` (every minute), `reconcile` (every five). Together they
+replace the Railway service — its outbox loop, its escalation cron, and
+the OneSignal, Resend and Termii calls underneath.
+
+## The shape Phase 6 forced
+
+Phase 6 established by experiment that an event Function runs **once** and
+is never retried. That is the load-bearing fact, and it shows up in three
+decisions here:
+
+**`on-write` does one write and nothing else.** Everything an event
+Function does is work that can silently not happen, so it writes one
+outbox document and leaves delivery to a schedule, which *is* retried.
+
+**The escalation row is written by `write`, not by an event.** A Postgres
+trigger created it in the report's transaction. Putting it in the event
+Function would have been tidier and would have meant that, whenever that
+Function failed, a report quietly never escalated. It is one more
+non-transactional call inside the write instead — a failure there fails
+the write and the client retries, which is the better failure.
+
+**`reconcile` exists at all.** Phase 6 called the lost transactionality
+"the loss that has no clean mitigation" and said the honest answer was a
+reconciling sweep. This is it, and it is as imperfect as predicted: it
+catches creates but not missed status changes, its 20-minute window is a
+guess, and the only exact thing about it is that it cannot double-notify,
+because outbox ids are deterministic and a re-enqueue collides with 409.
+
+## Two defects the tests found
+
+**An edit re-announced the report.** Appwrite's event payload is the
+document, not the change, so `on-write` cannot see a status transition.
+The `write` Function stamps `previousStatus`, and the first version read
+`doc.previousStatus ?? null` — which meant a description fix, with no
+`previousStatus` at all, produced a `report_status_changed` from `null`
+to the unchanged status. The handler's staleness check would have passed
+(the status *does* match) and every reporter would have been re-notified
+on every edit of their report. The absence of the field now means "this
+edit did not touch the status", which is what it actually means.
+
+**Outbox ids collided across event types.** `eventId` trimmed to the last
+36 characters, and a uuid key is already 36 — so `report_created-<uuid>`
+and `report_disputed-<uuid>` both became the bare uuid. The second event
+on a report would have been swallowed as a duplicate of the first: a
+dispute on a report that had already been created would simply never
+notify anybody. Same class as the file-id defect in Phase 9 and the ward
+team id in Phase 10; the fix is the same readable-prefix-plus-digest.
+
+Three occurrences of one mistake — *an id that is a truncation is not an
+id* — is enough to call it a pattern rather than three accidents.
+
+## What the fake does and does not prove
+
+`test/helpers.mjs` stubs the single `fetch` every call goes through. One
+thing in it is worth naming: **it refuses a duplicate `messageId` with
+409**, exactly as Appwrite does. Without that the idempotency tests would
+all pass vacuously, which is the failure mode this document has now
+recorded four times. With it, the "two overlapping drains cannot
+double-send" test actually exercises the property the whole claim-free
+design rests on.
+
+What it cannot prove is that Appwrite behaves that way. Phase 3 verified
+the 409 against a running 1.6.2 and Phase 6 verified the deterministic-id
+claim; neither has been re-checked on Cloud, and Cloud is past 1.8 where
+the document API these were tested through is deprecated.
+
+Also unverified: that Appwrite Messaging push reaches a device with the
+topics Phase 3 designed, that `targets.read` is the right scope for
+sending to users, that a one-minute schedule is honoured under load, and
+Termii's behaviour on anything but the happy path.
+
+## What is left before this can run
+
+Nothing in the client, the Functions, or the worker is now missing. What
+is missing is a place to put it:
+
+1. **The Cloud region**, against the NDPA residency position.
+2. **The tier quotas** — 584 teams, ~650 topics, more than one bucket.
+
+Eleven phases, and those two have been open since the first.

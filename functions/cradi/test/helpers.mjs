@@ -17,6 +17,7 @@ process.env.APPWRITE_DATABASE_ID = 'cradi';
 export function fakeAppwrite({ rows = {}, users = [], fail = {} } = {}) {
   const calls = [];
   const store = structuredClone(rows);
+  const sentMessages = {};
 
   globalThis.fetch = async (url, init = {}) => {
     const path = String(url).slice(ENDPOINT.length);
@@ -90,14 +91,25 @@ export function fakeAppwrite({ rows = {}, users = [], fail = {} } = {}) {
     if (path === '/account/sessions/token') {
       return json(201, { $id: 's1', secret: 'session-secret', userId: body.userId });
     }
-    if (path === '/messaging/messages/email') return json(201, { $id: 'm1' });
+    const message = path.match(/^\/messaging\/messages\/(email|push)$/);
+    if (message) {
+      // Appwrite refuses a duplicate messageId with 409, and that refusal
+      // is what the whole drain design uses instead of a lock. A fake
+      // that always accepted would make every idempotency test vacuous.
+      sentMessages[body.messageId] ??= 0;
+      if (sentMessages[body.messageId] > 0) {
+        return json(409, { message: 'exists', type: 'document_already_exists' });
+      }
+      sentMessages[body.messageId] += 1;
+      return json(201, { $id: body.messageId });
+    }
     if (path.startsWith('/teams/')) return json(200, { $id: path.split('/')[2] });
     if (path === '/teams') return json(201, { $id: body.teamId });
 
     return json(404, { message: `unstubbed ${method} ${path}` });
   };
 
-  return { calls, store, users };
+  return { calls, store, users, sentMessages };
 }
 
 const stamp = (id, data, permissions) => ({

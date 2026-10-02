@@ -4,11 +4,37 @@ Three Functions, one source tree. Appwrite lets several Functions share a
 root directory and differ only by entrypoint, which is why the helpers in
 `src/lib/` exist once rather than three times.
 
+### Called by the client
+
 | Function | entrypoint | called by |
 |---|---|---|
 | `write` | `src/write.js` | every write to a collection the client may not touch |
 | `auth` | `src/auth.js` | registration, code resends, recovery, redeeming a typed code |
 | `operation` | `src/operation.js` | the named server-side operations (the old RPCs) |
+
+### The worker, which replaces the Railway service
+
+| Function | entrypoint | trigger |
+|---|---|---|
+| `on-write` | `src/on-write.js` | document events — writes one outbox document and nothing else |
+| `drain` | `src/drain.js` | schedule `* * * * *` — sends what the outbox holds |
+| `escalate` | `src/escalate.js` | schedule `* * * * *` — reports still pending at their deadline |
+| `reconcile` | `src/reconcile.js` | schedule `*/5 * * * *` — finds events that never happened |
+
+`on-write` subscribes to:
+
+```
+tablesdb.cradi.tables.reports.rows.*.create
+tablesdb.cradi.tables.reports.rows.*.update
+tablesdb.cradi.tables.verifications.rows.*.create
+tablesdb.cradi.tables.alerts.rows.*.create
+tablesdb.cradi.tables.profiles.rows.*.update
+```
+
+**Scheduled Functions need `schedule-functions` and `schedule-executions`
+when self-hosting.** Phase 6 lost time to a stack without them: schedules
+silently never fire, which looks exactly like "Appwrite cron does not
+work". Cloud runs them for you.
 
 The contract each one must meet is
 [`docs/APPWRITE-FUNCTION-CONTRACTS.md`](../../docs/APPWRITE-FUNCTION-CONTRACTS.md).
@@ -37,6 +63,10 @@ the narrowest set that works:
 | `write` | `databases.read`, `documents.read`, `documents.write`, `teams.read`, `teams.write` |
 | `auth` | `users.read`, `users.write`, `sessions.write`, `documents.write`, `messages.write` |
 | `operation` | `documents.read`, `documents.write` |
+| `on-write` | `documents.write` |
+| `drain` | `documents.read`, `documents.write`, `users.write`, `messages.write`, `targets.read` |
+| `escalate` | `documents.read`, `documents.write`, `messages.write`, `targets.read` |
+| `reconcile` | `documents.read`, `documents.write` |
 
 ### Variables
 
@@ -47,6 +77,8 @@ injected by Appwrite. Set these yourself:
 |---|---|
 | `APPWRITE_API_KEY` | a server key with the scopes above |
 | `APPWRITE_DATABASE_ID` | defaults to `cradi` |
+| `TERMII_API_KEY` | `drain` only. Absent, authority SMS is **off** rather than failing |
+| `TERMII_SENDER_ID` | `drain` only |
 
 ## No dependencies, on purpose
 
@@ -63,13 +95,22 @@ endpoints between them.
 cd functions/cradi && npm test
 ```
 
-63 tests, no server and no network: `test/helpers.mjs` stubs the single
+107 tests, no server and no network: `test/helpers.mjs` stubs the single
 `fetch` every call goes through, which is enough to exercise a whole
 handler. They cover the things that decide what the server stores
 regardless of what the client sent — Phase 4's "a client cannot approve
 its own report", the caller coming from the header and never the body, a
 vote taking its ward from the report rather than from the voter, and
 recovery answering identically for an address that does not exist.
+
+The worker's tests add the ones that decide whether a warning goes out at
+all: that two overlapping drains cannot double-send (the fake refuses a
+duplicate `messageId` with 409, exactly as Appwrite does, so the
+idempotency tests are not vacuous), that a decision changed since the
+event was queued is never announced, that a push outage does not hold
+back the authority SMS and the event still retries, and that the
+reconciling sweep finds a report whose event Function never ran without
+inventing work the trigger would not have created.
 
 What they cannot cover is whether Appwrite behaves as assumed. These run
 against a fake; nothing here has met a real server.
