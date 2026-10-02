@@ -495,7 +495,7 @@ packages:
     source: hosted
     version: "0.0.3"
   flutter_image_compress_platform_interface:
-    dependency: transitive
+    dependency: "direct dev"
     description:
       name: flutter_image_compress_platform_interface
       sha256: "579cb3947fd4309103afe6442a01ca01e1e6f93dc53bb4cbd090e8ce34a41889"

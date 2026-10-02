@@ -1,24 +1,25 @@
 # A real Appwrite, locally
 
-Appwrite 1.8.0 on ports **8090** (API) and **8091** (realtime), beside
-the 1.6.2 spike — which still holds the Phase 0–6 proofs and keeps 8080.
+Appwrite 1.9.6 on ports **8090** (API) and **8091** (realtime).
+
+Pinned to 1.9.6, not the 1.8.0 this started on and not the 2.3 the
+Flutter SDK targets. See [Which server version](#which-server-version).
 
 ```
-docker network create runtimes18
-docker compose -f infra/appwrite/local/docker-compose.yml up -d
-echo "127.0.0.1 appwrite.local" | sudo tee -a /etc/hosts     # see below
+./infra/appwrite/local/up.sh          # network, /etc/hosts, compose, wait
 node infra/appwrite/local/bootstrap.mjs
 source infra/appwrite/local/.env.local
 node infra/appwrite/provision.mjs
 node infra/appwrite/local/deploy.mjs
 ```
 
-Then the three end-to-end suites:
+Then the four end-to-end suites:
 
 ```
 node infra/appwrite/local/e2e.mjs             # a hazard report, filed to delivered
 node infra/appwrite/local/e2e-auth.mjs        # typed codes, recovery, enumeration
 node infra/appwrite/local/e2e-escalation.mjs  # the cron, firing on its own
+node infra/appwrite/local/e2e-operation.mjs   # reopen_report, and who may run it
 ```
 
 and the Dart adapters:
@@ -37,6 +38,34 @@ flutter test \
 
 Without those defines the integration tests **skip**, so `flutter test`
 stays green in CI.
+
+## Which server version
+
+The Flutter SDK (27.x) targets Appwrite **2.3**, which is what Cloud
+runs. Self-hosted lags, and the gap is not cosmetic:
+
+| | 1.8.0 | 1.9.6 | 2.3.0 |
+|---|---|---|---|
+| realtime: channels in a `subscribe` frame | ✗ | ✓ | ✓ |
+| execution carries `resourceId`/`resourceType` | ✗ | ✗ | ✓ |
+| deployments need the `orchestrator` image | – | – | ✓ |
+
+1.8 closes the websocket with `1008 Missing channels` because the SDK
+sends `project` alone and the channels afterwards. 1.9.6 speaks that
+protocol, which is why the stack moved.
+
+Neither 1.8 nor 1.9 returns the execution shape the SDK parses, so
+`DataBackend.callOperation` throws `Bad state: No element` before the
+response body is read — in the SDK's model, not in our code. The two
+Dart tests for it are **skipped** with that reason; the Function itself
+is covered by `e2e-operation.mjs` over HTTP.
+
+2.3 self-hosted would close that last gap, but from 2.0 a deployment is
+built through `ghcr.io/open-runtimes/orchestrator`, and this
+environment's network policy refuses `pkg-containers.githubusercontent.com`,
+so no Function can be deployed there. The adapter's `callOperation`
+therefore stays **unverified until it runs against Cloud** — alongside
+the cookie-session gap in `signInWithPassword` (Phase 16).
 
 ## Why `appwrite.local` and /etc/hosts
 

@@ -100,7 +100,19 @@ for (const f of FUNCTIONS) {
   }
   // A Function with no deployment answers every call with a 500 and
   // looks, from the console, exactly like one that is fine.
-  if (!live.deployment) note(`function ${f.id}: created but never deployed`);
+  //
+  // `deployment` was renamed `deploymentId` in 1.9 (with `latest*`
+  // aliases), so reading only the old name reported every deployed
+  // Function as never deployed — a check that cannot fail is worse than
+  // no check. The build status is read too: a deployment that failed to
+  // build is present and just as dead.
+  const deployment = live.deploymentId ?? live.latestDeploymentId ?? live.deployment;
+  const buildStatus = live.latestDeploymentStatus;
+  if (!deployment) {
+    note(`function ${f.id}: created but never deployed`);
+  } else if (buildStatus && buildStatus !== 'ready') {
+    note(`function ${f.id}: deployment ${deployment} is "${buildStatus}", not ready`);
+  }
 }
 
 if (problems.length === 0) {

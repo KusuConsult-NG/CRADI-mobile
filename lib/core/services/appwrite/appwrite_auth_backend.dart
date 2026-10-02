@@ -123,6 +123,10 @@ class AppwriteAuthBackend implements AuthBackend {
     _cached = null;
     _sessionId = null;
     _data?.setCurrentUserId(null);
+    // The realtime JWT outlives the session it was minted from, and its
+    // background refresh would keep renewing a credential for an account
+    // that has signed out.
+    _data?.stopRealtimeAuth();
   }
 
   void _emit(AuthEvent event, AuthUser? user) {

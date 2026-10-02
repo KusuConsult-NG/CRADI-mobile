@@ -2151,7 +2151,7 @@ Function is wrong.
 **2. Two stacks, one network.** The 1.6.2 spike still owns the external
 network named `runtimes`, so both projects' API containers answered to
 the alias `appwrite` and a Function resolving `http://appwrite/v1` got
-whichever Docker felt like. The new stack is on `runtimes18`.
+whichever Docker felt like. The new stack is on `runtimes19` (`runtimes18` at the time; see Phase 17).
 
 **3. Function variables outlive their Function.** Delete and recreate a
 Function and its variables become project-scoped orphans; the key stays
@@ -2394,3 +2394,200 @@ typed code is redeemed, which is the path sign-up and recovery take.
 `AppwriteDataBackend`'s realtime subscriptions, file upload, and
 `callOperation`; the Termii path; and the reconciling sweep against a
 real gap.
+
+# Phase 17: realtime, file upload, and the named operation
+
+The three adapter paths that need more than a request and a response.
+None had ever run. Testing them cost a server upgrade and turned up
+four defects, three of them in the app rather than the harness.
+
+## The local stack moved to 1.9.6
+
+The Flutter SDK (27.x) targets Appwrite **2.3**, which is what Cloud
+runs. The local stack was 1.8.0, and two of the three paths failed for
+that reason alone:
+
+* **Realtime.** 1.8 wants `channels[]` in the connect URL and closes
+  with `1008 Missing channels` without them. SDK 26 moved to connecting
+  with `project` alone and sending a `subscribe` frame once the server
+  answers `connected`. 1.9 speaks that; 1.8 does not.
+* **Executions.** SDK 26 replaced the `Execution` model's `functionId`
+  with `resourceId`/`resourceType`, once executions covered sites as
+  well as functions. A pre-2.0 server still answers with `functionId`,
+  so `Execution.fromMap` throws `Bad state: No element` — in a field the
+  adapter never reads, before the response body is looked at.
+
+1.9.6 is the newest release this trimmed stack can host. Moving to it
+cost five more version changes, each of which failed in a way that did
+not name itself:
+
+* `keyId`, `platformId` and `variableId` became required on create. The
+  variables one is the dangerous one: it is the same failure as Phase
+  13's, where seven Functions ran with no configuration at all.
+* `worker-audits` is gone, folded into a generic `worker` entrypoint.
+* The function-sizing knobs were renamed `_APP_FUNCTIONS_*` →
+  `_APP_COMPUTE_*`. Under the old names they are silently ignored.
+* Executor 0.25 looks its own container up by `gethostname()` against
+  Docker's **container name**. With only `hostname: exc1` set it finds
+  nothing and dies inside its own error handler with "Dependency
+  response not found", which names neither the container nor the lookup.
+* `verify.mjs` read `function.deployment`, renamed `deploymentId` in
+  1.9, so it reported every deployed Function as never deployed. A check
+  that cannot fail is worse than no check; it now reads the build status
+  too, since a deployment that failed to build is present and just as
+  dead.
+
+**And one thing that was never scripted at all.** The auth Function
+sends its typed codes through Appwrite Messaging, which refuses to send
+without an enabled provider. Phase 15 created an SMTP provider by hand
+and never recorded it, so a freshly bootstrapped project looked like a
+broken mailer. It is in `bootstrap.mjs` now.
+
+## Realtime: every subscription was a guest
+
+With 1.9.6 the socket connected and still delivered nothing.
+
+`realtime_io` builds its handshake headers from exactly two places: the
+SDK's cookie jar, and `x-appwrite-jwt`. It never sends the session
+header that `Client.setSession` sets — and `setSession` is how CRADI
+establishes every session, because the typed-code flow adopts a
+server-minted secret.
+
+So **in the shipped app, every realtime subscription would have
+connected as a guest**, and no document permissioned to `user:<id>`
+would ever have emitted an event. The failure is silent in the worst
+way: the socket opens, the server accepts the channel, the initial page
+still loads because that goes over REST with the session header, and
+then nothing. It looks exactly like a quiet collection.
+
+The fix is a JWT, which is the one credential the socket does send. Two
+things made it less obvious than it sounds:
+
+* Appwrite refuses a request carrying both a JWT and a session —
+  `user_jwt_and_cookie_set`, 403 — so the JWT cannot live on the client
+  the REST calls use. Realtime now has its own client.
+* `Client.setJWT` stores the token as `config['jWT']`, and
+  `realtime_io._getWebSocket` reads `config['jwt']`. On SDK 27 the
+  socket never sends what `setJWT` set. The adapter writes the key
+  realtime actually reads.
+
+The token is re-minted in the background before it lapses, because the
+SDK re-reads it only when it rebuilds the socket — on a reconnect, which
+is exactly when an expired one would lock the stream out for good. The
+refresh stops on sign-out.
+
+The channel namespace needed checking too. 1.8 published an event under
+`databases.<db>.…` only, so the SDK's `Channel.tablesdb(...)` matched
+nothing. From 1.9 the server publishes all three spellings, so the SDK's
+own builder is right for every server it targets.
+
+## Reports with a photo could never be saved
+
+`reports.image_urls` is `text[]` in Postgres. The extractor's column
+regex did not capture `[]`, so it was read as scalar `text`, and the
+server refused every write:
+
+```
+Invalid document structure: Attribute "imageUrls" has invalid type.
+Value must be a valid string and no longer than 65535 chars
+```
+
+That is the app's main flow. It is the only Postgres array column, so
+the blast radius is one column — but nothing in the schema said why, and
+no existing test sent a photo. The extractor now carries `[]` through
+and sizes an array per element.
+
+## Evidence was write-once and unreadable
+
+`report-images` had `fileSecurity: true` and no read rule, and `_put`
+set no per-file permissions, so an uploaded photo was readable by
+nobody — not the monitors, not the reporter who took it. `/view`
+answered 404 for everyone.
+
+The fix is `read("any")`, and it is not a loosening: the app renders
+evidence with `CachedNetworkImage`, which sends no credential, and
+today's Supabase bucket is already public — every stored URL is a
+`/storage/v1/object/public/` one. Anything narrower makes the photos
+unrenderable rather than private. What protects them is that the file id
+is a digest of a path containing the report's uuid.
+
+`profile-images` keeps `fileSecurity: true` so the per-file rules the
+uploader gets can add `update`/`delete` for that one owner: an avatar is
+replaced, unlike evidence. Granting `delete("users")` on the bucket
+would let any signed-in user delete anyone's.
+
+So the two buckets now differ on purpose, and the tests say so: evidence
+is refused a second write even with `upsert`, and an avatar is not.
+
+## `reopen_report` had never worked
+
+Writing the operation's own end-to-end suite found that the Function
+fails every time: it wrote `reopenedAt` and `reopenedBy`, which exist in
+neither schema. Reading the Postgres original next to the port showed
+the column names were the smallest problem.
+
+The port:
+
+* allowed only `ewr` and admin, where the original allowed `ewv`, `ewr`,
+  `ldp_coordinator`, `project_staff` and admin — silently refusing the
+  three roles that do most of the reviewing;
+* had neither guard: reopening an **already-pending** report wipes votes
+  still being cast, and reopening **your own** report is how a reporter
+  clears a rejection;
+* reset `status`, `verificationCount` and `escalated`, and left
+  `verifiedAt`, `approvedAt`, `rejectedAt`, `rejectionReason`,
+  `escalatedAt`, `escalationReason`, `escalationStatus` and `updatedBy`
+  carrying the old decision on a report that is supposedly undecided;
+* never rescheduled the escalation deadline;
+* never superseded the events the old decision had queued, so a
+  "disputed" notification could land after the report went back to
+  pending;
+* never queued the reopen as an event of its own.
+
+All of it is ported now, with the two Appwrite-shaped departures stated
+in the code: `scheduled_escalations` holds one row per report, keyed by
+the report id, so "skip the old and insert a new" is an update in place;
+and the outbox has no sequence, so "events queued before this moment" is
+cut by `processedAt is null` instead of by id.
+
+Seven unit tests and nine end-to-end steps cover it.
+
+## What Phase 17 proves
+
+Realtime and file upload run against a real server, through the adapter
+the app ships: a collection stream emits its initial page and then each
+create, update and delete; a document stream emits `null` when its
+document goes; an upload returns a URL that serves the bytes back;
+evidence refuses a second write; an avatar does not. 18 Dart integration
+tests, 125 Function unit tests, four end-to-end suites.
+
+## The gap, left open
+
+`callOperation` is **still unverified through the adapter**. The SDK
+cannot parse a pre-2.0 execution, and 2.3 self-hosted cannot stand in:
+from 2.0 a deployment is built through
+`ghcr.io/open-runtimes/orchestrator`, and this environment's network
+policy refuses `pkg-containers.githubusercontent.com`, so no Function
+can be deployed there to execute. The 2.3 API itself came up fine on
+MariaDB, so this is a pull, not a compatibility wall.
+
+The Function is covered over HTTP by `e2e-operation.mjs`. What is
+unverified is one SDK parse step — which will work on Cloud, because
+Cloud is 2.3 and the SDK targets 2.3, but that is an argument and not a
+test. It joins `signInWithPassword`'s cookie session on the list of
+things to confirm against Cloud before launch.
+
+## What has still never run
+
+The Termii SMS path; the reconciling sweep against a real gap; and the
+admin portal, which is still entirely on Supabase.
+
+Two app-level findings worth their own work, both surfaced here:
+
+* `ImageUrlResolver.thumbUrlFor` is built on Supabase URL shapes
+  (`supabaseObjectPath`, the `/object/public/` marker). An Appwrite URL
+  carries a hashed file id, not a path, so it returns null and every
+  thumbnail falls back to the full-size image. Thumbnails are uploaded
+  and never read.
+* `ImageUrlResolver.resolve` routes through ImageKit by rewriting a
+  Supabase object path, and is inert for the same reason.

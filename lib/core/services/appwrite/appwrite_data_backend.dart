@@ -54,7 +54,98 @@ class AppwriteDataBackend implements DataBackend {
   late final aw.Account _account;
 
   aw.Realtime? _realtime;
-  aw.Realtime get _rt => _realtime ??= aw.Realtime(_client);
+
+  /// A second client, used only for the websocket.
+  ///
+  /// Separate because Appwrite refuses a request that carries both a JWT
+  /// and a session — `user_jwt_and_cookie_set`, 403 — so the JWT the
+  /// socket needs cannot live on the client the REST calls use. This one
+  /// carries the JWT and nothing else; `_client` keeps the session.
+  aw.Client? _realtimeClient;
+
+  aw.Client get _rtClient {
+    final existing = _realtimeClient;
+    if (existing != null) return existing;
+    // `setEndpoint` derives the websocket URL itself, so the explicit
+    // one is copied only when the caller overrode it — which a
+    // self-hosted stack that publishes realtime on its own port does.
+    final made = aw.Client()
+        .setEndpoint(_client.endPoint)
+        .setProject(_client.config['project'] ?? AppwriteConfig.projectId);
+    final realtime = _client.endPointRealtime;
+    if (realtime != null) made.setEndPointRealtime(realtime);
+    return _realtimeClient = made;
+  }
+
+  aw.Realtime get _rt => _realtime ??= aw.Realtime(_rtClient);
+
+  /// How long a minted realtime JWT is asked to live.
+  ///
+  /// Appwrite's maximum is an hour; shorter is safer and the refresh
+  /// below is cheap.
+  static const Duration _jwtLifetime = Duration(minutes: 15);
+
+  /// Re-minted this long before expiry, so a socket that reconnects
+  /// never picks up a token that is about to lapse.
+  static const Duration _jwtRenewBefore = Duration(minutes: 3);
+
+  DateTime? _jwtExpiresAt;
+  Timer? _jwtTimer;
+
+  /// Gives the websocket a credential it will actually send.
+  ///
+  /// `realtime_io` builds its handshake headers from exactly two places:
+  /// the SDK's cookie jar, and `x-appwrite-jwt`. It never sends the
+  /// session header that `Client.setSession` sets. CRADI establishes its
+  /// session from a server-minted secret — the typed-code flow in
+  /// `AppwriteAuthBackend._establish` — so no cookie is ever stored, and
+  /// without this every subscription connects as a guest.
+  ///
+  /// The failure that causes is silent and easy to miss: the socket
+  /// opens, the server accepts the channel, the initial page still loads
+  /// because that goes over REST with the session header, and then no
+  /// event for a document permissioned to `user:<id>` ever arrives. It
+  /// looks exactly like a quiet collection.
+  Future<void> _authenticateRealtime() async {
+    if (_userId == null) return; // A guest has nothing to prove.
+    final expires = _jwtExpiresAt;
+    if (expires != null &&
+        expires.isAfter(DateTime.now().add(_jwtRenewBefore))) {
+      return;
+    }
+    await _mintRealtimeJwt();
+  }
+
+  Future<void> _mintRealtimeJwt() async {
+    try {
+      final jwt = await _account.createJWT(duration: _jwtLifetime.inSeconds);
+      _rtClient.setJWT(jwt.jwt);
+      // `setJWT` stores the token as `config['jWT']`, but
+      // `realtime_io._getWebSocket` reads `config['jwt']` when it builds
+      // the handshake headers — so on SDK 27 the socket never sends what
+      // `setJWT` set. Writing the key realtime actually reads is the
+      // whole fix; drop this when the SDK spells them the same.
+      _rtClient.config['jwt'] = jwt.jwt;
+      _jwtExpiresAt = DateTime.now().add(_jwtLifetime);
+      _jwtTimer?.cancel();
+      // Kept fresh in the background, because the SDK re-reads the stored
+      // JWT only when it rebuilds the socket — on a reconnect, which is
+      // precisely when an expired one would lock the stream out for good.
+      _jwtTimer = Timer(_jwtLifetime - _jwtRenewBefore, () {
+        unawaited(_mintRealtimeJwt());
+      });
+    } on aw.AppwriteException {
+      // Leave whatever token is already set. A stale one still beats
+      // none, and the next subscribe tries again.
+    }
+  }
+
+  /// Stops the background JWT refresh. Call when signing out.
+  void stopRealtimeAuth() {
+    _jwtTimer?.cancel();
+    _jwtTimer = null;
+    _jwtExpiresAt = null;
+  }
 
   /// Cached because `DataBackend.currentUserId` is synchronous and is read
   /// on nearly every query, while Appwrite only exposes the account over
@@ -393,6 +484,22 @@ class AppwriteDataBackend implements DataBackend {
 
   // ───────────────────────── realtime ─────────────────────────────────
 
+  /// The realtime channel for a collection, or for one document.
+  ///
+  /// A subscription to a channel the server does not publish fails
+  /// *silently* — the socket connects, the server accepts the channel,
+  /// and no event ever arrives. Appwrite 1.8 published only
+  /// `databases.<db>.…`, so the SDK's `tablesdb.<db>.…` matched nothing.
+  /// From 1.9 the server publishes each event under all three spellings
+  /// (`tablesdb.…rows`, `databases.…rows`, `databases.…documents`), so
+  /// the SDK's builder is right for every server it targets. The local
+  /// stack is pinned to 1.9.6 for that reason; see
+  /// `infra/appwrite/local/docker-compose.yml`.
+  static aw.Channel _channelFor(String collectionId, [String? documentId]) =>
+      aw.Channel.tablesdb(
+        AppwriteConfig.databaseId,
+      ).table(collectionId).row(documentId);
+
   @override
   Stream<List<Map<String, dynamic>>> subscribeToCollection({
     required String collectionId,
@@ -400,9 +507,7 @@ class AppwriteDataBackend implements DataBackend {
   }) {
     if (!isConfigured) return const Stream.empty();
     final plan = DocumentPlan.build(queries);
-    final channel = aw.Channel.tablesdb(
-      AppwriteConfig.databaseId,
-    ).table(collectionId).row();
+    final channel = _channelFor(collectionId);
 
     late StreamController<List<Map<String, dynamic>>> controller;
     aw.RealtimeSubscription? subscription;
@@ -431,6 +536,7 @@ class AppwriteDataBackend implements DataBackend {
         return;
       }
 
+      await _authenticateRealtime();
       subscription = _rt.subscribe([channel]);
       subscription!.stream.listen(
         (message) {
@@ -466,9 +572,7 @@ class AppwriteDataBackend implements DataBackend {
     required String documentId,
   }) {
     if (!isConfigured) return const Stream.empty();
-    final channel = aw.Channel.tablesdb(
-      AppwriteConfig.databaseId,
-    ).table(collectionId).row(documentId);
+    final channel = _channelFor(collectionId, documentId);
 
     late StreamController<Map<String, dynamic>?> controller;
     aw.RealtimeSubscription? subscription;
@@ -489,6 +593,7 @@ class AppwriteDataBackend implements DataBackend {
         return;
       }
 
+      await _authenticateRealtime();
       subscription = _rt.subscribe([channel]);
       subscription!.stream.listen(
         (message) {
@@ -632,8 +737,26 @@ class AppwriteDataBackend implements DataBackend {
     required bool upsert,
   }) async {
     final fileId = fileIdFor(storagePath);
+    // The uploader's own rules. Buckets grant `read("any")` because the
+    // image loader sends no credential; these add the owner-only rights
+    // on top, so an avatar can be replaced by the person it belongs to
+    // and by nobody else. The evidence bucket has `fileSecurity` off, so
+    // it ignores these and stays write-once — which is intended.
+    final owner = _userId;
+    final permissions = owner == null
+        ? null
+        : [
+            aw.Permission.read(aw.Role.any()),
+            aw.Permission.update(aw.Role.user(owner)),
+            aw.Permission.delete(aw.Role.user(owner)),
+          ];
     try {
-      await _storage.createFile(bucketId: bucketId, fileId: fileId, file: file);
+      await _storage.createFile(
+        bucketId: bucketId,
+        fileId: fileId,
+        file: file,
+        permissions: permissions,
+      );
     } on aw.AppwriteException catch (e) {
       final duplicate = classifyAppwriteFailure(e) == BackendFailure.duplicate;
       if (!duplicate) rethrow;
@@ -642,7 +765,12 @@ class AppwriteDataBackend implements DataBackend {
       // two loses the old file, which is why this only runs when the
       // caller asked for an overwrite.
       await _storage.deleteFile(bucketId: bucketId, fileId: fileId);
-      await _storage.createFile(bucketId: bucketId, fileId: fileId, file: file);
+      await _storage.createFile(
+        bucketId: bucketId,
+        fileId: fileId,
+        file: file,
+        permissions: permissions,
+      );
     }
     return fileUrl(bucketId: bucketId, fileId: fileId);
   }

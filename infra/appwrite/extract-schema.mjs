@@ -55,7 +55,28 @@ export function stringSize(name) {
 
 /** Postgres type -> Appwrite column type. */
 export function toAppwrite(pgType, name) {
-  const t = pgType.toLowerCase();
+  let t = pgType.toLowerCase().trim();
+  // `text[]` is a list, and dropping the brackets silently turns it into
+  // a scalar. `reports.image_urls` was mapped that way, so every report
+  // with a photo was refused with "Attribute \"imageUrls\" has invalid
+  // type" — the app's main flow, and nothing in the schema said why.
+  const isArray = /\[\]$/.test(t);
+  if (isArray) t = t.replace(/\s*\[\]$/, '');
+  const mapped = toAppwriteScalar(t, name);
+  // Appwrite sizes an array column per element, and stores the whole
+  // column away from the row, so a list of URLs wants a URL's size and
+  // not a whole row's budget.
+  if (isArray) {
+    return {
+      ...mapped,
+      array: true,
+      ...(mapped.type === 'string' ? { size: 2048 } : {}),
+    };
+  }
+  return mapped;
+}
+
+function toAppwriteScalar(t, name) {
   if (/^(boolean|bool)\b/.test(t)) return { type: 'boolean' };
   if (/^(timestamptz|timestamp|date)\b/.test(t)) return { type: 'datetime' };
   if (/^(double precision|numeric|real|float)/.test(t)) return { type: 'double' };
@@ -84,13 +105,13 @@ export function extract(sql) {
       line = line.trim().replace(/,$/, '');
       if (!line || line.startsWith('--')) continue;
       if (/^(primary key|unique|constraint|foreign key|check|exclude)\b/i.test(line)) continue;
-      const m = /^(\w+)\s+([a-z0-9_ ]+(?:\([^)]*\))?)/i.exec(line);
+      const m = /^(\w+)\s+([a-z0-9_ ]+(?:\([^)]*\))?(?:\s*\[\])?)/i.exec(line);
       if (!m) continue;
       tables[name][m[1]] = m[2].trim();
     }
   }
   const added = sql.matchAll(
-    /alter table (?:public\.)?(\w+)\s+add column (?:if not exists )?(\w+)\s+([a-z0-9_ ]+(?:\([^)]*\))?)/gi,
+    /alter table (?:public\.)?(\w+)\s+add column (?:if not exists )?(\w+)\s+([a-z0-9_ ]+(?:\([^)]*\))?(?:\s*\[\])?)/gi,
   );
   for (const [, table, column, type] of added) {
     tables[table] ??= {};

@@ -114,16 +114,20 @@ console.log(`project: ${projectId}${project.ok ? '' : ' (existing)'}`);
 for (const platform of PLATFORMS) {
   const made = await call(`/projects/${projectId}/platforms`, {
     method: 'POST',
-    body: platform,
+    // 1.9 made the resource id explicit on create, as it did for keys.
+    body: { platformId: 'unique()', ...platform },
   });
   console.log(
-    `platform ${platform.type} ${platform.key}: ${made.ok ? 'created' : made.status}`,
+    `platform ${platform.type} ${platform.key}: ${
+      made.ok ? 'created' : `${made.status} ${JSON.stringify(made.body).slice(0, 200)}`
+    }`,
   );
 }
 
 const key = await call(`/projects/${projectId}/keys`, {
   method: 'POST',
   body: {
+    keyId: 'unique()',
     name: 'provisioner',
     scopes: [
       'users.read', 'users.write',
@@ -147,6 +151,37 @@ const key = await call(`/projects/${projectId}/keys`, {
   },
 });
 if (!key.ok) throw new Error(`key failed: ${JSON.stringify(key.body).slice(0, 300)}`);
+
+/**
+ * An SMTP provider pointed at Mailpit.
+ *
+ * The auth Function sends its typed codes through Appwrite Messaging
+ * (`/messaging/messages/email`), and Messaging refuses to send without
+ * an enabled provider — it accepts the message and leaves it
+ * `processing`, so the Function reports success and no mail is ever
+ * delivered. Phase 15 created this by hand and never recorded it, which
+ * is why a freshly bootstrapped project looked like a broken mailer.
+ */
+const provider = await call('/messaging/providers/smtp', {
+  method: 'POST',
+  project: projectId,
+  key: key.body.secret,
+  body: {
+    providerId: 'mailpit',
+    name: 'Mailpit (local)',
+    host: 'mailpit',
+    port: 1025,
+    encryption: 'none',
+    fromName: 'CRADI (local)',
+    fromEmail: 'no-reply@cradi.test',
+    enabled: true,
+  },
+});
+console.log(
+  `smtp provider: ${
+    provider.ok ? 'created' : `${provider.status} ${JSON.stringify(provider.body).slice(0, 200)}`
+  }`,
+);
 
 const envPath = resolve(here, '.env.local');
 writeFileSync(

@@ -297,8 +297,20 @@ export const BUCKETS = [
   {
     id: 'report-images',
     name: 'Report evidence',
-    permissions: ['create("users")'],
-    fileSecurity: true,
+    // `read("any")`, deliberately, and it is not a loosening: the app
+    // renders evidence with `CachedNetworkImage`, which sends no
+    // credential, and today's Supabase bucket is already public — every
+    // stored URL is a `/storage/v1/object/public/` one. Anything
+    // narrower makes the photos unrenderable rather than private.
+    //
+    // What protects them is that the URL is unguessable: the file id is
+    // a digest of a path containing the report's uuid (see
+    // `AppwriteDataBackend.fileIdFor`). Tightening this means giving the
+    // image loader an auth header first; until then `fileSecurity: true`
+    // with no read rule just produced a 404 for everyone, uploader
+    // included.
+    permissions: ['create("users")', 'read("any")'],
+    fileSecurity: false,
     maximumFileSize: 10 * 1024 * 1024,
     allowedFileExtensions: ['jpg', 'jpeg', 'png', 'webp'],
     compression: 'none', // the client already compresses before upload
@@ -308,8 +320,14 @@ export const BUCKETS = [
   {
     id: 'profile-images',
     name: 'Profile images',
+    // Readable by anyone, for the same reason as the evidence bucket:
+    // the image loader sends no credential. `fileSecurity` is on so the
+    // per-file rules the uploader gets (see `AppwriteDataBackend._put`)
+    // can add `update`/`delete` for that one owner — an avatar is
+    // replaced, unlike evidence. Granting `delete("users")` on the
+    // bucket instead would let any signed-in user delete anyone's.
     permissions: ['create("users")', 'read("any")'],
-    fileSecurity: false,
+    fileSecurity: true,
     maximumFileSize: 5 * 1024 * 1024,
     allowedFileExtensions: ['jpg', 'jpeg', 'png', 'webp'],
     compression: 'none',

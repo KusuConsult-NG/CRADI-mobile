@@ -231,7 +231,8 @@
     {
       "key": "imageUrls",
       "type": "string",
-      "size": 65535,
+      "size": 2048,
+      "array": true,
       "required": false
     },
     {

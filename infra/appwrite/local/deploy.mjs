@@ -81,7 +81,9 @@ for (const fn of FUNCTIONS) {
   for (const [key, value] of Object.entries(VARIABLES)) {
     const made = await api(`/functions/${fn.id}/variables`, {
       method: 'POST',
-      body: JSON.stringify({ key, value }),
+      // `variableId` became required in 1.9; without it the create is
+      // refused 400 and the Function runs with no configuration at all.
+      body: JSON.stringify({ variableId: 'unique()', key, value }),
     });
     if (!made.ok) {
       // Loudly. A missing variable is not a cosmetic failure here.

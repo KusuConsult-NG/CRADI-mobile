@@ -111,6 +111,13 @@ dev_dependencies:
   
   # Testing dependencies
   mockito: ^5.4.4
+
+  # Declared so the live Appwrite suite can replace the image compressor's
+  # platform instance. Off a real device it resolves to the "unsupported"
+  # implementation, which throws from the platform interface before any
+  # method channel is reached, so there is nothing a channel stub can
+  # intercept. See test/integration/live_appwrite.dart.
+  flutter_image_compress_platform_interface: ^1.0.5
   build_runner: ^2.4.13
   flutter_launcher_icons: ^0.14.1
 

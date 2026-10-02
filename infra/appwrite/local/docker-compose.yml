@@ -1,4 +1,19 @@
-# Minimal Appwrite, for the Phase 0 access-model spike only.
+# Minimal Appwrite 1.9.6, for local end-to-end testing.
+#
+# Pinned to 1.9.6 rather than the 1.8.0 this started on, because the
+# Flutter SDK (27.x) targets a newer server than 1.8 in two places:
+#
+#   * realtime — 1.8 wants `channels[]` in the connect URL and closes
+#     with 1008 "Missing channels" without them. The SDK connects with
+#     `project` alone and sends a `subscribe` frame after `connected`,
+#     which 1.9 understands and 1.8 does not.
+#   * executions — SDK 26 replaced `functionId` with `resourceId` and
+#     `resourceType`; parsing a 1.8 reply throws `Bad state: No element`.
+#
+# 2.3 is what the SDK actually targets, but its stack adds Postgres,
+# Mongo, ClickHouse, Traefik, a geo service and an ML model container.
+# 1.9.6 is the newest release this trimmed stack can host, and it speaks
+# both protocols above.
 #
 # The published self-hosted compose lives on appwrite.io, which this
 # container's egress proxy refuses, so this is the smallest subset that can
@@ -43,7 +58,7 @@ services:
       retries: 20
 
   appwrite:
-    image: appwrite/appwrite:1.8.0
+    image: appwrite/appwrite:1.9.6
     networks:
       default:
       runtimes:
@@ -79,6 +94,7 @@ services:
       _APP_DOMAIN_FUNCTIONS: localhost
       _APP_DOMAIN_TARGET: localhost
       _APP_CONSOLE_WHITELIST_ROOT: disabled
+      _APP_DB_ADAPTER: mariadb
       _APP_DB_HOST: mariadb
       _APP_DB_PORT: "3306"
       _APP_DB_SCHEMA: appwrite
@@ -92,17 +108,17 @@ services:
       _APP_EXECUTOR_SECRET: spike-executor-secret
       _APP_EXECUTOR_HOST: http://exc1/v1
       _APP_FUNCTIONS_TIMEOUT: "900"
-      _APP_FUNCTIONS_BUILD_TIMEOUT: "900"
-      _APP_FUNCTIONS_SIZE_LIMIT: "30000000"
-      _APP_FUNCTIONS_MEMORY: "512"
-      _APP_FUNCTIONS_CPUS: "1"
-      _APP_FUNCTIONS_RUNTIMES: node-22,node-20.0
-      _APP_FUNCTIONS_RUNTIMES_NETWORK: runtimes18
-      _APP_FUNCTIONS_INACTIVE_THRESHOLD: "600"
-      _APP_FUNCTIONS_MAINTENANCE_INTERVAL: "3600"
+      _APP_COMPUTE_BUILD_TIMEOUT: "900"
+      _APP_COMPUTE_SIZE_LIMIT: "30000000"
+      _APP_COMPUTE_MEMORY: "512"
+      _APP_COMPUTE_CPUS: "1"
+      _APP_FUNCTIONS_RUNTIMES: node-22
+      _APP_COMPUTE_RUNTIMES_NETWORK: runtimes19
+      _APP_COMPUTE_INACTIVE_THRESHOLD: "600"
+      _APP_COMPUTE_MAINTENANCE_INTERVAL: "3600"
 
   appwrite-worker-databases:
-    image: appwrite/appwrite:1.8.0
+    image: appwrite/appwrite:1.9.6
     entrypoint: worker-databases
     depends_on:
       - appwrite
@@ -114,21 +130,21 @@ services:
   # The spike never needed it and the gap is invisible until you check
   # a mailbox rather than the API.
   appwrite-worker-messaging:
-    image: appwrite/appwrite:1.8.0
+    image: appwrite/appwrite:1.9.6
     entrypoint: worker-messaging
     depends_on:
       - appwrite
     environment: *appwrite_env
 
   appwrite-worker-audits:
-    image: appwrite/appwrite:1.8.0
+    image: appwrite/appwrite:1.9.6
     entrypoint: worker-audits
     depends_on:
       - appwrite
     environment: *appwrite_env
 
   appwrite-realtime:
-    image: appwrite/appwrite:1.8.0
+    image: appwrite/appwrite:1.9.6
     entrypoint: realtime
     ports:
       - "8091:80"
@@ -137,37 +153,54 @@ services:
     environment: *appwrite_env
 
   openruntimes-executor:
+    # Both, and they must match: executor 0.25's start hook looks its own
+    # container up by `gethostname()` against Docker's *container name*,
+    # and without a match dies in its error handler with "Dependency
+    # response not found" — which names neither the container nor the
+    # lookup. The 1.8 executor had no such self-lookup, so `hostname`
+    # alone was enough there.
+    container_name: exc1
     hostname: exc1
-    image: openruntimes/executor:0.7.22
+    image: openruntimes/executor:0.25.4
     stop_signal: SIGINT
     networks: [default, runtimes]
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - appwrite-builds:/storage/builds:rw
       - appwrite-functions:/storage/functions:rw
+      - appwrite-sites:/storage/sites:rw
       # The executor and the runtime containers swap files through the host.
       - /tmp:/tmp:rw
     environment:
       OPR_EXECUTOR_ENV: development
       OPR_EXECUTOR_SECRET: spike-executor-secret
-      OPR_EXECUTOR_RUNTIMES: node-22,node-20.0
-      # Appwrite 1.8 creates every Function with runtime contract v5 and
-      # will not let you choose otherwise — the `version` field is
-      # ignored on create and immutable on update. The executor has to be
-      # told to accept it. Inherited from the 1.6.2 spike as `v2,v4`,
-      # this produced seven identical build failures reading
-      # "Invalid `version` param: Value must be one of (v2, v4)" — which
-      # names the executor's allow-list, not the function, and sounds
-      # like the function is wrong.
+      OPR_EXECUTOR_RUNTIMES: node-22
+      OPR_EXECUTOR_IMAGES: openruntimes/node:v5-22
+      OPEN_RUNTIMES_NFT: enabled
+      # Appwrite creates every Function with runtime contract v5 and will
+      # not let you choose otherwise — the `version` field is ignored on
+      # create and immutable on update. The executor has to be told to
+      # accept it. Inherited from the 1.6.2 spike as `v2,v4`, this
+      # produced seven identical build failures reading "Invalid
+      # `version` param: Value must be one of (v2, v4)" — which names the
+      # executor's allow-list, not the function, and sounds like the
+      # function is wrong.
       OPR_EXECUTOR_RUNTIME_VERSIONS: v5
-      OPR_EXECUTOR_NETWORK: runtimes18
-      OPR_EXECUTOR_INACTIVE_TRESHOLD: "600"
+      OPR_EXECUTOR_NETWORK: runtimes19
+      OPR_EXECUTOR_INACTIVE_THRESHOLD: "600"
       OPR_EXECUTOR_MAINTENANCE_INTERVAL: "3600"
-      OPR_EXECUTOR_STORAGE_DEVICE: local
-      OPR_EXECUTOR_CONNECTION_STORAGE: file://localhost
+      OPR_EXECUTOR_STORAGE_DEVICE: Local
+      OPR_EXECUTOR_CONNECTION_STORAGE: local://localhost
+      # Both are read unconditionally at start-up; left unset the
+      # executor dies in its own error handler with "Dependency response
+      # not found", which names neither.
+      OPR_EXECUTOR_CONNECTION_BUILD_CACHE_STORAGE: ""
+      OPR_EXECUTOR_LOGGING_CONFIG: ""
+      OPR_EXECUTOR_DOCKER_HUB_USERNAME: ""
+      OPR_EXECUTOR_DOCKER_HUB_PASSWORD: ""
 
   appwrite-worker-functions:
-    image: appwrite/appwrite:1.8.0
+    image: appwrite/appwrite:1.9.6
     entrypoint: worker-functions
     depends_on: [appwrite, openruntimes-executor]
     volumes:
@@ -175,23 +208,32 @@ services:
       - appwrite-builds:/storage/builds:rw
     environment: *appwrite_env
 
+  # New in 1.9: execution records are written by their own worker rather
+  # than inline. Without it an execution runs but is never persisted, so
+  # the API answers a sync call and the execution list stays empty.
+  appwrite-worker-executions:
+    image: appwrite/appwrite:1.9.6
+    entrypoint: worker-executions
+    depends_on: [appwrite]
+    environment: *appwrite_env
+
   # Without these two nothing scheduled ever runs, and a cron Function looks
   # like it simply does not work. schedule-functions watches for Functions
   # with a cron; schedule-executions runs what it queues.
   appwrite-task-scheduler-functions:
-    image: appwrite/appwrite:1.8.0
+    image: appwrite/appwrite:1.9.6
     entrypoint: schedule-functions
     depends_on: [appwrite]
     environment: *appwrite_env
 
   appwrite-task-scheduler-executions:
-    image: appwrite/appwrite:1.8.0
+    image: appwrite/appwrite:1.9.6
     entrypoint: schedule-executions
     depends_on: [appwrite]
     environment: *appwrite_env
 
   appwrite-worker-builds:
-    image: appwrite/appwrite:1.8.0
+    image: appwrite/appwrite:1.9.6
     entrypoint: worker-builds
     depends_on: [appwrite, openruntimes-executor]
     volumes:
@@ -201,6 +243,7 @@ services:
 
 volumes:
   appwrite-builds:
+  appwrite-sites:
   appwrite-functions:
   # Without these two, `docker compose down` silently destroys the project,
   # its collections, its users and every deployed Function. It did once.
@@ -218,10 +261,10 @@ networks:
     # "timed out during cold start" while the runtime's own log says the
     # server started fine.
     #
-    # `runtimes18`, not `runtimes`, because the 1.6.2 spike stack is
-    # still running and owns that name. Sharing it put two containers
+    # `runtimes19`, not `runtimes`, because an earlier spike stack owns
+    # that name. Sharing it put two containers
     # answering to the alias `appwrite` on one network, so a Function
     # resolving `http://appwrite/v1` got whichever Docker felt like —
     # usually the wrong project, and `fetch failed` when it was the one
     # that had gone away. `OPR_EXECUTOR_NETWORK` below must match.
-    name: runtimes18
+    name: runtimes19
