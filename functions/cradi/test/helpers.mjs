@@ -109,6 +109,14 @@ export function fakeAppwrite({ rows = {}, users = [], fail = {} } = {}) {
       if (method === 'GET') return json(200, { tokens: [] });
       return json(201, { secret: '251152', userId: tokens[1] });
     }
+    const labels = path.match(/^\/users\/([^/]+)\/labels$/);
+    if (labels && method === 'PUT') {
+      const id = decodeURIComponent(labels[1]);
+      const user = users.find((u) => u.$id === id) ?? { $id: id };
+      if (!users.includes(user)) users.push(user);
+      user.labels = body.labels;
+      return json(200, user);
+    }
     if (/^\/users\/[^/]+\/verification$/.test(path)) return json(200, {});
     if (/^\/users\/[^/]+\/password$/.test(path)) return json(200, {});
     if (path === '/account/sessions/token') {
@@ -156,8 +164,11 @@ const json = (status, body) =>
 /** The `{req, res, log, error}` an Appwrite Function is called with. */
 export function context(body, { userId = 'u1', path = '/' } = {}) {
   const captured = {};
+  const logs = [];
   return {
     captured,
+    /** What the Function logged, for the warnings it must not swallow. */
+    logs,
     req: {
       bodyRaw: JSON.stringify(body),
       path,
@@ -170,7 +181,9 @@ export function context(body, { userId = 'u1', path = '/' } = {}) {
         return { payload, status };
       },
     },
-    log: () => {},
+    log: (m) => {
+      logs.push(String(m));
+    },
     error: (m) => {
       captured.error = m;
     },

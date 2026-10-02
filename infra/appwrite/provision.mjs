@@ -287,21 +287,62 @@ async function probeLimits() {
   }
 }
 
+/**
+ * A Function's settings, as the plan has them.
+ *
+ * `ensure` only creates, so a Function that already exists kept whatever
+ * settings it was created with. Widening `scopes` in the plan therefore
+ * changed nothing and reported `exists`, and the Function went on running
+ * with an API key that could not do the new thing — `verify.mjs` was the
+ * only one telling the truth. These four are reconciled on every run.
+ */
+const functionSettings = (f) => ({
+  execute: f.execute,
+  events: f.events ?? [],
+  schedule: f.schedule ?? '',
+  scopes: f.scopes,
+});
+
+const sameSettings = (live, planned) =>
+  (live.schedule ?? '') === planned.schedule &&
+  sameSet(live.execute, planned.execute) &&
+  sameSet(live.events, planned.events) &&
+  sameSet(live.scopes, planned.scopes);
+
+const sameSet = (a, b) => {
+  const x = [...(a ?? [])].sort();
+  const y = [...(b ?? [])].sort();
+  return x.length === y.length && x.every((v, i) => v === y[i]);
+};
+
 async function functions() {
   for (const f of FUNCTIONS) {
+    const planned = functionSettings(f);
     const r = await ensure(`function ${f.id}`, `/functions/${f.id}`, '/functions', {
       functionId: f.id,
       name: f.name,
       runtime: 'node-22',
       version: FUNCTION_VERSION,
-      execute: f.execute,
-      events: f.events ?? [],
-      schedule: f.schedule ?? '',
-      scopes: f.scopes,
       entrypoint: f.entrypoint,
       enabled: true,
+      ...planned,
     });
-    say(r.state, `function ${f.id}`, f.schedule ? `cron ${f.schedule}` : (f.events ? `${f.events.length} events` : ''));
+    const detail = f.schedule ? `cron ${f.schedule}` : (f.events ? `${f.events.length} events` : '');
+    if (r.state === 'exists' && r.body && !sameSettings(r.body, planned)) {
+      // PUT, not PATCH: Appwrite replaces a Function's settings, and
+      // `name` and `entrypoint` are required alongside the rest.
+      const updated = await api(`/functions/${f.id}`, {
+        method: 'PUT',
+        body: { name: f.name, entrypoint: f.entrypoint, enabled: true, ...planned },
+      });
+      if (updated.ok || updated.dry) {
+        say('updated', `function ${f.id}`, `settings reconciled — ${detail}`);
+        continue;
+      }
+      say('failed', `function ${f.id}`, `settings: ${updated.status} ${updated.body?.message ?? ''}`);
+      continue;
+    }
+    say(r.state, `function ${f.id}`, detail);
     if (r.state === 'created' && !DRY) {
       notes.push(`${f.id}: created, but NOT deployed — push code with the Appwrite CLI`);
     }

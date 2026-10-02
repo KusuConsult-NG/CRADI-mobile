@@ -16,6 +16,7 @@ import {
   deleteRow,
   getRow,
   Query,
+  setAccountLabels,
   updateRow,
   updateRowsWhere,
   upsertRow,
@@ -37,6 +38,8 @@ import {
   WRITABLE,
   assertLocation,
   assertRole,
+  LABEL_FIELDS,
+  accountLabels,
   assertCoverage,
   assertTarget,
   isAdmin,
@@ -283,14 +286,48 @@ async function writeProfile({ op, userId, documentId, data, expect, role, log })
     }
     log(`profile ${documentId} updated by ${userId} (expected ${JSON.stringify(expect)})`);
     const after = await getRow('profiles', documentId);
-    return { document: after.ok ? after.body : { $id: documentId, ...data } };
+    const document = after.ok ? after.body : { $id: documentId, ...data };
+    await syncLabels(documentId, data, document, log);
+    return { document };
   }
 
   const updated = await updateRow('profiles', documentId, data);
   if (updated.status === 404) throw notFound();
   if (!updated.ok) throw new Error(`profile update failed: ${updated.status}`);
   log(`profile ${documentId} updated by ${userId}`);
+  await syncLabels(documentId, data, updated.body, log);
   return { document: updated.body };
+}
+
+/**
+ * Puts the account's labels back in step with the profile row.
+ *
+ * `role`, `isApproved` and `isDisabled` are the inputs to every
+ * `read("label:…")` ACL, and a label lives on the account rather than on
+ * the row — so until this ran, promoting someone in the admin panel
+ * changed what the row said and nothing about what they could read. The
+ * failure was silent: Appwrite answers an unreadable collection with
+ * `200 {"total": 0}`, so a new admin saw an empty panel and no error.
+ *
+ * Only called when one of those fields was in the patch, and never fatal:
+ * the row is already written, and failing the whole call here would
+ * report a write that happened as one that did not. A mismatch is logged
+ * loudly instead, and the reconciling sweep is where a repair belongs.
+ */
+async function syncLabels(documentId, patch, document, log) {
+  if (!LABEL_FIELDS.some((field) => field in patch)) return;
+  const labels = accountLabels(document ?? {});
+  const result = await setAccountLabels(documentId, labels);
+  if (result.ok) {
+    log(`labels for ${documentId}: [${labels.join(', ')}]`);
+    return;
+  }
+  log(
+    `WARNING: profile ${documentId} was updated but its account labels were not ` +
+      `(${result.status} ${result.body?.message ?? ''}). It now says ` +
+      `${JSON.stringify(labels)} and the account does not — that account reads ` +
+      'nothing those labels grant.',
+  );
 }
 
 /** Removes the fields the server owns, so a round-tripped document is safe. */

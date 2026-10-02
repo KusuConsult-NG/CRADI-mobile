@@ -289,6 +289,40 @@ export function assertCoverage({ coverageState, coverageLga }) {
   }
 }
 
+/**
+ * Appwrite account labels for a profile row.
+ *
+ * Every `read("label:…")` ACL in `plan.mjs` and in `RULES` names a label,
+ * and a label lives on the *account*, not on the profile row — so a
+ * profile that says `role: 'admin'` grants nothing until the account
+ * carries `admin`. Until this existed nothing in the running system ever
+ * set one: only the one-off migration seeder did, so every role granted
+ * after the migration read as a 200 with zero rows. Silent, and
+ * indistinguishable from "there is no data".
+ *
+ * `ldp_coordinator` becomes `ldpCoordinator` because Appwrite labels are
+ * alphanumeric. A disabled profile gets none: the account is blocked
+ * anyway, and leaving a label on it would outlive the block if it were
+ * ever lifted by hand.
+ */
+export function accountLabels({ role, isApproved, isDisabled }) {
+  if (isDisabled === true) return [];
+  const labels = [];
+  const name = String(role ?? '').replace(/_(.)/g, (_, c) => c.toUpperCase());
+  if (name && name !== 'user' && LABELS.includes(name)) labels.push(name);
+  if (isApproved === true) labels.push('approved');
+  return labels;
+}
+
+/** Every label an ACL may name; anything else is not a label Appwrite knows. */
+const LABELS = [
+  'ewm', 'ewv', 'ewr', 'ldpCoordinator', 'projectStaff', 'admin',
+  'techSupport', 'approved',
+];
+
+/** The profile fields whose value decides the account's labels. */
+export const LABEL_FIELDS = ['role', 'isApproved', 'isDisabled'];
+
 /** Refuses when [role] is not in [allowed]. */
 export function assertRole(role, allowed, what) {
   if (!allowed || allowed.includes(role)) return;

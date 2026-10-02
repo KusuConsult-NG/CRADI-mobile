@@ -45,6 +45,11 @@ const PLATFORMS = [
   // What a `flutter test` VM reports, from the stub in
   // `test/integration/live_appwrite.dart`.
   { type: 'flutter-linux', name: 'Linux (integration tests)', key: 'com.cradi.test' },
+  // The admin panel. A web platform is matched against the browser's
+  // `Origin` host (the port is not part of it), so one `localhost` entry
+  // covers `next dev` on 3000 and the e2e build on 3100. On Cloud this is
+  // the panel's real domain, added in the console.
+  { type: 'web', name: 'Admin panel (local)', hostname: 'localhost' },
 ];
 const here = dirname(fileURLToPath(import.meta.url));
 const jar = {};

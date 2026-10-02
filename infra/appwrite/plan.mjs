@@ -352,7 +352,13 @@ export const FUNCTION_VERSION = process.env.APPWRITE_FUNCTION_VERSION ?? 'v4';
 export const FUNCTIONS = [
   {
     id: 'write', name: 'Write', entrypoint: 'src/write.js', execute: ['users'],
-    scopes: ['databases.read', 'documents.read', 'documents.write', 'teams.read', 'teams.write'],
+    // `users.write` so a profile's role, approval and disabled flag stay
+    // in step with the account's labels — every `read("label:…")` ACL
+    // below is granted by a label on the account, not by the row.
+    scopes: [
+      'databases.read', 'documents.read', 'documents.write',
+      'teams.read', 'teams.write', 'users.read', 'users.write',
+    ],
   },
   {
     id: 'auth', name: 'Auth', entrypoint: 'src/auth.js', execute: ['any'],

@@ -249,6 +249,98 @@ describe('profiles', () => {
   });
 });
 
+describe('account labels', () => {
+  const labelsOf = (fake, id) => fake.users.find((u) => u.$id === id)?.labels;
+
+  it('gives a promoted admin the label their reads depend on', async () => {
+    const fake = fakeAppwrite({
+      rows: { profiles: { u1: profile({ role: 'admin' }), u2: profile({ $id: 'u2', role: 'user' }) } },
+    });
+    const ctx = context({
+      op: 'update', collection: 'profiles', documentId: 'u2',
+      data: { role: 'admin', isApproved: true },
+    });
+    await write(ctx);
+
+    assert.equal(ctx.captured.status, 200);
+    // Without this the row says admin, every `read("label:admin")` ACL
+    // still refuses, and Appwrite answers the refusal with 200 and zero
+    // rows — an empty panel and no error.
+    assert.deepEqual(labelsOf(fake, 'u2'), ['admin', 'approved']);
+  });
+
+  it('spells a two-word role the way a label may be spelled', async () => {
+    const fake = fakeAppwrite({
+      rows: { profiles: { u1: profile({ role: 'admin' }), u2: profile({ $id: 'u2', role: 'user' }) } },
+    });
+    await write(context({
+      op: 'update', collection: 'profiles', documentId: 'u2',
+      data: { role: 'ldp_coordinator', isApproved: true },
+    }));
+
+    assert.deepEqual(labelsOf(fake, 'u2'), ['ldpCoordinator', 'approved']);
+  });
+
+  it('takes every label off a disabled account', async () => {
+    const fake = fakeAppwrite({
+      rows: {
+        profiles: {
+          u1: profile({ role: 'admin' }),
+          u2: profile({ $id: 'u2', role: 'ewm', isApproved: true }),
+        },
+      },
+    });
+    await write(context({
+      op: 'update', collection: 'profiles', documentId: 'u2', data: { isDisabled: true },
+    }));
+
+    assert.deepEqual(labelsOf(fake, 'u2'), []);
+  });
+
+  it('drops `approved` when approval is revoked', async () => {
+    const fake = fakeAppwrite({
+      rows: {
+        profiles: {
+          u1: profile({ role: 'admin' }),
+          u2: profile({ $id: 'u2', role: 'ewm', isApproved: true }),
+        },
+      },
+    });
+    await write(context({
+      op: 'update', collection: 'profiles', documentId: 'u2', data: { isApproved: false },
+    }));
+
+    assert.deepEqual(labelsOf(fake, 'u2'), ['ewm']);
+  });
+
+  it('leaves the account alone when the edit touches nothing labels depend on', async () => {
+    const fake = fakeAppwrite({ rows: { profiles: { u1: profile({ role: 'ewm' }) } } });
+    await write(context({
+      op: 'update', collection: 'profiles', documentId: 'u1', data: { name: 'Amina B.' },
+    }));
+
+    assert.equal(labelsOf(fake, 'u1'), undefined);
+    assert.equal(fake.calls.filter((c) => c.path.endsWith('/labels')).length, 0);
+  });
+
+  it('does not fail the write when the labels call does', async () => {
+    // The row is already written; reporting a write that happened as one
+    // that did not would be the worse answer. It is logged instead.
+    const fake = fakeAppwrite({
+      rows: { profiles: { u1: profile({ role: 'admin' }), u2: profile({ $id: 'u2' }) } },
+      fail: { '/labels': { status: 401, body: { message: 'missing scope (users.write)' } } },
+    });
+    const ctx = context({
+      op: 'update', collection: 'profiles', documentId: 'u2', data: { role: 'ewr', isApproved: true },
+    });
+    await write(ctx);
+
+    assert.equal(ctx.captured.status, 200);
+    assert.equal(fake.store.profiles.u2.role, 'ewr');
+    assert.match(ctx.logs.join('\n'), /WARNING: profile u2 was updated but its account labels were not/);
+  });
+});
+
 describe('authorities', () => {
   it('refuses a contact whose LGA names no state', async () => {
     const fake = fakeAppwrite({ rows: { profiles: { u1: profile({ role: 'admin' }) } } });

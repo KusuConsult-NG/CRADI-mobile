@@ -183,6 +183,17 @@ export const Query = {
  * can see. It must match `migrate/migrate.mjs`'s `wardTeam` exactly or the
  * migrated documents point at teams nobody is in.
  */
+/**
+ * Replaces an account's labels.
+ *
+ * Labels are the subject half of every `read("label:…")` ACL in
+ * `plan.mjs`, so they are not decoration: an account without them reads
+ * nothing those collections hold. Appwrite accepts alphanumerics only, so
+ * `ldp_coordinator` is stored as `ldpCoordinator`.
+ */
+export const setAccountLabels = (userId, labels) =>
+  api(`/users/${encodeURIComponent(userId)}/labels`, { method: 'PUT', body: { labels } });
+
 export function wardTeam(state, lga, ward) {
   const slug = [state, lga, ward]
     .map((part) => String(part ?? '').toLowerCase().replace(/[^a-z0-9]+/g, '-'))

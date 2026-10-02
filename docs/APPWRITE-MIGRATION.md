@@ -2842,3 +2842,116 @@ check would miss. `alerts` already had its counterpart
 98 panel specs green against the mock, 162 Function unit tests green.
 The three product bugs above were all in code that compiled, passed
 review and would have failed on the first click.
+
+# Phase 21 — the panel against a real Appwrite
+
+Phase 20 got the admin panel's 98 specs green against
+`mock-appwrite.mjs`. The mock answers the *shape* of Appwrite and
+deliberately implements neither document permissions nor the `write`
+Function's authorisation, so it cannot see anything that lives in that
+gap. `CRADI-Mobile-Admin/e2e/live.spec.ts` drives the same browser
+against the real 1.9.6 stack and checks the server afterwards with an
+API key.
+
+## The bug the mock could never have found
+
+Nothing in the running system ever set an Appwrite account label.
+
+Labels are the subject half of every `read("label:…")` permission in
+`plan.mjs` — `profiles` and `reports` are readable by `label:admin`,
+`verifications` by `label:ewv` and `label:ewr`, and so on. A label lives
+on the **account**; `profiles.role` is a column. The only thing that had
+ever set one was `seed-identities.mjs`, the one-off migration seeder. So
+every role granted after the migration — in the panel, or by
+`set-admin.mjs` — wrote the row and granted nothing.
+
+Measured on the live stack, with an account whose profile said
+`role: 'admin', isApproved: true` and whose labels were `[]`:
+
+```
+read profiles as this admin -> 200 total=0
+read reports  as this admin -> 200 total=0
+```
+
+and after `PUT /users/<id>/labels ["admin"]`, with nothing else changed:
+
+```
+read profiles -> 200 total=9
+read reports  -> 200 total=15
+```
+
+Not an error. Appwrite answers a read you have no permission for with
+`200` and an empty page, so the first admin promoted after launch would
+have signed in to a panel reporting zero users and zero reports, with
+nothing in the console and nothing in the logs. The obvious reading of
+that screen is "the migration lost the data".
+
+Three places set labels now, because there are three ways a profile
+changes:
+
+- `write.js` — `syncLabels` after any profile write touching `role`,
+  `isApproved` or `isDisabled`. Never fatal: the row is already written,
+  and failing the call would report a write that happened as one that
+  did not, so a failure is logged loudly instead.
+- the panel's `/api/admin/users/[uid]` — approve, revoke, role, block
+  and unblock go through an API key and bypass the Function entirely.
+  It answers `{ success: true, warning }` when the row moved and the
+  labels did not, so the panel can say so.
+- `set-admin.mjs` — the bootstrap path, before either of the others
+  can run. It now refuses to report success if the labels fail.
+
+The `write` Function needed `users.read` and `users.write` to do it,
+which exposed a second problem: `provision.mjs` only ever *created*.
+Widening a Function's scopes in the plan changed nothing and reported
+`exists`, and only `verify.mjs` knew. It reconciles `scopes`, `events`,
+`schedule` and `execute` on every run now.
+
+## Where the session actually lives
+
+`signInWithPassword` on the Flutter client was a known gap (Phase 16).
+The panel is a browser client, and the browser is where the SDK's
+fallback works — but what it falls back *to* is worth knowing.
+
+Appwrite and the panel are different sites (`appwrite.local` and
+`localhost` here; Cloud and the panel's domain in production), so the
+session cookie is third-party and the browser drops it. Measured after
+a successful sign-in: **no cookies at all**. The session is in
+`localStorage.cookieFallback`, sent as an `X-Fallback-Cookies` header on
+every authenticated call. It works, it survives a reload, and
+`live.spec.ts` asserts it so an SDK upgrade that changed it fails loudly
+rather than emptying every page.
+
+It is also a security fact: the session is readable by any script on the
+panel's origin, where an HttpOnly cookie would not be. The panel's CSP
+(nonce + `strict-dynamic`, no `unsafe-inline`, no `unsafe-eval`) is what
+stands between an injected script and an admin session, which is a
+heavier job than it looks. Serving Appwrite from the same site as the
+panel would make the cookie first-party again and is worth doing if the
+domain is available.
+
+Two smaller things the live run established: a project with a web
+platform registered answers `/account/sessions/email` with
+`secret: ""` and puts the real secret in the `Set-Cookie` header, so a
+script reading the body gets a guest; and the panel must be registered
+as a web platform at all, or Appwrite refuses every browser request as
+an unknown origin.
+
+## What Phase 21 proves
+
+12 live specs: sign-in, the dashboard's counts, reading reports,
+approving one through the `write` Function (checked by its server-side
+stamps), the optimistic lock refusing a decision made elsewhere,
+`reopen_report` through the `operation` Function, `app_settings` as a
+string column, creating an authority, the coverage guard refusing a
+tampered request, approving a user *and* the labels that follow, an
+alert, a knowledge article and a news link. Alongside: 168 Function
+unit tests and the four pre-existing live suites, all still green.
+
+## Still open
+
+Unchanged from Phase 20, minus the cookie question for the panel: the
+Termii SMS path has never run end to end, the reconciling sweep has
+never run against a real gap, `minimum_peer_confirmations` is read by
+nothing, and the Flutter client's own `signInWithPassword` cookie jar
+still needs a run against Cloud — the panel's result does not transfer,
+because the fallback that rescues it is browser-only in the SDK.
