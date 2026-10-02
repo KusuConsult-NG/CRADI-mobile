@@ -271,8 +271,126 @@ Stated plainly, because these are the costs of the decision, not objections to i
    is correct as written. Nothing to fix in Supabase; the Appwrite mapping
    makes the inherited scope explicit instead.
 
+---
+
+# Phase 2: auth
+
+Status: **verified against a running Appwrite 1.6.2**, not merely designed.
+Every claim below was executed; the sequences are reproducible from
+`appwrite-spike/spike/auth*.mjs`.
+
+## The headline: the typed-code flows survive intact
+
+The app asks users to type a code, in two places — `/verify-otp` after
+registration and `/reset-password` for recovery. Appwrite's own verification
+and recovery endpoints are **link-based**: `POST /account/verification` and
+`POST /account/recovery` both require a `url`, email a link containing
+`userId` and `secret`, and return an empty `secret` to the caller. Taken at
+face value, the app's whole code-entry UX would have had to be rebuilt as
+links.
+
+It does not, because of one endpoint:
+
+```
+POST /v1/users/{userId}/tokens   {"length": 6, "expire": 900}   (server, API key)
+  -> 201 {"secret": "251152", ...}
+```
+
+A server-minted token of **any length we choose**, which the user can type and
+redeem for a real session. Verified end to end:
+
+| Step | Call | Result |
+|---|---|---|
+| 1. mint | `POST /users/{id}/tokens {length:6}` | `201`, secret `"251152"` |
+| 2. user types it | `POST /account/sessions/token {userId, secret}` | `201`, session established |
+| 3a. verification | `PATCH /users/{id}/verification {emailVerification:true}` | `200`, `emailVerification=true` |
+| 3b. recovery | `PATCH /users/{id}/password {password}` | `200` |
+| 4. new password works | `POST /account/sessions/email` | `201` |
+| 5. old password refused | `POST /account/sessions/email` | `401` |
+| — wrong code | `POST /account/sessions/token {secret:"000000"}` | `401` |
+
+So both flows become: a Function mints the token, **we** send the email
+through Messaging with our own wording, the user types six digits, and the
+Function completes the action. Appwrite's link endpoints are not used at all.
+
+**This deletes a whole class of bug we have already paid for once.** The
+`redirectTo` defect — a recovery link built from the project's Site URL,
+landing app users on the admin portal — cannot occur in a design with no link
+in it. `VITE_AGENT_APP_URL`, deep-link handling for recovery, and
+`kPasswordResetRedirect` all become unnecessary for this flow.
+
+The cost is that the email template moves from the provider's console into our
+Function, and the OTP length becomes our decision rather than a dashboard
+setting. Given we shipped a bug last month because the dashboard said 8 while
+the app's copy said 6, that is an improvement.
+
+## Call-by-call map
+
+Eleven distinct Supabase auth calls are in use across `auth_provider.dart`,
+`profile_provider.dart` and `supabase_service.dart`.
+
+| Today (Supabase) | Appwrite | Where |
+|---|---|---|
+| `auth.signUp(email, password, data:)` | `POST /users` + profile document | **Function** — metadata becomes the `profiles` document, which is Function-written anyway |
+| `auth.signInWithPassword` | `POST /account/sessions/email` | Client |
+| `auth.verifyOTP(type: signup)` | `POST /account/sessions/token` then `PATCH /users/{id}/verification` | Client + Function |
+| `auth.verifyOTP(type: recovery)` | `POST /account/sessions/token` then `PATCH /users/{id}/password` | Client + Function |
+| `auth.resend(type: signup)` | mint a fresh token, send again | Function |
+| `auth.resetPasswordForEmail` | mint token, send our own email | Function |
+| `auth.updateUser(password:)` | `PATCH /account/password` (knows the old one) | Client |
+| `auth.updateUser(email:)` | `PATCH /account/email` | Client |
+| `auth.refreshSession` | `PATCH /account/sessions/{id}` — verified `200`, expiry extended | Client |
+| `auth.currentSession` | `GET /account` / `GET /account/sessions` | Client |
+| `auth.signOut` | `DELETE /account/sessions/{id}` (verified `204`) or `/sessions` for all | Client |
+| `auth.signInWithOtp` (phone) | — | Not migrated. `AuthProvider.phoneAuthEnabled` is `false` and every phone control is hidden behind it. |
+
+## Sessions, and what they do not replace
+
+Appwrite sessions default to a **one-year** expiry and are refreshable in
+place. `GET /account/sessions` returns `ip, osName, osVersion, clientName,
+clientVersion, deviceName, deviceBrand, deviceModel, countryName, current` —
+and a single session can be deleted, which is "sign out that device".
+
+That covers the *listing and revoking* half of `trusted_devices`. It does not
+replace either table:
+
+- **`trusted_devices`** also carries `trusted` and our own
+  `device_fingerprint` from `DeviceFingerprintService`. Appwrite derives its
+  own fingerprint from the user agent and has no notion of trust. Keep the
+  collection; join it to sessions on our fingerprint.
+- **`login_history`** records `success`, including **failed** attempts, and a
+  `risk_score` from `FraudDetectionService`. A session only exists when
+  sign-in succeeded, so the failures — the rows that matter most — have
+  nowhere to live. Keep the collection and keep writing it.
+
+## Biometric unlock
+
+`authenticateWithBiometrics` re-uses the persisted session and refreshes it if
+expired; `_isServerSessionValid()` is the server check. Both map directly:
+`GET /account` to validate, `PATCH /account/sessions/{id}` to extend. The
+local half — `BiometricService`, the lock screen, `SecureSessionStorage` —
+does not touch the backend and is unaffected.
+
+The session secret must continue to live in `flutter_secure_storage`, as it
+does today.
+
+## Risks
+
+1. **The API key cannot ship in the app.** `POST /users/{id}/tokens` is a
+   server call. Every mint happens in a Function, which is also where the
+   abuse limits have to live — Supabase's per-address recovery throttle is a
+   dashboard setting today and becomes our code.
+2. **Token expiry is ours to choose.** Supabase's OTP expiry is a project
+   setting; here it is the `expire` argument. 900s matches the current
+   3600s loosely — pick deliberately and write it down.
+3. **Enumeration.** `POST /account/recovery` deliberately does not reveal
+   whether an address exists. Our Function must preserve that: always answer
+   the same, mint nothing for an unknown address.
+4. **Tested on 1.6.2 self-hosted.** The auth API is stable across 1.x, but
+   this has not been run against Cloud — see the open items, which still
+   stand.
+
 ## Not in scope here
 
-Auth flows, storage, Messaging providers, the Termii Function, data migration
-and cutover. Those are Phases 2 and onward, and none of them should start
-before the two blocking items above are answered.
+Storage, Messaging providers, the Termii Function, data migration and cutover.
+Those are Phases 3 and onward.

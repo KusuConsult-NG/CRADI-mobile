@@ -1,0 +1,3 @@
+# Written by setup.mjs: a project id and a live API key.
+# This repo has leaked three credentials into public history already.
+env.json

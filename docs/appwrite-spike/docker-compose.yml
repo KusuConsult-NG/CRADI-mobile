@@ -1,0 +1,78 @@
+# Minimal Appwrite, for the Phase 0 access-model spike only.
+#
+# The published self-hosted compose lives on appwrite.io, which this
+# container's egress proxy refuses, so this is the smallest subset that can
+# answer the question: the API, the databases worker (attributes and indexes
+# are created asynchronously by it — without it every attribute sits in
+# "processing" forever), MariaDB and Redis.
+#
+# Not a deployment. No Traefik, no functions executor, no mail.
+services:
+  mariadb:
+    image: mariadb:10.11
+    environment:
+      MYSQL_ROOT_PASSWORD: rootsecret
+      MYSQL_DATABASE: appwrite
+      MYSQL_USER: user
+      MYSQL_PASSWORD: password
+    command: --innodb-flush-method=fsync
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  redis:
+    image: redis:7.2.4-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  appwrite:
+    image: appwrite/appwrite:1.6.2
+    ports:
+      - "8080:80"
+    depends_on:
+      mariadb: {condition: service_healthy}
+      redis: {condition: service_healthy}
+    environment: &appwrite_env
+      _APP_ENV: development
+      _APP_LOCALE: en
+      _APP_OPENSSL_KEY_V1: spike-only-key-not-a-secret
+      _APP_DOMAIN: localhost
+      _APP_DOMAIN_FUNCTIONS: localhost
+      _APP_DOMAIN_TARGET: localhost
+      _APP_CONSOLE_WHITELIST_ROOT: disabled
+      _APP_DB_HOST: mariadb
+      _APP_DB_PORT: "3306"
+      _APP_DB_SCHEMA: appwrite
+      _APP_DB_USER: user
+      _APP_DB_PASS: password
+      _APP_REDIS_HOST: redis
+      _APP_REDIS_PORT: "6379"
+      _APP_WORKER_PER_CORE: "2"
+
+  appwrite-worker-databases:
+    image: appwrite/appwrite:1.6.2
+    entrypoint: worker-databases
+    depends_on:
+      - appwrite
+    environment: *appwrite_env
+
+  appwrite-worker-audits:
+    image: appwrite/appwrite:1.6.2
+    entrypoint: worker-audits
+    depends_on:
+      - appwrite
+    environment: *appwrite_env
+
+  appwrite-realtime:
+    image: appwrite/appwrite:1.6.2
+    entrypoint: realtime
+    ports:
+      - "8081:80"
+    depends_on:
+      - appwrite
+    environment: *appwrite_env
