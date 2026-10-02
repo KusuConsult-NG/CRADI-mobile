@@ -1026,7 +1026,112 @@ The freeze window is the open question the fixture cannot answer: it depends
 on row counts nobody has measured against the production database, and on
 whether a dual-write period is acceptable. Both need the Cloud project.
 
+---
+
+# Phase 8: decommissioning, and the credential inventory
+
+Status: **nothing has been decommissioned, and nothing should be.** No
+production migration has run. Tearing down Supabase, Railway, OneSignal or
+Resend now would destroy a working early-warning system for a migration that
+exists only as a tested pipeline.
+
+What this phase delivers is the part that is safe and overdue: an inventory
+of every credential in both repositories' full history, from an actual scan
+rather than a list written from memory — and a rotation order that does not
+depend on the migration happening at all.
+
+## The scan
+
+183 commits in `CRADI-mobile`, 55 in `CRADI-Mobile-Admin`, every one grepped
+for vendor-anchored patterns (`standard_`, `os_v2_`, `re_`, `sb_secret_`,
+`TL…`, `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.`, PEM headers). Both
+repositories are **public**.
+
+### Real, and compromised
+
+| Secret | Where | Reach |
+|---|---|---|
+| **2 × Appwrite server API keys** (`standard_…`, 265 chars) | `CRADI-mobile` history: `DEPLOYMENT_STEPS.md`, `docs/DEPLOYMENT_STEPS.md`, `ESCALATION_FIX_STATUS.md`, `scripts/update_schema.js`. One also in `CRADI-Mobile-Admin` history. | Full server access to the old Appwrite project |
+| **2 × Termii API keys** | `CRADI-mobile` history: `test_termii.dart`, `test_termii_otp.dart` | **Can send SMS and spend money** |
+
+Neither is in current `main`. Both are readable by anyone with `git log -p`.
+
+### Not secrets — no action
+
+- **Supabase anon key** in `README.md`, on current `main`. Decoded, its
+  payload is `"role":"anon"`: the publishable key, designed to ship in every
+  client. RLS is the protection, not this string.
+- **`ONESIGNAL_REST_KEY`** in `.env.example` — the value is
+  `os_v2_app_…gnal-rest-key`, a placeholder.
+- **`re_implementations`** — an English word that matches Resend's prefix.
+- **npm `sha512-` integrity hashes** and base64 inside `chain.pem` — these
+  matched a Termii-shaped pattern and are not keys. Checked individually
+  rather than reported.
+
+### A correction
+
+Earlier in this project I told you the **OneSignal REST key was in public git
+history** and should be rotated. That was wrong. The only occurrence is the
+placeholder above. I cannot substantiate the claim and should not have made
+it.
+
+## Rotation, which does not wait for the migration
+
+Your instruction was to keep the current keys until the app is fixed and
+rotate at the end. That is reasonable for keys whose only risk is
+inconvenience. It does not hold for these two, for different reasons:
+
+1. **The Termii keys can spend money, and Termii is not being
+   decommissioned.** It survives the migration by design (Phase 3), so
+   "rotate when we switch off the old stack" never arrives for them. Anyone
+   reading the public history can send SMS billed to you today.
+2. **The Appwrite server keys** grant full access to the old project. That
+   project is dormant, which lowers the impact — but it is the same tenancy
+   the new project would live in.
+
+Rewriting history does not help: the repositories are public and the commits
+are long since cloned and indexed. **Assume both are known and rotate at the
+vendor.** The old values keep working until you do.
+
+Order: Termii first (money), then Appwrite. Neither needs a code change —
+both are read from the environment.
+
+## The decommission runbook, for when it is earned
+
+Not before: a production migration completed, `reconcile.mjs` exiting `0`
+against the real data, and push target registration climbing (Phase 3 —
+OneSignal subscriptions cannot be transferred, so push reaches nobody until
+each user opens the new build).
+
+1. **Stop writes to Supabase**, keep it readable. Reversible.
+2. **Run one week** on Appwrite with Supabase intact. The failure this
+   guards against is the one Phase 6 names: an event Function that did not
+   fire, leaving a report nobody was told about. A week of Supabase as a
+   cross-check is cheap.
+3. **Take a final export** and store it outside both vendors.
+4. **Railway worker off** — its jobs are scheduled Functions by then.
+5. **Resend and OneSignal off**, in that order. Email is recoverable if
+   wrong; push silence is not noticed until it matters.
+6. **Supabase project deleted last**, and only after the export is verified
+   restorable, not merely taken.
+7. **Rotate everything that remains** — Termii, ImageKit, the new Appwrite
+   keys — and confirm no key is read from a file in either repository.
+
+Step 6 is the only irreversible one. Everything above it can be undone in
+minutes.
+
+## Standing rule, earned twice over
+
+Phase 7's reconciler read a `400` as "zero rows" and condemned a correct
+migration. `browser-test.sh` exited `0` with twenty failing tests. This scan
+reported three Termii keys and two were npm hashes.
+
+**A checker may not treat a failed or ambiguous result as a finding, in
+either direction.** Verify each hit before acting on it, and make the checker
+fail loudly when it cannot tell.
+
 ## Not in scope here
 
 The auth half of the client swap (Phase 2 maps it; Phase 5 explains why it
-waits), and the production cutover itself, which needs the Cloud project.
+waits), and the production cutover and decommission themselves, which need
+the Cloud project and a completed migration respectively.
