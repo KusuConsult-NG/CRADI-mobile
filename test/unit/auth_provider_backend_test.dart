@@ -106,7 +106,8 @@ class _FakeAuthBackend implements AuthBackend {
       _run('updatePassword', () {});
 
   @override
-  Future<void> updateEmail(String newEmail) async => _run('updateEmail', () {});
+  Future<void> updateEmail(String newEmail, {String? password}) async =>
+      _run('updateEmail', () {});
 
   @override
   Future<AuthUser?> reloadUser() async => _run('reloadUser', () => user);

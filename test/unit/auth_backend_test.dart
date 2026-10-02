@@ -111,21 +111,17 @@ void main() {
       expect(user.id, 'u1');
       expect(user.email, 'a@example.com');
       expect(user.createdAt, DateTime.utc(2026, 1, 5, 10));
-      expect(user.emailConfirmedAt, DateTime.utc(2026, 1, 6, 11));
-      expect(user.phoneConfirmedAt, isNull);
+      // GoTrue stores a timestamp; the app only asks the yes/no question,
+      // so the adapter answers that and nothing invents a date.
+      expect(user.emailConfirmed, isTrue);
+      expect(user.phoneConfirmed, isFalse);
       expect(user.metadataName, 'Amina');
     });
 
     test('isConfirmed is true once either address is confirmed', () {
       expect(const AuthUser(id: 'u').isConfirmed, isFalse);
-      expect(
-        AuthUser(id: 'u', emailConfirmedAt: DateTime(2026)).isConfirmed,
-        isTrue,
-      );
-      expect(
-        AuthUser(id: 'u', phoneConfirmedAt: DateTime(2026)).isConfirmed,
-        isTrue,
-      );
+      expect(const AuthUser(id: 'u', emailConfirmed: true).isConfirmed, isTrue);
+      expect(const AuthUser(id: 'u', phoneConfirmed: true).isConfirmed, isTrue);
     });
 
     test('a blank or missing metadata name reads as absent', () {

@@ -45,8 +45,8 @@ class SupabaseAuthBackend implements AuthBackend {
       id: user.id,
       email: user.email,
       phone: user.phone,
-      emailConfirmedAt: _parseTimestamp(user.emailConfirmedAt),
-      phoneConfirmedAt: _parseTimestamp(user.phoneConfirmedAt),
+      emailConfirmed: user.emailConfirmedAt != null,
+      phoneConfirmed: user.phoneConfirmedAt != null,
       createdAt: _parseTimestamp(user.createdAt),
       metadata: user.userMetadata ?? const {},
     );
@@ -240,7 +240,8 @@ class SupabaseAuthBackend implements AuthBackend {
   );
 
   @override
-  Future<void> updateEmail(String newEmail) =>
+  Future<void> updateEmail(String newEmail, {String? password}) =>
+      // GoTrue re-confirms by mail and does not ask for the password.
       _mapped(() => _db.auth.updateUser(sb.UserAttributes(email: newEmail)));
 
   @override

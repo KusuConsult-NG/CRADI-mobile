@@ -1457,3 +1457,150 @@ It buys nothing on the questions that actually gate the migration — the
 Cloud **region** against the NDPA residency position, and the **tier
 quotas** for 584 teams and more than one bucket. Those have been open since
 Phase 1 and no amount of client refactoring closes them.
+
+---
+
+# Phase 9: the Appwrite adapters
+
+Status: **written, analysed, formatted, and tested where testing is
+possible without a server.** 817 tests pass (752 before, +65). Nothing here
+has been run against Appwrite — there is still no project to point it at —
+and that limit is stated again at the end rather than buried.
+
+## What exists
+
+| file | what |
+|---|---|
+| `appwrite_config.dart` | endpoint, project, database, the three Function ids, and the write policy |
+| `appwrite_queries.dart` | `QueryFilter` → Appwrite queries, and `DocumentPlan` for the client-side half of a stream |
+| `appwrite_documents.dart` | row ↔ app document |
+| `appwrite_errors.dart` | Appwrite's refusals in both vocabularies |
+| `appwrite_data_backend.dart` | `DataBackend` |
+| `appwrite_auth_backend.dart` | `AuthBackend` |
+| `backend.dart` | picks one, by which credentials the build was given |
+
+`docs/APPWRITE-FUNCTION-CONTRACTS.md` is the other half: the three
+Functions these adapters call, specified from what Phases 1–4 proved and
+what the client now actually sends.
+
+## A correction, immediately
+
+Earlier in this phase I checked whether Appwrite's document API was
+deprecated, read the class header and the one deprecated method on it, and
+said it was fine. It is not: **the whole `Databases` service is deprecated
+as of Appwrite 1.8 in favour of `TablesDB`** — `createRow`, `listRows`,
+`upsertRow`. The analyzer said so the moment the first draft compiled.
+
+That matters beyond tidiness. The spike ran against self-hosted **1.6.2**,
+which has no `TablesDB` at all; Cloud — the chosen target — is well past
+1.8. The adapter uses `TablesDB`, so it will not run against the spike's
+own server. Anyone re-running the spike to check something should expect
+that.
+
+It also gained something: `TablesDB` has a native `upsertRow`, so the
+upsert is one call rather than create-catch-409-then-update.
+
+## Four decisions worth stating
+
+**1. The write policy is a list of what the client *may* write.**
+`AppwriteConfig.clientWritableCollections` names five collections —
+contacts, messages, trusted devices, login history, NDPA consents.
+Everything else goes through the `write` Function. The list is that way
+round on purpose: a collection added later and forgotten defaults to the
+Function, which fails safe. The other way round it would default to a
+direct write the server then has to refuse, and the bug would be a
+production 401 rather than an extra round trip.
+
+**2. Redeeming a typed code happens server-side, to keep enumeration
+shut.** `account.createSession` needs a `userId`; the client has only the
+address the user typed. Handing out a `userId` in exchange for an address
+is an enumeration oracle, and Phase 2 lists preserving Appwrite's silence
+there as a requirement. So the Function takes address *and* code together,
+resolves the user itself, redeems the token and returns a session secret
+for `Client.setSession`. Unknown address and wrong code answer identically.
+
+**3. Appwrite signs unverified accounts in; GoTrue refuses them.** The
+app's login screen *depends* on the refusal — it is what sends the user to
+the code screen with a fresh code. So the adapter checks
+`emailVerification` after a successful sign-in, **signs the session back
+out**, and raises `emailNotConfirmed`. Without that, an unverified account
+would land on the dashboard.
+
+**4. `updateEmail` now takes a password, because Appwrite demands one.**
+Supabase does not. Rather than let it fail with a bare 401, the adapter
+raises `reauthenticationNeeded` when no password is given — a condition
+`ProfileProvider` already has wording for ("please sign in again to change
+your email"). The UI change that would collect the password is a known
+follow-up, not a surprise.
+
+## The defect the tests found, and the test that nearly missed it
+
+Appwrite addresses files by **id**, capped at 36 characters, not by path.
+The app's paths are `<userId>/report_<timestamp>.jpg` — 60 characters with
+a UUID. The obvious translation is to keep the last 36.
+
+That is wrong, and quietly. The filename alone is 24 characters, so
+truncation keeps the whole filename and only a 12-character tail of the
+user id. Two agents whose ids end alike, photographing the same hazard in
+the same millisecond, get the same file id — and **the second upload
+overwrites the first's evidence**, with no error raised anywhere.
+
+The test written for it first was
+`'two different paths do not collide on their tail alone'`, comparing
+`u1/report_1.jpg` with `u2/report_1.jpg`. Both are 15 characters. Neither
+is truncated. The test passed because the code path it was meant to
+exercise never ran — the same shape of failure as `browser-test.sh`
+exiting 0 with 20 failures, and the reconciler reading a 400 as zero rows.
+
+The id is now a 19-character readable prefix plus a 64-bit FNV-1a digest of
+the whole path, and the tests use realistic 60-character paths plus a
+3,600-path batch that asserts 3,600 distinct ids.
+
+**A check that cannot fail is not a check.** Third time; it is in the doc
+twice already and it still nearly got through.
+
+## What is tested, and what cannot be
+
+Tested, 65 new cases:
+
+- **every filter translation**, with the null semantics made explicit on
+  both sides. `notEqual` is written as *not null and not equal* and
+  `distinctFrom` as *null or not equal*, so neither depends on how
+  Appwrite resolves a bare `notEqual` — which is not documented and has
+  not been observed here. An empty `IN` is a contradiction rather than an
+  empty `equal`, because an empty `equal` would read as *no constraint*
+  and return the whole collection.
+- **the whole error table**, both vocabularies, including the invariant
+  that nothing is classified both transient and permanent, and that a bare
+  400 is neither.
+- **the document mapping**, including that a collection's own `createdAt`
+  is never overwritten by Appwrite's `$createdAt` — `reports.createdAt` is
+  when the hazard was seen, not when the row was written, and an offline
+  report submitted days later would otherwise carry the wrong date with
+  nothing flagging it.
+- **file ids**, as above.
+
+Not tested, because it needs a server: every call. Sign-in, the Function
+exchange, realtime, uploads, the session restore. The error slugs are from
+Appwrite's published list and an unlisted one falls through to `unknown`,
+which is the safe direction — a generic message rather than a confidently
+wrong one — but *which* slugs a given endpoint actually returns is an
+observation nobody has made here.
+
+## Still blocking, now for the ninth phase running
+
+The adapters do not make the region question or the quota question any
+smaller, and they are the only two things standing between this and a
+migration:
+
+1. **Which Cloud region** is lawful under the NDPA. The old project was
+   Frankfurt. If in-country residency is required, Cloud is out and the
+   whole plan moves to self-hosting — which changes Phases 2, 4 and 6
+   materially.
+2. **Whether the tier allows** 584 teams, ~650 messaging topics and more
+   than one storage bucket.
+
+This container cannot reach `appwrite.io`; the egress proxy refuses it. One
+answer to each, or a set of Cloud credentials and proxy access, and the
+next step is deploying the three Functions and running the adapters against
+them.

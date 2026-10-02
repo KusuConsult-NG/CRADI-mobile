@@ -95,6 +95,7 @@ dependencies:
   # (android/app/src/main/kotlin/.../MainActivity.kt), applied by ScreenSecurityMixin.
   # flutter_windowmanager_plus removed — incompatible with AGP 8.0+ (missing namespace).
   share_plus: ^12.0.1
+  appwrite: ^27.0.0
 
 
 dev_dependencies:

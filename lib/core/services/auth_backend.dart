@@ -31,8 +31,8 @@ class AuthUser {
     required this.id,
     this.email,
     this.phone,
-    this.emailConfirmedAt,
-    this.phoneConfirmedAt,
+    this.emailConfirmed = false,
+    this.phoneConfirmed = false,
     this.createdAt,
     this.metadata = const {},
   });
@@ -41,11 +41,13 @@ class AuthUser {
   final String? email;
   final String? phone;
 
-  /// When the address was confirmed, or null if it never was. Kept as a
-  /// timestamp rather than a bool because that is what both backends store
-  /// and the app shows it nowhere — only tests it for null.
-  final DateTime? emailConfirmedAt;
-  final DateTime? phoneConfirmedAt;
+  /// Whether the address has been confirmed.
+  ///
+  /// A bool rather than the timestamp GoTrue stores, because the app only
+  /// ever asks the yes/no question and Appwrite only answers it — carrying
+  /// a timestamp here would mean the Appwrite adapter inventing one.
+  final bool emailConfirmed;
+  final bool phoneConfirmed;
 
   /// When the account was created — shown on the profile screen as the
   /// registration date.
@@ -59,7 +61,7 @@ class AuthUser {
   /// True once either address has been confirmed. The provider uses this to
   /// avoid sending an already-confirmed user to the verify screen when the
   /// profile row cannot be fetched.
-  bool get isConfirmed => emailConfirmedAt != null || phoneConfirmedAt != null;
+  bool get isConfirmed => emailConfirmed || phoneConfirmed;
 
   /// The display name from metadata, or null when it is absent or blank.
   String? get metadataName {
@@ -264,10 +266,20 @@ abstract interface class AuthBackend {
   Future<void> sendPasswordResetCode(String email);
 
   /// Changes the password of the current session.
+  ///
+  /// Both call sites are password *recovery*: the session was established
+  /// by a code the user typed, so there is no old password to supply. An
+  /// adapter whose API demands one does this through its server-side
+  /// Function instead.
   Future<void> updatePassword(String newPassword);
 
   /// Starts an email change. Both backends confirm it out of band.
-  Future<void> updateEmail(String newEmail);
+  ///
+  /// [password] is the account's current one. Supabase does not ask for it;
+  /// Appwrite does, and an adapter that needs it and is not given it must
+  /// raise [AuthFailure.reauthenticationNeeded] rather than guess — which
+  /// is a condition `ProfileProvider` already has wording for.
+  Future<void> updateEmail(String newEmail, {String? password});
 
   /// Re-fetches the account record from the server, so a confirmation or
   /// metadata change made elsewhere is picked up. Null when signed out.
