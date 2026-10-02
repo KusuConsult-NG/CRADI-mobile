@@ -1,0 +1,239 @@
+import assert from 'node:assert/strict';
+import { describe, it } from 'node:test';
+
+import auth from '../src/auth.js';
+import { context, fakeAppwrite } from './helpers.mjs';
+
+const call = async (body, opts) => {
+  const ctx = context(body, { userId: null, ...opts });
+  await auth(ctx);
+  return ctx.captured;
+};
+
+describe('registration', () => {
+  it('creates the account and the profile, and sends a code', async () => {
+    const fake = fakeAppwrite();
+    const out = await call({
+      action: 'signUp',
+      email: ' Amina@Example.COM ',
+      password: 'Password1!',
+      metadata: { name: 'Amina', role: 'ewm', ward: 'North Bank I' },
+    });
+
+    assert.equal(out.status, 200);
+    // No session: the user types the emailed code next.
+    assert.deepEqual(out.body, {});
+    assert.equal(fake.users[0].email, 'amina@example.com');
+
+    const profile = Object.values(fake.store.profiles)[0];
+    assert.equal(profile.name, 'Amina');
+    // The requested role is recorded and grants nothing.
+    assert.equal(profile.role, 'ewm');
+    assert.equal(profile.isApproved, false);
+    assert.equal(profile.isVerified, false);
+
+    assert.ok(fake.calls.some((c) => c.path.endsWith('/tokens') && c.method === 'POST'));
+    assert.ok(fake.calls.some((c) => c.path === '/messaging/messages/email'));
+  });
+
+  it('never lets the client decide its own approval', async () => {
+    const fake = fakeAppwrite();
+    await call({
+      action: 'signUp',
+      email: 'a@b.com',
+      password: 'Password1!',
+      metadata: { name: 'A', role: 'admin', isApproved: true, isDisabled: false },
+    });
+    const profile = Object.values(fake.store.profiles)[0];
+    assert.equal(profile.isApproved, false);
+  });
+
+  it('answers a duplicate address as one', async () => {
+    fakeAppwrite({ users: [{ $id: 'u1', email: 'a@b.com' }] });
+    const out = await call({
+      action: 'signUp', email: 'a@b.com', password: 'Password1!', metadata: {},
+    });
+    assert.equal(out.status, 409);
+    assert.equal(out.body.type, 'user_already_exists');
+  });
+
+  it('refuses something that is not an address', async () => {
+    fakeAppwrite();
+    const out = await call({
+      action: 'signUp', email: 'not-an-address', password: 'x', metadata: {},
+    });
+    assert.equal(out.status, 400);
+  });
+
+  it('reports a code that was minted but not delivered', async () => {
+    // Silence here leaves the user waiting for a code that will never
+    // arrive, which reads to them as the app being broken.
+    fakeAppwrite({
+      fail: { '/messaging/messages/email': { status: 500, body: { message: 'smtp down' } } },
+    });
+    const out = await call({
+      action: 'signUp', email: 'a@b.com', password: 'Password1!', metadata: {},
+    });
+    assert.equal(out.status, 502);
+  });
+});
+
+describe('recovery does not say who exists', () => {
+  it('answers the same for a known and an unknown address', async () => {
+    fakeAppwrite({ users: [{ $id: 'u1', email: 'known@b.com' }] });
+    const known = await call({ action: 'sendRecoveryCode', email: 'known@b.com' });
+
+    fakeAppwrite({ users: [] });
+    const unknown = await call({ action: 'sendRecoveryCode', email: 'nobody@b.com' });
+
+    assert.equal(known.status, unknown.status);
+    assert.deepEqual(known.body, unknown.body);
+  });
+
+  it('mints nothing for an address with no account', async () => {
+    const fake = fakeAppwrite({ users: [] });
+    await call({ action: 'sendRecoveryCode', email: 'nobody@b.com' });
+    assert.equal(fake.calls.filter((c) => c.path.endsWith('/tokens')).length, 0);
+    assert.equal(fake.calls.filter((c) => c.path === '/messaging/messages/email').length, 0);
+  });
+
+  it('and the resend is just as quiet', async () => {
+    const fake = fakeAppwrite({ users: [] });
+    const out = await call({ action: 'resendSignUpCode', email: 'nobody@b.com' });
+    assert.equal(out.status, 200);
+    assert.equal(fake.calls.filter((c) => c.path.endsWith('/tokens')).length, 0);
+  });
+});
+
+describe('redeeming a typed code', () => {
+  it('returns a session the client can set, not a user id', async () => {
+    // Handing out a userId in exchange for an address would be an
+    // enumeration oracle, which is the whole reason the exchange happens
+    // server-side.
+    fakeAppwrite({ users: [{ $id: 'u1', email: 'a@b.com' }] });
+    const out = await call({ action: 'verifySignUp', email: 'a@b.com', code: '251152' });
+
+    assert.equal(out.status, 200);
+    assert.equal(out.body.sessionSecret, 'session-secret');
+  });
+
+  it('marks the address verified, but only after the code proved it', async () => {
+    const fake = fakeAppwrite({ users: [{ $id: 'u1', email: 'a@b.com' }] });
+    await call({ action: 'verifySignUp', email: 'a@b.com', code: '251152' });
+
+    const verify = fake.calls.findIndex((c) => c.path === '/users/u1/verification');
+    const session = fake.calls.findIndex((c) => c.path === '/account/sessions/token');
+    assert.ok(session >= 0 && session < verify,
+      'the code must be redeemed before the address is trusted');
+  });
+
+  it('a recovery session is not a verification', async () => {
+    const fake = fakeAppwrite({ users: [{ $id: 'u1', email: 'a@b.com' }] });
+    await call({ action: 'verifyRecovery', email: 'a@b.com', code: '251152' });
+    assert.ok(!fake.calls.some((c) => c.path === '/users/u1/verification'));
+  });
+
+  it('a wrong code and an unknown address read identically', async () => {
+    fakeAppwrite({
+      users: [{ $id: 'u1', email: 'a@b.com' }],
+      fail: { '/account/sessions/token': { status: 401, body: { message: 'bad' } } },
+    });
+    const wrongCode = await call({ action: 'verifySignUp', email: 'a@b.com', code: '000000' });
+
+    fakeAppwrite({ users: [] });
+    const noAccount = await call({ action: 'verifySignUp', email: 'ghost@b.com', code: '251152' });
+
+    assert.equal(wrongCode.status, 401);
+    assert.deepEqual(wrongCode.body, noAccount.body);
+  });
+
+  it('fails loudly if the session comes back without a secret', async () => {
+    // That means the API key was not attached or lost its scopes.
+    // Returning a session the client cannot use would look like success.
+    fakeAppwrite({
+      users: [{ $id: 'u1', email: 'a@b.com' }],
+      fail: { '/account/sessions/token': { status: 201, body: { $id: 's1' } } },
+    });
+    const out = await call({ action: 'verifySignUp', email: 'a@b.com', code: '251152' });
+    assert.equal(out.status, 500);
+  });
+});
+
+describe('setting a password after recovery', () => {
+  it('sets it for the caller, from the header', async () => {
+    const fake = fakeAppwrite();
+    const out = await call(
+      { action: 'setPassword', password: 'Password1!', userId: 'somebody-else' },
+      { userId: 'u1' },
+    );
+    assert.equal(out.status, 200);
+    const patch = fake.calls.find((c) => c.path.endsWith('/password'));
+    assert.equal(patch.path, '/users/u1/password');
+  });
+
+  it('refuses without a session', async () => {
+    fakeAppwrite();
+    const out = await call({ action: 'setPassword', password: 'Password1!' });
+    assert.equal(out.status, 401);
+  });
+
+  it('refuses a short password with the condition the app understands', async () => {
+    fakeAppwrite();
+    const out = await call({ action: 'setPassword', password: 'short' }, { userId: 'u1' });
+    assert.equal(out.status, 400);
+    assert.equal(out.body.type, 'general_password_weak');
+  });
+});
+
+describe('the throttle that used to be a dashboard setting', () => {
+  it('refuses a fourth code inside the window', async () => {
+    const recent = new Date().toISOString();
+    fakeAppwrite({
+      users: [{ $id: 'u1', email: 'a@b.com' }],
+      fail: {
+        '/users/u1/tokens': {
+          status: 200,
+          body: {
+            tokens: [
+              { $createdAt: recent }, { $createdAt: recent }, { $createdAt: recent },
+            ],
+          },
+        },
+      },
+    });
+    const out = await call({ action: 'resendSignUpCode', email: 'a@b.com' });
+    assert.equal(out.status, 429);
+    assert.equal(out.body.type, 'general_rate_limit_exceeded');
+  });
+
+  it('ignores codes older than the window', async () => {
+    const old = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+    fakeAppwrite({
+      users: [{ $id: 'u1', email: 'a@b.com' }],
+      fail: {
+        '/users/u1/tokens': {
+          status: 200,
+          body: { tokens: [{ $createdAt: old }, { $createdAt: old }, { $createdAt: old }] },
+        },
+      },
+    });
+    const out = await call({ action: 'resendSignUpCode', email: 'a@b.com' });
+    assert.equal(out.status, 200);
+  });
+});
+
+describe('the envelope', () => {
+  it('refuses an unknown action rather than doing nothing quietly', async () => {
+    fakeAppwrite();
+    const out = await call({ action: 'deleteEverything' });
+    assert.equal(out.status, 400);
+  });
+
+  it('refuses a body that is not JSON', async () => {
+    fakeAppwrite();
+    const ctx = context({}, { userId: null });
+    ctx.req.bodyRaw = 'not json';
+    await auth(ctx);
+    assert.equal(ctx.captured.status, 400);
+  });
+});

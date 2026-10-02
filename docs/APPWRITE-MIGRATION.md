@@ -1604,3 +1604,128 @@ This container cannot reach `appwrite.io`; the egress proxy refuses it. One
 answer to each, or a set of Cloud credentials and proxy access, and the
 next step is deploying the three Functions and running the adapters against
 them.
+
+---
+
+# Phase 10: the three Functions
+
+Status: **written and tested against a fake Appwrite.** 63 Node tests,
+plus 819 Dart (up from 817). `dart analyze` and `dart format` clean, and a
+CI job runs the Node suite on every push. Nothing has met a real server.
+
+`functions/cradi/` — three Functions, one source tree, because Appwrite
+lets several Functions share a root directory and differ only by
+entrypoint. The helpers in `src/lib/` therefore exist once instead of
+three times, which matters more than it sounds: `wardTeam` drifting
+between copies is the failure mode described below.
+
+**No dependencies, deliberately.** `src/lib/appwrite.js` calls the REST
+API over `fetch` rather than using the Node SDK. Phase 4 measured a 735 ms
+cold start on an idle local box with no network in the way; on a quiet
+night in a quiet ward the first report of the morning pays it, and every
+dependency is paid again on every cold start.
+
+## The defect this phase existed to find
+
+`wardTeam` is a pure function of state, LGA and ward, and Phase 0's whole
+finding rests on it: document ACLs name the **team**, so moving an agent
+between wards is a membership change rather than a rewrite of every
+document they can see.
+
+Writing a test over all 584 wards rather than the three in the examples
+showed that **35 of them produce a team id longer than Appwrite's
+36-character limit**:
+
+```
+ward-plateau-langtang-north-langtang-north-central   50
+ward-nasarawa-nasarawa-egon-lizzin-keffi-ezzen       46
+ward-nasarawa-nasarawa-egon-igga-burumburum          43
+```
+
+Appwrite rejects those outright. The failure would have surfaced in
+production, for 6% of the country, only once somebody filed the first
+report in one of those wards — and the spike never touched one, because
+its fixtures were all in Makurdi.
+
+The id is now the plain slug where it fits and a truncated slug plus a
+64-bit digest where it does not, so **the 549 that already fit are
+unchanged** and nothing designed around them moves. All 584 are checked
+for length and for uniqueness.
+
+`migrate/migrate.mjs` had its own copy of `wardTeam`, with the same bug.
+It now imports this one. A copy was never defensible here: one character
+of drift between the two means every migrated document points at a team
+nobody is in, the whole ward sees nothing, and no error is raised
+anywhere.
+
+## Three things the client could not have told us
+
+**1. The spike trusted the request body for the caller's identity.**
+`create-report` read `req.headers['x-appwrite-user-id'] || payload.userId`.
+The fallback is fine for a spike and is a hole in production: the body is
+entirely under the client's control, so it hands any caller the ability to
+act as anyone — which is the one thing moving these writes into a Function
+was for. The header is the only source now, and a test asserts it.
+
+**2. A refused field has to be refused, not ignored.** A user sending
+`isApproved: true` on their own profile gets a 403 naming the field. The
+tempting alternative — strip it and answer 200 — tells somebody their
+request succeeded when it did not. The rule differs by kind, and the
+difference is written down: fields the server *owns* (a report's `status`)
+are silently overwritten, because a well-behaved client round-tripping a
+document it read would otherwise break for no gain; fields the caller is
+*not allowed to set* are refused.
+
+**3. Appwrite has no transactions, so `reopen_report` has an order.**
+Clearing the votes before reopening means an interrupted run leaves a
+closed report with some votes gone, which running it again fixes. The
+other order leaves a reopened report carrying stale votes, and it
+re-escalates immediately on a count that is no longer true. The test
+asserts the order, not just the outcome.
+
+## What the tests cover
+
+63 cases, no server and no network: `test/helpers.mjs` stubs the single
+`fetch` every call goes through, which is enough to drive a whole handler.
+They are aimed at what the server stores regardless of what the client
+sent:
+
+- Phase 4's third row, now a test: a client sending
+  `status:"approved", verificationCount:99, escalated:true` gets a success
+  and a stored document that says `pending`, `0`, `false`;
+- the caller comes from the header, never the body;
+- a vote takes its ward from the **report**, so an EWM cannot vote on
+  another ward's report by claiming it is theirs — the cross-collection
+  check the old `verifications_insert` policy made;
+- a disabled account is refused in words the user will see, because a 4xx
+  with no error slug is exactly what the client shows verbatim;
+- recovery answers **identically** for an address with no account, and
+  mints nothing;
+- a wrong code and an unknown address are indistinguishable;
+- the ward team exists before the document whose ACL names it, or nobody
+  in the ward can read it;
+- `reopen_report` is refused for a role that may not run it, and nothing
+  is touched on the way to the refusal.
+
+Two more guard the seams rather than the behaviour: `serverOwned` must
+list exactly what `create()` stamps, and a collection may not be both
+client-writable and Function-written — two write paths with two sets of
+rules is how a rule gets enforced in one and not the other.
+
+## Still not run against Appwrite
+
+Everything above runs against a fake that behaves the way these Functions
+assume Appwrite behaves. The assumptions are drawn from Phases 0–4, which
+*were* executed — against 1.6.2, which has no `TablesDB`, so the adapters
+and these Functions cannot be re-checked against that spike either.
+
+What remains unverified: that `POST /account/sessions/token` with a server
+key returns a usable `secret` (Phase 2 verified the client-side half of
+this sequence, not the server-key form); that Appwrite Messaging delivers
+with our own template; that the scopes listed in the README are the right
+set; and the cold-start cost of three Functions on Cloud rather than one
+on a local box.
+
+And the two questions from Phase 1, now ten phases old: **which Cloud
+region** is lawful under the NDPA, and **whether the tier allows** 584
+teams, ~650 topics and more than one bucket.

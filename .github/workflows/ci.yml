@@ -228,6 +228,28 @@ jobs:
       - name: Run tests
         run: npm test
 
+  appwrite-functions-test:
+    name: Appwrite Functions (Node) Test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: functions/cradi
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'          # Matches the Appwrite runtime
+
+      # No `npm ci`: these Functions have no dependencies on purpose —
+      # every one is paid again on every cold start, and Phase 4 measured
+      # 735 ms for that. There is nothing to install and no lock file.
+      - name: Run tests
+        run: npm test
+
   # ── Docker image builds (backend deploys from this Dockerfile) ────────────
   backend-docker-build:
     name: Backend Docker Build

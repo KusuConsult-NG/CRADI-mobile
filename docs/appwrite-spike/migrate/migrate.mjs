@@ -29,9 +29,20 @@ const aw = async (path, init = {}) => {
   return { status: r.status, body: await r.json().catch(() => null) };
 };
 
-/** The ward team id, identical to the one the write Function computes. */
-export const wardTeam = (state, lga, ward) =>
-  `ward-${[state, lga, ward].map((p) => String(p ?? '').toLowerCase().replace(/[^a-z0-9]+/g, '-')).join('-')}`;
+/**
+ * The ward team id.
+ *
+ * Imported from the write Function rather than copied, because the two
+ * must agree exactly: the ACLs name a team, so one character of drift
+ * means every migrated document points at a team nobody is in and the
+ * whole ward sees nothing — with no error anywhere.
+ *
+ * It used to be a copy, and the copy was a plain slug. That was wrong for
+ * 35 of the 584 wards, whose ids run up to 50 characters and exceed
+ * Appwrite's 36-character limit. `functions/cradi/test/policy.test.mjs`
+ * now checks all 584.
+ */
+export { wardTeam } from '../../../functions/cradi/src/lib/appwrite.js';
 
 /**
  * Role name -> Appwrite label.
