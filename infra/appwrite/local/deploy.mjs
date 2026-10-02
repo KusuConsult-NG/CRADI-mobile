@@ -1,8 +1,15 @@
 /**
- * Pushes the Function code to the local Appwrite and waits for builds.
+ * Pushes the Function code to whatever `APPWRITE_ENDPOINT` names, and
+ * waits for the builds.
  *
  *   source infra/appwrite/local/.env.local
  *   node infra/appwrite/local/deploy.mjs
+ *
+ * It lives under `local/` because that is what it was written for, but
+ * it deploys to Cloud too — see `docs/CLOUD-VERIFICATION.md`. The one
+ * thing that differs between the two is how a *running* Function reaches
+ * the API back, and that is derived from the endpoint rather than
+ * hardcoded; see VARIABLES below.
  *
  * All seven share one source tree (`functions/cradi`) and differ only by
  * entrypoint, so this uploads the same tarball seven times.
@@ -48,23 +55,40 @@ execFileSync('tar', [
 console.log(`packaged ${(readFileSync(tarball).length / 1024).toFixed(0)}KB`);
 
 /**
- * Inside a Function, Appwrite is reachable on the compose network, not
- * on the host port. `http://appwrite.local/v1` is the service name — the
- * localhost URL the provisioner uses would resolve to the Function's
- * own container.
+ * How a *running* Function reaches the API back — which is not the
+ * endpoint this script talks to.
+ *
+ * On the local stack, Appwrite is reachable on the compose network and
+ * not on the host port: `http://appwrite.local/v1` is the service alias,
+ * and the published `:8090` URL the provisioner uses would resolve to
+ * the Function's own container. Appwrite also injects
+ * `APPWRITE_FUNCTION_API_ENDPOINT` pointing at the project's public
+ * domain, which a runtime container on the runtimes network cannot
+ * reach — so locally that injection has to be overridden.
+ *
+ * On Cloud both of those are the other way round: the injected endpoint
+ * is correct, and `appwrite.local` resolves to nothing. Overriding it
+ * there deploys seven Functions that answer every call with
+ * `fetch failed`, which is the single most expensive mistake available
+ * in this directory — so the override is derived from the endpoint and
+ * not written down.
  */
+const LOCAL_HOST = 'appwrite.local';
+const isLocalStack = new URL(EP).hostname === LOCAL_HOST || new URL(EP).hostname === 'localhost';
 const VARIABLES = {
-  // Appwrite injects APPWRITE_FUNCTION_API_ENDPOINT itself, pointing at
-  // the project's public domain — which a runtime container cannot
-  // reach, because it is on the runtimes network and the domain
-  // resolves outside it. `lib/appwrite.js` prefers the injected one,
-  // correctly, since on Cloud it is right. So override it here.
-  APPWRITE_FUNCTION_API_ENDPOINT: 'http://appwrite.local/v1',
-  APPWRITE_ENDPOINT: 'http://appwrite.local/v1',
+  // Only when the stack is the local one; on Cloud Appwrite's own
+  // injection is right and `lib/appwrite.js` prefers it, correctly.
+  ...(isLocalStack ? { APPWRITE_FUNCTION_API_ENDPOINT: `http://${LOCAL_HOST}/v1` } : {}),
+  APPWRITE_ENDPOINT: isLocalStack ? `http://${LOCAL_HOST}/v1` : EP,
   APPWRITE_PROJECT: PROJECT,
   APPWRITE_API_KEY: KEY,
   APPWRITE_DATABASE_ID: process.env.APPWRITE_DATABASE_ID ?? 'cradi',
 };
+console.log(
+  isLocalStack
+    ? `deploying to the local stack at ${EP}`
+    : `deploying to ${EP} — Functions will call back on ${EP}`,
+);
 
 const deployments = [];
 let problems = 0;

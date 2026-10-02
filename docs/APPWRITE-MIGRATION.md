@@ -2955,3 +2955,78 @@ never run against a real gap, `minimum_peer_confirmations` is read by
 nothing, and the Flutter client's own `signInWithPassword` cookie jar
 still needs a run against Cloud — the panel's result does not transfer,
 because the fallback that rescues it is browser-only in the SDK.
+
+# Phase 22 — preparing the Cloud run, from a container that cannot reach it
+
+"Verify against Cloud" needs a route to `fra.cloud.appwrite.io`. This
+container has never had one: the environment's network policy answers
+**403 at the gateway** for it, for `cloud.appwrite.io` and for
+`appwrite.io`, and every contact anything here has made with Cloud was
+the owner running a script on their own machine. That is still true, so
+this phase built the thing they run.
+
+`docs/CLOUD-VERIFICATION.md` is the sequence, with what each step proves
+and the three questions only Cloud can answer: the Flutter client's
+`signInWithPassword` cookie jar, `DataBackend.callOperation` (the
+execution shape the SDK parses arrived in 2.3, and `cloud-check.mjs`
+reports which keys were actually present — on 1.9.6 it is neither), and
+the tier's real limits.
+
+## `cloud-check.mjs`
+
+`verify.mjs` asks whether the project matches the plan and reads only
+configuration. `cloud-check.mjs` asks whether it *behaves*: the
+questions that need a write, and whose 1.9.6 answer does not settle 2.x.
+Labels following a role, a label-gated read being empty without it and
+populated with it, the coverage guard, `expect` as a real
+compare-and-set, `app_settings.value` as a string, and the execution
+shape.
+
+It is built for a real project rather than a throwaway one. Everything
+it creates is named `cloudchk-<stamp>` and deleted at the end, including
+after a failure, and it names anything it could not remove. It writes
+nothing it did not create.
+
+One thing it deliberately does not probe: passing bulk-update queries in
+the *query string*, which 1.9.6 ignores while updating every row in the
+table. That was measured once, on a stack that could be thrown away, and
+is why `updateRowsWhere` carries the comment it does. It must not be
+measured on a real project.
+
+Tested the only way it could be — against the 1.9.6 stack, where it
+passes and correctly reports the 2.3-only check as the known gap.
+
+## Two bugs, from running it
+
+**A database refusal reached the client as a server fault.** Appwrite
+answers a bad payload with 400 and names the problem — `Invalid document
+structure: Attribute "value" has invalid type` — and `write.js` turned
+every non-2xx into `throw new Error`, which the handler rendered as
+`500 The server could not complete that`. The reason was thrown away.
+
+That is not hypothetical: it is how Phase 20 went. The in-memory mock
+reported `Unknown attribute: "updated_by"` and that is how the bug was
+found; the real server would have said "could not complete that" and
+hidden it. The fake was the more useful of the two, which is the wrong
+way round. A **400** from a row write is now the caller's refusal,
+carrying Appwrite's own message. A 401 or 403 stays a fault — that is
+this Function's API key lacking a scope, not the caller's mistake, and
+"missing scope (users.write)" is neither useful to a field agent nor
+theirs to see.
+
+**`deploy.mjs` would have broken every Function on Cloud.** It hardcoded
+`http://appwrite.local/v1` into `APPWRITE_ENDPOINT` and
+`APPWRITE_FUNCTION_API_ENDPOINT` for all seven, which is right on the
+compose network and resolves to nothing on Cloud — and it overrode the
+endpoint Appwrite injects, which on Cloud is correct. Running it against
+Cloud would have deployed seven Functions answering every call with
+`fetch failed`. The runbook would have told them to run it. Both are now
+derived from the endpoint, and the script says which it is doing.
+
+## What Phase 22 proves
+
+Nothing about Cloud. 170 Function unit tests, the four live suites, the
+panel's 12 live specs and `cloud-check.mjs` all pass against 1.9.6, and
+the Cloud sequence is one command list the owner can run. The two bugs
+above were found by writing the Cloud check and testing it locally,
+which is the most the container allows.

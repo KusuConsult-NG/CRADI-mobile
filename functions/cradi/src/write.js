@@ -148,7 +148,7 @@ export default handler(async ({ req, log }) => {
         ),
       ];
       const applied = await updateRowsWhere(collection, queries, clean);
-      if (!applied.ok) throw new Error(`update failed: ${applied.status}`);
+      if (!applied.ok) refuseWrite('update', applied);
       if ((applied.body?.total ?? 0) === 0) {
         throw conflict('That changed since you loaded it — reload and try again.');
       }
@@ -158,7 +158,7 @@ export default handler(async ({ req, log }) => {
     }
 
     const updated = await updateRow(collection, documentId, clean);
-    if (!updated.ok) throw new Error(`update failed: ${updated.status}`);
+    if (!updated.ok) refuseWrite('update', updated);
     log(`updated ${collection}/${documentId} by ${userId}`);
     return { document: updated.body };
   }
@@ -186,9 +186,7 @@ export default handler(async ({ req, log }) => {
       : await createRow(collection, documentId, stamped, permissions);
 
   if (written.status === 409) throw conflict('That has already been submitted');
-  if (!written.ok) {
-    throw new Error(`${op} failed: ${written.status} ${written.body?.message}`);
-  }
+  if (!written.ok) refuseWrite(op, written);
   if (collection === 'reports' && op !== 'update') {
     await scheduleEscalation(written.body, log);
   }
@@ -278,7 +276,7 @@ async function writeProfile({ op, userId, documentId, data, expect, role, log })
       ),
     ];
     const applied = await updateRowsWhere('profiles', queries, data);
-    if (!applied.ok) throw new Error(`profile update failed: ${applied.status}`);
+    if (!applied.ok) refuseWrite('profile update', applied);
     if ((applied.body?.total ?? 0) === 0) {
       const exists = await getRow('profiles', documentId);
       if (exists.status === 404) throw notFound();
@@ -293,7 +291,7 @@ async function writeProfile({ op, userId, documentId, data, expect, role, log })
 
   const updated = await updateRow('profiles', documentId, data);
   if (updated.status === 404) throw notFound();
-  if (!updated.ok) throw new Error(`profile update failed: ${updated.status}`);
+  if (!updated.ok) refuseWrite('profile update', updated);
   log(`profile ${documentId} updated by ${userId}`);
   await syncLabels(documentId, data, updated.body, log);
   return { document: updated.body };
@@ -328,6 +326,31 @@ async function syncLabels(documentId, patch, document, log) {
       `${JSON.stringify(labels)} and the account does not — that account reads ` +
       'nothing those labels grant.',
   );
+}
+
+/**
+ * Turns Appwrite's refusal of a row write into the caller's refusal.
+ *
+ * A **400** here is the payload's fault — a column that does not exist, a
+ * value of the wrong type, a string past its size — and Appwrite names it
+ * exactly: `Invalid document structure: Unknown attribute: "updated_by"`.
+ * Collapsing that into a 500 threw the reason away. It cost real time
+ * during the admin panel's migration, where the in-memory mock reported
+ * the attribute by name and the real server answered "The server could
+ * not complete that": the fake was the more useful of the two, which is
+ * the wrong way round.
+ *
+ * Anything else stays a fault. A 401 or 403 here is **this Function's**
+ * API key lacking a scope, not the caller's mistake, and repeating
+ * "missing scope (users.write)" to a field agent would be both confusing
+ * and a detail they should not be given.
+ */
+function refuseWrite(what, response) {
+  const message = response.body?.message;
+  if (response.status === 400 && message) {
+    throw new Refusal(400, message, response.body?.type ?? ErrorType.invalid);
+  }
+  throw new Error(`${what} failed: ${response.status} ${message ?? ''}`);
 }
 
 /** Removes the fields the server owns, so a round-tripped document is safe. */

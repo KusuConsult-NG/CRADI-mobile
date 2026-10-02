@@ -249,6 +249,58 @@ describe('profiles', () => {
   });
 });
 
+describe('a refusal from the database', () => {
+  it('reaches the caller with the reason, not as a server fault', async () => {
+    // Appwrite answers a bad payload with 400 and names the column:
+    // `Invalid document structure: Unknown attribute: "updated_by"`.
+    // Collapsing that into a 500 threw away the only useful part.
+    const fake = fakeAppwrite({
+      rows: { profiles: { u1: profile({ role: 'admin' }) } },
+      fail: {
+        '/tables/app_settings/rows': {
+          status: 400,
+          body: {
+            message: 'Invalid document structure: Invalid value for "value": Value must be a valid string',
+            type: 'document_invalid_structure',
+          },
+        },
+      },
+    });
+    const ctx = context({
+      op: 'upsert', collection: 'app_settings', documentId: 'escalation_timeout_minutes',
+      data: { key: 'escalation_timeout_minutes', value: 47 },
+    });
+    await write(ctx);
+
+    assert.equal(ctx.captured.status, 400);
+    assert.match(ctx.captured.body.message, /Value must be a valid string/);
+    assert.equal(fake.store.app_settings, undefined);
+  });
+
+  it('keeps a missing scope as a server fault, not the caller\'s', async () => {
+    // A 403 here is this Function's own API key, not the payload. Saying
+    // "missing scope" to a field agent is both confusing and a detail
+    // they should not be handed.
+    fakeAppwrite({
+      rows: { profiles: { u1: profile({ role: 'admin' }) } },
+      fail: {
+        '/tables/news_links/rows': {
+          status: 403,
+          body: { message: 'app.cradi (role: applications) missing scope (documents.write)' },
+        },
+      },
+    });
+    const ctx = context({
+      op: 'create', collection: 'news_links', documentId: 'n1',
+      data: { title: 'A link', url: 'https://example.org/' },
+    });
+    await write(ctx);
+
+    assert.equal(ctx.captured.status, 500);
+    assert.doesNotMatch(JSON.stringify(ctx.captured.body), /missing scope/);
+  });
+});
+
 describe('account labels', () => {
   const labelsOf = (fake, id) => fake.users.find((u) => u.$id === id)?.labels;
 
