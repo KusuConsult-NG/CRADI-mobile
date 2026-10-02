@@ -35,6 +35,7 @@ import {
   WRITABLE,
   assertLocation,
   assertRole,
+  assertTarget,
   isAdmin,
 } from './lib/policy.js';
 
@@ -128,6 +129,7 @@ export default handler(async ({ req, log }) => {
 
   // create / upsert
   const stamped = { ...strip(data, rule, { keepImmutable: true }), ...(rule.create?.(context) ?? {}) };
+  if (rule.requiresTarget) assertTarget(stamped);
   if (rule.requiresLocation) {
     assertLocation(stamped);
     // The ACL names a team, so the team has to exist before the document

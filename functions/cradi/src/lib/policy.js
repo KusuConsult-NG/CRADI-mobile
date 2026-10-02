@@ -117,7 +117,12 @@ export const RULES = {
       createdAt: new Date().toISOString(),
     }),
     immutable: ['createdBy'],
-    requiresLocation: true,
+    // Not `requiresLocation`: an alert has no ward, and the columns it
+    // targets by are `targetState` / `targetLga`. Asking `assertLocation`
+    // for `state`, `lga`, `ward` refused every alert ever created with
+    // "Unknown state: undefined" — the rule was right, it was reading
+    // fields the collection does not have.
+    requiresTarget: true,
     acl: () => ['read("any")'],
   },
 
@@ -161,6 +166,33 @@ export function assertLocation({ state, lga, ward }) {
   if (!wards) throw invalid(`Unknown LGA for ${state}: ${lga}`, ErrorType.argument);
   if (!wards.includes(ward)) {
     throw invalid(`Unknown ward for ${lga}: ${ward}`, ErrorType.argument);
+  }
+}
+
+/**
+ * Validates an alert's target: a state from the list, and either one of
+ * its LGAs or every LGA.
+ *
+ * The same rule Postgres held as `alerts_target_lga_needs_state`: an LGA
+ * without a state is not a thing an alert can be, because LGA names
+ * repeat across states (Obi is in both Benue and Nasarawa), so one would
+ * reach the wrong people or no one.
+ */
+export function assertTarget({ targetState, targetLga }) {
+  const lga = (targetLga ?? '').trim();
+  const state = (targetState ?? '').trim();
+  const everywhere = lga === '' || lga.toLowerCase() === 'all';
+
+  if (!state) {
+    if (everywhere) return;
+    throw invalid('An alert targeting an LGA must name its state', ErrorType.argument);
+  }
+  if (!locations[state]) {
+    throw invalid(`Unknown state: ${state}`, ErrorType.argument);
+  }
+  if (everywhere) return;
+  if (!locations[state][lga]) {
+    throw invalid(`Unknown LGA for ${state}: ${lga}`, ErrorType.argument);
   }
 }
 

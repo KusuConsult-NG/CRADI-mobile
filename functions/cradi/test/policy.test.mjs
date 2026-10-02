@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 
-import { RULES, WRITABLE, assertLocation } from '../src/lib/policy.js';
+import { RULES, WRITABLE, assertLocation, assertTarget } from '../src/lib/policy.js';
 import { wardTeam } from '../src/lib/appwrite.js';
 import { strip } from '../src/write.js';
 
@@ -189,6 +189,49 @@ describe('location validation', () => {
       /Unknown ward/,
     );
   });
+});
+
+describe('alert targeting', () => {
+    it('accepts an LGA of the named state', () => {
+        assert.doesNotThrow(() => assertTarget({ targetState: 'Benue', targetLga: 'Makurdi' }));
+    });
+
+    it('accepts every LGA of a state', () => {
+        for (const lga of ['All', 'all', '']) {
+            assert.doesNotThrow(() => assertTarget({ targetState: 'Benue', targetLga: lga }), lga);
+        }
+    });
+
+    it('accepts an alert with no target at all', () => {
+        // "All LGAs", which is how a nationwide alert is stored.
+        assert.doesNotThrow(() => assertTarget({ targetState: null, targetLga: 'All' }));
+        assert.doesNotThrow(() => assertTarget({}));
+    });
+
+    it('refuses an LGA with no state', () => {
+        // LGA names repeat across states — Obi is in Benue and in Nasarawa —
+        // so one without a state reaches the wrong people or nobody. This is
+        // the `alerts_target_lga_needs_state` check, carried over.
+        assert.throws(() => assertTarget({ targetLga: 'Obi' }), /must name its state/);
+    });
+
+    it('refuses a state or LGA that is not on the list', () => {
+        assert.throws(() => assertTarget({ targetState: 'Atlantis', targetLga: 'All' }), /Unknown state/);
+        assert.throws(
+            () => assertTarget({ targetState: 'Benue', targetLga: 'Nowhere' }),
+            /Unknown LGA/,
+        );
+        // An LGA of a *different* state is the mistake the rule exists for.
+        assert.throws(() => assertTarget({ targetState: 'Benue', targetLga: 'Lafia' }), /Unknown LGA/);
+    });
+
+    it('is what the alerts rule asks for', () => {
+        // `requiresLocation` would send `assertLocation` looking for
+        // `state`, `lga` and `ward`, which `alerts` does not have — that
+        // refused every alert ever created.
+        assert.equal(RULES.alerts.requiresTarget, true);
+        assert.ok(!RULES.alerts.requiresLocation);
+    });
 });
 
 describe('strip', () => {
