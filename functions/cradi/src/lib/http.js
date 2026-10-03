@@ -14,6 +14,12 @@ export const ErrorType = {
   forbidden: 'general_access_forbidden',
   notFound: 'document_not_found',
   duplicate: 'document_already_exists',
+  // A write refused because the row moved under the caller, which is
+  // not the same thing as a duplicate: the first is "somebody already
+  // did this", the second is "somebody did something else". The client
+  // branches on them differently — a duplicate is a replay to swallow,
+  // a stale write is a refusal to show — so they cannot share a slug.
+  staleWrite: 'document_update_conflict',
   invalid: 'document_invalid_structure',
   argument: 'general_argument_invalid',
   rateLimited: 'general_rate_limit_exceeded',
@@ -48,8 +54,11 @@ export const unauthorized = (m = 'Sign in to continue') =>
 export const forbidden = (m) => new Refusal(403, m);
 export const notFound = (m = 'Not found') =>
   new Refusal(404, m, ErrorType.notFound);
-export const conflict = (m = 'Already exists') =>
-  new Refusal(409, m, ErrorType.duplicate);
+export const conflict = (m = 'Already exists', type = ErrorType.duplicate) =>
+  new Refusal(409, m, type);
+/** A 409 from an optimistic lock: the row changed, nothing was written. */
+export const staleWrite = (m = 'That changed since you loaded it — reload and try again.') =>
+  new Refusal(409, m, ErrorType.staleWrite);
 export const invalid = (m, type = ErrorType.invalid) =>
   new Refusal(400, m, type);
 

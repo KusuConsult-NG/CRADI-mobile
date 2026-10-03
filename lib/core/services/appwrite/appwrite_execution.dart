@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'package:appwrite/appwrite.dart' as aw;
 import 'package:http/http.dart' as http;
 
-import 'package:climate_app/core/services/appwrite/appwrite_config.dart';
 
 /// Runs an Appwrite Function and hands back the execution as the server
 /// sent it.
@@ -39,8 +38,13 @@ Future<Map<String, dynamic>> createExecution(
   Map<String, dynamic> payload, {
   String path = '/',
 }) async {
+  // The client's endpoint, not the compile-time one. They are the same
+  // in a normal build, and they are not the same for a caller that was
+  // handed a client pointed somewhere else — a test against a local
+  // stack, say — which would otherwise send its executions to whatever
+  // `--dart-define` the binary was built with.
   final uri = Uri.parse(
-    '${AppwriteConfig.endpoint}'
+    '${client.endPoint}'
     '/functions/${Uri.encodeComponent(functionId)}/executions',
   );
   http.Response response;

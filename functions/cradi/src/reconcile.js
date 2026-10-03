@@ -125,19 +125,29 @@ async function repairConfirmationCounts(since, error) {
     repaired.countsChecked += 1;
     // `total`, not the page: the page is capped and the count is not.
     const confirmed = await countConfirmed(report.$id);
-    if (confirmed === (report.verificationCount ?? 0)) continue;
 
-    repaired.countsRepaired += 1;
-    error(
-      `reconcile: report ${report.$id} stored ${report.verificationCount} ` +
-        `confirmations and has ${confirmed}; the vote that was not counted ` +
-        'means a write Function stopped between two calls',
-    );
-    await updateRowsWhere(
-      'reports',
-      [Query.equal('$id', report.$id)],
-      { verificationCount: confirmed },
-    );
+    // Repairing the count and flipping the status are two separate
+    // failures, and this used to `continue` on a matching count — which
+    // skipped the flip as well.
+    //
+    // That is exactly the half-finished state `write.js` leaves when it
+    // stops after storing the count and before the flip: the count is
+    // right, the votes are there, and the report sits at `pending`
+    // until it escalates. The sweep is the thing that is supposed to
+    // notice, and it was the one case it looked at and walked past.
+    if (confirmed !== (report.verificationCount ?? 0)) {
+      repaired.countsRepaired += 1;
+      error(
+        `reconcile: report ${report.$id} stored ${report.verificationCount} ` +
+          `confirmations and has ${confirmed}; the vote that was not counted ` +
+          'means a write Function stopped between two calls',
+      );
+      await updateRowsWhere(
+        'reports',
+        [Query.equal('$id', report.$id)],
+        { verificationCount: confirmed },
+      );
+    }
     if (confirmed < threshold) continue;
 
     const flipped = await updateRowsWhere(

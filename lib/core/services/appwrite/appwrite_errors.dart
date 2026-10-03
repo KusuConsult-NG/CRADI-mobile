@@ -41,9 +41,20 @@ BackendFailure classifyAppwriteFailure(Object error) {
       return BackendFailure.notFound;
 
     case 'document_already_exists':
-    case 'document_update_conflict':
     case 'storage_file_already_exists':
       return BackendFailure.duplicate;
+
+    // Not `duplicate`, which it was grouped with. Appwrite raises this
+    // when the row moved under the writer, and the `write` Function
+    // raises it when an `expect` clause matched nothing — "somebody did
+    // something else", not "somebody already did this".
+    //
+    // The difference is not cosmetic: `isDuplicate` is how the offline
+    // queue decides a queued item was already written, so a decision
+    // that lost its optimistic lock was marked synced and dropped, and
+    // the reviewer was told it had gone through.
+    case 'document_update_conflict':
+      return BackendFailure.invalidState;
 
     case 'document_invalid_structure':
     case 'attribute_value_invalid':

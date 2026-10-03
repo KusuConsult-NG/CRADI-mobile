@@ -237,3 +237,91 @@ describe('the envelope', () => {
     assert.equal(ctx.captured.status, 400);
   });
 });
+
+/**
+ * A registration that half-succeeds.
+ *
+ * The account and the profile are two writes with no transaction
+ * between them. If the second fails the first has already happened,
+ * and an account with no profile is worse than no account at all:
+ * every rule in the system reads the profile, so the user can do
+ * nothing — and registering again answers "This account is already
+ * registered. Please login.", which is a dead end only an
+ * administrator with console access can open.
+ */
+describe('a registration that fails halfway', () => {
+  it('removes the account when the profile cannot be written', async () => {
+    const fake = fakeAppwrite({
+      fail: {
+        'POST /tables/profiles/rows': {
+          status: 500,
+          body: { message: 'storage is down', type: 'general_unknown' },
+        },
+      },
+    });
+    const out = await call({
+      action: 'signUp',
+      email: 'amina@example.com',
+      password: 'Password1!',
+      metadata: { name: 'Amina' },
+    });
+
+    assert.notEqual(out.status, 200);
+    // The address is free again, which is the whole point.
+    assert.deepEqual(fake.users, []);
+    assert.ok(
+      fake.calls.some((c) => c.method === 'DELETE' && /^\/users\/[^/]+$/.test(c.path)),
+      'the account was deleted',
+    );
+    // And no code was sent for an account that no longer exists.
+    assert.ok(!fake.calls.some((c) => c.path === '/messaging/messages/email'));
+  });
+
+  it('lets the address be registered again afterwards', async () => {
+    // The failure this is really about. One fake across both attempts,
+    // so the second really is retrying against the first one's
+    // leftovers — a fresh fake would reset the account list and assert
+    // nothing.
+    const fake = fakeAppwrite({
+      fail: {
+        'POST /tables/profiles/rows': { status: 500, body: { message: 'down' }, times: 1 },
+      },
+    });
+    const first = await call({ action: 'signUp', email: 'a@b.com', password: 'Password1!' });
+    assert.notEqual(first.status, 200);
+
+    const retry = await call({ action: 'signUp', email: 'a@b.com', password: 'Password1!' });
+    assert.equal(retry.status, 200, JSON.stringify(retry.body));
+    assert.equal(fake.users.length, 1);
+    assert.equal(Object.keys(fake.store.profiles ?? {}).length, 1);
+  });
+
+  it('reports the write that failed, not the cleanup', async () => {
+    // A rollback that itself fails must not replace the real reason.
+    const fake = fakeAppwrite({
+      fail: {
+        'POST /tables/profiles/rows': { status: 500, body: { message: 'storage is down' } },
+        'DELETE /users/': { status: 500, body: { message: 'users is down too' } },
+      },
+    });
+    // Its own context, because the warning is in the log rather than in
+    // the response — which is the point: nothing the caller sees can
+    // say this happened.
+    const ctx = context(
+      { action: 'signUp', email: 'a@b.com', password: 'Password1!' },
+      { userId: null },
+    );
+    await auth(ctx);
+    const out = ctx.captured;
+
+    assert.notEqual(out.status, 200);
+    assert.ok(!JSON.stringify(out.body).includes('users is down too'));
+    // Orphaned for real now, so it has to be in the log for a person:
+    // nothing else in the system will ever mention this account again.
+    assert.equal(fake.users.length, 1, 'the account is still there');
+    assert.ok(
+      ctx.logs.some((l) => /WARNING: account .* has no profile/.test(l)),
+      `no warning logged: ${JSON.stringify(ctx.logs)}`,
+    );
+  });
+});

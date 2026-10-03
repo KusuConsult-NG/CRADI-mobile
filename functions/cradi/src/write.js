@@ -28,6 +28,7 @@ import {
   callerId,
   conflict,
   forbidden,
+  staleWrite,
   handler,
   invalid,
   notFound,
@@ -48,9 +49,29 @@ import {
   assertCoverage,
   assertTarget,
   isAdmin,
+  reportContentChanged,
 } from './lib/policy.js';
 
 const OPS = new Set(['create', 'upsert', 'update', 'delete']);
+
+/**
+ * `report_has_votes(p_report_id)`: has anybody voted on this report?
+ *
+ * Any vote, confirming or disputing — a dispute is still somebody who
+ * read the description that is about to change.
+ *
+ * A read that fails is treated as "there are votes". The alternative is
+ * to let an edit through on a failed lookup, and this rule exists to
+ * stop a report changing under the peers who voted on it.
+ */
+async function reportHasVotes(reportId) {
+  const found = await listRows('verifications', [
+    Query.equal('reportId', reportId),
+    Query.limit(1),
+  ]);
+  if (!found.ok) return true;
+  return (found.body?.total ?? 0) > 0;
+}
 
 export default handler(async ({ req, log }) => {
   const payload = readJson(req);
@@ -134,10 +155,35 @@ export default handler(async ({ req, log }) => {
     assertUnchanged(rule.immutable, current.body, data);
     const clean = strip(data, rule, { keepImmutable: false, allow: rule.decidable });
     rule.guardUpdate?.({ role, userId, current: current.body, data: clean });
-    rule.derive?.(clean, { ...current.body, ...clean });
+    // `report_has_votes`, the one rule in the guard that needs a read:
+    // peers voted on what they saw, so the report cannot change under
+    // them. Asked only when the patch is a content edit by a non-admin,
+    // which the guard above has already established is the reporter's
+    // own pending report.
+    if (
+      collection === 'reports' &&
+      !isAdmin(role) &&
+      reportContentChanged(current.body, clean) &&
+      (await reportHasVotes(documentId))
+    ) {
+      throw forbidden('A report cannot be edited after peers have voted on it');
+    }
+    rule.derive?.(clean, { ...current.body, ...clean }, current.body);
     // Checked against the row as it will be, not against the patch: an edit
     // that moves the LGA without resending the state must not slip through.
+    //
+    // Both of these, not just coverage. `assertTarget` ran only on the
+    // create branch, so the CHECK constraint it replaces
+    // (`alerts_target_lga_needs_state`) held for a new alert and not for
+    // an edited one — and an alert retargeted to an LGA with no state
+    // goes to the wrong Obi, of which Nigeria has two.
+    //
+    // `requiresLocation` is deliberately not here: a report's state, LGA
+    // and ward are `immutable`, so an update that changes them is already
+    // refused by name, and re-validating the merged row would only ever
+    // fail for a row that was written before the list it validates against.
     if (rule.requiresCoverage) assertCoverage({ ...current.body, ...clean });
+    if (rule.requiresTarget) assertTarget({ ...current.body, ...clean });
     if (collection === 'reports' && 'status' in clean) {
       // Appwrite's event payload is the document, with no "before", so
       // the event Function cannot tell a status change from any other
@@ -161,7 +207,7 @@ export default handler(async ({ req, log }) => {
       const applied = await updateRowsWhere(collection, queries, clean);
       if (!applied.ok) refuseWrite('update', applied);
       if ((applied.body?.total ?? 0) === 0) {
-        throw conflict('That changed since you loaded it — reload and try again.');
+        throw staleWrite();
       }
       log(`updated ${collection}/${documentId} by ${userId} (expected ${JSON.stringify(expect)})`);
       const after = await getRow(collection, documentId);
@@ -294,7 +340,7 @@ async function writeProfile({ op, userId, documentId, data, expect, role, log })
     if ((applied.body?.total ?? 0) === 0) {
       const exists = await getRow('profiles', documentId);
       if (exists.status === 404) throw notFound();
-      throw conflict('That changed since you loaded it — reload and try again.');
+      throw staleWrite();
     }
     log(`profile ${documentId} updated by ${userId} (expected ${JSON.stringify(expect)})`);
     const after = await getRow('profiles', documentId);

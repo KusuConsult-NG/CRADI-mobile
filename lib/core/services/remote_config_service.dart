@@ -31,6 +31,12 @@ class RemoteConfigService {
   /// (connectivity can flap; a successful fetch this recent is kept).
   static const Duration _reconnectRefreshInterval = Duration(minutes: 5);
 
+  /// How many `app_settings` rows one fetch asks for.
+  ///
+  /// Comfortably above the number the plan provisions, and explicit
+  /// rather than left to Appwrite's silent default of 25.
+  static const int _settingsPageLimit = 200;
+
   // ── In-app defaults ───────────────────────────────────────────────────────
   static const Map<String, Object> _defaults = {
     'minimum_peer_confirmations': 2,
@@ -170,7 +176,25 @@ class RemoteConfigService {
     try {
       final rows = await backend.listDocuments(
         collectionId: AppConfig.appSettingsCollection,
+        // Appwrite pages at 25 by default, silently. Every setting past
+        // the 25th would simply not be in the map, and the getters fall
+        // back to their defaults — so the escalation timeout or the SMS
+        // cap would quietly revert with nothing in the logs. There are
+        // far fewer than this today; the limit is here so that stays a
+        // fact rather than an assumption.
+        limitCount: _settingsPageLimit,
       );
+      if (rows.length >= _settingsPageLimit) {
+        // Not an error — the values that did arrive are good. But the
+        // ones that did not are invisible, and this is the only place
+        // that can say so.
+        developer.log(
+          'app_settings returned a full page of $_settingsPageLimit rows; '
+          'settings beyond it are not loaded and their defaults are in use',
+          name: 'RemoteConfig',
+          level: 900,
+        );
+      }
       final fresh = <String, Object?>{
         for (final row in rows) row['key'] as String: row['value'],
       };

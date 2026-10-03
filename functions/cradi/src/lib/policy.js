@@ -77,10 +77,30 @@ export const RULES = {
       'updatedBy', 'severity', 'isAlert',
     ],
     guardUpdate: guardReportUpdate,
-    derive: (clean, merged) => {
+    derive: (clean, merged, current = {}) => {
       // Postgres set this on insert *and* update; nothing else does, so
       // without it a report raised to `critical` never became an alert.
       if ('severity' in clean) clean.isAlert = ALERT_SEVERITIES.includes(merged.severity);
+      // `guard_report_update`'s last block, which ran for every writer
+      // including the triggers: the decision columns follow the status.
+      // Without it an approved report keeps the rejection reason it was
+      // turned down with, and the app shows both.
+      if ('status' in clean && clean.status !== (current.status ?? null)) {
+        const now = new Date().toISOString();
+        if (clean.status === 'approved') {
+          clean.approvedAt ??= now;
+          clean.rejectedAt = null;
+          clean.rejectionReason = null;
+        } else if (clean.status === 'rejected') {
+          clean.rejectedAt ??= now;
+          clean.approvedAt = null;
+        } else if (clean.status === 'verified') {
+          clean.verifiedAt ??= now;
+          clean.approvedAt = null;
+          clean.rejectedAt = null;
+          clean.rejectionReason = null;
+        }
+      }
     },
     requiresLocation: true,
     acl: ({ userId, data }) => [
@@ -176,21 +196,74 @@ const changed = (data, current, field) =>
   field in data && data[field] !== (current[field] ?? null);
 
 /**
+ * A report's own content, as `guard_report_update` listed it.
+ *
+ * The location fields are in here as well as in `immutable`: `immutable`
+ * refuses them outright, and this list is what decides whether an edit
+ * is a *content* edit at all.
+ */
+export const REPORT_CONTENT_FIELDS = [
+  'state', 'lga', 'ward', 'latitude', 'longitude',
+  'hazardType', 'severity', 'description', 'locationDetails', 'location',
+  'address', 'imageUrls', 'submittedAt', 'type', 'reporterName',
+  'createdAt', 'legacyFirebaseId', 'syncedAt',
+];
+
+/** Fields only an admin may move, per the Postgres guard. */
+const OWNERSHIP_FIELDS = [
+  'userId', 'escalated', 'escalationStatus', 'escalatedAt',
+  'escalationReason', 'escalationScheduledAt',
+];
+
+/** Whether this patch edits the report itself rather than its decision. */
+export const reportContentChanged = (current, data) =>
+  REPORT_CONTENT_FIELDS.some((f) => changed(data, current, f));
+
+/**
  * `guard_report_update()`, carried over.
  *
- * Three separate rules, and they are not the same rule:
+ * Four separate rules, and they are not the same rule:
  *
+ *  - a report goes back to `pending` only through the reopen operation,
+ *    which clears the votes and reschedules escalation; a bare status
+ *    write would leave both behind;
+ *  - the report's own content is the reporter's, only while it is still
+ *    pending and only until somebody has voted on it;
  *  - ownership and escalation are an admin's to change;
  *  - the peer-verification tally is counted by confirmations, never set
  *    by hand, so only an admin may touch it or move a report to
  *    `verified` directly;
  *  - approving, rejecting and reopening need a reviewing role, and
  *    nobody but an admin may decide their own report.
+ *
+ * The one rule this cannot finish is "not after peers have voted",
+ * which needs a read; `write.js` runs that one, gated on
+ * [reportContentChanged], and this function is what says the rest.
  */
 export function guardReportUpdate({ role, userId, current, data }) {
   const admin = isAdmin(role);
 
-  if (['userId', 'escalated', 'escalationStatus', 'escalatedAt'].some((f) => changed(data, current, f))) {
+  // `raise exception 'Use reopen_report() ...'`. Without it a reviewer
+  // can PATCH a decided report straight back to pending, which leaves
+  // the old votes standing, the escalation unscheduled and the
+  // superseded notifications still queued — the three things
+  // `reopen_report` exists to do.
+  if (data.status === 'pending' && (current.status ?? null) !== 'pending') {
+    throw forbidden('Use the reopen operation to move a report back to pending');
+  }
+
+  if (reportContentChanged(current, data) && !admin) {
+    if ((current.userId ?? null) !== userId) {
+      throw forbidden("Only the reporter can edit a report's details");
+    }
+    // A staff reporter passes the role check on a report of any status,
+    // so this is where "what was reviewed stays as it was" lives.
+    if ((current.status ?? null) !== 'pending') {
+      throw forbidden('A report can only be edited while it is pending');
+    }
+  }
+
+  if (OWNERSHIP_FIELDS.some((f) => changed(data, current, f))) {
     if (!admin) throw forbidden('Only an admin can change report ownership or escalation');
   }
 

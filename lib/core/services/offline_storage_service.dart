@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:developer' as developer;
 import 'dart:io';
 
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as path;
@@ -562,12 +563,7 @@ class OfflineStorageService {
           ..remove('collection')
           ..remove('collectionId')
           ..remove('docId');
-        // RLS only allows new reports to be inserted as 'pending'.
-        if (collection == 'reports') {
-          data['status'] = 'pending';
-        }
-        // created_at / updated_at are set by the database.
-        data['syncedAt'] = DateTime.now();
+        stampForSync(collection, data);
 
         // With a known id, upsert idempotently (a row that already exists
         // was synced by an earlier attempt and is left untouched);
@@ -931,4 +927,32 @@ class OfflineStorageService {
     // Anything else cannot be stored in Hive.
     return _unsupported;
   }
+}
+
+/// What the queue adds to a row on its way out, by collection.
+///
+/// Both of these used to be written inline in the sync loop, and the
+/// second was written for every collection:
+///
+///  - `status` is forced to `pending` because a new report may only be
+///    inserted pending; the server would refuse anything else.
+///  - `syncedAt` is a column **`reports` has and nothing else does**.
+///    Appwrite refuses a field a collection does not declare — a 400
+///    `document_invalid_structure` — which this queue classifies as
+///    permanent and answers by marking the item rejected. So stamping it
+///    on every collection meant the first queued write of anything but a
+///    report would be thrown away instead of retried, and a field
+///    agent's queued work is the one thing here that cannot be
+///    recreated.
+///
+/// `createdAt` and `updatedAt` are the server's and are not sent.
+///
+/// Pulled out of the loop so it can be tested without Hive and without a
+/// backend: it is the whole of the decision, and the loop does nothing
+/// else to the payload.
+@visibleForTesting
+void stampForSync(String collection, Map<String, dynamic> data) {
+  if (collection != 'reports') return;
+  data['status'] = 'pending';
+  data['syncedAt'] = DateTime.now();
 }

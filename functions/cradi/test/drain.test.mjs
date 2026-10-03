@@ -334,6 +334,35 @@ describe('the reconciling sweep', () => {
     assert.equal(fake.store.reports.r1.status, 'pending');
   });
 
+  it('verifies a report whose count is right but whose flip never happened', async () => {
+    // The other half of the same two-call write: `write.js` stored the
+    // count and stopped before the status. The count then matches the
+    // votes, so the sweep used to `continue` and walk straight past the
+    // report it exists to rescue — it sat at pending with the votes to
+    // be verified until it escalated.
+    const fake = fakeAppwrite({
+      rows: {
+        reports: { r1: report({ status: 'pending', verificationCount: 2 }) },
+        alerts: {},
+        verifications: {
+          v1: { $id: 'v1', reportId: 'r1', isConfirmed: true, verifierId: 'a' },
+          v2: { $id: 'v2', reportId: 'r1', isConfirmed: true, verifierId: 'b' },
+        },
+        notification_outbox: { [eventId('report_created', 'r1')]: { $id: 'x' } },
+        app_settings: {},
+      },
+    });
+    const ctx = context({});
+    await reconcile(ctx);
+
+    // Nothing to repair — the count was already right — and the report
+    // is verified all the same.
+    assert.equal(ctx.captured.body.countsRepaired, 0);
+    assert.equal(ctx.captured.body.verified, 1);
+    assert.equal(fake.store.reports.r1.status, 'verified');
+    assert.equal(fake.store.reports.r1.autoValidated, true);
+  });
+
   it('does not reopen a decided report, however many votes it has', async () => {
     // A report approved by an admin is not pending, so the sweep never
     // looks at it — and if it did, the flip is a compare-and-set.

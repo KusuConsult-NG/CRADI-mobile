@@ -57,6 +57,40 @@ export default handler(async (context) => {
 
 // ───────────────────────────── registration ─────────────────────────────
 
+/**
+ * Runs `step`, and deletes the account just created if it throws.
+ *
+ * Appwrite has no transaction across the account and its profile, so
+ * this is the compensating write. A rollback that itself fails is
+ * logged and swallowed: the caller's own failure is the one worth
+ * reporting, and hiding it behind a cleanup error would say the
+ * registration failed for the wrong reason.
+ */
+async function withAccountRollback(userId, log, step) {
+  try {
+    return await step();
+  } catch (e) {
+    try {
+      // `api` answers with a result rather than throwing, so the status
+      // has to be read. Without this check a 500 from the delete logged
+      // "rolled back" for an account that is still there — a rollback
+      // that reports success when it failed is worse than none.
+      const removed = await api(`/users/${encodeURIComponent(userId)}`, { method: 'DELETE' });
+      if (!removed.ok && removed.status !== 404) {
+        throw new Error(`delete answered ${removed.status}`);
+      }
+      log(`rolled back account ${userId} after: ${e?.message ?? e}`);
+    } catch (cleanup) {
+      // Now it really is orphaned, and somebody has to know.
+      log(
+        `WARNING: account ${userId} has no profile and could not be removed ` +
+          `(${cleanup?.message ?? cleanup}); it must be deleted by hand`,
+      );
+    }
+    throw e;
+  }
+}
+
 async function signUp({ email, password, metadata }, { log }) {
   const address = normaliseEmail(email);
   if (!address || !password) {
@@ -83,29 +117,38 @@ async function signUp({ email, password, metadata }, { log }) {
   // approval and ward are the inputs to every other rule in the system.
   // `role` here is a *request* — it grants nothing until an admin
   // approves — and `isApproved` starts false whatever the client sent.
-  await apiOrThrow(`/tablesdb/${databaseId()}/tables/profiles/rows`, {
-    method: 'POST',
-    body: {
-      rowId: userId,
-      data: {
-        name: metadata?.name ?? '',
-        role: metadata?.role ?? 'user',
-        phone: metadata?.phone ?? '',
-        state: metadata?.state ?? '',
-        lga: metadata?.lga ?? '',
-        ward: metadata?.ward ?? '',
-        address: metadata?.address ?? '',
-        isApproved: false,
-        isVerified: false,
-        isDisabled: false,
+  //
+  // Wrapped, because the account above already exists. A profile write
+  // that fails leaves an account nobody can use and nobody can replace:
+  // every rule reads the profile, and registering again answers "This
+  // account is already registered. Please login." — so the address is
+  // spent and the only way out is an administrator with console access.
+  // Undoing the account turns that dead end back into a retry.
+  await withAccountRollback(userId, log, () =>
+    apiOrThrow(`/tablesdb/${databaseId()}/tables/profiles/rows`, {
+      method: 'POST',
+      body: {
+        rowId: userId,
+        data: {
+          name: metadata?.name ?? '',
+          role: metadata?.role ?? 'user',
+          phone: metadata?.phone ?? '',
+          state: metadata?.state ?? '',
+          lga: metadata?.lga ?? '',
+          ward: metadata?.ward ?? '',
+          address: metadata?.address ?? '',
+          isApproved: false,
+          isVerified: false,
+          isDisabled: false,
+        },
+        permissions: [
+          `read("user:${userId}")`,
+          'read("label:admin")',
+          'read("label:techSupport")',
+        ],
       },
-      permissions: [
-        `read("user:${userId}")`,
-        'read("label:admin")',
-        'read("label:techSupport")',
-      ],
-    },
-  });
+    }),
+  );
 
   await sendCode(userId, address, 'signUp', log);
   log(`registered ${userId}`);

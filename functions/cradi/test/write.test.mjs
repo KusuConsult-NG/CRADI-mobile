@@ -848,3 +848,252 @@ describe('deciding a report', () => {
         assert.equal(fake.store.reports.r2.verificationCount, 0);
     });
 });
+
+/**
+ * The rest of `guard_report_update()`, ported from `supabase/deploy/schema.sql`.
+ *
+ * These rules were in the Postgres trigger and not in the first port, so
+ * the Function enforced about half of it. Each test below names the
+ * `raise exception` it stands for; the wording is derived from the SQL,
+ * not from the JavaScript, so a port that drifts fails here.
+ */
+describe('the rules the Postgres guard had and the port had not', () => {
+  const pendingReport = (over = {}) => ({
+    $id: 'r1',
+    status: 'pending',
+    userId: 'owner',
+    hazardType: 'flood',
+    description: 'Water over the road',
+    state: 'Benue',
+    lga: 'Makurdi',
+    ward: 'North Bank I',
+    ...over,
+  });
+
+  const world = (role, report = pendingReport(), rows = {}) =>
+    fakeAppwrite({
+      rows: {
+        profiles: { u1: profile({ role }) },
+        reports: { r1: report },
+        ...rows,
+      },
+    });
+
+  const patch = async (data, { role = 'ewr', userId = 'u1' } = {}) => {
+    const ctx = context(
+      { op: 'update', collection: 'reports', documentId: 'r1', data },
+      { userId },
+    );
+    await write(ctx);
+    return ctx.captured;
+  };
+
+  describe("'Use reopen_report() to move a report back to pending'", () => {
+    it('refuses a bare status write back to pending', async () => {
+      // Reopening clears the votes, reschedules escalation and
+      // supersedes the queued notifications. A PATCH does none of that,
+      // so a report reopened this way keeps the votes it was decided on
+      // and re-escalates immediately on a count that is no longer true.
+      const fake = world('ewr', pendingReport({ status: 'approved' }));
+      const out = await patch({ status: 'pending' });
+
+      assert.equal(out.status, 403);
+      assert.match(out.body.message, /reopen/i);
+      assert.equal(fake.store.reports.r1.status, 'approved');
+    });
+
+    it('refuses it for an admin too, who also has the operation', async () => {
+      // Postgres refused this before it looked at the role.
+      world('admin', pendingReport({ status: 'rejected' }));
+      assert.equal((await patch({ status: 'pending' })).status, 403);
+    });
+
+    it('allows a write that leaves a pending report pending', async () => {
+      // `pending → pending` is not a reopen, and an edit that happens to
+      // resend the status must still go through.
+      world('admin', pendingReport());
+      assert.equal((await patch({ status: 'pending', severity: 'high' })).status, 200);
+    });
+  });
+
+  describe("'Only the reporter can edit a report\\'s details'", () => {
+    it('refuses a reviewer rewriting somebody else’s description', async () => {
+      const fake = world('ewr', pendingReport({ userId: 'someone-else' }));
+      const out = await patch({ description: 'Rewritten by a reviewer' });
+
+      assert.equal(out.status, 403);
+      assert.match(out.body.message, /reporter/i);
+      assert.equal(fake.store.reports.r1.description, 'Water over the road');
+    });
+
+    it('lets the reporter edit their own pending report', async () => {
+      world('user', pendingReport({ userId: 'u1' }));
+      assert.equal((await patch({ description: 'Now knee deep' })).status, 200);
+    });
+
+    it('lets an admin edit anybody’s', async () => {
+      world('admin', pendingReport({ userId: 'someone-else' }));
+      assert.equal((await patch({ description: 'Corrected' })).status, 200);
+    });
+  });
+
+  describe("'A report can only be edited while it is pending'", () => {
+    it('refuses the reporter editing their own approved report', async () => {
+      // A staff reporter passes the role check at any status, so this is
+      // the only thing keeping a decided report from being rewritten
+      // after the fact.
+      const fake = world('ewr', pendingReport({ userId: 'u1', status: 'approved' }));
+      const out = await patch({ description: 'Quietly changed after approval' });
+
+      assert.equal(out.status, 403);
+      assert.match(out.body.message, /pending/i);
+      assert.equal(fake.store.reports.r1.description, 'Water over the road');
+    });
+  });
+
+  describe("'A report cannot be edited after peers have voted on it'", () => {
+    it('refuses an edit once a vote exists', async () => {
+      const fake = world('user', pendingReport({ userId: 'u1' }), {
+        verifications: { v1: { $id: 'v1', reportId: 'r1', isConfirmed: true } },
+      });
+      const out = await patch({ description: 'Changed under the voters' });
+
+      assert.equal(out.status, 403);
+      assert.match(out.body.message, /voted/i);
+      assert.equal(fake.store.reports.r1.description, 'Water over the road');
+    });
+
+    it('counts a dispute as a vote', async () => {
+      // A dispute is still somebody who read what is about to change.
+      world('user', pendingReport({ userId: 'u1' }), {
+        verifications: { v1: { $id: 'v1', reportId: 'r1', isConfirmed: false } },
+      });
+      assert.equal((await patch({ description: 'Changed' })).status, 403);
+    });
+
+    it('ignores votes cast on another report', async () => {
+      world('user', pendingReport({ userId: 'u1' }), {
+        verifications: { v1: { $id: 'v1', reportId: 'other', isConfirmed: true } },
+      });
+      assert.equal((await patch({ description: 'Changed' })).status, 200);
+    });
+
+    it('does not ask when the edit is a decision rather than content', async () => {
+      // An approval is not a content edit, and a report being approved
+      // has votes almost by definition.
+      world('ewr', pendingReport({ userId: 'someone-else' }), {
+        verifications: { v1: { $id: 'v1', reportId: 'r1', isConfirmed: true } },
+      });
+      assert.equal((await patch({ status: 'approved' })).status, 200);
+    });
+  });
+
+  describe('the admin-only escalation fields the port had missed', () => {
+    for (const field of ['escalationReason', 'escalationScheduledAt']) {
+      it(`refuses a non-admin changing ${field}`, async () => {
+        const fake = world('ewr', pendingReport({ userId: 'someone-else' }));
+        const out = await patch({ [field]: '2030-01-01T00:00:00.000Z' });
+
+        assert.equal(out.status, 403, field);
+        assert.equal(fake.store.reports.r1[field], undefined);
+      });
+    }
+  });
+
+  describe('the decision columns follow the status, as the trigger made them', () => {
+    it('clears the rejection when a report is approved', async () => {
+      // Otherwise an approved report still carries the reason it was
+      // turned down with, and the app shows both.
+      const fake = world('ewr', pendingReport({
+        userId: 'someone-else',
+        status: 'rejected',
+        rejectedAt: '2026-01-01T00:00:00.000Z',
+        rejectionReason: 'Not credible',
+      }));
+      assert.equal((await patch({ status: 'approved' })).status, 200);
+
+      const r = fake.store.reports.r1;
+      assert.equal(r.rejectedAt, null);
+      assert.equal(r.rejectionReason, null);
+      assert.ok(r.approvedAt, 'approvedAt is stamped');
+    });
+
+    it('clears the approval when a report is rejected', async () => {
+      const fake = world('ewr', pendingReport({
+        userId: 'someone-else',
+        status: 'approved',
+        approvedAt: '2026-01-01T00:00:00.000Z',
+      }));
+      assert.equal((await patch({ status: 'rejected', rejectionReason: 'Duplicate' })).status, 200);
+
+      assert.equal(fake.store.reports.r1.approvedAt, null);
+      assert.ok(fake.store.reports.r1.rejectedAt);
+    });
+
+    it('keeps a timestamp the caller chose', async () => {
+      // `coalesce(new.approved_at, now())`: the panel may send its own.
+      const fake = world('admin', pendingReport({ userId: 'someone-else' }));
+      await patch({ status: 'approved', approvedAt: '2026-05-05T05:05:00.000Z' });
+      assert.equal(fake.store.reports.r1.approvedAt, '2026-05-05T05:05:00.000Z');
+    });
+  });
+});
+
+/**
+ * `alerts_target_lga_needs_state`, on an update as well as a create.
+ *
+ * The CHECK constraint applied to every write. The port asserted it on
+ * the create branch only, so an alert could be retargeted afterwards to
+ * an LGA with no state — and two Nigerian states have an Obi.
+ */
+describe('an alert’s target is validated when it is edited', () => {
+  const alert = {
+    $id: 'a1',
+    title: 'Flood warning',
+    targetState: 'Benue',
+    targetLga: 'Obi',
+    createdBy: 'u1',
+  };
+  const edit = async (data) => {
+    const ctx = context({ op: 'update', collection: 'alerts', documentId: 'a1', data });
+    await write(ctx);
+    return ctx.captured;
+  };
+
+  it('refuses an edit that drops the state from a targeted LGA', async () => {
+    const fake = fakeAppwrite({
+      rows: { profiles: { u1: profile({ role: 'admin' }) }, alerts: { a1: { ...alert } } },
+    });
+    const out = await edit({ targetState: '' });
+
+    assert.equal(out.status, 400);
+    assert.match(out.body.message, /state/i);
+    assert.equal(fake.store.alerts.a1.targetState, 'Benue');
+  });
+
+  it('refuses a move to an LGA the new state does not have', async () => {
+    fakeAppwrite({
+      rows: { profiles: { u1: profile({ role: 'admin' }) }, alerts: { a1: { ...alert } } },
+    });
+    // Obi is in Benue and in Nasarawa; Makurdi is in neither but Benue.
+    const out = await edit({ targetState: 'Nasarawa', targetLga: 'Makurdi' });
+    assert.equal(out.status, 400);
+  });
+
+  it('checks the row as it will be, not the patch alone', async () => {
+    // Resending only the LGA has to be validated against the state
+    // already stored, or every partial edit would look stateless.
+    const fake = fakeAppwrite({
+      rows: { profiles: { u1: profile({ role: 'admin' }) }, alerts: { a1: { ...alert } } },
+    });
+    assert.equal((await edit({ targetLga: 'Gwer East' })).status, 200);
+    assert.equal(fake.store.alerts.a1.targetLga, 'Gwer East');
+  });
+
+  it('still allows an alert aimed at every LGA', async () => {
+    fakeAppwrite({
+      rows: { profiles: { u1: profile({ role: 'admin' }) }, alerts: { a1: { ...alert } } },
+    });
+    assert.equal((await edit({ targetLga: 'all' })).status, 200);
+  });
+});

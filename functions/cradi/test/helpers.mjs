@@ -31,6 +31,8 @@ export function fakeAppwrite({ rows = {}, users = [], fail = {} } = {}) {
     }
   }
   const sentMessages = {};
+  /** How many times each `fail` pattern has been applied, for `times`. */
+  const failed = {};
 
   globalThis.fetch = async (url, init = {}) => {
     const path = String(url).slice(ENDPOINT.length);
@@ -42,10 +44,20 @@ export function fakeAppwrite({ rows = {}, users = [], fail = {} } = {}) {
     // — `'PATCH /tables/reports/rows/r1'` — because a read and a write
     // of the same row share a path, and failing both when the test meant
     // one of them is a different test from the one that was written.
+    //
+    // `times` limits how many calls it applies to, so a test can fail an
+    // attempt and then let the retry through. Without it a "and then it
+    // works" test has to build a second fake, which resets the store and
+    // quietly asserts nothing about the first attempt's leftovers.
     for (const [pattern, response] of Object.entries(fail)) {
       const [verb, rest] = pattern.includes(' ') ? pattern.split(/ +/, 2) : [null, pattern];
       if (verb && verb !== method) continue;
-      if (path.includes(rest)) return json(response.status, response.body);
+      if (!path.includes(rest)) continue;
+      if (response.times !== undefined) {
+        if (failed[pattern] >= response.times) continue;
+        failed[pattern] = (failed[pattern] ?? 0) + 1;
+      }
+      return json(response.status, response.body);
     }
 
     // rows: /tablesdb/{db}/tables/{table}/rows[/{id}]
@@ -148,6 +160,17 @@ export function fakeAppwrite({ rows = {}, users = [], fail = {} } = {}) {
       if (!users.includes(user)) users.push(user);
       user.labels = body.labels;
       return json(200, user);
+    }
+    const account = path.match(/^\/users\/([^/]+)$/);
+    if (account && method === 'DELETE') {
+      // The rollback `auth.js` does when a registration half-succeeds.
+      // Modelled rather than stubbed as a bare 200, so a test can assert
+      // the account really is gone.
+      const id = decodeURIComponent(account[1]);
+      const at = users.findIndex((u) => u.$id === id);
+      if (at < 0) return json(404, { message: 'not found', type: 'user_not_found' });
+      users.splice(at, 1);
+      return json(204, {});
     }
     if (/^\/users\/[^/]+\/verification$/.test(path)) return json(200, {});
     if (/^\/users\/[^/]+\/password$/.test(path)) return json(200, {});

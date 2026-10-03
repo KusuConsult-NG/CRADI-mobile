@@ -13,6 +13,52 @@ void main() {
   AppwriteException ex(String? type, [int code = 400, String? message]) =>
       AppwriteException(message ?? 'boom', code, type);
 
+  /// A 409 is two different refusals, and the app acts on them
+  /// differently.
+  ///
+  /// `document_already_exists` means the write already landed, so the
+  /// offline queue swallows it and marks the item synced.
+  /// `document_update_conflict` means the row moved under the writer and
+  /// **nothing was written** — the `write` Function raises it when an
+  /// `expect` clause matches no row. Classifying that as a duplicate
+  /// told the queue a decision had gone through when it had not, and the
+  /// item was dropped.
+  group('a lost optimistic lock is not a duplicate', () {
+    final stale = AppwriteException(
+      'That changed since you loaded it — reload and try again.',
+      409,
+      'document_update_conflict',
+    );
+
+    // `classifyAppwriteFailure`, not the global `isDuplicate`: that one
+    // goes through whichever classifier the app registered at startup,
+    // which in a unit test is none — so it answers `unknown` for
+    // everything and would make both directions of this pass.
+    test('it is an invalid state, not a duplicate', () {
+      expect(classifyAppwriteFailure(stale), BackendFailure.invalidState);
+      expect(classifyAppwriteFailure(stale), isNot(BackendFailure.duplicate));
+    });
+
+    test('so the queue retries it rather than abandoning it', () {
+      // The write never happened; the next attempt reads the row again
+      // and can succeed.
+      expect(isAppwritePermanent(stale), isFalse);
+    });
+
+    test('and a real duplicate still is one', () {
+      final dup = AppwriteException('Already exists', 409, 'document_already_exists');
+      expect(classifyAppwriteFailure(dup), BackendFailure.duplicate);
+      expect(isAppwritePermanent(dup), isTrue);
+    });
+
+    test('a 409 with no type stays a duplicate, as the replay path needs', () {
+      // An untyped 409 is the create-replay case; only the typed one is
+      // the lock.
+      expect(classifyAppwriteFailure(AppwriteException('x', 409)),
+          BackendFailure.duplicate);
+    });
+  });
+
   group('data refusals', () {
     const cases = <String, BackendFailure>{
       'user_unauthorized': BackendFailure.refused,
@@ -22,6 +68,9 @@ void main() {
       'document_already_exists': BackendFailure.duplicate,
       'storage_file_already_exists': BackendFailure.duplicate,
       'document_invalid_structure': BackendFailure.constraint,
+      // Not `duplicate`, which it used to share a branch with. See the
+      // group below.
+      'document_update_conflict': BackendFailure.invalidState,
     };
     cases.forEach((type, expected) {
       test('$type -> ${expected.name}', () {

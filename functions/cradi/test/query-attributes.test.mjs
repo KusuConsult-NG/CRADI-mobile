@@ -198,3 +198,48 @@ describe('the attributes the Flutter app queries', () => {
         );
     });
 });
+
+/**
+ * Two things the Flutter client assumes about the schema, checked
+ * against the committed column list rather than against the client.
+ */
+describe('what the client assumes the schema is', () => {
+    const LIB = join(here, '..', '..', '..', 'lib');
+    const columns = JSON.parse(readFileSync(COLUMNS, 'utf8'));
+
+    it('gives syncedAt to reports and to nothing else', () => {
+        // The offline queue stamps `syncedAt` on a report on its way out
+        // and on nothing else, because Appwrite refuses a field a
+        // collection has not declared and this queue reads that refusal
+        // as permanent — so a stamped write of any other collection is
+        // not retried, it is discarded.
+        //
+        // That rule is only correct while this stays true. If another
+        // collection gains the column, `stampForSync` can widen; if
+        // `reports` loses it, `stampForSync` is writing a field that no
+        // longer exists and every queued report is thrown away.
+        const withIt = Object.entries(columns)
+            .filter(([, cols]) => cols.some((c) => c.key === 'syncedAt'))
+            .map(([table]) => table);
+        assert.deepEqual(withIt, ['reports']);
+    });
+
+    it('asks app_settings for an explicit page size', () => {
+        // Appwrite pages at 25 by default and says nothing about it. A
+        // setting past the 25th would simply be absent from the map and
+        // its in-app default would be used, with no error anywhere — so
+        // the escalation timeout or the SMS cap could silently revert.
+        const source = readFileSync(
+            join(LIB, 'core', 'services', 'remote_config_service.dart'),
+            'utf8',
+        );
+        // Matched by counting parentheses rather than by a lazy regex:
+        // a prose comment inside the call contains a semicolon, and the
+        // first version of this stopped there and reported the call
+        // missing.
+        const at = source.indexOf('listDocuments(');
+        assert.ok(at >= 0, 'the app_settings read was not found');
+        const args = argumentList(source, at + 'listDocuments('.length);
+        assert.match(args, /limitCount:/, 'the read must bound its page');
+    });
+});

@@ -381,8 +381,13 @@ class AppwriteAuthBackend implements AuthBackend {
     required String email,
     required String password,
   }) async {
-    const endpoint = AppwriteConfig.endpoint;
-    const project = AppwriteConfig.projectId;
+    // From the client this backend was built with, not from the build's
+    // own defines. `AppwriteAuthBackend` accepts a client precisely so
+    // it can be pointed at another server, and reading the compile-time
+    // values here sent the one request that does not go through the SDK
+    // — the sign-in — to a different place than every other call.
+    final endpoint = _client.endPoint;
+    final project = _client.config['project'] ?? AppwriteConfig.projectId;
     http.Response response;
     try {
       response = await http.post(
