@@ -13,6 +13,8 @@
  */
 import assert from 'node:assert/strict';
 
+import { messageId } from '../../../functions/cradi/src/lib/messaging.js';
+
 const EP = process.env.APPWRITE_ENDPOINT;
 const PROJECT = process.env.APPWRITE_PROJECT_ID;
 const KEY = process.env.APPWRITE_API_KEY;
@@ -207,16 +209,21 @@ assert.ok(after.body.processedAt, `not processed; note=${after.body.note}`);
 ok(`processedAt ${after.body.processedAt}${after.body.note ? ` (${after.body.note})` : ''}`);
 
 step('a push message exists, addressed to the ward monitor and not the reporter');
-const messages = await call(
-  `/messaging/messages?queries[]=${encodeURIComponent(
-    JSON.stringify({ method: 'orderDesc', attribute: '$createdAt' }),
-  )}&queries[]=${encodeURIComponent(JSON.stringify({ method: 'limit', values: [5] }))}`,
+// Fetched by id rather than found in a page of recent messages. The id
+// is derived from the outbox event — that determinism is what makes a
+// repeated send a 409 instead of a second notification — so the test
+// can ask for exactly this run's push. Scanning "the newest five"
+// worked on an empty stack and failed on a used one, reporting "no push
+// addressed to the ward monitor" when the push was there and five
+// newer messages were in front of it.
+const pushId = messageId(`outbox:${outbox.$id}:verifiers`);
+const pushed = await call(`/messaging/messages/${encodeURIComponent(pushId)}`);
+assert.ok(pushed.ok, `no push ${pushId}: ${pushed.status} ${JSON.stringify(pushed.body).slice(0, 160)}`);
+const push = pushed.body;
+assert.ok(
+  (push.users ?? []).includes(verifierId),
+  `push ${pushId} does not name the ward monitor: ${JSON.stringify(push.users)}`,
 );
-assert.ok(messages.ok, 'could not list messages');
-const push = (messages.body.messages ?? []).find((m) =>
-  (m.users ?? []).includes(verifierId),
-);
-assert.ok(push, 'no push addressed to the ward monitor');
 assert.equal(push.providerType, 'push');
 assert.ok(
   !(push.users ?? []).includes(reporterId),
@@ -230,5 +237,31 @@ for (const leak of ['Makurdi', 'North Bank', 'Water over the road', 'flood']) {
   assert.ok(!text.includes(leak), `push leaked "${leak}": ${text.slice(0, 200)}`);
 }
 ok(`${push.$id} -> ${push.users.length} monitor(s), no location or hazard text`);
+
+step('cleaning up the accounts and the report this run created');
+// Not politeness. The ward monitors a new report notifies are read with
+// `Query.limit(50)`, so once fifty of these accumulate in one ward the
+// next run's own monitor falls outside the page and the push that
+// should name them does not — which reads as "the notification did not
+// happen" and is really "the fixtures did". Every suite that creates
+// accounts in a shared ward owes this.
+{
+  let removed = 0;
+  const left = [];
+  const targets = [
+    [row('reports', reportId), 'report'],
+    [row('profiles', reporterId), 'reporter profile'],
+    [row('profiles', verifierId), 'monitor profile'],
+    [`/users/${reporterId}`, 'reporter account'],
+    [`/users/${verifierId}`, 'monitor account'],
+  ];
+  for (const [path, what] of targets) {
+    const gone = await call(path, { method: 'DELETE' });
+    if (gone.ok || gone.status === 404) removed += 1;
+    else left.push(`${what}: ${gone.status}`);
+  }
+  console.log(`   ${left.length ? '!' : '✓'} removed ${removed}/${targets.length}`);
+  for (const l of left) console.log(`     LEFT BEHIND — ${l}`);
+}
 
 console.log('\nEND TO END: PASS');

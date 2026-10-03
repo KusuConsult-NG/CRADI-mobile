@@ -75,6 +75,33 @@ console.log(`packaged ${(readFileSync(tarball).length / 1024).toFixed(0)}KB`);
  */
 const LOCAL_HOST = 'appwrite.local';
 const isLocalStack = new URL(EP).hostname === LOCAL_HOST || new URL(EP).hostname === 'localhost';
+
+/**
+ * Everything the Functions read from `process.env`.
+ *
+ * This script **deletes a Function's existing variables before setting
+ * these**, because a variable is addressed by its generated id rather
+ * than by its key and there is no upsert. So this object is not "the
+ * variables this script happens to care about" — it is the complete
+ * set, and anything missing from it is removed from the deployed
+ * Function. A `TERMII_API_KEY` typed into the Appwrite console is gone
+ * at the next deploy.
+ *
+ * That is why the SMS credentials are passed through from this
+ * script's own environment rather than left to the console: with them
+ * missing, `drain.js` turns SMS off rather than failing
+ * (`smsSender()` returns null), so a system that cannot warn a single
+ * local authority looks exactly like one with nothing to warn them
+ * about. The summary below says which it is.
+ */
+const SMS = {
+  ...(process.env.TERMII_API_KEY ? { TERMII_API_KEY: process.env.TERMII_API_KEY } : {}),
+  ...(process.env.TERMII_SENDER_ID ? { TERMII_SENDER_ID: process.env.TERMII_SENDER_ID } : {}),
+  // Unset in production, where the default is Termii's own API. Set it
+  // to point a staging deploy at a stand-in.
+  ...(process.env.TERMII_BASE_URL ? { TERMII_BASE_URL: process.env.TERMII_BASE_URL } : {}),
+};
+
 const VARIABLES = {
   // Only when the stack is the local one; on Cloud Appwrite's own
   // injection is right and `lib/appwrite.js` prefers it, correctly.
@@ -83,11 +110,19 @@ const VARIABLES = {
   APPWRITE_PROJECT: PROJECT,
   APPWRITE_API_KEY: KEY,
   APPWRITE_DATABASE_ID: process.env.APPWRITE_DATABASE_ID ?? 'cradi',
+  ...SMS,
 };
 console.log(
   isLocalStack
     ? `deploying to the local stack at ${EP}`
     : `deploying to ${EP} — Functions will call back on ${EP}`,
+);
+console.log(
+  SMS.TERMII_API_KEY && SMS.TERMII_SENDER_ID
+    ? `SMS: on, as "${SMS.TERMII_SENDER_ID}"${SMS.TERMII_BASE_URL ? ` via ${SMS.TERMII_BASE_URL}` : ''}`
+    : '! SMS: OFF. TERMII_API_KEY and TERMII_SENDER_ID are not set in this\n' +
+        '  environment, so the deployed Functions will skip every authority\n' +
+        '  SMS silently. Set them and deploy again to turn it on.',
 );
 
 const deployments = [];
