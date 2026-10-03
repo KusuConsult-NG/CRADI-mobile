@@ -31,7 +31,12 @@ import { notifyApproved, termiiSender } from './lib/termii.js';
  */
 const RUN_BUDGET_MS = 45_000;
 
-export default handler(async ({ log, error }) => {
+/**
+ * The body of this Function, exported so `worker.js` can run it beside
+ * the others. The plan allows two Functions and this design has seven,
+ * so the three scheduled ones share one entrypoint — see `worker.js`.
+ */
+export async function runDrain({ log, error }) {
   const started = Date.now();
   const settings = await getSettings();
   const sms = smsSender(log);
@@ -55,7 +60,9 @@ export default handler(async ({ log, error }) => {
 
   if (summary.claimed) log(`drain ${JSON.stringify(summary)}`);
   return summary;
-});
+}
+
+export default handler(runDrain);
 
 /** Processes one claimed event and records the outcome. Never throws. */
 export async function processOne(event, handlers, { log = () => {}, error = () => {} } = {}) {

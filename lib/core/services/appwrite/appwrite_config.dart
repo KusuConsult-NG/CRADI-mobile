@@ -38,26 +38,29 @@ class AppwriteConfig {
   // Phase 2 and Phase 4: every write the database used to guard with a
   // trigger, and every auth step that needs a server API key.
 
-  /// The write path for collections the client may not write. Takes
-  /// `{op, collection, documentId, data}` and answers with the document —
-  /// the generalisation of Phase 4's `create-report`.
-  static const String writeFunctionId = String.fromEnvironment(
-    'APPWRITE_FN_WRITE',
-    defaultValue: 'write',
+  /// The one Function a client calls.
+  ///
+  /// It was three — `write`, `auth` and `operation` — and the Cloud plan
+  /// allows two Functions against the seven this backend needs, so they
+  /// share an entrypoint that routes on the execution's path. Which of
+  /// the three runs is [writePath], [authPath] or [operationPath]; see
+  /// `functions/cradi/src/client.js`.
+  static const String clientFunctionId = String.fromEnvironment(
+    'APPWRITE_FN_CLIENT',
+    defaultValue: 'client',
   );
+
+  /// The write route: collections the client may not write directly.
+  /// Takes `{op, collection, documentId, data}` and answers with the
+  /// document — the generalisation of Phase 4's `create-report`.
+  static const String writePath = '/write';
 
   /// Registration, code resends and recovery: the three steps that mint a
   /// typed token with a server key and send our own mail.
-  static const String authFunctionId = String.fromEnvironment(
-    'APPWRITE_FN_AUTH',
-    defaultValue: 'auth',
-  );
+  static const String authPath = '/auth';
 
   /// Named server-side operations — the RPCs. Today that is `reopen_report`.
-  static const String operationFunctionId = String.fromEnvironment(
-    'APPWRITE_FN_OPERATION',
-    defaultValue: 'operation',
-  );
+  static const String operationPath = '/operation';
 
   // ─────────────────────── Write policy ───────────────────────────────────
 

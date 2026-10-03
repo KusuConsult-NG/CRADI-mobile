@@ -30,6 +30,13 @@ Cloud answered **2.3.0**. What it settled:
 `verify.mjs --single-bucket` after the run: every column, index and the
 bucket match; the 7 problems left are all Functions.
 
+**Resolved since.** The seven were consolidated into the two the plan
+allows: `client` (the three a client calls, routed on the execution's
+path) and `worker` (the four the server runs on its own, routed on the
+trigger). No handler was rewritten — see
+`APPWRITE-FUNCTION-CONTRACTS.md`. The Termii line below is still open:
+it needs a send from a deployed Function, which this unblocks.
+
 ## What is already known about the Cloud project
 
 | | |
@@ -64,7 +71,8 @@ node infra/appwrite/provision.mjs --probe
 node infra/appwrite/provision.mjs --single-bucket
 node infra/appwrite/verify.mjs
 
-# 3. Deploy the seven Functions and wait for their builds.
+# 3. Deploy the two Functions (`client`, `worker`) and wait for
+#    their builds.
 node infra/appwrite/local/deploy.mjs      # endpoint comes from the env
 
 # 4. Behaviour. Creates `cloudchk-*` rows and deletes them, including
@@ -174,8 +182,8 @@ which `deploy.mjs` sets from its own environment.
 
 ### 2. The tier's real limits
 
-584 teams, ~650 messaging topics, 19 collections, 187 columns, 7
-Functions with three on a one-minute schedule. The one-database and
+584 teams, ~650 messaging topics, 19 collections, 187 columns, and 2
+Functions, one of them on a one-minute schedule. The one-database and
 one-bucket limits are known from the project's own history. The rest
 have never been measured against the live plan, which is what
 `--probe` is for: it keeps going past a quota refusal and lists every

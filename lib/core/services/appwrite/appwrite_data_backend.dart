@@ -393,7 +393,7 @@ class AppwriteDataBackend implements DataBackend {
     String name, {
     Map<String, dynamic>? params,
   }) async {
-    await _execute(AppwriteConfig.operationFunctionId, {
+    await _execute(AppwriteConfig.operationPath, {
       'operation': name,
       'params': params ?? const <String, dynamic>{},
     });
@@ -406,7 +406,7 @@ class AppwriteDataBackend implements DataBackend {
     String documentId,
     Map<String, dynamic> data,
   ) async {
-    final body = await _execute(AppwriteConfig.writeFunctionId, {
+    final body = await _execute(AppwriteConfig.writePath, {
       'op': op,
       'collection': collectionId,
       'documentId': documentId,
@@ -435,10 +435,15 @@ class AppwriteDataBackend implements DataBackend {
   /// of the app treat a Function refusal and a database refusal alike,
   /// which is the whole point of Phase 4.
   Future<Map<String, dynamic>> _execute(
-    String functionId,
+    String path,
     Map<String, dynamic> payload,
   ) async {
-    final execution = await createExecution(_client, functionId, payload);
+    final execution = await createExecution(
+      _client,
+      AppwriteConfig.clientFunctionId,
+      payload,
+      path: path,
+    );
 
     final status = (execution['responseStatusCode'] as num?)?.toInt() ?? 0;
     final responseBody = execution['responseBody']?.toString() ?? '';
@@ -457,7 +462,7 @@ class AppwriteDataBackend implements DataBackend {
     final state = execution['status']?.toString() ?? 'unknown';
     if (state != 'completed') {
       throw aw.AppwriteException(
-        'Function $functionId did not complete ($state)',
+        'The $path call did not complete ($state)',
         503,
         'function_incomplete',
         execution['errors']?.toString(),

@@ -51,7 +51,12 @@ export const failedAttempts = (reason) => {
 export const retryDelayMs = (attempt) =>
   Math.min(RETRY_BASE_MS * 2 ** (attempt - 1), RETRY_MAX_MS);
 
-export default handler(async ({ log, error }) => {
+/**
+ * The body of this Function, exported so `worker.js` can run it beside
+ * the others. The plan allows two Functions and this design has seven,
+ * so the three scheduled ones share one entrypoint — see `worker.js`.
+ */
+export async function runEscalate({ log, error }) {
   await getSettings(); // read once; the timeout itself is set at write time
   const due = await listRowsOrThrow(COLLECTION, [
     Query.equal('status', 'pending'),
@@ -77,7 +82,9 @@ export default handler(async ({ log, error }) => {
   }
   if (due.length) log(`escalations ${JSON.stringify(summary)}`);
   return summary;
-});
+}
+
+export default handler(runEscalate);
 
 export async function processEscalation(esc, { log = () => {} } = {}) {
   const found = await getRow('reports', esc.reportId);

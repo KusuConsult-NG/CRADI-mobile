@@ -11,8 +11,8 @@
  * the API back, and that is derived from the endpoint rather than
  * hardcoded; see VARIABLES below.
  *
- * All seven share one source tree (`functions/cradi`) and differ only by
- * entrypoint, so this uploads the same tarball seven times.
+ * Both share one source tree (`functions/cradi`) and differ only by
+ * entrypoint, so this uploads the same tarball twice.
  *
  * The Appwrite CLI does this too. A script is used here because the CLI
  * wants an interactive login and this has to run unattended.

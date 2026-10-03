@@ -1,11 +1,34 @@
-# The three Functions the client adapters call
+# The three routes the client adapters call
 
 The Appwrite adapters in `lib/core/services/appwrite/` are written against
-these three Functions. Nothing here is deployed — this is the specification
-the server side has to meet, derived from what Phases 1–4 proved and from
-what the client now actually sends.
+these three contracts, derived from what Phases 1–4 proved and from what
+the client now actually sends.
 
-Every Function:
+They were three Functions. The Cloud plan allows **two Functions in
+total** against the seven this backend needs (3 October 2026; see
+`CLOUD-VERIFICATION.md`), so they are now three routes of one —
+`AppwriteConfig.clientFunctionId`, default `client`, entrypoint
+`functions/cradi/src/client.js`. Which route runs is the **execution's
+path**, passed as `path` on `createExecution` and read as `req.path`:
+
+| contract | path | module |
+| --- | --- | --- |
+| 1. write | `/write` | `src/write.js` |
+| 2. auth | `/auth` | `src/auth.js` |
+| 3. operation | `/operation` | `src/operation.js` |
+
+Nothing about the three contracts changed in the merge — each module is
+still a complete handler and still writes its own response. A path the
+router does not know answers `404 general_route_not_found` naming itself,
+rather than Appwrite's own 404 naming a Function that no longer exists.
+
+The merged Function is `execute: ['any']`, because `/auth` must be
+reachable before there is a session. `/write` and `/operation` call
+`callerId(req)` first, which reads `x-appwrite-user-id` — a header only
+Appwrite sets — so a guest reaching them still gets the 401 it always
+got, from the handler rather than from the platform.
+
+Every route:
 
 - is invoked with `POST`, `content-type: application/json`, synchronously;
 - answers JSON;
@@ -26,9 +49,9 @@ taken".
 
 ---
 
-## 1. `write` — the collections the client may not write
+## 1. `/write` — the collections the client may not write
 
-`AppwriteConfig.writeFunctionId`, default `write`.
+`AppwriteConfig.writePath`, `/write`.
 
 Phase 1 found 14 of 19 collections have a rule an ACL cannot express.
 Phase 4 proved the shape with `create-report`; this is its generalisation.
@@ -78,9 +101,9 @@ of retrying it after the fix.
 
 ---
 
-## 2. `auth` — everything that needs a server API key
+## 2. `/auth` — everything that needs a server API key
 
-`AppwriteConfig.authFunctionId`, default `auth`.
+`AppwriteConfig.authPath`, `/auth`.
 
 **Request** `{"action": "...", ...}`.
 
@@ -163,9 +186,9 @@ accepting a weak one.
 
 ---
 
-## 3. `operation` — the named server-side operations
+## 3. `/operation` — the named server-side operations
 
-`AppwriteConfig.operationFunctionId`, default `operation`.
+`AppwriteConfig.operationPath`, `/operation`.
 
 `{"operation": "reopen_report", "params": {"p_report_id": "..."}}`
 
@@ -193,11 +216,32 @@ needs no change when it does.
 
 ---
 
-# The worker: four more Functions, nobody calls
+# The worker: four more handlers, nobody calls
 
 The three above answer the client. These four replace the Railway
 service, and nothing invokes them — Appwrite does, on events and on a
 schedule.
+
+They were four Functions, and they are the second half of the same
+two-Function limit: one Function, `worker`, entrypoint
+`functions/cradi/src/worker.js`, `execute: []` so no client can reach
+it. Which handler runs is the **trigger**:
+
+| trigger | runs |
+| --- | --- |
+| an event (`x-appwrite-event` is set) | `on-write`, and nothing else |
+| the schedule, or a manual HTTP run | the drain, then escalation, then — on every fifth minute — the sweep |
+
+One schedule, `* * * * *`, carries all three cadences: the drain and
+escalation ran every minute and the sweep every five, so `worker.js`
+checks `getUTCMinutes() % 5` for the third. The three are run
+independently and a thrown one is recorded rather than raised — they
+were separate Functions, where a crash in the sweep never stopped the
+drain — and the response carries each one's summary or its error, with
+a 500 when any of them threw.
+
+`x-appwrite-event` rather than `x-appwrite-trigger`, because a manual
+run for a test is `http` and must do the scheduled work.
 
 ## The collections they need
 

@@ -36,8 +36,9 @@ import 'package:climate_app/core/services/appwrite/appwrite_config.dart';
 Future<Map<String, dynamic>> createExecution(
   aw.Client client,
   String functionId,
-  Map<String, dynamic> payload,
-) async {
+  Map<String, dynamic> payload, {
+  String path = '/',
+}) async {
   final uri = Uri.parse(
     '${AppwriteConfig.endpoint}'
     '/functions/${Uri.encodeComponent(functionId)}/executions',
@@ -55,6 +56,9 @@ Future<Map<String, dynamic>> createExecution(
         'body': jsonEncode(payload),
         'async': false,
         'method': 'POST',
+        // Which of the merged handlers runs. Appwrite passes this
+        // through to the Function as `req.path`.
+        'path': path,
         'headers': {'content-type': 'application/json'},
       }),
     );

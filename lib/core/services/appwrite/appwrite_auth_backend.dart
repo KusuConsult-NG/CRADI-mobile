@@ -488,8 +488,9 @@ class AppwriteAuthBackend implements AuthBackend {
     try {
       execution = await createExecution(
         _client,
-        AppwriteConfig.authFunctionId,
+        AppwriteConfig.clientFunctionId,
         {'action': action, ...payload},
+        path: AppwriteConfig.authPath,
       );
     } on aw.AppwriteException catch (e) {
       throw toAuthBackendException(e);

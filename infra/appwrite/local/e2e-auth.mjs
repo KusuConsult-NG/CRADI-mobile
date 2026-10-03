@@ -39,14 +39,14 @@ async function call(path, { method = 'GET', body, headers = admin } = {}) {
 
 /** Calls the auth Function and returns {status, body}. */
 async function auth(payload, headers = anon) {
-  const exec = await call('/functions/auth/executions', {
+  const exec = await call('/functions/client/executions', {
     method: 'POST',
     headers,
-    body: { body: JSON.stringify(payload), async: false, method: 'POST' },
+    body: { body: JSON.stringify(payload), path: '/auth', async: false, method: 'POST' },
   });
   assert.ok(exec.ok, `execution refused: ${JSON.stringify(exec.body).slice(0, 200)}`);
   if (exec.body.status !== 'completed') {
-    const seen = await call(`/functions/auth/executions/${exec.body.$id}`);
+    const seen = await call(`/functions/client/executions/${exec.body.$id}`);
     throw new Error(
       `auth(${payload.action}) ${exec.body.status}: ${(seen.body?.errors || '').slice(-400)}`,
     );

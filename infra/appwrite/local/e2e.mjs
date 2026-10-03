@@ -99,10 +99,11 @@ ok(`refused with ${direct.status} — the collection is closed`);
 
 // ─── the write Function, trying to cheat ──────────────────────────────
 step('the reporter files a report through the write Function, claiming it is approved');
-const exec = await call('/functions/write/executions', {
+const exec = await call('/functions/client/executions', {
   method: 'POST',
   headers: asUser,
   body: {
+    path: '/write',
     body: JSON.stringify({
       op: 'create',
       collection: 'reports',
@@ -186,7 +187,10 @@ ok(`${outbox.$id} (${outbox.eventType})`);
 
 // ─── the drain ────────────────────────────────────────────────────────
 step('the drain notifies the ward monitor');
-const drain = await call('/functions/drain/executions', {
+// `drain`, `escalate` and `reconcile` are one Function: a scheduled run
+// does all three, and an HTTP execution does the same. So this runs the
+// worker and reads the drain's slice of its summary.
+const drain = await call('/functions/worker/executions', {
   method: 'POST',
   body: { body: '{}', async: false, method: 'POST' },
 });
@@ -198,9 +202,21 @@ if (drain.body.responseStatusCode >= 400) {
 }
 assert.equal(drain.body.status, 'completed');
 assert.equal(drain.body.responseStatusCode, 200);
-const summary = JSON.parse(drain.body.responseBody);
-assert.ok(summary.claimed >= 1, `claimed ${summary.claimed}`);
+// The worker answers with a summary per task — `{drain, escalate,
+// reconcile?}` — because one Function now carries all three. Reading
+// the whole body as the drain's summary read `claimed undefined`,
+// which is the shape of a run that did nothing rather than one that
+// worked.
+const tick = JSON.parse(drain.body.responseBody);
+const summary = tick.drain ?? {};
+assert.ok(!summary.failed, `drain failed: ${summary.error ?? ''}`);
+assert.ok(summary.claimed >= 1, `claimed ${summary.claimed}; tick=${JSON.stringify(tick)}`);
 ok(`claimed=${summary.claimed} processed=${summary.processed} failed=${summary.failed}`);
+// The escalation sweep shares the tick, and a thrown one is recorded
+// rather than raised — so a silent failure there would otherwise pass
+// this suite.
+assert.ok(!tick.escalate?.failed, `escalate failed: ${tick.escalate?.error ?? ''}`);
+assert.ok(!tick.reconcile?.failed, `reconcile failed: ${tick.reconcile?.error ?? ''}`);
 
 step('the outbox document is marked processed');
 const after = await call(row('notification_outbox', outbox.$id));

@@ -43,7 +43,12 @@ import { getSettings, minimumPeerConfirmations } from './lib/settings.js';
 export const WINDOW_MINUTES = 20;
 export const BATCH = 200;
 
-export default handler(async ({ log, error }) => {
+/**
+ * The body of this Function, exported so `worker.js` can run it beside
+ * the others. The plan allows two Functions and this design has seven,
+ * so the three scheduled ones share one entrypoint — see `worker.js`.
+ */
+export async function runReconcile({ log, error }) {
   const since = new Date(Date.now() - WINDOW_MINUTES * 60_000).toISOString();
 
   const summary = { checked: 0, missing: 0, enqueued: 0 };
@@ -85,7 +90,9 @@ export default handler(async ({ log, error }) => {
   // running looks exactly like a system with no gaps.
   log(`reconcile ${JSON.stringify(summary)} window=${WINDOW_MINUTES}m`);
   return summary;
-});
+}
+
+export default handler(runReconcile);
 
 /**
  * Repairs a pending report whose confirmation count is behind its votes.

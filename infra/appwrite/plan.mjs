@@ -416,29 +416,46 @@ export const BUCKETS = [
 export const FUNCTION_VERSION = process.env.APPWRITE_FUNCTION_VERSION ?? 'v4';
 
 /** Phases 10 and 11. */
+/**
+ * Two Functions, because the Cloud plan allows two.
+ *
+ * The design has seven and the first Cloud run (3 October 2026) created
+ * `write` and `auth` and was refused the third; see
+ * `docs/CLOUD-VERIFICATION.md`. Three of them are things a client calls
+ * and four are things the server does on its own, so they collapse
+ * along that line: `client.js` routes on the execution path, `worker.js`
+ * routes on the trigger. Neither rewrites the seven modules — each is
+ * already a complete handler, and the two entrypoints dispatch to them.
+ *
+ * Their scopes are the unions of what they now contain. That is the one
+ * real cost of merging: the `client` key can write users, which only
+ * `auth` and `write` needed, and the `worker` key can send messages,
+ * which the sweep never did. Appwrite has no per-route scoping, so the
+ * narrowing that is left is in the code — every handler still checks
+ * the caller and the collection before it touches anything.
+ */
 export const FUNCTIONS = [
   {
-    id: 'write', name: 'Write', entrypoint: 'src/write.js', execute: ['users'],
-    // `users.write` so a profile's role, approval and disabled flag stay
-    // in step with the account's labels — every `read("label:…")` ACL
-    // below is granted by a label on the account, not by the row.
+    id: 'client', name: 'Client API', entrypoint: 'src/client.js',
+    // `any`, because registration and recovery happen before there is a
+    // session and `auth` lives here now. `write` and `operation` were
+    // `users`, and both call `callerId()` before anything else — that
+    // reads a header only Appwrite sets, so a guest reaching them still
+    // gets the 401 it always got, from the handler instead of from the
+    // platform.
+    execute: ['any'],
     scopes: [
       'databases.read', 'documents.read', 'documents.write',
       'teams.read', 'teams.write', 'users.read', 'users.write',
+      'sessions.write', 'messages.write',
     ],
   },
   {
-    id: 'auth', name: 'Auth', entrypoint: 'src/auth.js', execute: ['any'],
-    // `any`: registration and recovery happen before there is a session.
-    scopes: ['users.read', 'users.write', 'sessions.write', 'documents.write', 'messages.write'],
-  },
-  {
-    id: 'operation', name: 'Operations', entrypoint: 'src/operation.js', execute: ['users'],
-    scopes: ['documents.read', 'documents.write'],
-  },
-  {
-    id: 'on-write', name: 'On write', entrypoint: 'src/on-write.js', execute: [],
-    scopes: ['documents.write'],
+    id: 'worker', name: 'Worker', entrypoint: 'src/worker.js', execute: [],
+    scopes: [
+      'documents.read', 'documents.write', 'users.write',
+      'messages.write', 'targets.read',
+    ],
     // `databases.`, not `tablesdb.`. The two namespaces differ and the
     // difference is not guessable: Realtime channels are
     // `tablesdb.<db>.tables.<t>.rows`, which is what the Flutter SDK's
@@ -454,21 +471,10 @@ export const FUNCTIONS = [
       `databases.${DATABASE_ID}.tables.alerts.rows.*.create`,
       `databases.${DATABASE_ID}.tables.profiles.rows.*.update`,
     ],
-  },
-  {
-    id: 'drain', name: 'Outbox drain', entrypoint: 'src/drain.js', execute: [],
-    scopes: ['documents.read', 'documents.write', 'users.write', 'messages.write', 'targets.read'],
+    // One schedule for three cadences: the drain and escalation ran
+    // every minute, the sweep every five, and `worker.js` checks the
+    // clock for the third.
     schedule: '* * * * *',
-  },
-  {
-    id: 'escalate', name: 'Escalation cron', entrypoint: 'src/escalate.js', execute: [],
-    scopes: ['documents.read', 'documents.write', 'messages.write', 'targets.read'],
-    schedule: '* * * * *',
-  },
-  {
-    id: 'reconcile', name: 'Reconciling sweep', entrypoint: 'src/reconcile.js', execute: [],
-    scopes: ['documents.read', 'documents.write'],
-    schedule: '*/5 * * * *',
   },
 ];
 

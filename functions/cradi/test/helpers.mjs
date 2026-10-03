@@ -236,7 +236,7 @@ const json = (status, body) =>
   });
 
 /** The `{req, res, log, error}` an Appwrite Function is called with. */
-export function context(body, { userId = 'u1', path = '/' } = {}) {
+export function context(body, { userId = 'u1', path = '/', event = null } = {}) {
   const captured = {};
   const logs = [];
   return {
@@ -246,7 +246,12 @@ export function context(body, { userId = 'u1', path = '/' } = {}) {
     req: {
       bodyRaw: JSON.stringify(body),
       path,
-      headers: userId ? { 'x-appwrite-user-id': userId } : {},
+      headers: {
+        ...(userId ? { 'x-appwrite-user-id': userId } : {}),
+        // Set by Appwrite only for an event delivery; `worker.js` routes
+        // on its presence.
+        ...(event ? { 'x-appwrite-event': event } : {}),
+      },
     },
     res: {
       json: (payload, status = 200) => {

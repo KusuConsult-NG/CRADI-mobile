@@ -91,14 +91,28 @@ const esc = await call(row('scheduled_escalations'), {
 assert.ok(esc.ok, JSON.stringify(esc.body).slice(0, 200));
 ok(`escalateAt ${overdue} (five minutes ago)`);
 
+// The escalation sweep is one task of the worker Function, which the
+// schedule runs every minute; the execution to wait for is the worker's.
 step('nothing is called — waiting for the cron');
-const before = (await call(`/functions/escalate/executions?${q({ method: 'limit', values: [1] })}`)).body?.total ?? 0;
-const deadline = Date.now() + 150_000;
+// A *new* schedule execution, by its timestamp.
+//
+// The old test watched `escalate`'s own execution list and took a
+// rising total as proof one had run. The worker's list also carries
+// every event delivery, and seeding this report produces a handful of
+// those — so a rising total stopped meaning "the cron fired" and the
+// loop broke on a schedule execution from before the row existed. The
+// report was then read a second too early and the suite reported "not
+// escalated" for a sweep that had not run yet.
+const since = Date.now();
+const deadline = since + 150_000;
 let fired = null;
 while (Date.now() < deadline) {
-  const now = await call(`/functions/escalate/executions?${q({ method: 'orderDesc', attribute: '$createdAt' }, { method: 'limit', values: [5] })}`);
-  fired = (now.body?.executions ?? []).find((e) => e.trigger === 'schedule');
-  if (fired && (now.body.total ?? 0) > before) break;
+  const now = await call(`/functions/worker/executions?${q({ method: 'orderDesc', attribute: '$createdAt' }, { method: 'limit', values: [25] })}`);
+  fired = (now.body?.executions ?? []).find(
+    (e) => e.trigger === 'schedule' && new Date(e.$createdAt).getTime() >= since,
+  );
+  if (fired && fired.status !== 'waiting' && fired.status !== 'processing') break;
+  fired = null;
   process.stdout.write('.');
   await new Promise((r) => setTimeout(r, 5000));
 }
@@ -122,18 +136,23 @@ assert.equal(closed.body.status, 'processed', `status=${closed.body.status} reas
 ok(`status=processed at ${closed.body.processedAt}`);
 
 step('the coordinator was notified, and the reporter was not');
-const messages = await call(`/messaging/messages?${q({ method: 'orderDesc', attribute: '$createdAt' }, { method: 'limit', values: [10] })}`);
-const push = (messages.body?.messages ?? []).find((m) => (m.users ?? []).includes(coordinatorId));
-assert.ok(push, 'the coordinator was not notified');
+// Asked for by id rather than found among the newest messages. The id
+// is derived from the escalation — that determinism is what makes a
+// repeated sweep a 409 instead of a second warning — and a tick now
+// runs the drain too, so "the newest message addressed to the
+// coordinator" can be an unrelated ward push.
+const escalationId = `escalation-${reportId}`.slice(0, 36);
+const found = await call(`/messaging/messages/${encodeURIComponent(escalationId)}`);
+assert.ok(found.ok, `no escalation push ${escalationId}: ${found.status}`);
+const push = found.body;
+assert.ok((push.users ?? []).includes(coordinatorId), 'the coordinator was not notified');
 assert.ok(!(push.users ?? []).includes(reporterId), 'the reporter must not be told to review their own report');
-assert.equal(push.messageId ?? push.$id, `escalation-${reportId}`.slice(0, 36),
-  `message id should be derived from the escalation: ${push.$id}`);
 ok(`${push.$id} -> ${push.users.length} recipient(s)`);
 
 step('a second run does not notify again');
 // There is no conditional update in Appwrite; what stands in for it is
 // Appwrite refusing a duplicate messageId.
-const again = await call('/functions/escalate/executions', {
+const again = await call('/functions/worker/executions', {
   method: 'POST', body: { body: '{}', async: false, method: 'POST' },
 });
 assert.equal(again.body.status, 'completed');
@@ -143,8 +162,19 @@ assert.equal(again.body.status, 'completed');
 const sameAgain = await call(
   `/messaging/messages?${q({ method: 'orderDesc', attribute: '$createdAt' }, { method: 'limit', values: [100] })}`,
 );
-const copies = (sameAgain.body?.messages ?? []).filter((m) => (m.users ?? []).includes(coordinatorId));
-assert.equal(copies.length, 1, `the coordinator was notified ${copies.length} times`);
-ok('still exactly one notification');
+// Counted by the escalation's own message id, not by "everything
+// addressed to the coordinator". A tick runs the drain as well as the
+// sweep now, and the drain legitimately delivers the ward's other
+// outbox events to the same coordinator — so counting recipients
+// counted unrelated pushes and read as a duplicate escalation.
+const copies = (sameAgain.body?.messages ?? []).filter(
+  (m) => (m.messageId ?? m.$id) === escalationId,
+);
+assert.equal(copies.length, 1, `the escalation was sent ${copies.length} times`);
+assert.ok(
+  (copies[0].users ?? []).includes(coordinatorId),
+  'the one escalation is still addressed to the coordinator',
+);
+ok('still exactly one escalation notification');
 
 console.log('\nESCALATION CRON: PASS');

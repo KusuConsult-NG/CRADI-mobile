@@ -42,10 +42,10 @@ const row = (table, id = '') => `/tablesdb/${DB}/tables/${table}/rows${id ? `/${
 
 /** Runs the Function and returns its inner response, as the adapter does. */
 async function operation(session, payload) {
-  const exec = await call('/functions/operation/executions', {
+  const exec = await call('/functions/client/executions', {
     method: 'POST',
     headers: { 'content-type': 'application/json', 'x-appwrite-project': PROJECT, 'x-appwrite-session': session },
-    body: { body: JSON.stringify(payload), async: false, method: 'POST' },
+    body: { body: JSON.stringify(payload), path: '/operation', async: false, method: 'POST' },
   });
   assert.ok(exec.ok, `execution refused: ${exec.status} ${JSON.stringify(exec.body).slice(0, 200)}`);
   assert.equal(exec.body.status, 'completed', `execution ${exec.body.status}: ${exec.body.errors}`);

@@ -110,21 +110,32 @@ async function sessionFor(email) {
   return decodeURIComponent(found);
 }
 
+/** The one Function the clients call; the route is the execution's path. */
+const CLIENT_FUNCTION = process.env.APPWRITE_FN_CLIENT?.trim() || 'client';
+
 const asUser = (secret) => ({
   'content-type': 'application/json',
   'x-appwrite-project': PROJECT,
   'x-appwrite-session': secret,
 });
 
-/** Runs a Function the way the clients do, and returns its inner response. */
-async function runFunction(id, secret, payload) {
+/**
+ * Runs one route of the client Function the way the clients do, and returns
+ * its inner response.
+ *
+ * `write`, `auth` and `operation` are one deployed Function — the Cloud plan
+ * allows two against the seven this backend needs — so which one runs is the
+ * execution's path, not its id.
+ */
+async function runFunction(route, secret, payload) {
+  const id = CLIENT_FUNCTION;
   const exec = await call(`/functions/${id}/executions`, {
     method: 'POST',
     headers: asUser(secret),
-    body: { body: JSON.stringify(payload), async: false, method: 'POST' },
+    body: { body: JSON.stringify(payload), path: `/${route}`, async: false, method: 'POST' },
   });
-  assert.ok(exec.ok, `${id} execution refused: ${exec.status} ${JSON.stringify(exec.body).slice(0, 200)}`);
-  assert.equal(exec.body.status, 'completed', `${id} execution ${exec.body.status}: ${exec.body.errors ?? ''}`);
+  assert.ok(exec.ok, `${route} execution refused: ${exec.status} ${JSON.stringify(exec.body).slice(0, 200)}`);
+  assert.equal(exec.body.status, 'completed', `${route} execution ${exec.body.status}: ${exec.body.errors ?? ''}`);
   let inner = null;
   try { inner = JSON.parse(exec.body.responseBody); } catch { inner = { raw: exec.body.responseBody }; }
   return { code: exec.body.responseStatusCode, body: inner, execution: exec.body };

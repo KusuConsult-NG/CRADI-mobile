@@ -113,24 +113,48 @@ describe('the provisioning plan', () => {
     }
   });
 
-  it('schedules the three that are scheduled, and nothing else', () => {
-    const scheduled = FUNCTIONS.filter((f) => f.schedule).map((f) => f.id);
-    assert.deepEqual(scheduled.sort(), ['drain', 'escalate', 'reconcile']);
-    // on-write is event-driven, and events are at-most-once — it must
-    // never be the only thing standing between a report and a warning.
-    const events = FUNCTIONS.find((f) => f.id === 'on-write');
-    assert.equal(events.schedule, undefined);
-    assert.equal(events.events.length, 5);
+  it('fits in the two Functions the Cloud plan allows', () => {
+    // Not a style rule: the first Cloud run created two and was refused
+    // the third (`docs/CLOUD-VERIFICATION.md`). A Function added here
+    // would provision cleanly against the local stack and fail on
+    // Cloud, which is the expensive way to find out.
+    assert.deepEqual(
+      FUNCTIONS.map((f) => f.id).sort(),
+      ['client', 'worker'],
+    );
   });
 
-  it('lets nobody but the auth Function be called without a session', () => {
-    for (const f of FUNCTIONS) {
-      if (f.id === 'auth') {
-        // Registration and recovery happen before there is a session.
-        assert.deepEqual(f.execute, ['any']);
-      } else if (f.execute.length) {
-        assert.deepEqual(f.execute, ['users'], f.id);
-      }
+  it('runs the worker on a schedule, and the client on none', () => {
+    const scheduled = FUNCTIONS.filter((f) => f.schedule).map((f) => f.id);
+    assert.deepEqual(scheduled, ['worker']);
+    // Every minute: `worker.js` folds the drain's and escalation's
+    // one-minute cadence and the sweep's five-minute one into this
+    // single schedule, and decides the sweep from the clock.
+    assert.equal(FUNCTIONS.find((f) => f.id === 'worker').schedule, '* * * * *');
+    assert.equal(FUNCTIONS.find((f) => f.id === 'client').schedule, undefined);
+  });
+
+  it('subscribes the worker to the five events on-write handled', () => {
+    // Events are at-most-once, which is why the sweep exists — the
+    // schedule above must never be dropped on the grounds that these
+    // cover it.
+    const worker = FUNCTIONS.find((f) => f.id === 'worker');
+    assert.equal(worker.events.length, 5);
+    for (const event of worker.events) {
+      assert.match(event, /^databases\.[^.]+\.tables\.[a-z_]+\.rows\.\*\.(create|update)$/);
     }
+    assert.deepEqual(FUNCTIONS.find((f) => f.id === 'client').events, undefined);
+  });
+
+  it('opens only the client Function to callers, and the worker to none', () => {
+    // `client` is `any` because registration and recovery happen before
+    // there is a session, and `/auth` lives in it. Its other two routes
+    // call `callerId()` first, so a guest still gets a 401 — from the
+    // handler rather than from the platform; `client.test.mjs` holds
+    // that to it.
+    assert.deepEqual(FUNCTIONS.find((f) => f.id === 'client').execute, ['any']);
+    // The worker is reached by a schedule and by events, never by a
+    // client: an open one would let anybody run the drain.
+    assert.deepEqual(FUNCTIONS.find((f) => f.id === 'worker').execute, []);
   });
 });

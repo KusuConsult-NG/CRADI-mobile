@@ -40,8 +40,15 @@ flutter test \
   --dart-define=DART_TEST_EMAIL="$DART_TEST_EMAIL" \
   --dart-define=DART_TEST_PASSWORD="$DART_TEST_PASSWORD" \
   --dart-define=DART_TEST_USER_ID="$DART_TEST_USER_ID" \
+  --dart-define=DART_TEST_FOREIGN_REPORT="$DART_TEST_FOREIGN_REPORT" \
   test/integration
 ```
+
+Every define `prep-dart.mjs` exports, including
+`DART_TEST_FOREIGN_REPORT` — a report filed by somebody else, because a
+reviewer may not decide their own and `callOperation` therefore has
+nothing to reopen without one. Leaving it out does not skip that test,
+it fails it.
 
 Without those defines the integration tests **skip**, so `flutter test`
 stays green in CI.
