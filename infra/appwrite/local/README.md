@@ -21,13 +21,25 @@ node infra/appwrite/local/e2e-auth.mjs        # typed codes, recovery, enumerati
 node infra/appwrite/local/e2e-escalation.mjs  # the cron, firing on its own
 node infra/appwrite/local/e2e-operation.mjs   # reopen_report, and who may run it
 node infra/appwrite/local/e2e-sms.mjs         # authority SMS, against a stand-in Termii
+node infra/appwrite/local/e2e-sms-deployed.mjs  # the same send, made by the deployed worker
 node infra/appwrite/cloud-check.mjs           # the behaviour a Cloud run must also show
 ```
 
 `e2e-sms.mjs` starts its own HTTP server and points `TERMII_BASE_URL` at
 it, so the whole send path runs — the numbers, the text, both caps, the
-deterministic claim and the bookkeeping — without texting anyone. What
-it cannot prove is Termii's own API contract.
+deterministic claim and the bookkeeping — without texting anyone. It
+makes the call from this process, though.
+
+`e2e-sms-deployed.mjs` closes that last gap: it redeploys the worker
+with `TERMII_BASE_URL` pointing at a stand-in bound on the docker
+gateway of the runtimes network — an address only a runtime container
+can reach — approves a report, and lets the deployed Functions queue
+and drain it. The assertion is that the stand-in was reached, and the
+remote address it prints is the container's. Point it at `127.0.0.1`
+instead and the run fails, which is how you know the hop is real.
+
+What neither can prove is Termii's own API contract: that needs a real
+key, a real number and somebody's consent.
 
 and the Dart adapters:
 

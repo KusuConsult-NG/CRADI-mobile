@@ -24,9 +24,13 @@
  *
  * It does not prove Termii's own API contract, and it does not prove
  * that a Function *container* can reach Termii from wherever it is
- * deployed. The first needs an account; the second needs a deploy. Both
- * are named in docs/CLOUD-VERIFICATION.md rather than quietly implied
- * by a green run here.
+ * deployed — this process makes the call, not a runtime.
+ *
+ * `e2e-sms-deployed.mjs` covers the second: same stand-in, but bound
+ * where only a container can reach it and called by the deployed
+ * worker. The first needs a real account and a real number, and is
+ * named in docs/CLOUD-VERIFICATION.md rather than quietly implied by a
+ * green run here.
  */
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';

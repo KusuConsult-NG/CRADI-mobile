@@ -34,8 +34,23 @@ bucket match; the 7 problems left are all Functions.
 allows: `client` (the three a client calls, routed on the execution's
 path) and `worker` (the four the server runs on its own, routed on the
 trigger). No handler was rewritten — see
-`APPWRITE-FUNCTION-CONTRACTS.md`. The Termii line below is still open:
-it needs a send from a deployed Function, which this unblocks.
+`APPWRITE-FUNCTION-CONTRACTS.md`.
+
+On the Termii line, the half that was about *deployment* is now
+covered: `infra/appwrite/local/e2e-sms-deployed.mjs` deploys the
+worker with `TERMII_BASE_URL` pointing at a stand-in bound on the
+runtimes network's docker gateway — an address only a container can
+reach — approves a report, and asserts the stand-in was called. It
+was, from a container address, with the deployed key and sender id,
+and a second drain did not re-send. So the variable plumbing, the
+runtime's egress and its `fetch` all work from inside a deployed
+Function.
+
+What is left is the half that needs an account: Termii's own API
+contract, from a Function deployed on **Cloud**, to a real number.
+That is one run of the same script with `TERMII_BASE_URL` unset and a
+real `TERMII_API_KEY` in the environment — and a number whose owner
+has agreed to be texted.
 
 ## What is already known about the Cloud project
 
