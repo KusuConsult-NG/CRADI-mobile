@@ -181,31 +181,79 @@ export async function notifyApproved(report, { settings = {}, send, now = Date.n
   return summary;
 }
 
-/** +234… — the format Termii wants. */
-export function normalisePhone(raw) {
-  const digits = String(raw ?? '').replace(/[^\d+]/g, '');
-  if (!digits) return null;
-  if (digits.startsWith('+234')) return digits;
-  if (digits.startsWith('234')) return `+${digits}`;
-  if (digits.startsWith('0') && digits.length === 11) return `+234${digits.slice(1)}`;
-  if (digits.length === 10) return `+234${digits}`;
-  return null;
+/**
+ * `+234…` — the format the rest of the system stores and compares.
+ *
+ * Not the format Termii's API wants, which is the same digits without
+ * the `+`; `termiiSender` strips it on the way out. Kept with the `+`
+ * here because `sms_deliveries.phone`, the admin panel and the
+ * `authorities` rows all use E.164, and the deterministic claim id is
+ * derived from it.
+ */
+export function normalisePhone(input) {
+  // A faithful port of `backend/src/sms/phone.js`, which is also what
+  // the admin panel's `lib/phone.ts` mirrors — so a number the panel
+  // accepts is one this can text, which was the point of writing it
+  // once. The first port of it was a shorter reimplementation that
+  // dropped two of the spellings and, worse, validated nothing: it
+  // turned "+234 (0)803 123 4567" into a fourteen-digit number and
+  // passed "+2349" straight through, both of which reach Termii as a
+  // send to nobody.
+  if (input == null) return null;
+  let digits = String(input).replace(/\(0\)/g, '').replace(/[^\d+]/g, '');
+  let international = false;
+  if (digits.startsWith('+')) {
+    digits = digits.slice(1);
+    international = true;
+  } else if (digits.startsWith('00')) {
+    digits = digits.slice(2);
+    international = true;
+  }
+  if (digits.includes('+')) return null;
+
+  if (digits.startsWith('234') && digits.length >= 13) digits = digits.slice(3);
+  else if (international) return null; // another country code
+  if (digits.startsWith('0')) digits = digits.slice(1);
+  // Nigerian subscriber numbers are 10 digits after the country code.
+  if (!/^[1-9]\d{9}$/.test(digits)) return null;
+  return `+234${digits}`;
+}
+
+/** Termii's replies about the recipient: a bad number, or DND-blocked. */
+const RECIPIENT_REFUSAL =
+  /invalid\s+(phone|mobile|recipient|destination|number)|(phone|mobile)\s*(number)?\s+(is\s+)?invalid|not\s+a\s+valid\s+(phone|mobile)|number\s+blacklisted|\bdnd\b|do.not.disturb/i;
+
+/**
+ * 401, 402, 403: bad credentials, no balance, a suspended account.
+ *
+ * Not the number's fault and not permanent — somebody tops up the
+ * account and every queued warning goes out. Treating it as permanent
+ * would mark a whole LGA's authorities `rejected` over an unpaid bill,
+ * and nothing would ever retry them.
+ */
+export function isSmsAccountError(error) {
+  return [401, 402, 403].includes(error?.status);
 }
 
 /**
- * A number the provider will never accept, as opposed to an outage.
+ * A refusal the provider will repeat for this number, as opposed to an
+ * outage, a rate limit or an unpaid account.
+ *
+ * Status first, then the text. The message alone is not enough: Termii
+ * says "Invalid API key" with a 401 and "Invalid phone number" with a
+ * 400, and a substring match on `invalid` cannot tell a dead account
+ * from a dead number — one is fixed by topping up and retrying, the
+ * other is never fixed by retrying at all. The Railway worker this is a
+ * port of got that right and the first port of it did not.
  *
  * Erring toward "not permanent" costs a retry; erring the other way
- * silently stops warning an authority, so the list is deliberately short.
+ * silently stops warning an authority, so the match stays narrow.
  */
 export function isPermanentSmsError(error) {
-  const message = String(error?.message ?? error).toLowerCase();
-  return (
-    message.includes('invalid phone') ||
-    message.includes('invalid number') ||
-    message.includes('number blacklisted') ||
-    message.includes('dnd')
-  );
+  const status = error?.status;
+  if (!Number.isInteger(status) || status < 400 || status >= 500) return false;
+  if (isSmsAccountError(error) || status === 408 || status === 429) return false;
+  return RECIPIENT_REFUSAL.test(String(error?.detail ?? error?.message ?? error));
 }
 
 /** Termii's API, unless something points this somewhere else. */
@@ -223,27 +271,60 @@ export const TERMII_BASE_URL = 'https://api.ng.termii.com';
 export const termiiBaseUrl = () =>
   String(process.env.TERMII_BASE_URL || TERMII_BASE_URL).replace(/\/+$/, '');
 
+/**
+ * How long to wait on Termii before giving up.
+ *
+ * The drain is a scheduled Function with a time budget, and `fetch` has
+ * no default timeout — one hung connection would hold the whole run
+ * until Appwrite killed it, taking every other queued notification with
+ * it. The Railway worker used the same 15s.
+ */
+export const SMS_TIMEOUT_MS = 15_000;
+
 /** Sends one message through Termii. */
 export async function termiiSender({ apiKey, senderId, fetchImpl = fetch }) {
   return async (to, sms) => {
-    const response = await fetchImpl(`${termiiBaseUrl()}/api/sms/send`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        to,
-        from: senderId,
-        sms,
-        type: 'plain',
-        channel: 'generic',
-        api_key: apiKey,
-      }),
-    });
+    let response;
+    try {
+      response = await fetchImpl(`${termiiBaseUrl()}/api/sms/send`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', accept: 'application/json' },
+        body: JSON.stringify({
+          // **Without the `+`.** Termii wants an international number as
+          // bare digits — `2348031234567` — and the Railway worker
+          // stripped it on every send, with a comment saying so. The
+          // first port of this passed `normalisePhone`'s `+234…`
+          // straight through, which is the one field in the payload that
+          // decides whether a flood warning is delivered or refused.
+          to: String(to).replace(/^\+/, ''),
+          from: senderId,
+          sms,
+          type: 'plain',
+          channel: 'generic',
+          api_key: apiKey,
+        }),
+        signal: AbortSignal.timeout(SMS_TIMEOUT_MS),
+      });
+    } catch (cause) {
+      // A timeout or a dead socket. No status, so never permanent: the
+      // claim is released and the outbox retries this number.
+      const error = new Error(`termii: ${cause?.message ?? cause}`);
+      error.cause = cause;
+      throw error;
+    }
     const body = await response.json().catch(() => ({}));
     // Termii answers 200 with an error message in the body as often as it
     // answers a 4xx, so the body is checked too — a 200 that did not send
     // must not read as sent.
     if (!response.ok || body?.code === 'error' || body?.message_id === undefined) {
-      throw new Error(`termii: ${body?.message ?? response.status}`);
+      const detail = String(body?.message ?? body?.error ?? response.status);
+      const error = new Error(`termii: ${detail}`.slice(0, 500));
+      // A 200 carrying `code: 'error'` is still the provider refusing,
+      // and what it refused is in the message — so it is classified as a
+      // 400 rather than as a success that threw.
+      error.status = response.ok ? 400 : response.status;
+      error.detail = detail;
+      throw error;
     }
     return body.message_id;
   };

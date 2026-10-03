@@ -129,16 +129,29 @@ on is worth a line either way.
 
 ### 1. Termii
 
-The SMS path now runs end to end against a stand-in
-(`infra/appwrite/local/e2e-sms.mjs`): the numbers chosen, the text,
-both caps, the deterministic claim and the bookkeeping. What that
-cannot prove is Termii's own API contract — that a real key and sender
-id are accepted, and that the response shape is what the sender reads —
-and that a deployed Function can reach `api.ng.termii.com` at all.
+The SMS path runs end to end against a stand-in
+(`infra/appwrite/local/e2e-sms.mjs`): the numbers chosen, the payload,
+the text, both caps, the deterministic claim, and the bookkeeping after
+a success, a refused number and an unpaid account.
 
-Both need an account and a deploy. Send one message to a number you
-own, with `TERMII_BASE_URL` unset, and check `sms_deliveries` says
-`sent` with a provider id.
+The payload is no longer the stand-in's guess at what Termii wants. It
+is checked against `backend/src/sms/providers.js` — the Railway worker
+that was **in production** — which is a better reference than a
+document, because it was delivering messages. Phase 24 found the port
+had diverged from it in three ways, one of which (`+234…` where Termii
+takes `234…`) would have refused every message.
+
+What is left needs an account:
+
+- that a real key and sender id are accepted, and that Termii's reply
+  is the shape the sender reads;
+- that a deployed Function can reach `api.ng.termii.com` at all.
+
+Send one message to a number you own, with `TERMII_BASE_URL` unset, and
+check `sms_deliveries` says `sent` with a provider id. Put the key in
+the environment rather than in a shell — `TERMII_API_KEY` and
+`TERMII_SENDER_ID` are read by `drain.js` from the Function's variables,
+which `deploy.mjs` sets from its own environment.
 
 ### 2. The tier's real limits
 

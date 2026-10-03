@@ -3177,3 +3177,86 @@ an SMS path that failed at its first write.
 The tier's real limits, which only Cloud can answer, and Termii's own
 API, which needs an account. `docs/CLOUD-VERIFICATION.md` is still the
 sequence for the first.
+
+# Phase 24 — the Termii gap, closed against the thing that worked
+
+The remaining SMS gap was "Termii's own API contract, which needs an
+account". Half of that was true. The other half was reachable without
+one, and nobody had looked: **this repository already contains a Termii
+client that was in production.** `backend/src/sms/providers.js` is the
+Railway worker's, and it was delivering messages to real local
+authorities. `functions/cradi/src/lib/termii.js` says in its own header
+that it is a port of it.
+
+It had diverged in three ways.
+
+## The `+`
+
+```js
+// the worker, with a comment saying so
+to: toE164.replace(/^\+/, '')   // "international format without '+'"
+
+// the port
+to,                              // +2348031234567
+```
+
+Termii takes the recipient as bare digits. The port sent E.164 with the
+`+` — the one field in the payload that decides whether a flood warning
+is delivered or refused, and **every** message would have carried it.
+
+`e2e-sms.mjs` could not catch this, and that is the part worth keeping
+in mind: its stand-in was written from the sender's own assumptions, so
+it agreed with the bug. A fake built from the code it tests can only
+confirm the code agrees with itself. The assertion now derives the
+expected value from the worker's rule instead, and reverting the fix
+fails both it and the unit tests.
+
+## Which failures are the number's fault
+
+The worker decided permanence by status first and text second. The port
+matched four substrings against the message and ignored the status
+entirely.
+
+Termii says `Invalid API key` with a 401 and `Invalid phone number` with
+a 400. A substring match on `invalid` cannot tell a dead account from a
+dead number — and the port's rule, applied to an unpaid account, would
+have marked every authority in an LGA `rejected`, kept their claims, and
+never texted them again. Over a billing problem. The worker retried
+401/402/403 and logged them loudly, because somebody tops the account up
+and the queue drains; the port does that now.
+
+## A timeout, and the numbers themselves
+
+`fetch` has no default timeout and the drain is a scheduled Function
+with a budget: one hung socket would have taken every other queued
+notification with it. 15 seconds, as the worker had.
+
+And `normalisePhone` was a shorter reimplementation of
+`backend/src/sms/phone.js` that dropped two accepted spellings and
+validated nothing: `+234 (0)803 123 4567` came out as a fourteen-digit
+number, and `+2349` passed straight through. Both reach Termii as a send
+to nobody. It is now a faithful port of the original — which is also
+what the admin panel's `lib/phone.ts` mirrors, so a number the panel
+accepts is one the backend can text, which was the point of writing it
+once.
+
+## The module had no unit tests
+
+Not one. The schema audit touched it and `settings.test.mjs` touched
+`smsBudget`; the payload, the permanence rule, the message text and the
+phone parsing had none. That is how a port of a working implementation
+lost three of its properties without anything going red.
+`termii.test.mjs` is 21 tests over exactly those four things.
+
+## What Phase 24 proves
+
+202 Function unit tests, 808 Dart tests, six live suites and
+`cloud-check.mjs`, all green. The SMS payload now matches an
+implementation that was delivering messages in production, rather than
+matching a stand-in that was written from the same guess as the sender.
+
+## Still open
+
+The tier's real limits, and one message through Termii's live API from
+a deployed Function — a real key, a real sender id, a number you own.
+`docs/CLOUD-VERIFICATION.md` has both.

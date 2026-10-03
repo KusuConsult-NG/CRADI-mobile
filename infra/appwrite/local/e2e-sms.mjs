@@ -182,7 +182,16 @@ async function main() {
   assert.equal(first.type, 'plain');
   assert.equal(first.channel, 'generic');
   assert.equal(first.api_key, 'test-key');
-  assert.ok(phones.includes(first.to), `to: ${first.to}`);
+  // Bare digits, no `+`. This assertion used to read
+  // `phones.includes(first.to)` and passed against a payload Termii
+  // would have refused — the stand-in was written from the sender's own
+  // assumptions, so it agreed with the bug. The expected value comes
+  // from the production worker's rule now, not from the sender.
+  assert.ok(
+    phones.map((p) => p.replace(/^\+/, '')).includes(first.to),
+    `to: ${first.to} — Termii wants 234…, not +234…`,
+  );
+  assert.ok(!String(first.to).startsWith('+'), `to still carries a +: ${first.to}`);
   assert.match(first.sms, /^EWER ALERT: HIGH Flooding reported in North Bank I, Makurdi\./);
   assert.match(first.sms, / - verified by community monitors\.$/);
   assert.ok(first.sms.length <= 320, `length ${first.sms.length}`);
@@ -190,7 +199,7 @@ async function main() {
 
   step('every number was texted exactly once');
   const texted = received.map((r) => r.body.to).sort();
-  assert.deepEqual(texted, [...phones].sort());
+  assert.deepEqual(texted, phones.map((p) => p.replace(/^\+/, '')).sort());
   ok(texted.join(', '));
 
   step('the deliveries are recorded as sent, with the provider id');
@@ -285,6 +294,49 @@ async function main() {
     assert.match(String(d.error), /Invalid phone/i);
   }
   ok("3 recorded as rejected, with the provider's reason");
+
+  step("an unpaid account is not the number's fault, so the claim is released");
+  // The distinction that decides whether a whole LGA's authorities are
+  // written off over a billing problem. 402 means top up and retry; if
+  // it were treated as a refused number the rows would say `rejected`
+  // and nothing would ever text them again.
+  const billingId = name('billing');
+  const billing = { ...report, $id: billingId };
+  const storedBilling = await call(row('reports'), {
+    method: 'POST',
+    body: {
+      rowId: billingId,
+      data: {
+        ...billing, userId: 'sms-check', reporterName: 'SMS check', status: 'approved',
+        verificationCount: 0, isAlert: false, escalated: false, autoValidated: false,
+        submittedAt: new Date().toISOString(), imageUrls: [],
+      },
+      permissions: ['read("label:admin")'],
+    },
+  });
+  assert.ok(storedBilling.ok, `billing report: ${storedBilling.status}`);
+  track('reports', billingId);
+
+  nextResponse = () => ({ status: 402, body: { message: 'Insufficient balance' } });
+  let threw = null;
+  try {
+    await notifyApproved(billing, { settings: {}, send, log });
+  } catch (e) {
+    threw = e;
+  }
+  nextResponse = () => ({ status: 200, body: { message_id: `m-${received.length}` } });
+  assert.ok(threw, 'a transient failure must surface, so the outbox retries');
+  assert.match(String(threw.message), /Insufficient balance/);
+
+  const afterBilling = await call(
+    `${row('sms_deliveries')}?${q({ method: 'equal', attribute: 'reportId', values: [billingId] }, { method: 'limit', values: [25] })}`,
+  );
+  assert.equal(
+    afterBilling.body.total,
+    0,
+    `the claim must be released, not kept as rejected (${afterBilling.body.total} left)`,
+  );
+  ok('claim released and the error raised — the retry texts them once the account is topped up');
 }
 
 let failure = null;
