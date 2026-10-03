@@ -38,8 +38,27 @@ and drain it. The assertion is that the stand-in was reached, and the
 remote address it prints is the container's. Point it at `127.0.0.1`
 instead and the run fails, which is how you know the hop is real.
 
-What neither can prove is Termii's own API contract: that needs a real
-key, a real number and somebody's consent.
+What neither proves by default is Termii's own API contract. For that,
+the same script has a live mode — it sends a **real SMS**, costs money
+and reaches a handset, so everything it needs is explicit:
+
+```
+TERMII_API_KEY=...  TERMII_SENDER_ID=CRADI \
+SMS_LIVE_NUMBER=+234XXXXXXXXXX \
+node infra/appwrite/local/e2e-sms-deployed.mjs
+```
+
+It refuses to start without the key and sender, or with a number that
+is not full E.164.
+
+The risk in live mode is not the number you pass, it is the ones you
+do not: `notifyApproved` texts **every** authority covering the
+report's LGA, so against a project holding real local-government
+contacts, approving a report in a covered LGA texts all of them. The
+script asserts that exactly one authority covers the chosen LGA and
+that it is the one the run created; anything else and it stops before
+creating the report. `SMS_TEST_LGA` / `SMS_TEST_STATE` pick a
+different one.
 
 and the Dart adapters:
 

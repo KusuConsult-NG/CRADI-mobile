@@ -24,9 +24,23 @@
  *    picks the event up and writes the outbox row, and a second
  *    execution drains it — both deployed Functions, in sequence.
  *
- * What is left after a green run is Termii's own API contract and a
- * real number, which need an account and somebody's consent. See
- * `docs/CLOUD-VERIFICATION.md`.
+ * ## The live mode
+ *
+ * With `SMS_LIVE_NUMBER` set this sends a **real SMS through Termii**
+ * to that number, which is the last thing the stand-in cannot prove:
+ * Termii's own API contract, from a deployed Function. It needs
+ * `TERMII_API_KEY` and `TERMII_SENDER_ID` in the environment, costs
+ * money, and reaches a real handset — so the number is given
+ * explicitly and never defaulted.
+ *
+ * The danger in live mode is not the number you pass, it is the ones
+ * you do not: `notifyApproved` texts **every** authority covering the
+ * report's LGA. Against a real project with real local-government
+ * contacts in it, approving a report in a covered LGA would text them
+ * all. So before anything is approved, this asserts that exactly one
+ * authority covers the chosen LGA and that it is the one this run
+ * created. If any other row covers it, the run stops and sends
+ * nothing.
  */
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
@@ -58,13 +72,31 @@ if (!EP || !PROJECT || !KEY) {
  * assertions below check the stand-in was *reached*, not merely that
  * the Function reported success.
  */
+const LIVE = (process.env.SMS_LIVE_NUMBER ?? '').trim();
 const NETWORK = process.env.APPWRITE_RUNTIMES_NETWORK ?? 'runtimes19';
 const PORT = Number(process.env.SMS_STANDIN_PORT ?? 8099);
-const gateway = execFileSync('docker', [
-  'network', 'inspect', NETWORK, '-f', '{{range .IPAM.Config}}{{.Gateway}}{{end}}',
-]).toString().trim();
-assert.ok(gateway, `no gateway for the ${NETWORK} network`);
-const BASE_URL = `http://${gateway}:${PORT}`;
+
+let BASE_URL = null;
+if (!LIVE) {
+  const gateway = execFileSync('docker', [
+    'network', 'inspect', NETWORK, '-f', '{{range .IPAM.Config}}{{.Gateway}}{{end}}',
+  ]).toString().trim();
+  assert.ok(gateway, `no gateway for the ${NETWORK} network`);
+  BASE_URL = `http://${gateway}:${PORT}`;
+} else {
+  // Termii's own API, which is what `TERMII_BASE_URL` defaults to.
+  for (const required of ['TERMII_API_KEY', 'TERMII_SENDER_ID']) {
+    assert.ok(
+      (process.env[required] ?? '').trim(),
+      `${required} must be set for a live send; put it in the environment, not here`,
+    );
+  }
+  assert.match(
+    LIVE,
+    /^\+234\d{10}$/,
+    `SMS_LIVE_NUMBER must be a full E.164 Nigerian number, got "${LIVE}"`,
+  );
+}
 
 const admin = { 'content-type': 'application/json', 'x-appwrite-project': PROJECT, 'x-appwrite-key': KEY };
 async function call(path, { method = 'GET', body } = {}) {
@@ -89,7 +121,7 @@ const track = (kind, id) => made.unshift({ kind, id });
 
 // ── the stand-in, on every interface ──────────────────────────────────
 const received = [];
-const termii = createServer((req, res) => {
+const standIn = createServer((req, res) => {
   let raw = '';
   req.on('data', (c) => { raw += c; });
   req.on('end', () => {
@@ -100,12 +132,18 @@ const termii = createServer((req, res) => {
     res.end(JSON.stringify({ message_id: `m-${received.length}`, code: 'ok' }));
   });
 });
-await new Promise((resolve) => termii.listen(PORT, '0.0.0.0', resolve));
-console.log(`stand-in Termii on ${BASE_URL} (container-reachable)`);
+if (LIVE) {
+  console.log(`LIVE: a real SMS will be sent to ${LIVE} via Termii as "${process.env.TERMII_SENDER_ID}"`);
+} else {
+  await new Promise((resolve) => standIn.listen(PORT, '0.0.0.0', resolve));
+  console.log(`stand-in Termii on ${BASE_URL} (container-reachable)`);
+}
 
-const LGA = 'Makurdi';
-const STATE = 'Benue';
-const PHONE = '+2348030000009';
+// An LGA with no authorities of its own, asserted below rather than
+// assumed: every authority covering the report's LGA is texted.
+const LGA = process.env.SMS_TEST_LGA ?? 'Makurdi';
+const STATE = process.env.SMS_TEST_STATE ?? 'Benue';
+const PHONE = LIVE || '+2348030000009';
 
 async function cleanup() {
   step('cleaning up');
@@ -132,16 +170,18 @@ async function main() {
   // The real `deploy.mjs`, so the variables travel the way they do in
   // production. A hand-written variable write here would prove that a
   // variable this script set can be read, which is not the question.
-  execFileSync('node', [join(here, 'deploy.mjs')], {
-    env: {
-      ...process.env,
-      TERMII_API_KEY: 'standin-key',
-      TERMII_SENDER_ID: 'CRADI',
-      TERMII_BASE_URL: BASE_URL,
-    },
-    stdio: 'pipe',
-  });
-  ok(`deployed with TERMII_BASE_URL=${BASE_URL}`);
+  const deployEnv = LIVE
+    ? // Termii's real API: `TERMII_BASE_URL` must not be carried over
+      // from a previous stand-in run, or the "live" send goes nowhere.
+      { ...process.env, TERMII_BASE_URL: undefined }
+    : {
+        ...process.env,
+        TERMII_API_KEY: 'standin-key',
+        TERMII_SENDER_ID: 'CRADI',
+        TERMII_BASE_URL: BASE_URL,
+      };
+  execFileSync('node', [join(here, 'deploy.mjs')], { env: deployEnv, stdio: 'pipe' });
+  ok(LIVE ? 'deployed against Termii\u2019s own API' : `deployed with TERMII_BASE_URL=${BASE_URL}`);
 
   step('an authority covering the LGA, and an approved report in it');
   const authorityId = name('auth');
@@ -160,6 +200,26 @@ async function main() {
   });
   assert.ok(authority.ok, `authority: ${authority.status} ${JSON.stringify(authority.body).slice(0, 200)}`);
   track('authorities', authorityId);
+
+  // THE guard. `notifyApproved` texts every authority covering the
+  // report's LGA, so on a project with real local-government contacts
+  // in it the blast radius of this run is "whoever covers Makurdi",
+  // not "the number I passed". Checked after the insert, so it also
+  // catches a second copy of our own row from an interrupted run.
+  const covering = await call(`${row('authorities')}?${[
+    { method: 'equal', attribute: 'coverageLga', values: [LGA] },
+    { method: 'limit', values: [100] },
+  ].map((q) => `queries[]=${encodeURIComponent(JSON.stringify(q))}`).join('&')}`);
+  assert.ok(covering.ok, `authorities: ${covering.status}`);
+  const others = (covering.body?.rows ?? []).filter((a) => a.$id !== authorityId);
+  assert.equal(
+    others.length,
+    0,
+    `${others.length} other authorities already cover ${LGA} and would be texted too: ` +
+      `${others.map((a) => `${a.$id} ${a.phone}`).join(', ')}. ` +
+      'Pick an uncovered LGA with SMS_TEST_LGA / SMS_TEST_STATE, or remove them first.',
+  );
+  ok(`${LGA} is covered by this run's authority and no other`);
 
   const reportId = name('report');
   const created = await call(row('reports'), {
@@ -229,22 +289,30 @@ async function main() {
       `  errors: ${(tick.errors || '').slice(-600)}`,
   );
 
-  assert.ok(
-    received.length > before,
-    'the stand-in was never reached — the deployed Function did not call Termii. ' +
-      `logs: ${(tick.logs || '').slice(-600)} errors: ${(tick.errors || '').slice(-400)}`,
-  );
-  const sent = received[received.length - 1];
-  ok(`reached from ${sent.from} (a runtime container, not this process)`);
+  if (LIVE) {
+    // Nothing of ours sits between the Function and Termii here, so
+    // the evidence is the delivery row and the execution's own log.
+    // Termii's `message_id` in that log is the thing that can be
+    // looked up in their dashboard, which is the point of the run.
+    ok('the drain completed without error');
+  } else {
+    assert.ok(
+      received.length > before,
+      'the stand-in was never reached — the deployed Function did not call Termii. ' +
+        `logs: ${(tick.logs || '').slice(-600)} errors: ${(tick.errors || '').slice(-400)}`,
+    );
+    const sent = received[received.length - 1];
+    ok(`reached from ${sent.from} (a runtime container, not this process)`);
 
-  step('and it sent what it was supposed to send');
-  assert.equal(sent.path, '/api/sms/send', `path: ${sent.path}`);
-  // Termii refuses a leading `+`; `termiiSender` strips it.
-  assert.equal(sent.body.to, PHONE.replace(/^\+/, ''), `to: ${sent.body.to}`);
-  assert.equal(sent.body.from, 'CRADI', `from: ${sent.body.from}`);
-  assert.equal(sent.body.api_key, 'standin-key', 'the deployed key was used');
-  assert.match(sent.body.sms, /Makurdi/, `text: ${sent.body.sms}`);
-  ok(`to=${sent.body.to} from=${sent.body.from} "${String(sent.body.sms).slice(0, 70)}…"`);
+    step('and it sent what it was supposed to send');
+    assert.equal(sent.path, '/api/sms/send', `path: ${sent.path}`);
+    // Termii refuses a leading `+`; `termiiSender` strips it.
+    assert.equal(sent.body.to, PHONE.replace(/^\+/, ''), `to: ${sent.body.to}`);
+    assert.equal(sent.body.from, 'CRADI', `from: ${sent.body.from}`);
+    assert.equal(sent.body.api_key, 'standin-key', 'the deployed key was used');
+    assert.match(sent.body.sms, new RegExp(LGA), `text: ${sent.body.sms}`);
+    ok(`to=${sent.body.to} from=${sent.body.from} "${String(sent.body.sms).slice(0, 70)}…"`);
+  }
 
   step('and recorded the delivery, so a second drain does not re-send');
   const deliveries = await call(`${row('sms_deliveries')}?queries[]=${encodeURIComponent(
@@ -253,7 +321,18 @@ async function main() {
   const claims = deliveries.body?.rows ?? [];
   assert.equal(claims.length, 1, `claims: ${JSON.stringify(claims).slice(0, 200)}`);
   for (const c of claims) track('sms_deliveries', c.$id);
+  assert.equal(
+    claims[0].status,
+    'sent',
+    `the delivery was not recorded as sent: ${JSON.stringify(claims[0]).slice(0, 300)}\n` +
+      `  logs: ${(tick.logs || '').slice(-600)}`,
+  );
   ok(`${claims[0].$id} status=${claims[0].status}`);
+  if (LIVE) {
+    // The Function logs Termii's reply; printing it is how the run is
+    // checked against the Termii dashboard and the handset.
+    console.log(`\n   Termii, as the Function saw it:\n${(tick.logs || '').slice(-800)}`);
+  }
 
   const afterFirst = received.length;
   await runWorker('second drain');
@@ -271,5 +350,5 @@ try {
   await main();
 } finally {
   await cleanup().catch(() => {});
-  termii.close();
+  if (!LIVE) standIn.close();
 }
