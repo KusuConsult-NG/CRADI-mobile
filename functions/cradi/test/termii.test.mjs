@@ -33,10 +33,27 @@ function capture(response = { ok: true, body: { message_id: 'm1' } }) {
   return { calls, fetchImpl };
 }
 
+describe('the way drain.js builds the sender', () => {
+  it('returns the function, not a promise of one', async () => {
+    // `drain.js` does `const send = termiiSender({...})` with no await
+    // and hands `send` to `notifyApproved`. While the builder was
+    // `async` that made `send` a Promise and every authority SMS died
+    // on `send is not a function` — and `e2e-sms.mjs` did not catch it,
+    // because the suite awaited the builder. It was written to match
+    // this signature instead of matching its one real caller.
+    const { fetchImpl } = capture();
+    const send = termiiSender({ apiKey: 'k', senderId: 'EWER', fetchImpl });
+
+    assert.equal(typeof send, 'function', 'drain.js calls this directly');
+    assert.ok(!(send instanceof Promise));
+    assert.equal(await send('+2348031234567', 'hi'), 'm1');
+  });
+});
+
 describe('the Termii payload', () => {
   it('sends the number without its +, which is what Termii accepts', async () => {
     const { calls, fetchImpl } = capture();
-    const send = await termiiSender({ apiKey: 'k', senderId: 'EWER', fetchImpl });
+    const send = termiiSender({ apiKey: 'k', senderId: 'EWER', fetchImpl });
     await send('+2348031234567', 'hello');
 
     assert.equal(calls[0].body.to, '2348031234567');
@@ -45,7 +62,7 @@ describe('the Termii payload', () => {
 
   it('is the shape the provider documents', async () => {
     const { calls, fetchImpl } = capture();
-    const send = await termiiSender({ apiKey: 'secret', senderId: 'EWER', fetchImpl });
+    const send = termiiSender({ apiKey: 'secret', senderId: 'EWER', fetchImpl });
     const id = await send('+2348031234567', 'hello');
 
     assert.equal(id, 'm1');
@@ -63,7 +80,7 @@ describe('the Termii payload', () => {
 
   it('gives up rather than holding the whole drain open', async () => {
     const { calls, fetchImpl } = capture();
-    const send = await termiiSender({ apiKey: 'k', senderId: 'EWER', fetchImpl });
+    const send = termiiSender({ apiKey: 'k', senderId: 'EWER', fetchImpl });
     await send('+2348031234567', 'hello');
 
     // `fetch` has no default timeout, and the drain is a scheduled
@@ -82,7 +99,7 @@ describe('what Termii calls a failure', () => {
       ok: true,
       body: { code: 'error', message: 'Invalid phone number' },
     });
-    const send = await termiiSender({ apiKey: 'k', senderId: 'EWER', fetchImpl });
+    const send = termiiSender({ apiKey: 'k', senderId: 'EWER', fetchImpl });
     await assert.rejects(send('+2348031234567', 'hi'), (e) => {
       assert.match(e.message, /Invalid phone number/);
       assert.equal(e.status, 400, 'classified as the refusal it is');
@@ -92,7 +109,7 @@ describe('what Termii calls a failure', () => {
 
   it('treats a 200 with no message id as a failure', async () => {
     const { fetchImpl } = capture({ ok: true, body: { balance: 3 } });
-    const send = await termiiSender({ apiKey: 'k', senderId: 'EWER', fetchImpl });
+    const send = termiiSender({ apiKey: 'k', senderId: 'EWER', fetchImpl });
     await assert.rejects(send('+2348031234567', 'hi'));
   });
 
@@ -102,7 +119,7 @@ describe('what Termii calls a failure', () => {
       status: 402,
       body: { message: 'Insufficient balance' },
     });
-    const send = await termiiSender({ apiKey: 'k', senderId: 'EWER', fetchImpl });
+    const send = termiiSender({ apiKey: 'k', senderId: 'EWER', fetchImpl });
     await assert.rejects(send('+2348031234567', 'hi'), (e) => {
       assert.equal(e.status, 402);
       return true;
@@ -113,7 +130,7 @@ describe('what Termii calls a failure', () => {
     const fetchImpl = async () => {
       throw new Error('The operation was aborted due to timeout');
     };
-    const send = await termiiSender({ apiKey: 'k', senderId: 'EWER', fetchImpl });
+    const send = termiiSender({ apiKey: 'k', senderId: 'EWER', fetchImpl });
     await assert.rejects(send('+2348031234567', 'hi'), (e) => {
       assert.equal(e.status, undefined);
       assert.equal(isPermanentSmsError(e), false);

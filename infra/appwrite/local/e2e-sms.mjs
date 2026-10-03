@@ -164,7 +164,10 @@ async function main() {
   track('reports', reportId);
   ok(`${phones.length} authorities in ${LGA}, ${STATE}`);
 
-  const send = await termiiSender({ apiKey: 'test-key', senderId: 'EWER' });
+  // No `await`, because `drain.js` does not await it either — the suite
+  // must wire the sender the way the one real caller does, or it is
+  // testing a call nobody makes.
+  const send = termiiSender({ apiKey: 'test-key', senderId: 'EWER' });
   const log = () => {};
 
   step('the first run texts every authority once');

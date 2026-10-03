@@ -281,8 +281,19 @@ export const termiiBaseUrl = () =>
  */
 export const SMS_TIMEOUT_MS = 15_000;
 
-/** Sends one message through Termii. */
-export async function termiiSender({ apiKey, senderId, fetchImpl = fetch }) {
+/**
+ * Builds the sender. **Not async**: it returns the function, not a
+ * promise of one.
+ *
+ * It was `async` and `drain.js` calls it without `await`, so `send` was
+ * a Promise and every authority SMS died on `send is not a function`.
+ * The SMS suite did not catch it because the suite awaited the builder
+ * — it was written to match this signature instead of matching the one
+ * caller that matters, which is the same mistake as a fake built from
+ * the code it tests. `drain.test.mjs` now calls it the way the drain
+ * does.
+ */
+export function termiiSender({ apiKey, senderId, fetchImpl = fetch }) {
   return async (to, sms) => {
     let response;
     try {
