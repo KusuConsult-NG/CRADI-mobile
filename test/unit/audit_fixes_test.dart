@@ -2,25 +2,23 @@ import 'dart:async';
 
 import 'package:climate_app/core/services/offline_storage_service.dart';
 import 'package:climate_app/core/services/secure_storage_service.dart';
-import 'package:climate_app/core/services/supabase_service.dart';
+import 'package:climate_app/core/services/backend.dart';
+
+import '../support/fake_backends.dart';
 import 'package:climate_app/features/auth/providers/auth_provider.dart';
 import 'package:climate_app/features/profile/providers/profile_provider.dart';
 import 'package:climate_app/features/verification/providers/reports_status_provider.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:supabase_flutter/supabase_flutter.dart' as sb;
 
-/// Minimal [SupabaseService] stand-in: a signed-in user and a controllable
+/// Minimal [DataBackend] stand-in: a signed-in user and a controllable
 /// `profiles` row.
-class _FakeDb implements SupabaseService {
+class _FakeDb implements DataBackend {
   _FakeDb(this.user);
 
-  sb.User? user;
+  AuthUser? user;
   Future<Map<String, dynamic>> Function() profileRow = () async => {};
-
-  @override
-  sb.User? getCurrentUser() => user;
 
   @override
   String? get currentUserId => user?.id;
@@ -35,14 +33,7 @@ class _FakeDb implements SupabaseService {
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
-sb.User _user(String id, String email) => sb.User(
-  id: id,
-  email: email,
-  appMetadata: const {},
-  userMetadata: const {},
-  aud: 'authenticated',
-  createdAt: '2026-01-01T00:00:00Z',
-);
+AuthUser _user(String id, String email) => AuthUser(id: id, email: email);
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -69,7 +60,7 @@ void main() {
             'email': 'b@x.org',
             'monitoringZone': '',
           };
-        final profile = ProfileProvider(supabaseService: db);
+        final profile = ProfileProvider(db: db, auth: FakeAuthBackend(db.user));
         await profile.loadProfile();
 
         expect(profile.monitoringZone, isNull);
@@ -85,7 +76,7 @@ void main() {
           'email': 'a@x.org',
           'monitoringZone': 'Benue State',
         };
-      final profile = ProfileProvider(supabaseService: db);
+      final profile = ProfileProvider(db: db, auth: FakeAuthBackend(db.user));
       await profile.loadProfile();
 
       expect(profile.monitoringZone, 'Benue State');
@@ -101,7 +92,7 @@ void main() {
             'email': 'a@x.org',
             'monitoringZone': 'Benue State',
           };
-        final profile = ProfileProvider(supabaseService: db);
+        final profile = ProfileProvider(db: db, auth: FakeAuthBackend(db.user));
         final zones = <String?>[];
         profile.onMonitoringZoneChanged = zones.add;
         await profile.loadProfile();
@@ -121,7 +112,10 @@ void main() {
         'monitoring_zone': 'Benue State',
         'biometric_enabled': 'true',
       });
-      final profile = ProfileProvider(supabaseService: _FakeDb(null));
+      final profile = ProfileProvider(
+        db: _FakeDb(null),
+        auth: FakeAuthBackend(),
+      );
       await profile.clearProfile();
 
       for (final key in [
@@ -139,7 +133,7 @@ void main() {
     test('a load that outlives a sign-out applies nothing', () async {
       final row = Completer<Map<String, dynamic>>();
       final db = _FakeDb(_user('u1', 'a@x.org'));
-      final profile = ProfileProvider(supabaseService: db);
+      final profile = ProfileProvider(db: db, auth: FakeAuthBackend(db.user));
       // Let the constructor's load finish first.
       await Future<void>.delayed(Duration.zero);
       await profile.loadProfile();

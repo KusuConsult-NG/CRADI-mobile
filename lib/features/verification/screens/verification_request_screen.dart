@@ -1,5 +1,5 @@
 import 'package:climate_app/core/constants/hazards.dart';
-import 'package:climate_app/core/services/supabase_service.dart';
+import 'package:climate_app/core/services/backend.dart';
 import 'package:climate_app/core/utils/error_handler.dart';
 import 'package:climate_app/core/utils/validators.dart';
 import 'package:flutter/material.dart';
@@ -60,9 +60,9 @@ class _VerificationRequestScreenState extends State<VerificationRequestScreen> {
     }
 
     try {
-      final user = SupabaseService().getCurrentUser();
+      final userId = backend.currentUserId;
 
-      if (user == null) {
+      if (userId == null) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text(context.l10n.authErrorNotLoggedIn)),
@@ -86,7 +86,7 @@ class _VerificationRequestScreenState extends State<VerificationRequestScreen> {
 
       try {
         await context.read<ReportsStatusProvider>().submitVerificationRequest(
-          userId: user.id,
+          userId: userId,
           hazardType: _selectedHazard,
           severity: _selectedSeverity,
           description: _descriptionController.text,

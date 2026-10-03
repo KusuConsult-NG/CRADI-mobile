@@ -1,5 +1,5 @@
 import 'package:climate_app/core/constants/hazards.dart';
-import 'package:climate_app/core/services/supabase_service.dart';
+import 'package:climate_app/core/services/backend.dart';
 import 'package:climate_app/features/verification/providers/reports_status_provider.dart';
 import 'package:climate_app/core/utils/error_handler.dart';
 import 'package:climate_app/core/constants/app_config.dart';
@@ -44,7 +44,7 @@ class _VerificationListScreenState extends State<VerificationListScreen> {
       final auth = context.read<AuthProvider>();
       final statusProvider = context.read<ReportsStatusProvider>();
       final currentUserId = auth.currentUser?.id;
-      final db = SupabaseService();
+      final db = backend;
 
       final queries = <QueryFilter>[
         FQuery.equal('status', 'pending'),

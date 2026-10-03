@@ -1,6 +1,6 @@
 import 'dart:convert';
 import 'package:climate_app/core/constants/app_config.dart';
-import 'package:climate_app/core/services/supabase_service.dart';
+import 'package:climate_app/core/services/backend.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:developer' as developer;
@@ -121,7 +121,7 @@ class NewsService {
 
   /// Active curated links from `news_links`, in admin-defined order.
   static Future<List<Map<String, dynamic>>> _fetchNewsLinks(int limit) async {
-    final rows = await SupabaseService().listDocuments(
+    final rows = await backend.listDocuments(
       collectionId: AppConfig.newsLinksCollection,
       queries: [
         FQuery.equal('isActive', true),

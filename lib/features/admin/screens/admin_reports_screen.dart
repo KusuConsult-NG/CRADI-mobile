@@ -1,5 +1,5 @@
 import 'package:climate_app/core/constants/app_config.dart';
-import 'package:climate_app/core/services/supabase_service.dart';
+import 'package:climate_app/core/services/backend.dart';
 import 'package:climate_app/features/auth/providers/auth_provider.dart';
 import 'package:climate_app/features/verification/providers/reports_status_provider.dart';
 import 'package:climate_app/features/verification/widgets/report_verifications_section.dart';
@@ -78,7 +78,7 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
       _error = null;
     });
     try {
-      final page = await SupabaseService().listDocuments(
+      final page = await backend.listDocuments(
         collectionId: AppConfig.reportsCollection,
         queries: [
           if (_statusFilter != 'all') FQuery.equal('status', _statusFilter),
@@ -195,12 +195,12 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
         await context.read<ReportsStatusProvider>().moveBackToPending(reportId);
       } else {
         final now = DateTime.now();
-        updated = await SupabaseService().updateDocument(
+        updated = await backend.updateDocument(
           collectionId: AppConfig.reportsCollection,
           documentId: reportId,
           data: {
             'status': newStatus,
-            'updatedBy': SupabaseService().currentUserId,
+            'updatedBy': backend.currentUserId,
             if (newStatus == 'verified') 'verifiedAt': now,
             if (newStatus == 'approved') 'approvedAt': now,
             if (newStatus == 'rejected') 'rejectedAt': now,

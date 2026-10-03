@@ -1,4 +1,4 @@
-import 'package:climate_app/core/services/supabase_service.dart';
+import 'package:climate_app/core/services/backend.dart';
 import 'package:climate_app/core/constants/app_config.dart';
 import 'package:climate_app/core/services/remote_config_service.dart';
 import 'package:climate_app/features/auth/providers/auth_provider.dart'
@@ -29,7 +29,7 @@ class PeerVerificationService {
   factory PeerVerificationService() => _instance;
   PeerVerificationService._internal();
 
-  final SupabaseService _db = SupabaseService();
+  final DataBackend _db = backend;
 
   /// Submit a verification (confirm or dispute).
   ///
@@ -95,14 +95,14 @@ class PeerVerificationService {
             : (AppLocalizations l) => l.verifyDisputedMessage,
       };
     } on Exception catch (e) {
-      if (SupabaseService.isUniqueViolation(e)) {
+      if (isDuplicate(e)) {
         return {
           'success': false,
           'alreadyVoted': true,
           'message': (AppLocalizations l) => l.verifyErrorAlreadyVoted,
         };
       }
-      if (SupabaseService.isPermissionDenied(e)) {
+      if (isRefusal(e)) {
         // RLS also refuses votes on reports that left 'pending' (e.g.
         // verified or rejected meanwhile): tell those apart.
         if (await _isNoLongerPending(reportId)) {
@@ -244,29 +244,23 @@ class PeerVerificationService {
   /// The verifier's name is embedded from `profiles` where the caller may
   /// read that profile; otherwise it is null (never looked up separately).
   Future<List<ReportVerification>> getVerifications(String reportId) async {
-    const table = AppConfig.verificationsCollection;
-    List<Map<String, dynamic>> rows;
-    try {
-      rows = await _db.client
-          .from(table)
-          .select('*, verifier:profiles!verifier_id(name)')
-          .eq('report_id', reportId)
-          .order('submitted_at', ascending: false)
-          .limit(200);
-    } on Exception catch (e) {
-      // Embedding can fail (e.g. relationship not exposed): plain rows.
-      developer.log(
-        'Verifier embed failed, loading plain rows: $e',
-        name: 'PeerVerificationService',
-      );
-      rows = await _db.client
-          .from(table)
-          .select()
-          .eq('report_id', reportId)
-          .order('submitted_at', ascending: false)
-          .limit(200);
-    }
-    return rows.map(ReportVerification.fromRow).toList();
+    final docs = await _db.listDocuments(
+      collectionId: AppConfig.verificationsCollection,
+      queries: [
+        FQuery.equal('reportId', reportId),
+        FQuery.orderDesc('submittedAt'),
+        FQuery.limit(200),
+      ],
+      // Best-effort by contract: a backend that cannot join returns the
+      // documents without it and the name simply reads as null.
+      related: const RelatedFields(
+        alias: 'verifier',
+        collectionId: AppConfig.usersCollection,
+        foreignKey: 'verifierId',
+        fields: ['name'],
+      ),
+    );
+    return docs.map(ReportVerification.fromDocument).toList();
   }
 
   /// Haversine distance in kilometres.
@@ -304,15 +298,19 @@ class ReportVerification {
 
   /// Builds a vote from a raw `verifications` row (optionally with an
   /// embedded `verifier: {name}`).
-  factory ReportVerification.fromRow(Map<String, dynamic> row) {
-    final verifier = row['verifier'];
+  /// Reads a document as the backend returns it — field names, not column
+  /// names. [verifier] is the embedded related object where the backend
+  /// could supply one; absent, the name reads as null, which is what the
+  /// UI already shows for a profile the caller may not read.
+  factory ReportVerification.fromDocument(Map<String, dynamic> doc) {
+    final verifier = doc['verifier'];
     final name = verifier is Map ? verifier['name']?.toString().trim() : null;
     return ReportVerification(
-      verifierId: row['verifier_id']?.toString() ?? '',
-      isConfirmed: row['is_confirmed'] == true,
-      comment: row['comment']?.toString().trim() ?? '',
+      verifierId: doc['verifierId']?.toString() ?? '',
+      isConfirmed: doc['isConfirmed'] == true,
+      comment: doc['comment']?.toString().trim() ?? '',
       verifierName: (name == null || name.isEmpty) ? null : name,
-      submittedAt: parseTimestamp(row['submitted_at'] ?? row['created_at']),
+      submittedAt: parseTimestamp(doc['submittedAt'] ?? doc['createdAt']),
     );
   }
 

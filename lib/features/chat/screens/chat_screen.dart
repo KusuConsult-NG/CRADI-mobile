@@ -1,11 +1,11 @@
 import 'dart:async';
 
 import 'package:climate_app/core/theme/app_colors.dart';
-import 'package:climate_app/core/services/supabase_service.dart';
+import 'package:climate_app/core/services/backend.dart';
+import 'package:climate_app/features/auth/providers/auth_provider.dart';
 import 'package:climate_app/core/constants/app_config.dart';
 import 'package:climate_app/core/utils/error_handler.dart';
 import 'package:climate_app/features/chat/providers/chat_provider.dart';
-import 'package:supabase_flutter/supabase_flutter.dart' as sb;
 import 'package:flutter/material.dart';
 import 'package:flutter_chat_core/flutter_chat_core.dart';
 import 'package:flutter_chat_ui/flutter_chat_ui.dart';
@@ -38,11 +38,13 @@ class ChatScreen extends StatelessWidget {
       ),
       body: Builder(
         builder: (context) {
-          final fbUser = SupabaseService().getCurrentUser();
-          if (fbUser == null) {
+          // The session comes from AuthProvider, which is the app's one
+          // source of it — not from a second backend handle built here.
+          final user = context.watch<AuthProvider>().currentUser;
+          if (user == null) {
             return Center(child: Text(context.l10n.chatLoginRequired));
           }
-          return _ChatView(fbUser: fbUser);
+          return _ChatView(user: user);
         },
       ),
     );
@@ -50,8 +52,8 @@ class ChatScreen extends StatelessWidget {
 }
 
 class _ChatView extends StatefulWidget {
-  final sb.User fbUser;
-  const _ChatView({required this.fbUser});
+  final AuthUser user;
+  const _ChatView({required this.user});
 
   @override
   State<_ChatView> createState() => _ChatViewState();
@@ -60,7 +62,7 @@ class _ChatView extends StatefulWidget {
 class _ChatViewState extends State<_ChatView> {
   static const String _chatId = 'general';
 
-  final SupabaseService _db = SupabaseService();
+  final DataBackend _db = backend;
   late final ChatProvider _chat;
   late final InMemoryChatController _chatController;
   StreamSubscription<List<Map<String, dynamic>>>? _subscription;
@@ -141,10 +143,10 @@ class _ChatViewState extends State<_ChatView> {
   }
 
   Future<User?> _resolveUser(UserID id) async {
-    if (id == widget.fbUser.id) {
+    if (id == widget.user.id) {
       return User(
         id: id,
-        name: _displayName(widget.fbUser, context.l10n.chatMe),
+        name: widget.user.metadataName ?? context.l10n.chatMe,
       );
     }
     final name = _senderNames[id];
@@ -153,7 +155,7 @@ class _ChatViewState extends State<_ChatView> {
 
   Future<void> _handleMessageSend(String text) async {
     if (text.trim().isEmpty) return;
-    final user = widget.fbUser;
+    final user = widget.user;
     final msgId = const Uuid().v4();
 
     // Optimistic insert. The row is created with the same id so the realtime
@@ -192,8 +194,8 @@ class _ChatViewState extends State<_ChatView> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              e is sb.PostgrestException && SupabaseService.isRateLimited(e)
-                  ? context.l10n.chatRateLimited(e.message)
+              backendFailureOf(e) == BackendFailure.rateLimited
+                  ? context.l10n.chatRateLimited(backendMessageOf(e) ?? '')
                   : context.l10n.chatSendFailed(
                       ErrorHandler.getUserMessage(e, context.l10n),
                     ),
@@ -232,7 +234,7 @@ class _ChatViewState extends State<_ChatView> {
     }
 
     return Chat(
-      currentUserId: widget.fbUser.id,
+      currentUserId: widget.user.id,
       chatController: _chatController,
       resolveUser: _resolveUser,
       onMessageSend: _handleMessageSend,
@@ -247,10 +249,5 @@ class _ChatViewState extends State<_ChatView> {
             Composer(hintText: context.l10n.chatComposerHint),
       ),
     );
-  }
-
-  static String _displayName(sb.User user, String fallback) {
-    final n = user.userMetadata?['name'];
-    return (n is String && n.trim().isNotEmpty) ? n : fallback;
   }
 }

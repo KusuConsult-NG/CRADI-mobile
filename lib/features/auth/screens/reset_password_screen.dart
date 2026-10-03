@@ -240,9 +240,15 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen>
             const SizedBox(height: 16),
             TextFormField(
               controller: _codeController,
-              keyboardType: TextInputType.number,
+              // Not digits-only. Supabase mails six digits, but Appwrite's
+              // server-minted token is six *alphanumeric* characters —
+              // `9592e8`. A numeric keypad plus `digitsOnly` meant the
+              // code could not be typed at all, and a pasted one was
+              // silently stripped to nothing. Digits remain a subset, so
+              // this is correct on either backend.
+              keyboardType: TextInputType.visiblePassword,
               inputFormatters: [
-                FilteringTextInputFormatter.digitsOnly,
+                FilteringTextInputFormatter.allow(RegExp(r'[A-Za-z0-9]')),
                 LengthLimitingTextInputFormatter(10),
               ],
               decoration: _decoration(

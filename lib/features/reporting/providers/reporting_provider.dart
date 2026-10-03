@@ -1,16 +1,14 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:climate_app/core/services/supabase_service.dart';
+import 'package:climate_app/core/services/backend.dart';
 import 'package:climate_app/core/utils/error_handler.dart';
 import 'package:climate_app/core/services/offline_storage_service.dart';
 import 'package:climate_app/core/data/mvp_locations_data.dart';
 import 'package:climate_app/core/providers/connectivity_provider.dart';
 import 'package:climate_app/core/constants/app_config.dart';
-import 'package:climate_app/core/utils/image_url_resolver.dart';
 import 'dart:developer' as developer;
 import 'package:provider/provider.dart';
-import 'package:supabase_flutter/supabase_flutter.dart' show PostgrestException;
 import 'package:uuid/uuid.dart';
 import 'package:climate_app/core/l10n/l10n.dart';
 
@@ -42,11 +40,9 @@ bool isAlertSeverity(Object? raw) {
 }
 
 class ReportingProvider extends ChangeNotifier {
-  ReportingProvider({
-    SupabaseService? db,
-    OfflineStorageService? offlineStorage,
-  }) : _db = db ?? SupabaseService(),
-       _offline = offlineStorage ?? OfflineStorageService();
+  ReportingProvider({DataBackend? db, OfflineStorageService? offlineStorage})
+    : _db = db ?? backend,
+      _offline = offlineStorage ?? OfflineStorageService();
 
   /// Upper bound for one photo upload; a stalled upload is treated like a
   /// lost connection (the report is kept for offline sync).
@@ -89,20 +85,23 @@ class ReportingProvider extends ChangeNotifier {
   static const int thumbnailQuality = 70;
 
   /// Uploads the small preview that goes next to the photo at
-  /// [storagePath] (same folder, `_thumb.jpg` — see
-  /// [ImageUrlResolver.thumbStoragePath], which is also how display code
-  /// finds it again).
+  /// [storagePath] — the photo's path, not the thumbnail's.
+  ///
+  /// Where it lands is the backend's decision, because the backend is
+  /// what has to find it again from the stored URL: Supabase can name it
+  /// `_thumb.jpg` beside the photo, Appwrite has to key its id off the
+  /// photo's. See `DataBackend.uploadThumbnailFromPath`.
   ///
   /// Best effort: a report is never rejected because its thumbnail failed,
-  /// and views fall back to the full-size image. Idempotent — the path is
+  /// and views fall back to the full-size image. Idempotent — the name is
   /// deterministic and an object an earlier attempt already stored is
   /// reused (upsert is off; storage has no update policy for evidence).
   Future<void> _uploadThumbnail(File file, String storagePath) async {
     try {
       await _db
-          .uploadFileFromPath(
+          .uploadThumbnailFromPath(
             bucketId: AppConfig.reportImagesBucket,
-            storagePath: ImageUrlResolver.thumbStoragePath(storagePath),
+            storagePath: storagePath,
             file: file,
             maxDimension: thumbnailMaxDimension,
             quality: thumbnailQuality,
@@ -120,7 +119,7 @@ class ReportingProvider extends ChangeNotifier {
   /// address fields at 500 characters).
   static const int maxLocationDetailsLength = 500;
 
-  final SupabaseService _db;
+  final DataBackend _db;
   final OfflineStorageService _offline;
   final ImagePicker _picker = ImagePicker();
 
@@ -458,8 +457,9 @@ class ReportingProvider extends ChangeNotifier {
         // Rate-limit refusals carry a readable reason written by the
         // database (not translated); everything else is localised.
         'message': (AppLocalizations l) =>
-            (e is PostgrestException && SupabaseService.isRateLimited(e))
-            ? e.message
+            backendFailureOf(e) == BackendFailure.rateLimited
+            ? (backendMessageOf(e) ??
+                  ErrorHandler.handleError(e, l, context: 'Report Submission'))
             : ErrorHandler.handleError(e, l, context: 'Report Submission'),
       };
     }

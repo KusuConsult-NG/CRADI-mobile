@@ -1,13 +1,14 @@
 import 'dart:async';
 
 import 'package:climate_app/core/services/geolocation_service.dart';
-import 'package:climate_app/core/services/supabase_service.dart';
+import 'package:climate_app/core/services/backend.dart';
+
+import '../support/fake_backends.dart';
 import 'package:climate_app/features/profile/providers/profile_provider.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:supabase_flutter/supabase_flutter.dart' as sb;
 
 Position _pos({required DateTime at}) => Position(
   latitude: 9,
@@ -22,22 +23,17 @@ Position _pos({required DateTime at}) => Position(
   headingAccuracy: 0,
 );
 
+/// The signed-in account these tests run as.
+const _user = AuthUser(
+  id: 'u1',
+  email: 'u1@example.com',
+  metadata: {'name': 'Signup Name'},
+);
+
 /// Signed-in backend stub recording profile updates.
-class _FakeDb implements SupabaseService {
+class _FakeDb implements DataBackend {
   final List<Map<String, dynamic>> updates = [];
   bool failUpdates = false;
-
-  final sb.User _user = const sb.User(
-    id: 'u1',
-    appMetadata: {},
-    userMetadata: {'name': 'Signup Name'},
-    aud: 'authenticated',
-    createdAt: '2026-01-01T00:00:00Z',
-    email: 'u1@example.com',
-  );
-
-  @override
-  sb.User? getCurrentUser() => _user;
 
   @override
   String? get currentUserId => _user.id;
@@ -125,7 +121,11 @@ void main() {
       FlutterSecureStorage.setMockInitialValues({});
       db = _FakeDb();
       net = _FakeConnectivity();
-      profile = ProfileProvider(supabaseService: db, connectivity: net);
+      profile = ProfileProvider(
+        db: db,
+        auth: FakeAuthBackend(_user),
+        connectivity: net,
+      );
       // Let the constructor's loadProfile finish.
       await Future<void>.delayed(const Duration(milliseconds: 20));
     });

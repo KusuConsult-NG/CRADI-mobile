@@ -5,8 +5,7 @@ export 'package:climate_app/core/utils/error_handler.dart'
     show AuthException, EmailNotConfirmedException;
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:supabase_flutter/supabase_flutter.dart' as sb;
-import 'package:climate_app/core/services/supabase_service.dart';
+import 'package:climate_app/core/services/backend.dart';
 import 'package:climate_app/core/services/notification_service.dart';
 import 'package:climate_app/core/services/secure_storage_service.dart';
 import 'package:climate_app/core/services/session_manager.dart';
@@ -15,8 +14,6 @@ import 'package:climate_app/core/services/biometric_service.dart';
 import 'package:climate_app/core/services/device_fingerprint_service.dart';
 import 'package:climate_app/core/services/fraud_detection_service.dart';
 import 'package:climate_app/core/constants/app_config.dart';
-import 'package:climate_app/core/router/route_guard.dart'
-    show kPasswordResetRedirect;
 import 'package:climate_app/core/utils/validators.dart';
 import 'package:climate_app/core/l10n/l10n.dart';
 
@@ -62,28 +59,43 @@ extension UserRoleValue on UserRole {
   }
 }
 
-/// Authentication state and operations — backed by Supabase Auth and the
+/// Authentication state and operations — backed by an [AuthBackend] and the
 /// `profiles` table.
 ///
-/// * Sign-up passes the profile fields as user metadata; a database trigger
+/// * Sign-up passes the profile fields as account metadata; the backend
 ///   creates the `profiles` row. The client never inserts it.
-/// * Email verification and password recovery use Supabase's 6-digit OTPs.
-/// * Phone accounts use Supabase phone OTP (SMS provider configured in the
-///   Supabase dashboard).
-/// * The session (incl. refresh token) is persisted by supabase_flutter in
-///   secure storage; the biometric lock re-uses it — no password is stored.
+/// * Email verification and password recovery use 6-digit codes.
+/// * Phone accounts use SMS one-time codes.
+/// * The session (incl. refresh token) is persisted by the backend adapter
+///   in secure storage; the biometric lock re-uses it — no password is
+///   stored.
 /// * Role / approval / disabled changes arrive through a realtime
 ///   subscription on the user's own profile row.
+///
+/// Nothing below names a vendor. The backend's own error codes are
+/// translated to [AuthFailure] by the adapter, which is the only file that
+/// knows them; the flows here choose the wording, because the same
+/// condition reads differently during registration and during a password
+/// reset.
 class AuthProvider extends ChangeNotifier {
-  AuthProvider() {
+  /// [auth] is injectable so tests can drive the flows without a server;
+  /// it defaults to the Supabase adapter.
+  /// [auth] defaults to the configured backend, not to Supabase.
+  ///
+  /// It was `?? SupabaseAuthBackend()`, and `main.dart` constructs this
+  /// with no argument — so an Appwrite build read its data from Appwrite
+  /// and its session from a Supabase client that is not there. The app
+  /// came up permanently signed out. `ProfileProvider` two files over
+  /// already used the locator; this is the one that was missed.
+  AuthProvider({AuthBackend? auth}) : _auth = auth ?? authBackend {
     _initializeSessionManager();
     unawaited(_storage.purgeLegacyCredentials());
-    _authSub = _db.authStateChanges.listen(
+    _authSub = _auth.changes.listen(
       _onAuthEvent,
       onError: (Object e) =>
           developer.log('Auth stream error: $e', name: 'AuthProvider'),
     );
-    if (!SupabaseService.isReady) {
+    if (!_auth.isConfigured) {
       // No backend configured: behave as signed out.
       unawaited(_handleSignedOut());
     } else {
@@ -91,9 +103,9 @@ class AuthProvider extends ChangeNotifier {
       // restored at startup was already refreshed, only `tokenRefreshed`
       // arrives. Seed the state from the restored session instead of
       // waiting for `initialSession`.
-      final session = _db.auth.currentSession;
-      if (session != null) {
-        unawaited(_ensureSignedIn(session.user));
+      final restored = _auth.currentUser;
+      if (restored != null) {
+        unawaited(_ensureSignedIn(restored));
       } else {
         unawaited(_handleSignedOut());
       }
@@ -106,16 +118,17 @@ class AuthProvider extends ChangeNotifier {
   static const Duration initTimeout = Duration(seconds: 12);
 
   /// Phone (SMS OTP) sign-up and sign-in. Keep false until an SMS provider
-  /// is configured in the Supabase dashboard (Auth → Providers → Phone);
-  /// the registration and login screens hide the phone option meanwhile.
+  /// is configured on the backend; the registration and login screens hide
+  /// the phone option meanwhile.
   static const bool phoneAuthEnabled = false;
 
-  final SupabaseService _db = SupabaseService();
+  final AuthBackend _auth;
+  final DataBackend _db = backend;
   bool _isAuthenticated = false;
   UserRole? _userRole;
   String? _phoneNumber;
   bool _isLoading = false;
-  sb.User? _currentUser;
+  AuthUser? _currentUser;
   bool? _isApproved;
   bool _isVerified = false;
   String? _ward;
@@ -157,7 +170,7 @@ class AuthProvider extends ChangeNotifier {
 
   // Realtime listener on the user's profile row.
   StreamSubscription<Map<String, dynamic>?>? _profileSub;
-  late final StreamSubscription<sb.AuthState> _authSub;
+  late final StreamSubscription<AuthChange> _authSub;
 
   // Single in-flight sign-in handling per user.
   Future<void>? _signInFuture;
@@ -271,7 +284,7 @@ class AuthProvider extends ChangeNotifier {
 
   bool get isLoading => _isLoading;
   String? get phoneNumber => _phoneNumber;
-  sb.User? get currentUser => _currentUser;
+  AuthUser? get currentUser => _currentUser;
   bool? get isApproved => _isApproved;
   bool get isVerified => _isVerified;
   bool get isInitialized => _isInitialized;
@@ -285,10 +298,9 @@ class AuthProvider extends ChangeNotifier {
   /// Email of the account waiting for OTP confirmation, if any.
   String? get pendingEmail => _pendingEmail ?? _currentUser?.email;
 
-  /// Whether a persisted Supabase session exists on this device (the
-  /// biometric sign-in re-uses it; after a logout there is none).
-  bool get hasStoredSession =>
-      SupabaseService.isReady && _db.auth.currentSession != null;
+  /// Whether a persisted session exists on this device (the biometric
+  /// sign-in re-uses it; after a logout there is none).
+  bool get hasStoredSession => _auth.hasSession;
 
   /// Called after every completed sign-in (new user id) — e.g. to refetch
   /// data that was loaded before the session existed.
@@ -353,10 +365,10 @@ class AuthProvider extends ChangeNotifier {
     };
   }
 
-  Future<void> _onAuthEvent(sb.AuthState state) async {
-    final session = state.session;
-    switch (state.event) {
-      case sb.AuthChangeEvent.passwordRecovery:
+  Future<void> _onAuthEvent(AuthChange change) async {
+    final user = change.user;
+    switch (change.event) {
+      case AuthEvent.passwordRecovery:
         // [_recovering] is raised by [confirmPasswordReset] for the length
         // of the reset; the event it triggers is ignored there.
         if (_recovering) return;
@@ -366,48 +378,49 @@ class AuthProvider extends ChangeNotifier {
         // here would make the provider ignore every later auth event —
         // token refreshes and the initial session included — for the rest
         // of the app's life.
-        if (session == null) {
+        if (user == null) {
           await _handleSignedOut();
           return;
         }
         // Raised *after* the sign-in: _ensureSignedIn may sign a stale
         // session out first, and that clears the flag again.
-        await _ensureSignedIn(session.user);
+        await _ensureSignedIn(user);
         _passwordRecoveryPending = true;
         notifyListeners();
         return;
-      case sb.AuthChangeEvent.signedOut:
+      case AuthEvent.signedOut:
         await _handleSignedOut();
         return;
-      case sb.AuthChangeEvent.initialSession:
-      case sb.AuthChangeEvent.signedIn:
+      case AuthEvent.initialSession:
+      case AuthEvent.signedIn:
         if (_recovering) return;
-        if (session == null) {
+        if (user == null) {
           await _handleSignedOut();
           return;
         }
-        await _ensureSignedIn(session.user);
+        await _ensureSignedIn(user);
         return;
-      default:
-        // tokenRefreshed / userUpdated / mfa.
-        if (session == null || _recovering) return;
-        if (_signInUid != session.user.id) {
+      case AuthEvent.tokenRefreshed:
+      case AuthEvent.userUpdated:
+      case AuthEvent.other:
+        if (user == null || _recovering) return;
+        if (_signInUid != user.id) {
           // Not signed in for this user yet: the stream only replays its
           // latest event, so a refresh that completed before we subscribed
           // is the only event we get. Treat it as a sign-in.
-          await _ensureSignedIn(session.user);
+          await _ensureSignedIn(user);
           return;
         }
         // Keep the user object fresh without re-running the sign-in flow
         // (which would re-lock the app).
-        _currentUser = session.user;
-        if (state.event == sb.AuthChangeEvent.userUpdated) {
+        _currentUser = user;
+        if (change.event == AuthEvent.userUpdated) {
           notifyListeners();
         }
     }
   }
 
-  Future<void> _ensureSignedIn(sb.User user) {
+  Future<void> _ensureSignedIn(AuthUser user) {
     final inFlight = _signInFuture;
     if (_signInUid == user.id && inFlight != null) return inFlight;
     _signInUid = user.id;
@@ -430,7 +443,7 @@ class AuthProvider extends ChangeNotifier {
     // Sign-in paths sign out a stale session first; that `signedOut` event
     // can be delivered after the new sign-in completed. Ignore it while a
     // session exists.
-    if (SupabaseService.isReady && _db.auth.currentSession != null) {
+    if (_auth.hasSession) {
       developer.log('Ignoring stale signedOut event', name: 'AuthProvider');
       return;
     }
@@ -472,11 +485,7 @@ class AuthProvider extends ChangeNotifier {
     _accountDisabled = false;
   }
 
-  static bool _authConfirmed(sb.User? user) =>
-      user != null &&
-      (user.emailConfirmedAt != null || user.phoneConfirmedAt != null);
-
-  Future<void> _handleSignedIn(sb.User user) async {
+  Future<void> _handleSignedIn(AuthUser user) async {
     // A sign-out (or another sign-in) during any await below cancels this
     // run: nothing may be applied for a user who is no longer signed in.
     final gen = _authGen;
@@ -494,10 +503,10 @@ class AuthProvider extends ChangeNotifier {
     _currentUser = user;
     _pendingEmail = null;
     _accountDisabled = false;
-    // Supabase Auth already knows whether the email / phone is confirmed;
-    // do not send confirmed users to the verify screen when the profile
-    // row cannot be fetched.
-    if (_authConfirmed(user)) _isVerified = true;
+    // The auth server already knows whether the email / phone is
+    // confirmed; do not send confirmed users to the verify screen when the
+    // profile row cannot be fetched.
+    if (user.isConfirmed) _isVerified = true;
 
     await _loadOnboardingStatus();
     if (stale()) return;
@@ -528,7 +537,7 @@ class AuthProvider extends ChangeNotifier {
       if (stale()) return;
 
       // Self-heal: Auth confirmed the email/phone but the row lags behind.
-      if (_authConfirmed(user) && profile['isVerified'] != true) {
+      if (user.isConfirmed && profile['isVerified'] != true) {
         try {
           await _db.updateDocument(
             collectionId: AppConfig.usersCollection,
@@ -608,7 +617,8 @@ class AuthProvider extends ChangeNotifier {
     }
     final approved = data['isApproved'] as bool? ?? false;
     final verified =
-        (data['isVerified'] as bool? ?? false) || _authConfirmed(_currentUser);
+        (data['isVerified'] as bool? ?? false) ||
+        (_currentUser?.isConfirmed ?? false);
     if (_isApproved != approved) {
       _isApproved = approved;
       changed = true;
@@ -693,7 +703,7 @@ class AuthProvider extends ChangeNotifier {
   /// Force reload of user data (e.g. after profile update or verification).
   Future<void> reloadUserData() async {
     try {
-      final user = await _db.reloadCurrentUser();
+      final user = await _auth.reloadUser();
       if (user == null) return;
       _currentUser = user;
       final profile = await _db.getDocument(
@@ -755,7 +765,7 @@ class AuthProvider extends ChangeNotifier {
   // ─────────────────────────── Sign Up ─────────────────────────────────────
 
   /// Creates the account. With email confirmation enabled (recommended),
-  /// Supabase emails a 6-digit code and no session exists until
+  /// the backend emails a 6-digit code and no session exists until
   /// [verifyOtpAndLogin] succeeds.
   ///
   /// [ndpaPolicyVersion] records the NDPA consent once a session exists.
@@ -776,8 +786,8 @@ class AuthProvider extends ChangeNotifier {
       notifyListeners();
 
       // Sign out any stale session
-      if (_db.getCurrentUser() != null) {
-        await _db.logout();
+      if (_auth.currentUser != null) {
+        await _auth.signOut();
         _resetUserState();
       }
 
@@ -787,7 +797,7 @@ class AuthProvider extends ChangeNotifier {
       }
 
       _justLoggedIn = true;
-      final response = await _db.auth.signUp(
+      final outcome = await _auth.signUpWithPassword(
         email: normalisedEmail,
         password: password,
         data: _signUpMetadata(
@@ -801,22 +811,13 @@ class AuthProvider extends ChangeNotifier {
         ),
       );
 
-      // With confirmations on, an already-registered address returns an
-      // obfuscated user without identities instead of an error.
-      final identities = response.user?.identities;
-      if (response.session == null &&
-          identities != null &&
-          identities.isEmpty) {
-        _justLoggedIn = false;
-        throw AuthException((l) => l.authErrorEmailRegistered);
-      }
-
-      if (response.session == null) {
+      final user = outcome.user;
+      if (!outcome.hasSession || user == null) {
         // Waiting for the emailed code.
         _justLoggedIn = false;
         _pendingEmail = normalisedEmail;
       } else {
-        await _ensureSignedIn(response.session!.user);
+        await _ensureSignedIn(user);
       }
 
       _isLoading = false;
@@ -826,12 +827,12 @@ class AuthProvider extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
       rethrow;
-    } on sb.AuthException catch (e) {
+    } on AuthBackendException catch (e) {
       _isLoading = false;
       _justLoggedIn = false;
       notifyListeners();
       developer.log(
-        'SignUp AuthException: ${e.code} – ${e.message}',
+        'SignUp failure: ${e.failure.name} (${e.code} – ${e.message})',
         name: 'AuthProvider',
       );
       throw _mapSignUpError(e);
@@ -844,33 +845,19 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
-  AuthException _mapSignUpError(sb.AuthException e) {
-    if (e is sb.AuthRetryableFetchException) {
-      return AuthException((l) => l.authErrorNetworkRetry);
-    }
-    if (e is sb.AuthWeakPasswordException || e.code == 'weak_password') {
-      return AuthException((l) => l.authErrorWeakPassword);
-    }
-    switch (e.code) {
-      case 'user_already_exists':
-      case 'email_exists':
-      case 'phone_exists':
-        return AuthException((l) => l.authErrorAccountRegistered);
-      case 'email_address_invalid':
-      case 'validation_failed':
-        return AuthException((l) => l.validation_invalidEmail);
-      case 'signup_disabled':
-      case 'email_provider_disabled':
-      case 'phone_provider_disabled':
-        return AuthException((l) => l.authErrorRegistrationDisabled);
-      case 'over_email_send_rate_limit':
-      case 'over_sms_send_rate_limit':
-      case 'over_request_rate_limit':
-        return AuthException((l) => l.authErrorTooManyAttempts);
-      default:
-        return AuthException((l) => l.authErrorRegistrationFailed);
-    }
-  }
+  AuthException _mapSignUpError(AuthBackendException e) => switch (e.failure) {
+    AuthFailure.network => AuthException((l) => l.authErrorNetworkRetry),
+    AuthFailure.weakPassword => AuthException((l) => l.authErrorWeakPassword),
+    AuthFailure.accountExists => AuthException(
+      (l) => l.authErrorAccountRegistered,
+    ),
+    AuthFailure.invalidEmail => AuthException((l) => l.validation_invalidEmail),
+    AuthFailure.providerDisabled => AuthException(
+      (l) => l.authErrorRegistrationDisabled,
+    ),
+    AuthFailure.rateLimited => AuthException((l) => l.authErrorTooManyAttempts),
+    _ => AuthException((l) => l.authErrorRegistrationFailed),
+  };
 
   Map<String, dynamic> _signUpMetadata({
     String? name,
@@ -911,18 +898,18 @@ class AuthProvider extends ChangeNotifier {
       // Clear stale state. The `signedOut` event of this logout may arrive
       // after the new session exists (and is then ignored), so reset the
       // previous user's state here.
-      if (_db.getCurrentUser() != null) await _db.logout();
+      if (_auth.currentUser != null) await _auth.signOut();
       _resetUserState();
 
       final deviceFingerprint = await _fingerprintService.generateFingerprint();
       final deviceName = await _fingerprintService.getDeviceName();
 
       _justLoggedIn = true;
-      final response = await _db.auth.signInWithPassword(
+      final outcome = await _auth.signInWithPassword(
         email: normalisedEmail,
         password: password,
       );
-      final user = response.user ?? response.session?.user;
+      final user = outcome.user;
       if (user == null) throw AuthException((l) => l.authErrorLoginFailed);
 
       await _ensureSignedIn(user);
@@ -976,23 +963,21 @@ class AuthProvider extends ChangeNotifier {
       _justLoggedIn = false;
       notifyListeners();
       rethrow;
-    } on sb.AuthException catch (e) {
+    } on AuthBackendException catch (e) {
       _isLoading = false;
       _justLoggedIn = false;
       notifyListeners();
       developer.log(
-        'Login AuthException: ${e.code} – ${e.message}',
+        'Login failure: ${e.failure.name} (${e.code} – ${e.message})',
         name: 'AuthProvider',
       );
-      if (e is sb.AuthRetryableFetchException) {
-        throw AuthException((l) => l.authErrorLoginConnection);
-      }
-      switch (e.code) {
-        case 'invalid_credentials':
-        case 'user_not_found':
+      switch (e.failure) {
+        case AuthFailure.network:
+          throw AuthException((l) => l.authErrorLoginConnection);
+        case AuthFailure.invalidCredentials:
           await _rateLimiter.recordFailedLogin();
           throw AuthException((l) => l.authErrorInvalidCredentials);
-        case 'email_not_confirmed':
+        case AuthFailure.emailNotConfirmed:
           _pendingEmail = normalisedEmail;
           try {
             await _resendSignupCode(normalisedEmail);
@@ -1000,13 +985,14 @@ class AuthProvider extends ChangeNotifier {
             developer.log('Resend failed: $resendError', name: 'AuthProvider');
           }
           throw EmailNotConfirmedException(normalisedEmail);
-        case 'user_banned':
+        case AuthFailure.accountBanned:
           throw AuthException((l) => l.authErrorAccountDisabled);
-        case 'over_request_rate_limit':
+        case AuthFailure.rateLimited:
           throw AuthException((l) => l.authErrorTooManyLogins);
         default:
           ErrorHandler.logError(
-            'Unhandled AuthException: ${e.code} – ${e.message}',
+            'Unhandled auth failure: ${e.failure.name} '
+            '(${e.code} – ${e.message})',
             context: 'AuthProvider.signInWithEmail',
           );
           throw AuthException((l) => l.authErrorLoginFailed);
@@ -1041,7 +1027,7 @@ class AuthProvider extends ChangeNotifier {
 
   // ─────────────────────────── OTP ─────────────────────────────────────────
 
-  /// Sends a Supabase SMS OTP to [phone].
+  /// Sends an SMS one-time code to [phone].
   ///
   /// Pass [registrationData] (name, address, role, state, lga, ward) when
   /// registering: it becomes the new user's metadata, from which the
@@ -1087,9 +1073,9 @@ class AuthProvider extends ChangeNotifier {
         }
       }
 
-      await _db.auth.signInWithOtp(
+      await _auth.sendPhoneOtp(
         phone: normalised,
-        shouldCreateUser: _pendingPhoneMetadata != null,
+        createUser: _pendingPhoneMetadata != null,
         data: _pendingPhoneMetadata,
       );
       await _storage.savePhoneNumber(normalised);
@@ -1102,18 +1088,17 @@ class AuthProvider extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
       rethrow;
-    } on sb.AuthException catch (e) {
+    } on AuthBackendException catch (e) {
       _isLoading = false;
       notifyListeners();
-      developer.log('Phone OTP error: ${e.code} ${e.message}');
-      switch (e.code) {
-        case 'phone_provider_disabled':
-        case 'sms_send_failed':
+      developer.log('Phone OTP failure: ${e.failure.name} ${e.message}');
+      switch (e.failure) {
+        case AuthFailure.providerDisabled:
+        case AuthFailure.deliveryFailed:
           throw AuthException((l) => l.authErrorSmsUnavailable);
-        case 'otp_disabled':
+        case AuthFailure.otpDisabled:
           throw AuthException((l) => l.authErrorPhoneNotRegistered);
-        case 'over_sms_send_rate_limit':
-        case 'over_request_rate_limit':
+        case AuthFailure.rateLimited:
           throw AuthException((l) => l.authErrorTooManyAttempts);
         default:
           throw AuthException((l) => l.authErrorSmsFailed);
@@ -1147,12 +1132,11 @@ class AuthProvider extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
       rethrow;
-    } on sb.AuthException catch (e) {
+    } on AuthBackendException catch (e) {
       _isLoading = false;
       notifyListeners();
-      developer.log('Resend error: ${e.code} ${e.message}');
-      if (e.code == 'over_email_send_rate_limit' ||
-          e.code == 'over_request_rate_limit') {
+      developer.log('Resend failure: ${e.failure.name} ${e.message}');
+      if (e.failure == AuthFailure.rateLimited) {
         throw AuthException((l) => l.authErrorTooManyAttempts);
       }
       throw AuthException((l) => l.authErrorCodeSendFailed);
@@ -1164,8 +1148,7 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> _resendSignupCode(String email) =>
-      _db.auth.resend(type: sb.OtpType.signup, email: email);
+  Future<void> _resendSignupCode(String email) => _auth.resendSignUpCode(email);
 
   /// Verifies a 6-digit code: the email sign-up confirmation code, or the
   /// SMS code for phone sign-in/registration. On success a session exists
@@ -1193,28 +1176,25 @@ class AuthProvider extends ChangeNotifier {
       final token = otp.trim();
 
       _justLoggedIn = true;
-      final sb.AuthResponse response;
+      final AuthOutcome outcome;
       if (isPhoneFlow) {
-        response = await _db.auth.verifyOTP(
-          type: sb.OtpType.sms,
+        outcome = await _auth.verifyPhoneOtp(
           phone: Validators.normalizePhoneNumber(data['phone'] as String),
           token: token,
         );
       } else {
-        response = await _db.auth.verifyOTP(
-          type: sb.OtpType.signup,
+        outcome = await _auth.verifySignUpOtp(
           email: (data['email'] as String).trim().toLowerCase(),
           token: token,
         );
       }
 
-      // A session is what makes this a sign-in. `verifyOTP` also answers
+      // A session is what makes this a sign-in. Verification also answers
       // with a user and no session for the first step of a secure email /
       // phone change — accepting that would flip the app to "signed in"
       // with no credentials behind it.
-      final session = response.session;
-      final user = session?.user ?? response.user;
-      if (session == null || user == null) {
+      final user = outcome.user;
+      if (!outcome.hasSession || user == null) {
         throw AuthException((l) => l.authErrorVerificationFailed);
       }
       _pendingPhoneMetadata = null;
@@ -1233,24 +1213,29 @@ class AuthProvider extends ChangeNotifier {
       _justLoggedIn = false;
       notifyListeners();
       rethrow;
-    } on sb.AuthException catch (e) {
+    } on AuthBackendException catch (e) {
       _isLoading = false;
       _justLoggedIn = false;
       notifyListeners();
       developer.log(
-        'verifyOtp AuthException: ${e.code} – ${e.message}',
+        'verifyOtp failure: ${e.failure.name} (${e.code} – ${e.message})',
         name: 'AuthProvider',
       );
-      if (e is sb.AuthRetryableFetchException) {
-        throw AuthException((l) => l.errorNetwork);
+      switch (e.failure) {
+        case AuthFailure.network:
+          throw AuthException((l) => l.errorNetwork);
+        // A wrong code and an expired one are the same answer here, and
+        // the backend may not distinguish them — GoTrue reports a bad code
+        // as `invalid_credentials`, the same code it uses for a wrong
+        // password.
+        case AuthFailure.otpExpired:
+        case AuthFailure.invalidCredentials:
+          throw AuthException((l) => l.authErrorInvalidCode);
+        case AuthFailure.rateLimited:
+          throw AuthException((l) => l.authErrorTooManyAttemptsRetry);
+        default:
+          throw AuthException((l) => l.authErrorVerificationFailed);
       }
-      if (e.code == 'otp_expired' || e.code == 'invalid_credentials') {
-        throw AuthException((l) => l.authErrorInvalidCode);
-      }
-      if (e.code == 'over_request_rate_limit') {
-        throw AuthException((l) => l.authErrorTooManyAttemptsRetry);
-      }
-      throw AuthException((l) => l.authErrorVerificationFailed);
     } on Exception catch (e) {
       _isLoading = false;
       _justLoggedIn = false;
@@ -1305,27 +1290,19 @@ class AuthProvider extends ChangeNotifier {
     try {
       _isLoading = true;
       notifyListeners();
-      await _db.auth.resetPasswordForEmail(
-        email.trim().toLowerCase(),
-        // Without this the link in the mail is built from the project's Site
-        // URL, which is the admin panel — app users who tapped it landed on a
-        // staff login screen. On web there is no app to open, so the Site URL
-        // (the browser reset page) remains the right destination.
-        redirectTo: kIsWeb ? null : kPasswordResetRedirect,
-      );
+      await _auth.sendPasswordResetCode(email.trim().toLowerCase());
       _isLoading = false;
       notifyListeners();
-    } on sb.AuthException catch (e) {
+    } on AuthBackendException catch (e) {
       _isLoading = false;
       notifyListeners();
       ErrorHandler.logError(e, context: 'AuthProvider.sendPasswordResetEmail');
-      if (e is sb.AuthRetryableFetchException) {
+      if (e.failure == AuthFailure.network) {
         throw AuthException((l) => l.authErrorNetworkRetry);
       }
-      // Supabase throttles recovery mail per address and per project; say so
+      // Recovery mail is throttled per address and per project; say so
       // instead of "failed to send", which invites an immediate retry.
-      if (e.code == 'over_email_send_rate_limit' ||
-          e.code == 'over_request_rate_limit') {
+      if (e.failure == AuthFailure.rateLimited) {
         throw AuthException((l) => l.authErrorTooManyAttempts);
       }
       throw AuthException((l) => l.authErrorResetEmailFailed);
@@ -1356,23 +1333,22 @@ class AuthProvider extends ChangeNotifier {
       _isLoading = true;
       _recovering = true;
       notifyListeners();
-      await _db.auth.verifyOTP(
-        type: sb.OtpType.recovery,
+      await _auth.verifyRecoveryOtp(
         email: email.trim().toLowerCase(),
         token: code.trim(),
       );
       codeAccepted = true;
-      await _db.auth.updateUser(sb.UserAttributes(password: newPassword));
-    } on sb.AuthException catch (e) {
+      await _auth.updatePassword(newPassword);
+    } on AuthBackendException catch (e) {
       ErrorHandler.logError(e, context: 'AuthProvider.confirmPasswordReset');
-      if (e is sb.AuthWeakPasswordException || e.code == 'weak_password') {
-        throw AuthException((l) => l.authErrorResetWeakPassword);
-      }
-      switch (e.code) {
-        case 'otp_expired':
-        case 'invalid_credentials':
+      switch (e.failure) {
+        case AuthFailure.weakPassword:
+          throw AuthException((l) => l.authErrorResetWeakPassword);
+        // As in [verifyOtpAndLogin]: a refused code may arrive as either.
+        case AuthFailure.otpExpired:
+        case AuthFailure.invalidCredentials:
           throw AuthException((l) => l.authErrorResetCodeInvalid);
-        case 'same_password':
+        case AuthFailure.samePassword:
           throw AuthException((l) => l.authErrorResetSamePassword);
         default:
           throw AuthException((l) => l.authErrorResetFailed);
@@ -1382,7 +1358,7 @@ class AuthProvider extends ChangeNotifier {
       throw AuthException((l) => l.authErrorResetFailed);
     } finally {
       try {
-        if (codeAccepted && _db.getCurrentUser() != null) await _db.logout();
+        if (codeAccepted && _auth.currentUser != null) await _auth.signOut();
       } on Exception catch (_) {}
       _recovering = false;
       _isLoading = false;
@@ -1397,7 +1373,7 @@ class AuthProvider extends ChangeNotifier {
     _passwordRecoveryPending = false;
     notifyListeners();
     try {
-      if (_db.getCurrentUser() != null) await _db.logout();
+      if (_auth.currentUser != null) await _auth.signOut();
     } on Exception catch (e) {
       ErrorHandler.logError(e, context: 'AuthProvider.cancelPasswordRecovery');
     }
@@ -1414,20 +1390,18 @@ class AuthProvider extends ChangeNotifier {
       _isLoading = true;
       _recovering = true;
       notifyListeners();
-      await _db.auth.updateUser(sb.UserAttributes(password: newPassword));
-    } on sb.AuthException catch (e) {
+      await _auth.updatePassword(newPassword);
+    } on AuthBackendException catch (e) {
       ErrorHandler.logError(
         e,
         context: 'AuthProvider.completePasswordRecovery',
       );
-      if (e is sb.AuthWeakPasswordException || e.code == 'weak_password') {
-        throw AuthException((l) => l.authErrorResetWeakPassword);
-      }
-      switch (e.code) {
-        case 'same_password':
+      switch (e.failure) {
+        case AuthFailure.weakPassword:
+          throw AuthException((l) => l.authErrorResetWeakPassword);
+        case AuthFailure.samePassword:
           throw AuthException((l) => l.authErrorResetSamePassword);
-        case 'session_not_found':
-        case 'bad_jwt':
+        case AuthFailure.sessionExpired:
           throw AuthException((l) => l.authErrorResetCodeInvalid);
         default:
           throw AuthException((l) => l.authErrorResetFailed);
@@ -1445,7 +1419,7 @@ class AuthProvider extends ChangeNotifier {
       // trap the user on the reset screen with a session they cannot use.
       _passwordRecoveryPending = false;
       try {
-        if (_db.getCurrentUser() != null) await _db.logout();
+        if (_auth.currentUser != null) await _auth.signOut();
       } on Exception catch (_) {}
       notifyListeners();
     }
@@ -1453,7 +1427,7 @@ class AuthProvider extends ChangeNotifier {
 
   // ─────────────────────────── Biometrics ──────────────────────────────────
 
-  /// Unlocks with biometrics using the persisted Supabase session. Returns
+  /// Unlocks with biometrics using the persisted session. Returns
   /// false when there is no usable session (the user must sign in with
   /// their password).
   Future<bool> authenticateWithBiometrics({String? promptReason}) async {
@@ -1471,7 +1445,7 @@ class AuthProvider extends ChangeNotifier {
       final isValid = await _isServerSessionValid();
       if (!isValid) return false;
 
-      final user = _db.getCurrentUser();
+      final user = _auth.currentUser;
       if (user == null) return false;
 
       _justLoggedIn = true;
@@ -1499,7 +1473,7 @@ class AuthProvider extends ChangeNotifier {
       );
       if (!canAuth) throw AuthException((l) => l.biometricErrorFailed);
     }
-    final user = _db.getCurrentUser();
+    final user = _auth.currentUser;
     await _storage.setBiometricEnabled(enabled, userId: user?.id);
     if (user != null) {
       try {
@@ -1518,7 +1492,7 @@ class AuthProvider extends ChangeNotifier {
   /// Whether the signed-in account enabled the biometric lock on this
   /// device.
   Future<bool> isBiometricEnabled() => _storage.isBiometricEnabled(
-    forUserId: _currentUser?.id ?? _db.currentUserId,
+    forUserId: _currentUser?.id ?? _auth.currentUser?.id,
   );
   Future<bool> isBiometricAvailable() =>
       _biometricService.isBiometricAvailable();
@@ -1539,24 +1513,24 @@ class AuthProvider extends ChangeNotifier {
   Future<bool> validateSession() => _isServerSessionValid();
 
   Future<bool> _isServerSessionValid() async {
-    if (!SupabaseService.isReady) return false;
-    final session = _db.auth.currentSession;
-    if (session == null) {
+    if (!_auth.isConfigured) return false;
+    if (!_auth.hasSession) {
       developer.log('No persisted session.', name: 'AuthProvider');
       return false;
     }
     try {
-      if (session.isExpired) {
-        await _db.auth.refreshSession();
+      if (_auth.isSessionExpired) {
+        await _auth.refreshSession();
       }
       await _sessionManager.extendSession();
       return true;
-    } on sb.AuthRetryableFetchException catch (e) {
-      // Offline — allow access with the cached session.
-      developer.log('Session refresh offline: $e', name: 'AuthProvider');
-      return true;
-    } on sb.AuthException catch (e) {
-      developer.log('Session invalid: ${e.code}', name: 'AuthProvider');
+    } on AuthBackendException catch (e) {
+      if (e.failure == AuthFailure.network) {
+        // Offline — allow access with the cached session.
+        developer.log('Session refresh offline: $e', name: 'AuthProvider');
+        return true;
+      }
+      developer.log('Session invalid: ${e.failure.name}', name: 'AuthProvider');
       await logout();
       return false;
     } on Exception catch (e) {
@@ -1603,7 +1577,7 @@ class AuthProvider extends ChangeNotifier {
       await NotificationService().onUserSignedOut();
 
       // Revokes the refresh token and clears the persisted session.
-      await _db.logout();
+      await _auth.signOut();
 
       // The biometric lock is per account: it must not carry over to the
       // next account signing in on this device.
@@ -1626,7 +1600,7 @@ class AuthProvider extends ChangeNotifier {
   // ─────────────────────────── Helpers ─────────────────────────────────────
 
   Future<void> _startUserSession(
-    sb.User user,
+    AuthUser user,
     UserRole role, {
     bool rememberMe = false,
   }) async {

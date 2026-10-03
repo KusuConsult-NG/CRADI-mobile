@@ -101,17 +101,18 @@ cp env.example.json env.json   # env.json is git-ignored
 | `SUPABASE_ANON_KEY` | yes | anon / publishable key (never the service-role key) |
 | `ONESIGNAL_APP_ID` | for push | push is disabled when empty |
 | `SENTRY_DSN` | no | crash reporting is disabled when empty |
-| `IMAGEKIT_URL_ENDPOINT` | no | ImageKit CDN in front of Supabase Storage; images are fetched straight from Supabase when empty |
+| `APPWRITE_IMAGE_TRANSFORMS` | no | ask Appwrite's `/preview` for smaller renders; off when unset |
 
-`IMAGEKIT_URL_ENDPOINT` is a delivery-only optimisation (no SDK, no
-upload-side integration). Set it to an ImageKit URL endpoint, e.g.
-`https://ik.imagekit.io/<imagekit_id>`, whose origin is this project's
-Supabase Storage public base
-(`https://<ref>.supabase.co/storage/v1/object/public/`). The app then
-requests `<endpoint>/<bucket>/<object path>?tr=w-…,q-…` so photos are
-resized at the edge instead of downloading the full-size original; every
-other URL (off-site knowledge-base images, signed URLs) is left untouched.
-Leaving it empty changes nothing.
+`APPWRITE_IMAGE_TRANSFORMS` is a delivery-only optimisation. With it, a
+thumbnail is requested from Appwrite at the size it will be drawn
+(`/preview?width=…&quality=…`) instead of downloading the full-size
+original. It is **off by default** because image transformations are a
+plan-gated feature on Appwrite Cloud: where they are not included the
+request answers with an error rather than the image, and a broken
+thumbnail is worse than a large one. Self-hosted has no such limit.
+
+Leaving it unset changes nothing — the small copy uploaded beside each
+photo is still used, which is the bulk of the saving.
 
 Run / build with the file:
 
@@ -134,21 +135,6 @@ The app has no hardcoded fallbacks: these are pasted into your local
 | `SUPABASE_URL` | `https://splfkqazwzybityoqmyv.supabase.co` |
 | `SUPABASE_ANON_KEY` | `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNwbGZrcWF6d3p5Yml0eW9xbXl2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTAzNjg5MzcsImV4cCI6MjEwNTk0NDkzN30.B3p-MTWYacngdF0uGCxDXZNqL7gxYMQNfKp_6i-7QfQ` |
 | `ONESIGNAL_APP_ID` | `2e6f30a8-ef18-4091-9961-e6a6fe862322` |
-| `IMAGEKIT_URL_ENDPOINT` | `https://ik.imagekit.io/CRADIEWER` (optional; leave empty to serve from Supabase) |
-
-The ImageKit endpoint is public by nature — it appears in every image URL it
-serves. ImageKit's **public API key** is not listed because this integration is
-delivery-only: no SDK, no client-side upload, so it is never used. ImageKit's
-**private key** must never appear here or in the app.
-
-Before the endpoint does anything useful, add a **storage / web-server origin**
-to it in the ImageKit dashboard pointing at
-`https://splfkqazwzybityoqmyv.supabase.co/storage/v1/object/public/`. Without
-that origin every rewritten URL 404s. Verify with one image:
-`https://ik.imagekit.io/CRADIEWER/report-images/<uid>/<file>.jpg` should return
-the same picture as the Supabase URL, and adding `?tr=w-320` should return a
-smaller one.
-
 Both Supabase values are public client credentials: the anon key only grants what the RLS
 policies allow, and the OneSignal app id only identifies the app.
 

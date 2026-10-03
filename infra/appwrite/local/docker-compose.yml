@@ -1,0 +1,270 @@
+# Minimal Appwrite 1.9.6, for local end-to-end testing.
+#
+# Pinned to 1.9.6 rather than the 1.8.0 this started on, because the
+# Flutter SDK (27.x) targets a newer server than 1.8 in two places:
+#
+#   * realtime — 1.8 wants `channels[]` in the connect URL and closes
+#     with 1008 "Missing channels" without them. The SDK connects with
+#     `project` alone and sends a `subscribe` frame after `connected`,
+#     which 1.9 understands and 1.8 does not.
+#   * executions — SDK 26 replaced `functionId` with `resourceId` and
+#     `resourceType`; parsing a 1.8 reply throws `Bad state: No element`.
+#
+# 2.3 is what the SDK actually targets, but its stack adds Postgres,
+# Mongo, ClickHouse, Traefik, a geo service and an ML model container.
+# 1.9.6 is the newest release this trimmed stack can host, and it speaks
+# both protocols above.
+#
+# The published self-hosted compose lives on appwrite.io, which this
+# container's egress proxy refuses, so this is the smallest subset that can
+# answer the question: the API, the databases worker (attributes and indexes
+# are created asynchronously by it — without it every attribute sits in
+# "processing" forever), MariaDB and Redis.
+#
+# Not a deployment. No Traefik, no functions executor, no mail.
+services:
+  mariadb:
+    image: mariadb:10.11
+    environment:
+      MYSQL_ROOT_PASSWORD: rootsecret
+      MYSQL_DATABASE: appwrite
+      MYSQL_USER: user
+      MYSQL_PASSWORD: password
+    command: --innodb-flush-method=fsync
+    volumes:
+      - appwrite-mariadb:/var/lib/mysql:rw
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  # A mail catcher, so the typed-code flows can be tested the way a user
+  # experiences them: the code has to actually arrive in an email. Reading
+  # it from a Function log would test the mint and not the delivery, and
+  # would mean logging live auth codes.
+  mailpit:
+    image: axllent/mailpit:latest
+    restart: unless-stopped
+    ports:
+      - "8025:8025"
+
+  redis:
+    image: redis:7.2.4-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  appwrite:
+    image: appwrite/appwrite:1.9.6
+    networks:
+      default:
+      runtimes:
+        # A dotted alias, because the session cookie is issued for
+        # `domain=.<_APP_DOMAIN>` and a cookie jar rejects a
+        # single-label domain like `.appwrite` outright. Without it
+        # the Flutter SDK never stored the session and every call
+        # after sign-in came back as a guest.
+        aliases:
+          - appwrite.local
+    ports:
+      - "8090:80"
+    volumes:
+      - appwrite-functions:/storage/functions:rw
+      - appwrite-builds:/storage/builds:rw
+    depends_on:
+      mariadb: {condition: service_healthy}
+      redis: {condition: service_healthy}
+    environment: &appwrite_env
+      _APP_ENV: development
+      _APP_LOCALE: en
+      _APP_OPENSSL_KEY_V1: spike-only-key-not-a-secret
+      # Appwrite routes by Host. A Function calling `http://appwrite/v1`
+      # sends `Host: appwrite`, which matches no configured domain, and
+      # router protection answers with the console's HTML instead of the
+      # API — a 200 full of markup, which `getRow` reads as "not found"
+      # and the write Function reports as "Your account is not set up
+      # yet". Disabled here because the stack is local and reachable
+      # only from this machine; on Cloud the injected public endpoint is
+      # correct and this does not arise.
+      _APP_OPTIONS_ROUTER_PROTECTION: "disabled"
+      _APP_DOMAIN: appwrite.local
+      _APP_DOMAIN_FUNCTIONS: localhost
+      _APP_DOMAIN_TARGET: localhost
+      _APP_CONSOLE_WHITELIST_ROOT: disabled
+      _APP_DB_ADAPTER: mariadb
+      _APP_DB_HOST: mariadb
+      _APP_DB_PORT: "3306"
+      _APP_DB_SCHEMA: appwrite
+      _APP_DB_USER: user
+      _APP_DB_PASS: password
+      _APP_REDIS_HOST: redis
+      _APP_REDIS_PORT: "6379"
+      _APP_WORKER_PER_CORE: "2"
+      _APP_STORAGE_LIMIT: "30000000"
+      _APP_STORAGE_PREVIEW_LIMIT: "20000000"
+      _APP_EXECUTOR_SECRET: spike-executor-secret
+      _APP_EXECUTOR_HOST: http://exc1/v1
+      _APP_FUNCTIONS_TIMEOUT: "900"
+      _APP_COMPUTE_BUILD_TIMEOUT: "900"
+      _APP_COMPUTE_SIZE_LIMIT: "30000000"
+      _APP_COMPUTE_MEMORY: "512"
+      _APP_COMPUTE_CPUS: "1"
+      _APP_FUNCTIONS_RUNTIMES: node-22
+      _APP_COMPUTE_RUNTIMES_NETWORK: runtimes19
+      _APP_COMPUTE_INACTIVE_THRESHOLD: "600"
+      _APP_COMPUTE_MAINTENANCE_INTERVAL: "3600"
+
+  appwrite-worker-databases:
+    image: appwrite/appwrite:1.9.6
+    entrypoint: worker-databases
+    depends_on:
+      - appwrite
+    environment: *appwrite_env
+
+  # Without this nothing is ever *sent*. Appwrite accepts a message and
+  # leaves it `processing` forever, so an outbox drain reports success,
+  # a push shows up in the console, and no device or inbox ever sees it.
+  # The spike never needed it and the gap is invisible until you check
+  # a mailbox rather than the API.
+  appwrite-worker-messaging:
+    image: appwrite/appwrite:1.9.6
+    entrypoint: worker-messaging
+    depends_on:
+      - appwrite
+    environment: *appwrite_env
+
+  appwrite-worker-audits:
+    image: appwrite/appwrite:1.9.6
+    entrypoint: worker-audits
+    depends_on:
+      - appwrite
+    environment: *appwrite_env
+
+  appwrite-realtime:
+    image: appwrite/appwrite:1.9.6
+    entrypoint: realtime
+    ports:
+      - "8091:80"
+    depends_on:
+      - appwrite
+    environment: *appwrite_env
+
+  openruntimes-executor:
+    # Both, and they must match: executor 0.25's start hook looks its own
+    # container up by `gethostname()` against Docker's *container name*,
+    # and without a match dies in its error handler with "Dependency
+    # response not found" — which names neither the container nor the
+    # lookup. The 1.8 executor had no such self-lookup, so `hostname`
+    # alone was enough there.
+    container_name: exc1
+    hostname: exc1
+    image: openruntimes/executor:0.25.4
+    stop_signal: SIGINT
+    networks: [default, runtimes]
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - appwrite-builds:/storage/builds:rw
+      - appwrite-functions:/storage/functions:rw
+      - appwrite-sites:/storage/sites:rw
+      # The executor and the runtime containers swap files through the host.
+      - /tmp:/tmp:rw
+    environment:
+      OPR_EXECUTOR_ENV: development
+      OPR_EXECUTOR_SECRET: spike-executor-secret
+      OPR_EXECUTOR_RUNTIMES: node-22
+      OPR_EXECUTOR_IMAGES: openruntimes/node:v5-22
+      OPEN_RUNTIMES_NFT: enabled
+      # Appwrite creates every Function with runtime contract v5 and will
+      # not let you choose otherwise — the `version` field is ignored on
+      # create and immutable on update. The executor has to be told to
+      # accept it. Inherited from the 1.6.2 spike as `v2,v4`, this
+      # produced seven identical build failures reading "Invalid
+      # `version` param: Value must be one of (v2, v4)" — which names the
+      # executor's allow-list, not the function, and sounds like the
+      # function is wrong.
+      OPR_EXECUTOR_RUNTIME_VERSIONS: v5
+      OPR_EXECUTOR_NETWORK: runtimes19
+      OPR_EXECUTOR_INACTIVE_THRESHOLD: "600"
+      OPR_EXECUTOR_MAINTENANCE_INTERVAL: "3600"
+      OPR_EXECUTOR_STORAGE_DEVICE: Local
+      OPR_EXECUTOR_CONNECTION_STORAGE: local://localhost
+      # Both are read unconditionally at start-up; left unset the
+      # executor dies in its own error handler with "Dependency response
+      # not found", which names neither.
+      OPR_EXECUTOR_CONNECTION_BUILD_CACHE_STORAGE: ""
+      OPR_EXECUTOR_LOGGING_CONFIG: ""
+      OPR_EXECUTOR_DOCKER_HUB_USERNAME: ""
+      OPR_EXECUTOR_DOCKER_HUB_PASSWORD: ""
+
+  appwrite-worker-functions:
+    image: appwrite/appwrite:1.9.6
+    entrypoint: worker-functions
+    depends_on: [appwrite, openruntimes-executor]
+    volumes:
+      - appwrite-functions:/storage/functions:rw
+      - appwrite-builds:/storage/builds:rw
+    environment: *appwrite_env
+
+  # New in 1.9: execution records are written by their own worker rather
+  # than inline. Without it an execution runs but is never persisted, so
+  # the API answers a sync call and the execution list stays empty.
+  appwrite-worker-executions:
+    image: appwrite/appwrite:1.9.6
+    entrypoint: worker-executions
+    depends_on: [appwrite]
+    environment: *appwrite_env
+
+  # Without these two nothing scheduled ever runs, and a cron Function looks
+  # like it simply does not work. schedule-functions watches for Functions
+  # with a cron; schedule-executions runs what it queues.
+  appwrite-task-scheduler-functions:
+    image: appwrite/appwrite:1.9.6
+    entrypoint: schedule-functions
+    depends_on: [appwrite]
+    environment: *appwrite_env
+
+  appwrite-task-scheduler-executions:
+    image: appwrite/appwrite:1.9.6
+    entrypoint: schedule-executions
+    depends_on: [appwrite]
+    environment: *appwrite_env
+
+  appwrite-worker-builds:
+    image: appwrite/appwrite:1.9.6
+    entrypoint: worker-builds
+    depends_on: [appwrite, openruntimes-executor]
+    volumes:
+      - appwrite-functions:/storage/functions:rw
+      - appwrite-builds:/storage/builds:rw
+    environment: *appwrite_env
+
+volumes:
+  appwrite-builds:
+  appwrite-sites:
+  appwrite-functions:
+  # Without these two, `docker compose down` silently destroys the project,
+  # its collections, its users and every deployed Function. It did once.
+  appwrite-mariadb:
+  appwrite-uploads:
+
+networks:
+  default:
+  runtimes:
+    external: true
+    # Explicit, because the executor attaches runtime containers to this
+    # network through the Docker socket, by the literal name below. Left
+    # to Compose it becomes `<project>_runtimes`, the runtimes land
+    # somewhere the executor cannot reach, and every execution dies with
+    # "timed out during cold start" while the runtime's own log says the
+    # server started fine.
+    #
+    # `runtimes19`, not `runtimes`, because an earlier spike stack owns
+    # that name. Sharing it put two containers
+    # answering to the alias `appwrite` on one network, so a Function
+    # resolving `http://appwrite/v1` got whichever Docker felt like —
+    # usually the wrong project, and `fetch failed` when it was the one
+    # that had gone away. `OPR_EXECUTOR_NETWORK` below must match.
+    name: runtimes19

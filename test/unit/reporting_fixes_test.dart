@@ -6,11 +6,16 @@ import 'package:climate_app/core/data/mvp_locations_data.dart';
 import 'package:climate_app/core/services/offline_storage_service.dart';
 import 'package:climate_app/features/verification/providers/reports_status_provider.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:climate_app/core/services/backend.dart';
 import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart' show PostgrestException;
 import 'package:climate_app/core/l10n/l10n.dart';
 
 void main() {
+  // The error vocabulary is the backend's, and these tests call the pure
+  // classifiers directly, with no live client to install it.
+  setUpAll(installBackendErrorVocabulary);
+
   group('Hazard metadata', () {
     test('stored names resolve to themselves', () {
       for (final h in Hazard.values) {

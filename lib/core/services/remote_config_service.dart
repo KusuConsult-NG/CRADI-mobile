@@ -7,7 +7,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:climate_app/core/constants/app_config.dart';
-import 'package:climate_app/core/services/supabase_service.dart';
+import 'package:climate_app/core/services/backend.dart';
 
 /// Server-side configurable parameters, read from the `app_settings` table
 /// (key → jsonb value).
@@ -30,6 +30,12 @@ class RemoteConfigService {
   /// Minimum age of the cached values before a reconnect refetches them
   /// (connectivity can flap; a successful fetch this recent is kept).
   static const Duration _reconnectRefreshInterval = Duration(minutes: 5);
+
+  /// How many `app_settings` rows one fetch asks for.
+  ///
+  /// Comfortably above the number the plan provisions, and explicit
+  /// rather than left to Appwrite's silent default of 25.
+  static const int _settingsPageLimit = 200;
 
   // ── In-app defaults ───────────────────────────────────────────────────────
   static const Map<String, Object> _defaults = {
@@ -143,7 +149,7 @@ class RemoteConfigService {
     bool force = false,
     Duration maxAge = _refreshInterval,
   }) {
-    if (!SupabaseService.isReady) return Future<void>.value();
+    if (!backend.isConfigured) return Future<void>.value();
     if (!isRefreshDue(
       lastFetch: _lastFetch,
       now: DateTime.now(),
@@ -168,9 +174,27 @@ class RemoteConfigService {
 
   Future<void> _fetch() async {
     try {
-      final rows = await SupabaseService().client
-          .from(AppConfig.appSettingsCollection)
-          .select('key, value');
+      final rows = await backend.listDocuments(
+        collectionId: AppConfig.appSettingsCollection,
+        // Appwrite pages at 25 by default, silently. Every setting past
+        // the 25th would simply not be in the map, and the getters fall
+        // back to their defaults — so the escalation timeout or the SMS
+        // cap would quietly revert with nothing in the logs. There are
+        // far fewer than this today; the limit is here so that stays a
+        // fact rather than an assumption.
+        limitCount: _settingsPageLimit,
+      );
+      if (rows.length >= _settingsPageLimit) {
+        // Not an error — the values that did arrive are good. But the
+        // ones that did not are invisible, and this is the only place
+        // that can say so.
+        developer.log(
+          'app_settings returned a full page of $_settingsPageLimit rows; '
+          'settings beyond it are not loaded and their defaults are in use',
+          name: 'RemoteConfig',
+          level: 900,
+        );
+      }
       final fresh = <String, Object?>{
         for (final row in rows) row['key'] as String: row['value'],
       };

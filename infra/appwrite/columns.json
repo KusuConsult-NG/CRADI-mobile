@@ -1,0 +1,1079 @@
+{
+  "app_settings": [
+    {
+      "key": "key",
+      "type": "string",
+      "size": 64,
+      "required": false
+    },
+    {
+      "key": "updatedAt",
+      "type": "datetime",
+      "required": false
+    },
+    {
+      "key": "value",
+      "type": "string",
+      "size": 65535,
+      "required": true
+    }
+  ],
+  "profiles": [
+    {
+      "key": "address",
+      "type": "string",
+      "size": 255,
+      "required": false
+    },
+    {
+      "key": "biometricsEnabled",
+      "type": "boolean",
+      "required": false
+    },
+    {
+      "key": "createdAt",
+      "type": "datetime",
+      "required": false
+    },
+    {
+      "key": "email",
+      "type": "string",
+      "size": 255,
+      "required": false
+    },
+    {
+      "key": "isApproved",
+      "type": "boolean",
+      "required": false
+    },
+    {
+      "key": "isDisabled",
+      "type": "boolean",
+      "required": false
+    },
+    {
+      "key": "isVerified",
+      "type": "boolean",
+      "required": false
+    },
+    {
+      "key": "lastLoginAt",
+      "type": "datetime",
+      "required": false
+    },
+    {
+      "key": "legacyFirebaseUid",
+      "type": "string",
+      "size": 255,
+      "required": false
+    },
+    {
+      "key": "lga",
+      "type": "string",
+      "size": 255,
+      "required": false
+    },
+    {
+      "key": "monitoringZone",
+      "type": "string",
+      "size": 65535,
+      "required": false
+    },
+    {
+      "key": "name",
+      "type": "string",
+      "size": 255,
+      "required": false
+    },
+    {
+      "key": "phone",
+      "type": "string",
+      "size": 255,
+      "required": false
+    },
+    {
+      "key": "profileImageUrl",
+      "type": "string",
+      "size": 2048,
+      "required": false
+    },
+    {
+      "key": "registrationCode",
+      "type": "string",
+      "size": 255,
+      "required": false
+    },
+    {
+      "key": "role",
+      "type": "string",
+      "size": 64,
+      "required": false
+    },
+    {
+      "key": "state",
+      "type": "string",
+      "size": 255,
+      "required": false
+    },
+    {
+      "key": "updatedAt",
+      "type": "datetime",
+      "required": false
+    },
+    {
+      "key": "ward",
+      "type": "string",
+      "size": 255,
+      "required": false
+    }
+  ],
+  "notification_outbox": [
+    {
+      "key": "attempts",
+      "type": "integer",
+      "required": false
+    },
+    {
+      "key": "availableAt",
+      "type": "datetime",
+      "required": false
+    },
+    {
+      "key": "createdAt",
+      "type": "datetime",
+      "required": false
+    },
+    {
+      "key": "eventType",
+      "type": "string",
+      "size": 255,
+      "required": true
+    },
+    {
+      "key": "lastError",
+      "type": "string",
+      "size": 255,
+      "required": false
+    },
+    {
+      "key": "payload",
+      "type": "string",
+      "size": 65535,
+      "required": false
+    },
+    {
+      "key": "processedAt",
+      "type": "datetime",
+      "required": false
+    }
+  ],
+  "reports": [
+    {
+      "key": "address",
+      "type": "string",
+      "size": 255,
+      "required": false
+    },
+    {
+      "key": "approvedAt",
+      "type": "datetime",
+      "required": false
+    },
+    {
+      "key": "autoValidated",
+      "type": "boolean",
+      "required": false
+    },
+    {
+      "key": "createdAt",
+      "type": "datetime",
+      "required": false
+    },
+    {
+      "key": "description",
+      "type": "string",
+      "size": 65535,
+      "required": false
+    },
+    {
+      "key": "escalated",
+      "type": "boolean",
+      "required": false
+    },
+    {
+      "key": "escalatedAt",
+      "type": "datetime",
+      "required": false
+    },
+    {
+      "key": "escalationReason",
+      "type": "string",
+      "size": 65535,
+      "required": false
+    },
+    {
+      "key": "escalationScheduledAt",
+      "type": "datetime",
+      "required": false
+    },
+    {
+      "key": "escalationStatus",
+      "type": "string",
+      "size": 255,
+      "required": false
+    },
+    {
+      "key": "hazardType",
+      "type": "string",
+      "size": 255,
+      "required": true
+    },
+    {
+      "key": "imageUrls",
+      "type": "string",
+      "size": 2048,
+      "array": true,
+      "required": false
+    },
+    {
+      "key": "isAlert",
+      "type": "boolean",
+      "required": false
+    },
+    {
+      "key": "latitude",
+      "type": "double",
+      "required": false
+    },
+    {
+      "key": "legacyFirebaseId",
+      "type": "string",
+      "size": 64,
+      "required": false
+    },
+    {
+      "key": "lga",
+      "type": "string",
+      "size": 255,
+      "required": true
+    },
+    {
+      "key": "location",
+      "type": "string",
+      "size": 255,
+      "required": false
+    },
+    {
+      "key": "locationDetails",
+      "type": "string",
+      "size": 65535,
+      "required": false
+    },
+    {
+      "key": "longitude",
+      "type": "double",
+      "required": false
+    },
+    {
+      "key": "rejectedAt",
+      "type": "datetime",
+      "required": false
+    },
+    {
+      "key": "rejectionReason",
+      "type": "string",
+      "size": 65535,
+      "required": false
+    },
+    {
+      "key": "reporterName",
+      "type": "string",
+      "size": 255,
+      "required": false
+    },
+    {
+      "key": "severity",
+      "type": "string",
+      "size": 64,
+      "required": false
+    },
+    {
+      "key": "state",
+      "type": "string",
+      "size": 255,
+      "required": false
+    },
+    {
+      "key": "status",
+      "type": "string",
+      "size": 64,
+      "required": false
+    },
+    {
+      "key": "submittedAt",
+      "type": "datetime",
+      "required": false
+    },
+    {
+      "key": "syncedAt",
+      "type": "datetime",
+      "required": false
+    },
+    {
+      "key": "type",
+      "type": "string",
+      "size": 64,
+      "required": false
+    },
+    {
+      "key": "updatedAt",
+      "type": "datetime",
+      "required": false
+    },
+    {
+      "key": "updatedBy",
+      "type": "string",
+      "size": 36,
+      "required": false
+    },
+    {
+      "key": "userId",
+      "type": "string",
+      "size": 36,
+      "required": false
+    },
+    {
+      "key": "verificationCount",
+      "type": "integer",
+      "required": false
+    },
+    {
+      "key": "verifiedAt",
+      "type": "datetime",
+      "required": false
+    },
+    {
+      "key": "ward",
+      "type": "string",
+      "size": 255,
+      "required": false
+    }
+  ],
+  "scheduled_escalations": [
+    {
+      "key": "createdAt",
+      "type": "datetime",
+      "required": false
+    },
+    {
+      "key": "escalateAt",
+      "type": "datetime",
+      "required": true
+    },
+    {
+      "key": "processedAt",
+      "type": "datetime",
+      "required": false
+    },
+    {
+      "key": "reason",
+      "type": "string",
+      "size": 65535,
+      "required": false
+    },
+    {
+      "key": "reportId",
+      "type": "string",
+      "size": 36,
+      "required": true
+    },
+    {
+      "key": "status",
+      "type": "string",
+      "size": 64,
+      "required": false
+    },
+    {
+      "key": "updatedAt",
+      "type": "datetime",
+      "required": false
+    }
+  ],
+  "verifications": [
+    {
+      "key": "comment",
+      "type": "string",
+      "size": 65535,
+      "required": false
+    },
+    {
+      "key": "createdAt",
+      "type": "datetime",
+      "required": false
+    },
+    {
+      "key": "isConfirmed",
+      "type": "boolean",
+      "required": true
+    },
+    {
+      "key": "reportId",
+      "type": "string",
+      "size": 36,
+      "required": true
+    },
+    {
+      "key": "submittedAt",
+      "type": "datetime",
+      "required": false
+    },
+    {
+      "key": "updatedAt",
+      "type": "datetime",
+      "required": false
+    },
+    {
+      "key": "verifierId",
+      "type": "string",
+      "size": 36,
+      "required": false
+    }
+  ],
+  "verification_overrides": [
+    {
+      "key": "action",
+      "type": "string",
+      "size": 64,
+      "required": true
+    },
+    {
+      "key": "createdAt",
+      "type": "datetime",
+      "required": false
+    },
+    {
+      "key": "reason",
+      "type": "string",
+      "size": 65535,
+      "required": false
+    },
+    {
+      "key": "reportId",
+      "type": "string",
+      "size": 36,
+      "required": true
+    },
+    {
+      "key": "validatorId",
+      "type": "string",
+      "size": 36,
+      "required": false
+    }
+  ],
+  "alerts": [
+    {
+      "key": "createdAt",
+      "type": "datetime",
+      "required": false
+    },
+    {
+      "key": "createdBy",
+      "type": "string",
+      "size": 36,
+      "required": false
+    },
+    {
+      "key": "isActive",
+      "type": "boolean",
+      "required": false
+    },
+    {
+      "key": "message",
+      "type": "string",
+      "size": 65535,
+      "required": false
+    },
+    {
+      "key": "reportId",
+      "type": "string",
+      "size": 36,
+      "required": false
+    },
+    {
+      "key": "severity",
+      "type": "string",
+      "size": 64,
+      "required": false
+    },
+    {
+      "key": "targetLga",
+      "type": "string",
+      "size": 255,
+      "required": false
+    },
+    {
+      "key": "targetLgaCanonical",
+      "type": "string",
+      "size": 255,
+      "required": false
+    },
+    {
+      "key": "targetState",
+      "type": "string",
+      "size": 255,
+      "required": false
+    },
+    {
+      "key": "title",
+      "type": "string",
+      "size": 255,
+      "required": true
+    },
+    {
+      "key": "updatedAt",
+      "type": "datetime",
+      "required": false
+    }
+  ],
+  "messages": [
+    {
+      "key": "chatId",
+      "type": "string",
+      "size": 64,
+      "required": false
+    },
+    {
+      "key": "createdAt",
+      "type": "datetime",
+      "required": false
+    },
+    {
+      "key": "message",
+      "type": "string",
+      "size": 65535,
+      "required": true
+    },
+    {
+      "key": "read",
+      "type": "boolean",
+      "required": false
+    },
+    {
+      "key": "senderId",
+      "type": "string",
+      "size": 36,
+      "required": false
+    },
+    {
+      "key": "senderName",
+      "type": "string",
+      "size": 255,
+      "required": false
+    },
+    {
+      "key": "sentAt",
+      "type": "datetime",
+      "required": false
+    },
+    {
+      "key": "type",
+      "type": "string",
+      "size": 64,
+      "required": false
+    },
+    {
+      "key": "updatedAt",
+      "type": "datetime",
+      "required": false
+    }
+  ],
+  "contacts": [
+    {
+      "key": "category",
+      "type": "string",
+      "size": 64,
+      "required": false
+    },
+    {
+      "key": "createdAt",
+      "type": "datetime",
+      "required": false
+    },
+    {
+      "key": "isAvailable",
+      "type": "boolean",
+      "required": false
+    },
+    {
+      "key": "lga",
+      "type": "string",
+      "size": 255,
+      "required": false
+    },
+    {
+      "key": "name",
+      "type": "string",
+      "size": 255,
+      "required": true
+    },
+    {
+      "key": "organization",
+      "type": "string",
+      "size": 255,
+      "required": false
+    },
+    {
+      "key": "phone",
+      "type": "string",
+      "size": 255,
+      "required": true
+    },
+    {
+      "key": "role",
+      "type": "string",
+      "size": 64,
+      "required": false
+    },
+    {
+      "key": "updatedAt",
+      "type": "datetime",
+      "required": false
+    },
+    {
+      "key": "userId",
+      "type": "string",
+      "size": 36,
+      "required": false
+    }
+  ],
+  "knowledge_base": [
+    {
+      "key": "category",
+      "type": "string",
+      "size": 64,
+      "required": false
+    },
+    {
+      "key": "content",
+      "type": "string",
+      "size": 65535,
+      "required": false
+    },
+    {
+      "key": "createdAt",
+      "type": "datetime",
+      "required": false
+    },
+    {
+      "key": "hazardType",
+      "type": "string",
+      "size": 255,
+      "required": false
+    },
+    {
+      "key": "imageUrl",
+      "type": "string",
+      "size": 2048,
+      "required": false
+    },
+    {
+      "key": "legacyFirebaseId",
+      "type": "string",
+      "size": 64,
+      "required": false
+    },
+    {
+      "key": "source",
+      "type": "string",
+      "size": 255,
+      "required": false
+    },
+    {
+      "key": "title",
+      "type": "string",
+      "size": 255,
+      "required": true
+    },
+    {
+      "key": "updatedAt",
+      "type": "datetime",
+      "required": false
+    }
+  ],
+  "authorities": [
+    {
+      "key": "coverageLga",
+      "type": "string",
+      "size": 255,
+      "required": true
+    },
+    {
+      "key": "coverageState",
+      "type": "string",
+      "size": 255,
+      "required": false
+    },
+    {
+      "key": "createdAt",
+      "type": "datetime",
+      "required": false
+    },
+    {
+      "key": "name",
+      "type": "string",
+      "size": 255,
+      "required": false
+    },
+    {
+      "key": "organization",
+      "type": "string",
+      "size": 255,
+      "required": false
+    },
+    {
+      "key": "phone",
+      "type": "string",
+      "size": 255,
+      "required": true
+    },
+    {
+      "key": "updatedAt",
+      "type": "datetime",
+      "required": false
+    }
+  ],
+  "trusted_devices": [
+    {
+      "key": "createdAt",
+      "type": "datetime",
+      "required": false
+    },
+    {
+      "key": "deviceFingerprint",
+      "type": "string",
+      "size": 64,
+      "required": true
+    },
+    {
+      "key": "deviceName",
+      "type": "string",
+      "size": 255,
+      "required": false
+    },
+    {
+      "key": "lastUsed",
+      "type": "datetime",
+      "required": false
+    },
+    {
+      "key": "trusted",
+      "type": "boolean",
+      "required": false
+    },
+    {
+      "key": "userId",
+      "type": "string",
+      "size": 36,
+      "required": false
+    }
+  ],
+  "login_history": [
+    {
+      "key": "createdAt",
+      "type": "datetime",
+      "required": false
+    },
+    {
+      "key": "deviceFingerprint",
+      "type": "string",
+      "size": 64,
+      "required": false
+    },
+    {
+      "key": "deviceName",
+      "type": "string",
+      "size": 255,
+      "required": false
+    },
+    {
+      "key": "occurredAt",
+      "type": "datetime",
+      "required": false
+    },
+    {
+      "key": "riskScore",
+      "type": "integer",
+      "required": false
+    },
+    {
+      "key": "success",
+      "type": "boolean",
+      "required": true
+    },
+    {
+      "key": "userId",
+      "type": "string",
+      "size": 36,
+      "required": false
+    }
+  ],
+  "ndpa_consents": [
+    {
+      "key": "consentedAt",
+      "type": "datetime",
+      "required": false
+    },
+    {
+      "key": "dataResidency",
+      "type": "string",
+      "size": 255,
+      "required": false
+    },
+    {
+      "key": "method",
+      "type": "string",
+      "size": 64,
+      "required": false
+    },
+    {
+      "key": "platform",
+      "type": "string",
+      "size": 64,
+      "required": false
+    },
+    {
+      "key": "policyVersion",
+      "type": "string",
+      "size": 255,
+      "required": true
+    },
+    {
+      "key": "userId",
+      "type": "string",
+      "size": 36,
+      "required": false
+    }
+  ],
+  "news_links": [
+    {
+      "key": "createdAt",
+      "type": "datetime",
+      "required": false
+    },
+    {
+      "key": "isActive",
+      "type": "boolean",
+      "required": false
+    },
+    {
+      "key": "sortOrder",
+      "type": "integer",
+      "required": false
+    },
+    {
+      "key": "source",
+      "type": "string",
+      "size": 255,
+      "required": false
+    },
+    {
+      "key": "title",
+      "type": "string",
+      "size": 255,
+      "required": true
+    },
+    {
+      "key": "updatedAt",
+      "type": "datetime",
+      "required": false
+    },
+    {
+      "key": "url",
+      "type": "string",
+      "size": 2048,
+      "required": true
+    }
+  ],
+  "sms_deliveries": [
+    {
+      "key": "createdAt",
+      "type": "datetime",
+      "required": false
+    },
+    {
+      "key": "lga",
+      "type": "string",
+      "size": 255,
+      "required": false
+    },
+    {
+      "key": "phone",
+      "type": "string",
+      "size": 255,
+      "required": true
+    },
+    {
+      "key": "reportId",
+      "type": "string",
+      "size": 36,
+      "required": true
+    },
+    {
+      "key": "state",
+      "type": "string",
+      "size": 255,
+      "required": false
+    },
+    {
+      "key": "status",
+      "type": "string",
+      "size": 64,
+      "required": false
+    }
+  ],
+  "nigeria_states": [
+    {
+      "key": "name",
+      "type": "string",
+      "size": 255,
+      "required": false
+    }
+  ],
+  "nigeria_lgas": [
+    {
+      "key": "lga",
+      "type": "string",
+      "size": 255,
+      "required": true
+    },
+    {
+      "key": "state",
+      "type": "string",
+      "size": 255,
+      "required": true
+    }
+  ],
+  "alerts_unresolved_target": [
+    {
+      "key": "createdAt",
+      "type": "datetime",
+      "required": false
+    },
+    {
+      "key": "createdBy",
+      "type": "string",
+      "size": 36,
+      "required": false
+    },
+    {
+      "key": "isActive",
+      "type": "boolean",
+      "required": false
+    },
+    {
+      "key": "message",
+      "type": "string",
+      "size": 65535,
+      "required": false
+    },
+    {
+      "key": "quarantinedAt",
+      "type": "datetime",
+      "required": false
+    },
+    {
+      "key": "reason",
+      "type": "string",
+      "size": 65535,
+      "required": true
+    },
+    {
+      "key": "reportId",
+      "type": "string",
+      "size": 36,
+      "required": false
+    },
+    {
+      "key": "severity",
+      "type": "string",
+      "size": 64,
+      "required": false
+    },
+    {
+      "key": "targetLga",
+      "type": "string",
+      "size": 255,
+      "required": false
+    },
+    {
+      "key": "targetState",
+      "type": "string",
+      "size": 255,
+      "required": false
+    },
+    {
+      "key": "title",
+      "type": "string",
+      "size": 255,
+      "required": true
+    },
+    {
+      "key": "updatedAt",
+      "type": "datetime",
+      "required": false
+    }
+  ],
+  "authorities_unresolved_coverage": [
+    {
+      "key": "coverageLga",
+      "type": "string",
+      "size": 255,
+      "required": true
+    },
+    {
+      "key": "coverageState",
+      "type": "string",
+      "size": 255,
+      "required": false
+    },
+    {
+      "key": "createdAt",
+      "type": "datetime",
+      "required": false
+    },
+    {
+      "key": "name",
+      "type": "string",
+      "size": 255,
+      "required": false
+    },
+    {
+      "key": "organization",
+      "type": "string",
+      "size": 255,
+      "required": false
+    },
+    {
+      "key": "phone",
+      "type": "string",
+      "size": 255,
+      "required": true
+    },
+    {
+      "key": "quarantinedAt",
+      "type": "datetime",
+      "required": false
+    },
+    {
+      "key": "reason",
+      "type": "string",
+      "size": 65535,
+      "required": true
+    },
+    {
+      "key": "updatedAt",
+      "type": "datetime",
+      "required": false
+    }
+  ]
+}

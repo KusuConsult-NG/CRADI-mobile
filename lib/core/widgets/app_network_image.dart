@@ -1,17 +1,18 @@
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:climate_app/core/utils/image_url_resolver.dart';
+import 'package:climate_app/core/services/backend.dart';
 import 'package:flutter/material.dart';
 
 /// The app's single point for showing a remote image.
 ///
 /// Wraps [CachedNetworkImage] (so bytes are fetched once and then served
 /// from the disk cache, including offline) and routes every URL through
-/// [ImageUrlResolver.resolve], which is a no-op unless an ImageKit endpoint
-/// is configured at build time.
+/// `DataBackend.displayUrl`, which is a no-op unless the backend has a way
+/// to resize and it is configured at build time.
 ///
 /// [fallbackUrl] is loaded when [url] fails. That is what makes thumbnails
-/// safe to derive by name: reports uploaded before thumbnails existed have
-/// no `_thumb.jpg` object, so the 404 falls through to the full-size image.
+/// safe to derive rather than store: a report uploaded before thumbnails
+/// existed has no thumbnail object, so the 404 falls through to the
+/// full-size image.
 class AppNetworkImage extends StatelessWidget {
   const AppNetworkImage({
     super.key,
@@ -28,10 +29,10 @@ class AppNetworkImage extends StatelessWidget {
   });
 
   /// Shows the small thumbnail stored next to [url] (see
-  /// [ImageUrlResolver.thumbUrlFor]) and falls back to [url] itself when
-  /// there is none. [renderWidth] additionally asks ImageKit, when it is
-  /// configured, to render at that width — which also shrinks the fallback
-  /// for reports that never got a thumbnail.
+  /// `DataBackend.thumbUrlFor`) and falls back to [url] itself when there
+  /// is none. [renderWidth] additionally asks the backend, when it has a
+  /// way to resize and it is configured, to render at that width — which
+  /// also shrinks the fallback for reports that never got a thumbnail.
   factory AppNetworkImage.thumbnail({
     Key? key,
     required String url,
@@ -43,7 +44,7 @@ class AppNetworkImage extends StatelessWidget {
     WidgetBuilder? placeholder,
     WidgetBuilder? errorWidget,
   }) {
-    final thumb = ImageUrlResolver.thumbUrlFor(url);
+    final thumb = backend.thumbUrlFor(url);
     return AppNetworkImage(
       key: key,
       url: thumb ?? url,
@@ -64,8 +65,8 @@ class AppNetworkImage extends StatelessWidget {
   final double? height;
   final BoxFit? fit;
 
-  /// Width, in pixels, to ask the CDN to render at. Ignored when no ImageKit
-  /// endpoint is configured.
+  /// Width, in pixels, to ask the backend to render at. Ignored when the
+  /// backend has no way to resize, or has one that is not configured.
   final int? renderWidth;
   final int? renderQuality;
 
@@ -97,7 +98,7 @@ class AppNetworkImage extends StatelessWidget {
     required WidgetBuilder? onError,
   }) {
     return CachedNetworkImage(
-      imageUrl: ImageUrlResolver.resolve(
+      imageUrl: backend.displayUrl(
         rawUrl,
         width: renderWidth,
         quality: renderQuality,

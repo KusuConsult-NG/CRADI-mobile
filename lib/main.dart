@@ -28,7 +28,7 @@ import 'package:provider/provider.dart';
 import 'package:climate_app/core/l10n/fallback_localizations.dart';
 import 'package:climate_app/core/widgets/force_update_gate.dart';
 import 'package:climate_app/core/services/remote_config_service.dart';
-import 'package:climate_app/core/services/supabase_service.dart';
+import 'package:climate_app/core/services/backend.dart';
 import 'package:climate_app/core/constants/app_config.dart';
 import 'package:climate_app/core/utils/error_handler.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
@@ -55,7 +55,7 @@ Future<void> _bootstrap() async {
 
   // Initialize Supabase (auth session is restored from secure storage).
   try {
-    await SupabaseService.initialize();
+    await initializeBackend();
   } on Exception catch (e) {
     debugPrint('Supabase initialization failed: $e');
   }

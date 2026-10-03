@@ -20,14 +20,6 @@ class AppConfig {
   /// Optional. Crash reporting is disabled when empty.
   static const String sentryDsn = String.fromEnvironment('SENTRY_DSN');
 
-  /// Optional. ImageKit URL endpoint (e.g. `https://ik.imagekit.io/cradi`)
-  /// used as a CDN in front of Supabase Storage. When empty — the default —
-  /// images are fetched straight from Supabase Storage and every URL is left
-  /// untouched (see `ImageUrlResolver`). Delivery only: no SDK, no uploads.
-  static const String imageKitUrlEndpoint = String.fromEnvironment(
-    'IMAGEKIT_URL_ENDPOINT',
-  );
-
   static bool get isSupabaseConfigured =>
       supabaseUrl.isNotEmpty && supabaseAnonKey.isNotEmpty;
 
@@ -65,7 +57,20 @@ class AppConfig {
 
   // ─────────────────────── Storage buckets ─────────────────────────────────
   // Object paths must start with the uploader's user id (storage RLS).
+  //
+  // Overridable at build time because an Appwrite tier that allows only
+  // one bucket makes both of these the same bucket, separated by the
+  // path prefix. The previous Appwrite project ran exactly that way —
+  // its config says "Due to Appwrite free tier limits (max 1 bucket)".
+  // Safe there as long as file-level permissions stay on; see
+  // `infra/appwrite/plan.mjs`.
 
-  static const String profileImagesBucket = 'profile-images';
-  static const String reportImagesBucket = 'report-images';
+  static const String profileImagesBucket = String.fromEnvironment(
+    'PROFILE_IMAGES_BUCKET',
+    defaultValue: 'profile-images',
+  );
+  static const String reportImagesBucket = String.fromEnvironment(
+    'REPORT_IMAGES_BUCKET',
+    defaultValue: 'report-images',
+  );
 }

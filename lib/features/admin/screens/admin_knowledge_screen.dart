@@ -1,5 +1,5 @@
 import 'package:climate_app/core/widgets/admin_menu_entry.dart';
-import 'package:climate_app/core/services/supabase_service.dart';
+import 'package:climate_app/core/services/backend.dart';
 import 'package:climate_app/core/utils/error_handler.dart';
 import 'package:climate_app/features/knowledge_base/knowledge_categories.dart';
 import 'package:flutter/material.dart';
@@ -29,7 +29,7 @@ class _AdminKnowledgeScreenState extends State<AdminKnowledgeScreen> {
   @override
   void initState() {
     super.initState();
-    _knowledgeStream = SupabaseService().subscribeToCollection(
+    _knowledgeStream = backend.subscribeToCollection(
       collectionId: AppConfig.knowledgeBaseCollection,
       queries: [FQuery.orderDesc('updatedAt')],
     );
@@ -65,16 +65,14 @@ class _AdminKnowledgeScreenState extends State<AdminKnowledgeScreen> {
     );
     if (confirmed == true) {
       try {
-        await SupabaseService().deleteDocument(
+        await backend.deleteDocument(
           collectionId: AppConfig.knowledgeBaseCollection,
           documentId: id,
         );
       } on Exception catch (e) {
         developer.log('Guide delete failed: $e', name: 'AdminKnowledgeScreen');
         if (mounted) {
-          final denied =
-              SupabaseService.isPermissionDenied(e) ||
-              e is DocumentNotFoundException;
+          final denied = isRefusal(e) || e is DocumentNotFoundException;
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(
@@ -394,7 +392,7 @@ class _GuideFormSheetState extends State<_GuideFormSheet> {
     };
 
     try {
-      final db = SupabaseService();
+      final db = backend;
       if (widget.docId != null) {
         await db.updateDocument(
           collectionId: AppConfig.knowledgeBaseCollection,

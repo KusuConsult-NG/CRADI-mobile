@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:climate_app/core/l10n/l10n.dart';
 import 'package:climate_app/core/providers/connectivity_provider.dart';
 import 'package:climate_app/core/services/offline_storage_service.dart';
-import 'package:climate_app/core/services/supabase_service.dart';
+import 'package:climate_app/core/services/backend.dart';
 import 'package:climate_app/core/utils/image_url_resolver.dart';
 import 'package:climate_app/features/reporting/providers/reporting_provider.dart';
 import 'package:flutter/material.dart';
@@ -15,7 +15,7 @@ import 'package:provider/provider.dart';
 
 /// Records uploads / writes; the upload number [failUploadAt] (0-based)
 /// fails with [uploadError].
-class _FakeDb implements SupabaseService {
+class _FakeDb implements DataBackend {
   _FakeDb({this.failUploadAt, this.uploadError});
 
   final int? failUploadAt;
@@ -43,15 +43,28 @@ class _FakeDb implements SupabaseService {
     int maxDimension = 1920,
     int quality = 85,
   }) async {
-    if (storagePath.endsWith('_thumb.jpg')) {
-      uploadedThumbPaths.add(storagePath);
-      return 'https://storage.example/$storagePath';
-    }
     final n = attemptedPaths.length;
     attemptedPaths.add(storagePath);
     if (n == failUploadAt) throw uploadError!;
     uploadedPaths.add(storagePath);
     return 'https://storage.example/$storagePath';
+  }
+
+  /// Models the Supabase convention: the thumbnail lands beside the
+  /// photo under `thumbStoragePath`. The provider now passes the
+  /// **photo's** path and lets the backend name the thumbnail, which is
+  /// what lets Appwrite key its id off the photo's instead.
+  @override
+  Future<String> uploadThumbnailFromPath({
+    required String bucketId,
+    required String storagePath,
+    required File file,
+    int maxDimension = 320,
+    int quality = 60,
+  }) async {
+    final thumb = ImageUrlResolver.thumbStoragePath(storagePath);
+    uploadedThumbPaths.add(thumb);
+    return 'https://storage.example/$thumb';
   }
 
   @override

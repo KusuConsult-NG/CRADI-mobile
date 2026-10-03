@@ -1,14 +1,14 @@
 import 'package:flutter/material.dart';
-import 'package:climate_app/core/services/supabase_service.dart';
+import 'package:climate_app/core/services/backend.dart';
 import 'package:climate_app/core/constants/app_config.dart';
 
 /// Chat data access. Messages are sent by the chat screen itself (it
 /// inserts optimistically with a client-generated id).
 class ChatProvider extends ChangeNotifier {
-  final SupabaseService _db = SupabaseService();
+  final DataBackend _db = backend;
 
   /// Check if user is authenticated
-  bool get isAuthenticated => _db.getCurrentUser() != null;
+  bool get isAuthenticated => _db.currentUserId != null;
 
   /// Realtime stream of the latest messages in [chatId].
   Stream<List<Map<String, dynamic>>> getMessages({String chatId = 'general'}) {

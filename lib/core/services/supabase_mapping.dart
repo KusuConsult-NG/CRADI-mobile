@@ -228,6 +228,24 @@ DateTime? parseTimestamp(Object? value) {
 
 // ───────────────────────────── Query DSL ─────────────────────────────────────
 
+/// Orders two encoded values the way both adapters' client-side filtering
+/// needs: nulls first, numbers and bools natively, ISO-8601 strings as
+/// instants, everything else lexically.
+///
+/// Shared rather than duplicated because it decides the order of a list a
+/// user reads, and two copies would drift.
+int compareValues(Object? a, Object? b) {
+  if (a == null && b == null) return 0;
+  if (a == null) return -1;
+  if (b == null) return 1;
+  if (a is num && b is num) return a.compareTo(b);
+  if (a is bool && b is bool) return a == b ? 0 : (a ? 1 : -1);
+  final da = a is String ? DateTime.tryParse(a) : null;
+  final db = b is String ? DateTime.tryParse(b) : null;
+  if (da != null && db != null) return da.compareTo(db);
+  return a.toString().compareTo(b.toString());
+}
+
 /// [neq] follows SQL (`NULL <> x` is not true, so NULL rows are excluded);
 /// [distinctFrom] is `IS DISTINCT FROM` (NULL rows are included).
 enum FilterOp { eq, neq, distinctFrom, gt, lt, contains, inList }
@@ -269,17 +287,7 @@ class ColumnFilter {
     }
   }
 
-  static int _compare(Object? a, Object? b) {
-    if (a == null && b == null) return 0;
-    if (a == null) return -1;
-    if (b == null) return 1;
-    if (a is num && b is num) return a.compareTo(b);
-    if (a is bool && b is bool) return a == b ? 0 : (a ? 1 : -1);
-    final da = a is String ? DateTime.tryParse(a) : null;
-    final db = b is String ? DateTime.tryParse(b) : null;
-    if (da != null && db != null) return da.compareTo(db);
-    return a.toString().compareTo(b.toString());
-  }
+  static int _compare(Object? a, Object? b) => compareValues(a, b);
 
   @override
   String toString() => '$column.${op.name}.$value';

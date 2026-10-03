@@ -2,15 +2,14 @@ import 'dart:async';
 import 'dart:developer' as developer;
 import 'dart:io';
 
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
-import 'package:supabase_flutter/supabase_flutter.dart'
-    show AuthRetryableFetchException, PostgrestException, StorageException;
 
 import 'package:climate_app/core/services/hive_encryption_service.dart';
-import 'package:climate_app/core/services/supabase_service.dart';
+import 'package:climate_app/core/services/backend.dart';
 import 'package:climate_app/core/utils/error_handler.dart'
     show ValidationException;
 import 'package:climate_app/core/l10n/l10n.dart';
@@ -30,20 +29,6 @@ class OfflineQueuedException implements Exception {
   String toString() => message(englishL10n);
 }
 
-/// Postgres error codes that will fail the same way on every retry
-/// (permissions, constraint / type violations, unknown columns).
-const Set<String> _permanentPostgresCodes = {
-  '42501', // insufficient_privilege / RLS
-  '23502', // not_null_violation
-  '23503', // foreign_key_violation
-  '23514', // check_violation
-  '22P02', // invalid_text_representation
-  '22001', // string_data_right_truncation
-  '22007', // invalid_datetime_format
-  '42703', // undefined_column
-  'PGRST204', // unknown column in payload
-};
-
 /// True for connectivity failures worth retrying later (no network, DNS,
 /// timeouts, dropped connections, auth refresh that could not reach the
 /// server).
@@ -52,25 +37,15 @@ bool isTransientNetworkError(Object error) =>
     error is TimeoutException ||
     error is HandshakeException ||
     error is http.ClientException ||
-    error is AuthRetryableFetchException;
+    // The backend's own retryable failures; the adapter knows which.
+    isBackendTransient(error);
 
 /// True when the server rejected the payload and retrying cannot succeed:
 /// a permanent Postgres error, a storage upload refused with a 4xx status
 /// (e.g. file too large, wrong type, not permitted — but not a timeout,
 /// conflict or rate limit), or an image that can't be processed.
-bool isPermanentSyncError(Object error) {
-  if (error is PostgrestException) {
-    return _permanentPostgresCodes.contains(error.code);
-  }
-  if (error is StorageException) {
-    final status = int.tryParse(error.statusCode ?? '');
-    return status != null &&
-        status >= 400 &&
-        status < 500 &&
-        !const {408, 409, 429}.contains(status);
-  }
-  return error is ImageEncodingException;
-}
+bool isPermanentSyncError(Object error) =>
+    isBackendPermanent(error) || error is ImageEncodingException;
 
 /// Service for storing draft reports offline using Hive
 /// Allows users to create reports without internet and sync later
@@ -418,7 +393,7 @@ class OfflineStorageService {
 
   /// Whether a sync failure should consume one of the item's retries.
   static bool failureCountsAsRetry(Object error) =>
-      !isTransientNetworkError(error) && !SupabaseService.isRateLimited(error);
+      !isTransientNetworkError(error) && !isRateLimited(error);
 
   /// Mark queue item as failed.
   ///
@@ -511,9 +486,7 @@ class OfflineStorageService {
   }
 
   Future<Map<String, int>> _doSyncPendingReports() async {
-    final currentUserId = SupabaseService.isReady
-        ? SupabaseService().currentUserId
-        : null;
+    final currentUserId = backend.isConfigured ? backend.currentUserId : null;
     if (!isInitialized) {
       developer.log(
         'syncPendingReports: not initialized, skipping',
@@ -550,7 +523,7 @@ class OfflineStorageService {
       name: 'OfflineStorageService',
     );
 
-    final db = SupabaseService();
+    final db = backend;
     int successCount = 0;
     int failCount = 0;
     int rejectedCount = 0;
@@ -590,12 +563,7 @@ class OfflineStorageService {
           ..remove('collection')
           ..remove('collectionId')
           ..remove('docId');
-        // RLS only allows new reports to be inserted as 'pending'.
-        if (collection == 'reports') {
-          data['status'] = 'pending';
-        }
-        // created_at / updated_at are set by the database.
-        data['syncedAt'] = DateTime.now();
+        stampForSync(collection, data);
 
         // With a known id, upsert idempotently (a row that already exists
         // was synced by an earlier attempt and is left untouched);
@@ -615,17 +583,14 @@ class OfflineStorageService {
         await markAsSynced(queueId);
         successCount++;
       } on Exception catch (e) {
-        if (SupabaseService.isUniqueViolation(e)) {
+        if (isDuplicate(e)) {
           // Already inserted by an earlier attempt.
           await markAsSynced(queueId);
           successCount++;
           continue;
         }
         if (isPermanentSyncError(e)) {
-          await markAsRejected(
-            queueId,
-            e is PostgrestException ? e.message : e.toString(),
-          );
+          await markAsRejected(queueId, backendDiagnosticOf(e) ?? e.toString());
           rejectedCount++;
         } else {
           await markAsFailed(
@@ -962,4 +927,32 @@ class OfflineStorageService {
     // Anything else cannot be stored in Hive.
     return _unsupported;
   }
+}
+
+/// What the queue adds to a row on its way out, by collection.
+///
+/// Both of these used to be written inline in the sync loop, and the
+/// second was written for every collection:
+///
+///  - `status` is forced to `pending` because a new report may only be
+///    inserted pending; the server would refuse anything else.
+///  - `syncedAt` is a column **`reports` has and nothing else does**.
+///    Appwrite refuses a field a collection does not declare — a 400
+///    `document_invalid_structure` — which this queue classifies as
+///    permanent and answers by marking the item rejected. So stamping it
+///    on every collection meant the first queued write of anything but a
+///    report would be thrown away instead of retried, and a field
+///    agent's queued work is the one thing here that cannot be
+///    recreated.
+///
+/// `createdAt` and `updatedAt` are the server's and are not sent.
+///
+/// Pulled out of the loop so it can be tested without Hive and without a
+/// backend: it is the whole of the decision, and the loop does nothing
+/// else to the payload.
+@visibleForTesting
+void stampForSync(String collection, Map<String, dynamic> data) {
+  if (collection != 'reports') return;
+  data['status'] = 'pending';
+  data['syncedAt'] = DateTime.now();
 }

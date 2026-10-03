@@ -1,5 +1,4 @@
-import 'package:climate_app/core/services/supabase_service.dart';
-import 'package:supabase_flutter/supabase_flutter.dart' show CountOption;
+import 'package:climate_app/core/services/backend.dart';
 import 'package:climate_app/features/auth/providers/auth_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter/material.dart';
@@ -29,13 +28,14 @@ class _AdminScreenState extends State<AdminScreen> {
 
   /// Exact row count of [table] (column names are database names). Errors
   /// propagate so the dashboard can show them instead of a misleading 0.
-  Future<int> _count(String table, {Map<String, Object>? where}) {
-    var query = SupabaseService().client.from(table).count(CountOption.exact);
-    for (final e in (where ?? const <String, Object>{}).entries) {
-      query = query.eq(e.key, e.value);
-    }
-    return query.timeout(const Duration(seconds: 10));
-  }
+  Future<int> _count(String table, {Map<String, Object>? where}) =>
+      backend.countDocumentsOrThrow(
+        collectionId: table,
+        queries: [
+          for (final e in (where ?? const <String, Object>{}).entries)
+            WhereFilter(e.key, FilterOp.eq, e.value),
+        ],
+      );
 
   /// Other users' profiles are readable by admins only (tech support sees
   /// just its own row), so profile counts are unknown (null) otherwise.
@@ -44,12 +44,17 @@ class _AdminScreenState extends State<AdminScreen> {
       ? _count('profiles', where: where)
       : Future<int?>.value();
 
+  // camelCase, as the Appwrite columns are named. These were
+  // `is_approved` and `is_active` — Postgres names — and Appwrite
+  // refuses a query naming an attribute that is not in the schema, so
+  // every count on this screen 400d and the dashboard showed its error
+  // state instead of numbers.
   Future<List<int?>> _loadCounts() => Future.wait<int?>([
-    _countProfiles(where: {'is_approved': false}),
+    _countProfiles(where: {'isApproved': false}),
     _count('reports', where: {'status': 'pending'}),
     _count('reports', where: {'status': 'verified'}),
     _countProfiles(),
-    _count('alerts', where: {'is_active': true}),
+    _count('alerts', where: {'isActive': true}),
     _count('reports'),
   ]);
 

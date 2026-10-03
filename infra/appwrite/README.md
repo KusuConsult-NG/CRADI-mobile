@@ -1,0 +1,212 @@
+# Setting up the Appwrite project
+
+Three commands. The region is settled (Frankfurt); the tier is the one
+thing still to confirm, and the provisioner answers it by running.
+
+---
+
+## The region: decided
+
+**Frankfurt — `https://fra.cloud.appwrite.io/v1`.** The default
+everywhere in this directory.
+
+Chosen on latency: of the Appwrite Cloud regions, Frankfurt is much the
+closest to Nigeria (Lagos–Frankfurt ≈ 4,500 km, against ≈ 8,500 km to
+New York). It is also where the previous Appwrite project ran.
+
+Recorded because it cannot be changed later without migrating everything
+a second time, and because the alternative was a data-residency
+position. The owner's decision, 2026-10-02, is that NDPA in-country
+residency is not a constraint on this deployment. If that is ever
+revisited, Cloud is out and the plan moves to self-hosting — which
+changes Phases 2, 4 and 6 and brings back the four operational traps
+Phase 4 recorded (the executor's port, the shared `/storage` volumes,
+the `runtimes` network name, and giving MariaDB a volume).
+
+## The one decision left: which tier
+
+The project needs, at minimum:
+
+| | |
+|---|---|
+| Teams | **584** — one per ward. Phase 0's whole design rests on ACLs naming a team, so moving an agent between wards is a membership change rather than a rewrite of every document they can see. |
+| Messaging topics | **~650** — one per targetable group (56 for states and LGAs, plus per-ward and per-role) |
+| Storage buckets | **2** — evidence and profile images, with different ACLs and different retention |
+| Collections | **19** |
+| Columns | **187** |
+| Functions | **7**, three of them on a one-minute schedule |
+
+### What the plan actually allows — run the probe
+
+```
+APPWRITE_PROJECT_ID=... APPWRITE_API_KEY=... APPWRITE_DATABASE_ID=... \
+node infra/appwrite/provision.mjs --probe
+```
+
+`--probe` keeps going past a quota refusal instead of stopping, and
+lists every limit at the end. It also creates one throwaway team and one
+throwaway topic — the two quotas no pricing page states plainly and the
+two this design cannot do without — and deletes them again.
+
+Stopping is right for a real run; probing is right when the question
+*is* what the plan allows, because otherwise each limit costs a whole
+round trip to discover.
+
+**Measured on the existing Frankfurt project, 2026-10-02 — the plan
+refuses four things, and one of them is fatal:**
+
+| | |
+|---|---|
+| Databases | one, already used by the old build. Pass `APPWRITE_DATABASE_ID` to provision into it. |
+| **Functions** | **none available — all seven refused.** Every write, auth's token minting and the whole worker are Functions. There is no version of this design that runs without them. |
+| Buckets | none available, so even the one-bucket fallback needs a slot freed. |
+| Columns per table | capped; `reports` alone needs 37. |
+
+So this is a billing decision before it is an engineering one: a paid
+Cloud plan, or self-hosting. See *Phase 12* in
+`../../docs/APPWRITE-MIGRATION.md`.
+
+**One more limit is known from the previous project's own config:**
+
+> Due to Appwrite free tier limits (max 1 bucket), Profile Photos and
+> Report Images currently share the same bucket but are logically
+> separated by folder paths.
+
+So on that tier the two-bucket plan fails. `--single-bucket` provisions
+one shared bucket instead, which is safe while file-level permissions
+stay on — see `SINGLE_BUCKET` in `plan.mjs` for what it does and does
+not cost. The app follows with `--dart-define PROFILE_IMAGES_BUCKET=...`
+and `REPORT_IMAGES_BUCKET=...`.
+
+`provision.mjs` stops the moment the plan refuses something and says so,
+rather than burying it in two hundred lines — so running it is also how
+the rest of this question gets answered.
+
+---
+
+## The commands
+
+### 0. In the console, by hand
+
+Create the project (picking the region — see above) and a **server API
+key** with, at minimum:
+
+```
+databases.read  databases.write
+collections.read collections.write
+attributes.read attributes.write
+indexes.read indexes.write
+documents.read documents.write
+buckets.read buckets.write
+functions.read functions.write
+teams.read teams.write
+users.read users.write
+```
+
+The key is only used by the provisioner and by the Functions; it must
+never reach the app. The app gets the endpoint and project id, which are
+not secrets.
+
+### 1. See the plan, offline
+
+```
+node infra/appwrite/provision.mjs --dry-run
+```
+
+Needs no credentials and no network — it prints every object it would
+create (237 of them) against an imagined empty project.
+
+### 2. Apply it
+
+```
+APPWRITE_PROJECT_ID=... APPWRITE_API_KEY=... \
+node infra/appwrite/provision.mjs
+```
+
+The endpoint defaults to Frankfurt; `APPWRITE_ENDPOINT` overrides it.
+The previous project was `6941cdb400050e7249d5` with database
+`6941e2c2003705bb5a25` — reuse or replace, but set
+`APPWRITE_DATABASE_ID` if you keep the old database id rather than
+`cradi`.
+
+**The API key must be a fresh one.** Two server keys from the previous
+project are in public git history.
+
+**Idempotent**: every step checks before it writes and prints
+`created` / `exists`. A half-finished run is resumed by running it again,
+which is not a nicety — Phase 4 lost an entire spike project to
+`docker compose down` on a volumeless MariaDB, and the only reason that
+was cheap is that the spike was scripted.
+
+**It never deletes.** A column in the project that is not in the plan is
+reported with a `?` and left alone. Dropping a column drops its data, and
+this will be run against a project holding live reports.
+
+`--only=collections` (or `database`, `buckets`, `functions`) narrows it.
+
+### 3. Deploy the Function code
+
+The provisioner creates the Functions but cannot push code — that is the
+Appwrite CLI, from `functions/cradi`:
+
+```
+appwrite push function --function-id write
+appwrite push function --function-id auth
+appwrite push function --function-id operation
+appwrite push function --function-id on-write
+appwrite push function --function-id drain
+appwrite push function --function-id escalate
+appwrite push function --function-id reconcile
+```
+
+Then set each one's variables (`APPWRITE_API_KEY`, `APPWRITE_DATABASE_ID`,
+and `TERMII_API_KEY` / `TERMII_SENDER_ID` on `drain`). See
+`functions/cradi/README.md`.
+
+### 4. Check it
+
+```
+APPWRITE_ENDPOINT=... APPWRITE_PROJECT_ID=... APPWRITE_API_KEY=... \
+node infra/appwrite/verify.mjs
+```
+
+Read-only, and exits non-zero when anything is missing. It checks three
+things a bare existence check would call fine: a column stuck in
+`processing` (present, and rejects every write), a Function created but
+never deployed (answers every call with a 500 and looks healthy in the
+console), and a schedule that does not match the plan.
+
+---
+
+## Where the plan comes from
+
+`plan.mjs` is the declaration. Its **columns are generated**, not written
+by hand:
+
+```
+node infra/appwrite/extract-schema.mjs > infra/appwrite/columns.json
+```
+
+reads `supabase/migrations/` — which *is* the live database — and derives
+the 187 Appwrite columns from it. Hand-writing them would have been
+quicker and would have created a second source of truth for a schema that
+already has one. `functions/cradi/test/plan.test.mjs` fails if the
+committed file falls behind the migrations, so a column added to Postgres
+and forgotten here is a red CI run rather than a write the server rejects
+at 3am with the report already typed in.
+
+Everything else in `plan.mjs` traces to a phase of
+`docs/APPWRITE-MIGRATION.md`: the collection list and write rules to
+Phase 1, the document ACLs to Phase 0, buckets and topics to Phase 3, the
+Functions to Phases 10 and 11.
+
+## What this does not do
+
+- **Teams and topics.** 584 teams and ~650 topics are created from the
+  migrated data, not from a static list — `docs/appwrite-spike/migrate/`
+  creates each ward team as it writes the first document that names it.
+  Creating them here would mean guessing which wards have members.
+- **Seed data.** `app_settings`, `knowledge_base`, `authorities` and
+  `news_links` come across in the migration, not from the plan.
+- **Anything destructive.** No deletes, ever. If the plan and the project
+  disagree, the project wins and you are told.

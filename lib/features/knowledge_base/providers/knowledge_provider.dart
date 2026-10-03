@@ -1,4 +1,4 @@
-import 'package:climate_app/core/services/supabase_service.dart';
+import 'package:climate_app/core/services/backend.dart';
 import 'package:climate_app/core/services/offline_storage_service.dart';
 import 'package:climate_app/core/constants/app_config.dart';
 import 'package:climate_app/features/knowledge_base/knowledge_categories.dart';
@@ -44,7 +44,7 @@ class KnowledgeProvider extends ChangeNotifier {
     // the newest [fetchLimit] rows. Unknown / 'All' categories fall back to
     // the unfiltered list.
     final values = knowledgeCategoryQueryValues(category);
-    return SupabaseService().listDocuments(
+    return backend.listDocuments(
       collectionId: AppConfig.knowledgeBaseCollection,
       queries: <QueryFilter>[
         if (values.isNotEmpty) FQuery.isIn('hazardType', values),

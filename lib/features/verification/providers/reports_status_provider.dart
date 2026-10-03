@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:climate_app/core/services/supabase_service.dart';
+import 'package:climate_app/core/services/backend.dart';
 import 'package:climate_app/core/services/peer_verification_service.dart';
 import 'package:climate_app/features/verification/models/verification_report_model.dart';
 import 'package:climate_app/core/constants/app_config.dart';
@@ -13,7 +13,6 @@ import 'package:climate_app/features/reporting/providers/reporting_provider.dart
     show normalizeSeverity;
 import 'package:climate_app/core/constants/hazards.dart';
 import 'package:climate_app/core/utils/error_handler.dart';
-import 'package:supabase_flutter/supabase_flutter.dart' show PostgrestException;
 import 'package:climate_app/core/l10n/l10n.dart';
 
 export 'package:climate_app/core/services/offline_storage_service.dart'
@@ -53,21 +52,21 @@ String reportActionErrorMessage(
   if (error is DocumentNotFoundException) {
     return l10n.reportActionErrorNoPermissionOrGone;
   }
-  if (error is PostgrestException) {
-    switch (error.code) {
-      case '22023':
-        return l10n.reportActionErrorAlreadyPending;
-      case 'P0002':
-        return l10n.reportActionErrorGone;
-      case '42501':
-      case 'PGRST301':
-        // Trigger refusals carry a readable reason (written by the
-        // database, so not translated); RLS denials do not.
-        final msg = error.message;
-        return msg.isNotEmpty && !msg.toLowerCase().contains('row-level')
-            ? msg
-            : l10n.reportActionErrorNoPermission;
-    }
+  switch (backendFailureOf(error)) {
+    case BackendFailure.invalidState:
+      return l10n.reportActionErrorAlreadyPending;
+    case BackendFailure.notFound:
+      return l10n.reportActionErrorGone;
+    case BackendFailure.refused:
+      // A guard's refusal carries the reason it gives, which is written by
+      // the backend and so not translated. A bare permission denial carries
+      // nothing worth showing, and the adapter returns null for it.
+      return backendMessageOf(error) ?? l10n.reportActionErrorNoPermission;
+    case BackendFailure.rateLimited:
+    case BackendFailure.duplicate:
+    case BackendFailure.constraint:
+    case BackendFailure.unknown:
+      break;
   }
   return ErrorHandler.handleError(error, l10n, context: context);
 }
@@ -88,7 +87,7 @@ class _ListKey {
 }
 
 class ReportsStatusProvider extends ChangeNotifier {
-  final SupabaseService _db = SupabaseService();
+  final DataBackend _db = backend;
   final OfflineStorageService _offlineStorage = OfflineStorageService();
   ProfileProvider? _profileProvider;
 
@@ -383,7 +382,7 @@ class ReportsStatusProvider extends ChangeNotifier {
   /// Loads the ids of reports the signed-in user already voted on (one
   /// query, cached per user). Failures leave the previous set in place.
   Future<void> loadMyVotes({bool force = false}) {
-    final uid = SupabaseService.isReady ? _db.currentUserId : null;
+    final uid = backend.isConfigured ? _db.currentUserId : null;
     if (uid == null) {
       _votedReportIds = {};
       _votesUserId = null;
@@ -478,7 +477,7 @@ class ReportsStatusProvider extends ChangeNotifier {
   /// list, read with [toVerifyReports]), with a larger page than the
   /// default lists.
   Future<void> fetchToVerify() {
-    final uid = SupabaseService.isReady ? _db.currentUserId : null;
+    final uid = backend.isConfigured ? _db.currentUserId : null;
     if (uid == null) return Future.value();
     return fetchReports(
       status: ReportStatus.pending,
@@ -861,7 +860,10 @@ class ReportsStatusProvider extends ChangeNotifier {
   /// its peer votes, sets it back to pending and reschedules escalation.
   Future<void> moveBackToPending(String reportId) async {
     try {
-      await _db.client.rpc('reopen_report', params: {'p_report_id': reportId});
+      await _db.callOperation(
+        'reopen_report',
+        params: {'p_report_id': reportId},
+      );
       developer.log('Report reopened: $reportId');
       // Votes were cleared, including the user's own.
       _votedReportIds = {..._votedReportIds}..remove(reportId);

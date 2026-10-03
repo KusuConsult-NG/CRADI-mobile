@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:climate_app/core/services/supabase_service.dart';
+import 'package:climate_app/core/services/backend.dart';
 import 'package:climate_app/features/contacts/models/emergency_contact_model.dart';
 import 'package:climate_app/core/constants/app_config.dart';
 import 'dart:developer' as developer;
 import 'package:climate_app/core/utils/error_handler.dart' show AuthException;
 
 class EmergencyContactsProvider extends ChangeNotifier {
-  final SupabaseService _db = SupabaseService();
+  final DataBackend _db = backend;
 
   /// The signed-in user's contacts; [] on error. Use [fetchContacts] when a
   /// load failure must be told apart from "no contacts".
@@ -23,13 +23,13 @@ class EmergencyContactsProvider extends ChangeNotifier {
   /// (e.g. offline). Returns [] only when there really are none (or no one
   /// is signed in).
   Future<List<EmergencyContact>> fetchContacts() async {
-    final user = _db.getCurrentUser();
-    if (user == null) return [];
+    final userId = _db.currentUserId;
+    if (userId == null) return [];
 
     // Only the signed-in user's own contacts (RLS enforces this too).
     final docs = await _db.listDocuments(
       collectionId: AppConfig.contactsCollection,
-      queries: [FQuery.equal('userId', user.id)],
+      queries: [FQuery.equal('userId', userId)],
     );
 
     return _toSortedContacts(docs);
@@ -37,11 +37,11 @@ class EmergencyContactsProvider extends ChangeNotifier {
 
   Future<void> addContact(EmergencyContact contact) async {
     try {
-      final user = _db.getCurrentUser();
-      if (user == null) throw AuthException((l) => l.authErrorNotLoggedIn);
+      final userId = _db.currentUserId;
+      if (userId == null) throw AuthException((l) => l.authErrorNotLoggedIn);
 
       final data = contact.toMap();
-      data['userId'] = user.id;
+      data['userId'] = userId;
 
       await _db.createDocument(
         collectionId: AppConfig.contactsCollection,
@@ -103,24 +103,24 @@ class EmergencyContactsProvider extends ChangeNotifier {
 
   /// Real-time stream of the signed-in user's contacts.
   Stream<List<EmergencyContact>> getContactsStream() {
-    final user = _db.getCurrentUser();
-    if (user == null) return Stream.value(const []);
+    final userId = _db.currentUserId;
+    if (userId == null) return Stream.value(const []);
     return _db
         .subscribeToCollection(
           collectionId: AppConfig.contactsCollection,
-          queries: [FQuery.equal('userId', user.id)],
+          queries: [FQuery.equal('userId', userId)],
         )
         .map(_toSortedContacts);
   }
 
   Stream<List<EmergencyContact>> getContactsByCategory(String category) {
-    final user = _db.getCurrentUser();
-    if (user == null) return Stream.value(const []);
+    final userId = _db.currentUserId;
+    if (userId == null) return Stream.value(const []);
     return _db
         .subscribeToCollection(
           collectionId: AppConfig.contactsCollection,
           queries: [
-            FQuery.equal('userId', user.id),
+            FQuery.equal('userId', userId),
             FQuery.equal('category', category),
           ],
         )
