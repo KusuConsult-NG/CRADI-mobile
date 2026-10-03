@@ -161,7 +161,12 @@ async function reopenReport(params, { userId, role, log }) {
   ]);
   if (!stale.ok) throw new Error(`outbox read failed: ${stale.status}`);
   for (const event of stale.body?.rows ?? []) {
-    if (payloadOf(event).report_id !== reportId) continue;
+    // `reportId`, which is the key every outbox payload uses. Written
+    // `report_id` this compared `undefined` against the id, matched
+    // nothing, and superseded nothing — so the ward was still told the
+    // report had been disputed or decided after it went back to
+    // pending, which is the one thing this loop exists to prevent.
+    if (payloadOf(event).reportId !== reportId) continue;
     await markProcessed(event.$id, 'superseded by reopen');
   }
 
@@ -171,7 +176,11 @@ async function reopenReport(params, { userId, role, log }) {
   await enqueue({
     eventType: 'report_created',
     key: `${reportId}-reopen`,
-    payload: { report_id: reportId, reopened: true },
+    // Also `reportId`: the `report_created` handler reads that key and
+    // raises `PermanentEventError` without it, so written `report_id`
+    // this event was dropped and nobody was told the report was live
+    // again.
+    payload: { reportId, reopened: true },
   });
 
   log(`report ${reportId} reopened by ${userId}, ${votes.body?.rows?.length ?? 0} votes cleared`);

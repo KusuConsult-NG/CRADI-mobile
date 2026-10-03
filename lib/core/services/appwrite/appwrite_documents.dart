@@ -62,11 +62,34 @@ Map<String, dynamic> _flatten(
 ///
 /// `$id` is passed to the SDK as `documentId`, not inside `data`, and the
 /// timestamps are the server's. Sending any of them back is a 400.
+///
+/// A [DateTime] is encoded here because the payload is handed to
+/// `jsonEncode`, which has no encoding for one and throws
+/// `JsonUnsupportedObjectError` — not a refusal from the server but a
+/// crash on the way to it. The Supabase client used to do this
+/// conversion itself, so call sites that pass a `DateTime` were correct
+/// before the migration and silently became a crash after it
+/// (`auth_provider.dart` writes `lastLoginAt` this way on every
+/// sign-in). UTC, because Appwrite stores and compares datetimes in it
+/// and a local-time string sorts wrongly against one.
 Map<String, dynamic> toAppwriteData(Map<String, dynamic> data) {
   final out = Map<String, dynamic>.from(data)
     ..removeWhere((k, _) => kAppwriteSystemKeys.contains(k))
     ..remove('id');
+  for (final entry in out.entries.toList()) {
+    out[entry.key] = _encodeValue(entry.value);
+  }
   return out;
+}
+
+/// Anything `jsonEncode` cannot take, turned into something it can.
+Object? _encodeValue(Object? value) {
+  if (value is DateTime) return value.toUtc().toIso8601String();
+  if (value is List) return value.map(_encodeValue).toList();
+  if (value is Map) {
+    return value.map((k, v) => MapEntry(k.toString(), _encodeValue(v)));
+  }
+  return value;
 }
 
 /// The same flattening for a realtime payload, which arrives as a raw map

@@ -44,12 +44,17 @@ class _AdminScreenState extends State<AdminScreen> {
       ? _count('profiles', where: where)
       : Future<int?>.value();
 
+  // camelCase, as the Appwrite columns are named. These were
+  // `is_approved` and `is_active` — Postgres names — and Appwrite
+  // refuses a query naming an attribute that is not in the schema, so
+  // every count on this screen 400d and the dashboard showed its error
+  // state instead of numbers.
   Future<List<int?>> _loadCounts() => Future.wait<int?>([
-    _countProfiles(where: {'is_approved': false}),
+    _countProfiles(where: {'isApproved': false}),
     _count('reports', where: {'status': 'pending'}),
     _count('reports', where: {'status': 'verified'}),
     _countProfiles(),
-    _count('alerts', where: {'is_active': true}),
+    _count('alerts', where: {'isActive': true}),
     _count('reports'),
   ]);
 

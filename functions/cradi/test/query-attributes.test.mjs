@@ -133,3 +133,68 @@ describe('query attributes exist in the schema', () => {
         );
     });
 });
+
+/**
+ * The same audit over the Flutter app, which queries the same schema.
+ *
+ * The Functions were checked and the client was not, so the in-app
+ * admin dashboard went on filtering `profiles` on `is_approved` and
+ * `alerts` on `is_active` — Postgres names. Appwrite refuses an
+ * attribute it does not have, so every count on that screen 400d and
+ * the dashboard showed its error state rather than numbers.
+ *
+ * Both spellings the app uses are read: `WhereFilter('x', …)` and the
+ * `where: { 'x': … }` maps the dashboard passes, which is the one the
+ * first version of this missed.
+ */
+describe('the attributes the Flutter app queries', () => {
+    const LIB = join(here, '..', '..', '..', 'lib');
+    // `FQuery.equal('isActive', …)` is what the providers use;
+    // `WhereFilter('x', …)` and the `where:` maps are the dashboard's.
+    const DIRECT = /(?:FQuery\.\w+|WhereFilter|OrderBy)\(\s*'([A-Za-z_$][\w$]*)'/g;
+    const WHERE_MAP = /where:\s*\{([^}]*)\}/gs;
+    const MAP_KEY = /'([A-Za-z_$][\w$]*)'\s*:/g;
+
+    function dartFiles(dir) {
+        const out = [];
+        for (const entry of readdirSync(dir)) {
+            const full = join(dir, entry);
+            if (statSync(full).isDirectory()) out.push(...dartFiles(full));
+            else if (entry.endsWith('.dart')) out.push(full);
+        }
+        return out;
+    }
+
+    const everyColumn = new Set(
+        Object.values(JSON.parse(readFileSync(COLUMNS, 'utf8'))).flatMap((cols) =>
+            cols.map((c) => c.key),
+        ),
+    );
+    // Checked against every collection's columns rather than per table:
+    // the client's call sites name the collection in a variable often
+    // enough that resolving it would be guesswork, and a name that is
+    // in no collection at all is the mistake worth catching.
+    const names = [];
+    for (const file of dartFiles(LIB)) {
+        const text = readFileSync(file, 'utf8');
+        for (const [, name] of text.matchAll(DIRECT)) names.push({ file, name });
+        for (const [, block] of text.matchAll(WHERE_MAP)) {
+            for (const [, name] of block.matchAll(MAP_KEY)) names.push({ file, name });
+        }
+    }
+
+    it('finds the reads it is meant to check', () => {
+        // A matcher that sees nothing makes the assertion below vacuous.
+        assert.ok(names.length >= 30, `only ${names.length} client attributes found`);
+    });
+
+    it('names only attributes the schema has', () => {
+        const bad = names.filter(
+            (n) => !SYSTEM.has(n.name) && n.name !== 'id' && !everyColumn.has(n.name),
+        );
+        assert.deepEqual(
+            bad.map((n) => `${n.file.split('/lib/')[1]}: ${n.name}`),
+            [],
+        );
+    });
+});

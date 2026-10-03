@@ -5,7 +5,6 @@ export 'package:climate_app/core/utils/error_handler.dart'
     show AuthException, EmailNotConfirmedException;
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:climate_app/core/services/supabase_auth_backend.dart';
 import 'package:climate_app/core/services/backend.dart';
 import 'package:climate_app/core/services/notification_service.dart';
 import 'package:climate_app/core/services/secure_storage_service.dart';
@@ -81,7 +80,14 @@ extension UserRoleValue on UserRole {
 class AuthProvider extends ChangeNotifier {
   /// [auth] is injectable so tests can drive the flows without a server;
   /// it defaults to the Supabase adapter.
-  AuthProvider({AuthBackend? auth}) : _auth = auth ?? SupabaseAuthBackend() {
+  /// [auth] defaults to the configured backend, not to Supabase.
+  ///
+  /// It was `?? SupabaseAuthBackend()`, and `main.dart` constructs this
+  /// with no argument — so an Appwrite build read its data from Appwrite
+  /// and its session from a Supabase client that is not there. The app
+  /// came up permanently signed out. `ProfileProvider` two files over
+  /// already used the locator; this is the one that was missed.
+  AuthProvider({AuthBackend? auth}) : _auth = auth ?? authBackend {
     _initializeSessionManager();
     unawaited(_storage.purgeLegacyCredentials());
     _authSub = _auth.changes.listen(

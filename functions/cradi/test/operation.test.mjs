@@ -2,7 +2,19 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import operation from '../src/operation.js';
+import { eventsFor } from '../src/on-write.js';
 import { context, fakeAppwrite, profile } from './helpers.mjs';
+
+/**
+ * An outbox payload as `on-write.js` actually writes one.
+ *
+ * Built from the producer rather than typed out. These fixtures used to
+ * say `report_id`, which nothing in the system emits — so the supersede
+ * loop's own `report_id` comparison matched them and the tests passed
+ * against a loop that, in production, superseded nothing.
+ */
+const payloadFor = (event, doc) =>
+  JSON.stringify(eventsFor(event, doc)[0].payload);
 
 const reopen = { operation: 'reopen_report', params: { p_report_id: 'r1' } };
 
@@ -132,11 +144,17 @@ describe('reopen_report', () => {
         notification_outbox: {
           e1: {
             $id: 'e1', eventType: 'report_disputed', processedAt: null,
-            payload: JSON.stringify({ report_id: 'r1' }),
+            payload: payloadFor(
+              'databases.cradi.tables.verifications.rows.v9.create',
+              { $id: 'v9', reportId: 'r1', isConfirmed: false },
+            ),
           },
           e2: {
-            $id: 'e2', eventType: 'report_status_changed', processedAt: null,
-            payload: JSON.stringify({ report_id: 'other' }),
+            $id: 'e2', eventType: 'report_disputed', processedAt: null,
+            payload: payloadFor(
+              'databases.cradi.tables.verifications.rows.v8.create',
+              { $id: 'v8', reportId: 'other', isConfirmed: false },
+            ),
           },
         },
       },
@@ -163,8 +181,11 @@ describe('reopen_report', () => {
       (e) => e.eventType === 'report_created' && !e.processedAt,
     );
     assert.equal(queued.length, 1);
+    // `reportId`, the key the `report_created` handler reads. With
+    // `report_id` the handler raised PermanentEventError and the event
+    // was dropped, so nobody was told the report was live again.
     assert.deepEqual(JSON.parse(queued[0].payload), {
-      report_id: 'r1',
+      reportId: 'r1',
       reopened: true,
     });
   });

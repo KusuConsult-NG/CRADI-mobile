@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:climate_app/core/services/appwrite/appwrite_data_backend.dart';
@@ -66,6 +67,36 @@ void main() {
       });
 
       expect(data.keys, unorderedEquals(['status', 'createdAt']));
+    });
+
+    test('a DateTime is encoded, because jsonEncode cannot take one', () {
+      // Not a server refusal — `jsonEncode` throws
+      // `JsonUnsupportedObjectError` on the way out, so the write never
+      // leaves the device. The Supabase client did this conversion
+      // itself, so call sites passing a `DateTime` were correct before
+      // the migration and became a crash after it: `auth_provider.dart`
+      // writes `lastLoginAt` this way on every sign-in.
+      final data = toAppwriteData({
+        'lastLoginAt': DateTime.utc(2026, 3, 6, 9),
+        'nested': {'at': DateTime.utc(2026, 3, 6, 9)},
+        'many': [DateTime.utc(2026, 3, 6, 9)],
+        'untouched': 'x',
+      });
+
+      expect(data['lastLoginAt'], '2026-03-06T09:00:00.000Z');
+      expect((data['nested'] as Map)['at'], '2026-03-06T09:00:00.000Z');
+      expect((data['many'] as List).first, '2026-03-06T09:00:00.000Z');
+      expect(data['untouched'], 'x');
+      expect(() => jsonEncode(data), returnsNormally);
+    });
+
+    test('a local DateTime is stored as UTC', () {
+      // Appwrite stores and compares datetimes in UTC; a local-time
+      // string sorts wrongly against one.
+      final local = DateTime.utc(2026, 3, 6, 9).toLocal();
+      final data = toAppwriteData({'at': local});
+
+      expect(data['at'], '2026-03-06T09:00:00.000Z');
     });
   });
 
