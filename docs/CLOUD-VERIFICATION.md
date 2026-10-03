@@ -14,6 +14,22 @@ be run from a machine that can reach Cloud.
 > To run it from a Claude Code session instead, the environment's
 > **Network access** setting needs `fra.cloud.appwrite.io` allowed.
 
+## First Cloud run — 3 October 2026, from the owner's machine
+
+Cloud answered **2.3.0**. What it settled:
+
+| | Result |
+|---|---|
+| **Functions** | **The plan allows 2.** The previous build's four were deleted to free their slots; `write` and `auth` were created and `operation` was refused. The design needs 7, three on a one-minute cron. **This plan cannot run the backend** — it needs an upgrade, or the Functions consolidated to two. |
+| Buckets | 1. The previous build's `Shared Images Bucket` is reused through `APPWRITE_BUCKET_ID`; `provision.mjs` reconciled it (it had `fileSecurity` off and update/delete for every user). |
+| Teams, messaging topics | A probe of each was created and deleted. No refusal. |
+| Index width | **767**, summed over each index's string columns. Four indexes were refused until they were given `lengths`; 1.9.6 had not enforced it. |
+| Row width | `reports` was full: an earlier build had made `escalationStatus` 8192 wide. It and the unplanned `imageIds` were fixed on the empty table. 38 other columns still differ in size from the plan; `verify.mjs` prints them with `~`. |
+| Termii | A real key and the `CRADI` sender id were accepted — `200`, `code: ok`, `message_id` — and the inbox shows the message `Sent`. The send reply's `balance` field read `0` while the account held ₦3,610; do not read it as the balance. Still unverified: that a **deployed Function** can reach Termii, because `drain` cannot be created on this plan. |
+
+`verify.mjs --single-bucket` after the run: every column, index and the
+bucket match; the 7 problems left are all Functions.
+
 ## What is already known about the Cloud project
 
 | | |
@@ -35,8 +51,11 @@ export APPWRITE_ENDPOINT=https://fra.cloud.appwrite.io/v1
 export APPWRITE_PROJECT_ID=6941cdb400050e7249d5
 export APPWRITE_DATABASE_ID=6941e2c2003705bb5a25
 export APPWRITE_API_KEY=...            # a fresh server key
+export APPWRITE_BUCKET_ID=6941e4e10034186aded8   # the tier's one bucket, reused
 
-# 1. What the plan asks for, against what the tier allows. Read-only.
+# 1. What the plan asks for, against what the tier allows.
+#    --dry-run is read-only. --probe is NOT: it provisions for real and
+#    only differs in carrying on past a quota refusal.
 node infra/appwrite/provision.mjs --dry-run
 node infra/appwrite/provision.mjs --probe
 

@@ -228,7 +228,12 @@ async function collections() {
     for (const index of c.indexes ?? []) {
       const made = await api(`/tablesdb/${DATABASE_ID}/tables/${c.id}/indexes`, {
         method: 'POST',
-        body: { key: index.key, type: index.type, columns: index.attributes },
+        body: {
+          key: index.key,
+          type: index.type,
+          columns: index.attributes,
+          ...(index.lengths ? { lengths: index.lengths } : {}),
+        },
       });
       if (made.ok || made.dry) say('created', `  index ${c.id}.${index.key}`);
       else if (made.status === 409) say('exists', `  index ${c.id}.${index.key}`);
@@ -237,20 +242,48 @@ async function collections() {
   }
 }
 
+/** A bucket's settings, as the plan has them. */
+const bucketSettings = (b) => ({
+  name: b.name,
+  permissions: b.permissions,
+  fileSecurity: b.fileSecurity,
+  maximumFileSize: b.maximumFileSize,
+  allowedFileExtensions: b.allowedFileExtensions,
+  compression: b.compression,
+  encryption: b.encryption,
+  antivirus: b.antivirus,
+  enabled: true,
+});
+
+const sameBucket = (live, planned) =>
+  live.fileSecurity === planned.fileSecurity &&
+  live.maximumFileSize === planned.maximumFileSize &&
+  live.compression === planned.compression &&
+  live.encryption === planned.encryption &&
+  live.antivirus === planned.antivirus &&
+  live.enabled === planned.enabled &&
+  sameSet(live.$permissions, planned.permissions) &&
+  sameSet(live.allowedFileExtensions, planned.allowedFileExtensions);
+
 async function buckets() {
   for (const b of SINGLE ? [SINGLE_BUCKET] : BUCKETS) {
+    const planned = bucketSettings(b);
     const r = await ensure(`bucket ${b.id}`, `/storage/buckets/${b.id}`, '/storage/buckets', {
       bucketId: b.id,
-      name: b.name,
-      permissions: b.permissions,
-      fileSecurity: b.fileSecurity,
-      maximumFileSize: b.maximumFileSize,
-      allowedFileExtensions: b.allowedFileExtensions,
-      compression: b.compression,
-      encryption: b.encryption,
-      antivirus: b.antivirus,
-      enabled: true,
+      ...planned,
     });
+    // `ensure` only creates, so a bucket that was already there kept the
+    // settings it was made with. That matters when the bucket is reused
+    // rather than created (see `SINGLE_BUCKET_ID`): the Cloud project's
+    // was made with `fileSecurity` off and update/delete granted to every
+    // signed-in user, so any user could delete anyone's evidence. Same
+    // reasoning as `functionSettings` — reconciled on every run.
+    if (r.state === 'exists' && r.body && !sameBucket(r.body, planned)) {
+      const updated = await api(`/storage/buckets/${b.id}`, { method: 'PUT', body: planned });
+      if (updated.ok || updated.dry) say('updated', `bucket ${b.id}`, 'settings reconciled to the plan');
+      else say('failed', `bucket ${b.id}`, `update: ${updated.status} ${updated.body?.message ?? ''}`);
+      continue;
+    }
     say(r.state, `bucket ${b.id}`);
   }
 }

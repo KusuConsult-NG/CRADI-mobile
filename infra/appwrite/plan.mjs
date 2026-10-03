@@ -143,7 +143,21 @@ export const COLLECTIONS = [
     columns: cols('alerts'),
     indexes: [
       { key: 'by_active_created', type: 'key', attributes: ['isActive', '$createdAt'] },
-      { key: 'by_target', type: 'key', attributes: ['targetState', 'targetLga'] },
+      // `lengths` on every index over a string, from here down. Appwrite
+      // sums the indexed width of each column — a string counts its full
+      // `size` unless a length is given — and refuses the index past the
+      // adapter's maximum: 767 on Cloud 2.3. The local 1.9.6 stack allowed
+      // more, so these went unnoticed until the first Cloud run, where the
+      // live columns had been created at 8192 by an earlier build and
+      // `provision.mjs` does not resize a column that exists. A prefix
+      // length makes the index independent of the column's size; 255 is
+      // longer than any state or LGA name.
+      {
+        key: 'by_target',
+        type: 'key',
+        attributes: ['targetState', 'targetLga'],
+        lengths: [255, 255],
+      },
     ],
     permissions: ['read("any")'],
   },
@@ -151,7 +165,14 @@ export const COLLECTIONS = [
     id: 'authorities',
     name: 'Authorities',
     columns: cols('authorities'),
-    indexes: [{ key: 'by_coverage', type: 'key', attributes: ['coverageState', 'coverageLga'] }],
+    indexes: [
+      {
+        key: 'by_coverage',
+        type: 'key',
+        attributes: ['coverageState', 'coverageLga'],
+        lengths: [255, 255],
+      },
+    ],
     permissions: ['read("label:admin")'],
   },
   {
@@ -226,7 +247,12 @@ export const COLLECTIONS = [
     id: 'scheduled_escalations',
     name: 'Scheduled escalations',
     columns: cols('scheduled_escalations'),
-    indexes: [{ key: 'by_status_due', type: 'key', attributes: ['status', 'escalateAt'] }],
+    // One length, not two: Appwrite refuses a length on a datetime, and a
+    // shorter `lengths` array leaves the remaining columns at their own
+    // width (1 for a datetime).
+    indexes: [
+      { key: 'by_status_due', type: 'key', attributes: ['status', 'escalateAt'], lengths: [64] },
+    ],
     // Server only: nothing reads these but the cron.
     permissions: [],
   },
@@ -261,7 +287,12 @@ export const COLLECTIONS = [
       { key: 'by_report', type: 'key', attributes: ['reportId'] },
       // The daily cap counts from here, keyed by (state, lga) because
       // LGA names repeat across states.
-      { key: 'by_area_day', type: 'key', attributes: ['lga', 'state', '$createdAt'] },
+      {
+        key: 'by_area_day',
+        type: 'key',
+        attributes: ['lga', 'state', '$createdAt'],
+        lengths: [255, 255],
+      },
     ],
     permissions: [],
   },
@@ -285,8 +316,18 @@ export const COLLECTIONS = [
 /**
  * Phase 3. Evidence is immutable: a bucket whose files are created and
  * never updated, with the ACL on each file.
+ *
+ * The single bucket's id is overridable because the tier's one bucket may
+ * already be taken. On the Cloud project it is: the previous build's
+ * `Shared Images Bucket`
+ * (`6941e4e10034186aded8`) holds the only slot, so `cradi-files` cannot
+ * be created and the existing bucket is reused instead. `provision.mjs`
+ * reconciles its settings to `SINGLE_BUCKET` below — it was created with
+ * `fileSecurity` off and update/delete for every signed-in user. The app
+ * takes the same id through `PROFILE_IMAGES_BUCKET` and
+ * `REPORT_IMAGES_BUCKET`.
  */
-export const SINGLE_BUCKET_ID = 'cradi-files';
+export const SINGLE_BUCKET_ID = process.env.APPWRITE_BUCKET_ID ?? 'cradi-files';
 
 /**
  * One bucket instead of two, for a project whose tier allows only one.

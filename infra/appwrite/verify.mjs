@@ -3,7 +3,10 @@
  * Reports where a live project differs from `plan.mjs`. Read-only.
  *
  *   APPWRITE_ENDPOINT=... APPWRITE_PROJECT_ID=... APPWRITE_API_KEY=... \
- *   node infra/appwrite/verify.mjs
+ *   node infra/appwrite/verify.mjs [--single-bucket]
+ *
+ * `--single-bucket` (or `APPWRITE_BUCKET_ID` set) checks the one bucket
+ * `provision.mjs --single-bucket` makes, instead of the two.
  *
  * Exits non-zero when anything is missing. A verifier that cannot fail
  * is not a verifier — this project has already shipped one checker that
@@ -11,7 +14,7 @@
  * rows", so every read here is checked and an unreadable project is a
  * failure, not an empty diff.
  */
-import { BUCKETS, COLLECTIONS, DATABASE_ID, FUNCTIONS } from './plan.mjs';
+import { BUCKETS, COLLECTIONS, DATABASE_ID, FUNCTIONS, SINGLE_BUCKET } from './plan.mjs';
 
 const ENDPOINT = process.env.APPWRITE_ENDPOINT;
 const PROJECT = process.env.APPWRITE_PROJECT_ID;
@@ -77,15 +80,63 @@ for (const c of COLLECTIONS) {
     if (found.status && found.status !== 'available') {
       note(`not available: ${c.id}.${col.key} is ${found.status}`);
     }
+    // A warning, not a problem: `provision.mjs` never resizes a column
+    // that exists, so this is drift it cannot fix by running again. It is
+    // printed because it is what broke the first Cloud run — columns an
+    // earlier build made at 8192 pushed four indexes past the 767 limit
+    // and filled `reports` — and nothing said so.
+    if (col.type === 'string' && found.size != null && found.size !== col.size) {
+      console.log(`~  ${c.id}.${col.key} is size ${found.size}, the plan says ${col.size}`);
+    }
   }
   for (const key of live.keys()) {
     if (!c.columns.some((col) => col.key === key)) {
       console.log(`?  ${c.id}.${key} is in the project but not in the plan`);
     }
   }
+
+  // Indexes were not checked at all until the first Cloud run, where four
+  // of them were refused and this script said the project matched. An
+  // index that is missing is not an error anyone sees — the queries it
+  // serves still answer, slowly, or fail with "index not found" only on
+  // the paths that need one.
+  const liveIndexes = new Map((table.body.indexes ?? []).map((i) => [i.key, i]));
+  for (const index of c.indexes ?? []) {
+    const found = liveIndexes.get(index.key);
+    if (!found) {
+      note(`missing: index ${c.id}.${index.key}`);
+      continue;
+    }
+    if (found.status && found.status !== 'available') {
+      note(`not available: index ${c.id}.${index.key} is ${found.status}${found.error ? ` (${found.error})` : ''}`);
+    }
+    // 1.9 renamed `attributes` to `columns`; read either.
+    const liveCols = found.columns ?? found.attributes ?? [];
+    if (liveCols.join(',') !== index.attributes.join(',')) {
+      note(`index ${c.id}.${index.key}: covers (${liveCols.join(', ')}), plan says (${index.attributes.join(', ')})`);
+    }
+    if (found.type && found.type !== index.type) {
+      note(`index ${c.id}.${index.key}: is ${found.type}, plan says ${index.type}`);
+    }
+  }
 }
 
-for (const b of BUCKETS) present(await get(`/storage/buckets/${b.id}`), `bucket ${b.id}`);
+// The same switch `provision.mjs` takes. Without it a single-bucket
+// project reported both planned buckets missing forever, which teaches
+// whoever reads the output to ignore it.
+const SINGLE = process.argv.includes('--single-bucket') || Boolean(process.env.APPWRITE_BUCKET_ID);
+for (const b of SINGLE ? [SINGLE_BUCKET] : BUCKETS) {
+  const bucket = await get(`/storage/buckets/${b.id}`);
+  if (!present(bucket, `bucket ${b.id}`)) continue;
+  // The two settings that decide who can read and delete files.
+  if (bucket.body.fileSecurity !== b.fileSecurity) {
+    note(`bucket ${b.id}: fileSecurity is ${bucket.body.fileSecurity}, plan says ${b.fileSecurity}`);
+  }
+  const livePerms = [...(bucket.body.$permissions ?? [])].sort().join(',');
+  if (livePerms !== [...b.permissions].sort().join(',')) {
+    note(`bucket ${b.id}: permissions are [${bucket.body.$permissions}], plan says [${b.permissions}]`);
+  }
+}
 
 for (const f of FUNCTIONS) {
   const fn = await get(`/functions/${f.id}`);
