@@ -59,10 +59,16 @@ const String liveSession = String.fromEnvironment('DART_TEST_SESSION');
 ///
 /// Published separately in the local stack; on Cloud `/v1/realtime` is
 /// proxied on the same host and the SDK derives it from the endpoint.
-const String liveRealtime = String.fromEnvironment(
-  'APPWRITE_REALTIME',
-  defaultValue: 'ws://appwrite.local:8091/v1',
-);
+String get liveRealtime {
+  const explicit = String.fromEnvironment('APPWRITE_REALTIME');
+  if (explicit.isNotEmpty) return explicit;
+  if (liveEndpoint.contains('appwrite.local')) {
+    return 'ws://appwrite.local:8091/v1';
+  }
+  return liveEndpoint
+      .replaceFirst('https://', 'wss://')
+      .replaceFirst('http://', 'ws://');
+}
 
 bool get liveConfigured =>
     liveEndpoint.isNotEmpty && liveProject.isNotEmpty && liveEmail.isNotEmpty;
