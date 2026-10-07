@@ -135,9 +135,10 @@ only FCM enabled that happens to be right, which is exactly why it is
 worth binding explicitly now — the day APNs is enabled, an unbound iOS
 target goes to FCM, is accepted, and is silent.
 
-> `infra/appwrite/push-smoke-test.mjs` creates its target **without** a
-> `providerId`, so a green run of it does not exercise that binding. The
-> app does (`AppwritePushTargets.providerId`).
+> `infra/appwrite/push-smoke-test.mjs` binds the provider the way the app
+> does, from `APPWRITE_PUSH_PROVIDER_ANDROID` (default `fcm`), and reads
+> the binding back off the created target — so a green run now covers it.
+> Set that variable to empty to exercise the unbound case deliberately.
 
 ### 1e. Auth settings
 
