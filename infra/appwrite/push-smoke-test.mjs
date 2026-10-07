@@ -139,6 +139,7 @@ async function run() {
         targetId,
         identifier: `fcm-token-${stamp}`,
         name: `Smoke Device ${stamp}`,
+        providerId: process.env.APPWRITE_PUSH_PROVIDER_ANDROID || 'fcm',
       },
     });
     assert.ok(targetRes.ok, `Failed to register push target: ${JSON.stringify(targetRes.body)}`);
