@@ -116,14 +116,28 @@ origin), but Flutter **web** builds would.
 > for email, which is why the local stack provisions an SMTP provider by
 > hand.
 
-Those push credentials live inside OneSignal today. Getting them into
-Appwrite is a prerequisite for push on this stack, not an optimisation.
+**State on project `6ac51e70002ab6238fec`:**
 
-**Note both push provider ids.** A target that names no provider is filed
-under the project's *default* push provider, so in a project with FCM and
-APNs every device on the non-default platform would be registered against
-a provider that cannot reach it — accepted at registration, silent at
-send time. The app build takes them as defines in step 6.
+| Provider | Id | Status |
+| --- | --- | --- |
+| FCM | `fcm` | **enabled**, with the service-account credentials from Firebase project `ewer-8f788` — the same project `android/app/google-services.json` names |
+| APNs | `apns` | **registered, not enabled.** It needs the Apple `.p8` AuthKey, its Key ID and the Team ID. Registered for bundle id `com.westgatestratagem.climateapp.climateApp`, which matches `PRODUCT_BUNDLE_IDENTIFIER` in the Xcode project |
+
+So Android push has a provider and iOS does not — and iOS additionally
+has no `GoogleService-Info.plist` (§ 1f), so there is no token to deliver
+to either. Both are required before iOS push works at all.
+
+**Both ids have to reach the app build**, as
+`--dart-define APPWRITE_PUSH_PROVIDER_ANDROID=fcm` and
+`--dart-define APPWRITE_PUSH_PROVIDER_IOS=apns` (§ 6). A target that names
+no provider is filed under the project's *default* push provider: with
+only FCM enabled that happens to be right, which is exactly why it is
+worth binding explicitly now — the day APNs is enabled, an unbound iOS
+target goes to FCM, is accepted, and is silent.
+
+> `infra/appwrite/push-smoke-test.mjs` creates its target **without** a
+> `providerId`, so a green run of it does not exercise that binding. The
+> app does (`AppwritePushTargets.providerId`).
 
 ### 1e. Auth settings
 
