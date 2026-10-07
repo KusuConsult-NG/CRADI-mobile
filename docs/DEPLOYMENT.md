@@ -523,17 +523,31 @@ raise `app_min_version` once an iOS build is in users' hands until
 
 ### Before you trust a build — never-tested areas
 
-The app has been compiled but **never assembled into an APK in CI or run on a
-device**. The Dart half is verified: 843 tests pass, `flutter analyze
---fatal-infos --fatal-warnings` is clean, and a full product-mode AOT compile
-of `lib/main.dart` with every package succeeds — Android arm64 codegen
-produces a normal 12 MB `libapp.so`, the exact artifact a release APK embeds.
-The Android/Gradle half could not be built in the environment this was written
-in (`dl.google.com` is blocked, so no SDK, NDK or Android Gradle Plugin). A
-static audit found the Gradle/AGP/Kotlin/JDK versions coherent and no `minSdk`
-conflict across the 25 Android plugins (all need ≤ 24; the app sets 24).
+**A correction.** This section used to say the app had "never been assembled
+into an APK in CI". It has: `build-android-debug` runs
+`flutter build apk --debug --no-shrink` on every push and pull request and
+uploads `app-debug.apk`, and it passes. So the Android half is not
+unproven — Gradle, AGP, Kotlin and the JDK agree, the NDK downloads, and
+the 25 plugins' `minSdk` floors are compatible in practice rather than only
+in a static audit. The claim was written in an environment that could not
+build it (`dl.google.com` blocked) and nobody went back to CI to check.
 
-Check these first on a real device, in this order — each compiles fine and
+What is genuinely untested is narrower, and `--no-shrink` is the clue to
+the first half of it:
+
+- **No release APK has ever been built.** `isMinifyEnabled` and
+  `isShrinkResources` are on for release, so **R8 has never run**, and
+  `verifyReleaseSigning` has never been exercised. The release job is
+  skipped without a `v*` tag — and until the tag trigger was added it could
+  not run at all, so this is not an oversight that one tag fixes by
+  accident. Do a signed release build well before you need one.
+- **Nothing has run on a device.** The Dart half is verified by 843 tests,
+  a clean `flutter analyze --fatal-infos --fatal-warnings`, and a full
+  product-mode AOT compile (Android arm64 codegen produces a normal 12 MB
+  `libapp.so`, the artifact a release APK embeds) — none of which exercises
+  a platform channel against a real OS.
+
+Check these first on a real device, in this order — each builds fine and
 fails only at runtime:
 
 1. **Biometric login.** `LaunchTheme`/`NormalTheme` inherit from
@@ -542,17 +556,19 @@ fails only at runtime:
    `BiometricPrompt` this is a known source of `InflateException` at the moment
    the fingerprint sheet appears. If it throws, give the themes a
    `Theme.AppCompat`/`Theme.Material3` parent.
-2. **A release build at all.** `isMinifyEnabled` and `isShrinkResources` are on,
-   and `verifyReleaseSigning` blocks release builds without
-   `android/key.properties` (see `docs/KEYSTORE_SETUP.md`). R8 has therefore
-   never run. Do a signed release build well before you need one.
-3. **The NDK.** `jni` is among the plugins, so `ndkVersion` 28.2.13676358 is
-   genuinely required — a ~2 GB download on the first Android build.
-4. **Push, on this stack, end to end.** The device registers an Appwrite push
+2. **What R8 does to it.** The release build minifies and shrinks
+   resources; the debug build CI runs passes `--no-shrink`, so nothing has
+   ever been through R8. A rule that keeps too little shows up as a
+   `ClassNotFoundException` at runtime, not as a build failure — and the
+   ProGuard file's `com.google.gson.**` keep rule matches no class in this
+   app, so do not read it as cover. `verifyReleaseSigning` also blocks a
+   release build without `android/key.properties`
+   (`docs/KEYSTORE_SETUP.md`), which is the other half nobody has run.
+3. **Push, on this stack, end to end.** The device registers an Appwrite push
    target and the server subscribes it to its topics; both halves are tested
    against a server of the test's own, and neither has run against Appwrite
    Cloud with a real provider. § 7 step 2 is the first time it does.
-5. **Deep links.** `lib/core/services/deep_link_service.dart` listens for
+4. **Deep links.** `lib/core/services/deep_link_service.dart` listens for
    `cradi://…` and `https://cradi.ng/…` with `app_links` and hands the mapped
    location to `go_router`. The mapping is unit-tested
    (`test/unit/deep_link_service_test.dart`) but has never run on a device. On
@@ -566,10 +582,9 @@ fails only at runtime:
    those, `https://` links open a browser/chooser instead of the app — the
    `cradi://` scheme works regardless.
 
-One ProGuard leftover, listed so nobody reads it as protection: the
-`com.google.gson.**` keep rule matches no Java class in this app. The
-`okhttp3.**` rules do apply — OkHttp arrives transitively with Sentry and
-OneSignal.
+On the ProGuard file: the `okhttp3.**` rules do apply — OkHttp arrives
+transitively with Sentry and OneSignal — and the `com.google.gson.**` rule
+(see item 2) matches nothing.
 
 ---
 
