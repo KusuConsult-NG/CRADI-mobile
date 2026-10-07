@@ -52,34 +52,38 @@ void main() {
         request.response.statusCode = 201;
         request.response.write(jsonEncode({'\$id': 's1', 'secret': 'sess'}));
       } else if (path.endsWith('/account')) {
-        request.response.write(jsonEncode({
-          '\$id': 'u1',
-          '\$createdAt': '2026-01-01T00:00:00.000+00:00',
-          '\$updatedAt': '2026-01-01T00:00:00.000+00:00',
-          'name': 'Amina',
-          'email': 'amina@example.com',
-          'emailVerification': true,
-          'phoneVerification': false,
-          'status': true,
-          'labels': <String>[],
-          'prefs': <String, dynamic>{},
-          'registration': '2026-01-01T00:00:00.000+00:00',
-          'passwordUpdate': '',
-          'phone': '',
-          'accessedAt': '2026-01-01T00:00:00.000+00:00',
-          'mfa': false,
-          'targets': <dynamic>[],
-        }));
+        request.response.write(
+          jsonEncode({
+            '\$id': 'u1',
+            '\$createdAt': '2026-01-01T00:00:00.000+00:00',
+            '\$updatedAt': '2026-01-01T00:00:00.000+00:00',
+            'name': 'Amina',
+            'email': 'amina@example.com',
+            'emailVerification': true,
+            'phoneVerification': false,
+            'status': true,
+            'labels': <String>[],
+            'prefs': <String, dynamic>{},
+            'registration': '2026-01-01T00:00:00.000+00:00',
+            'passwordUpdate': '',
+            'phone': '',
+            'accessedAt': '2026-01-01T00:00:00.000+00:00',
+            'mfa': false,
+            'targets': <dynamic>[],
+          }),
+        );
       } else {
         request.response.statusCode = 201;
-        request.response.write(jsonEncode({
-          '\$id': 'e1',
-          'status': 'completed',
-          'responseStatusCode': 200,
-          'responseBody': jsonEncode({'ok': true}),
-          'errors': '',
-          'logs': '',
-        }));
+        request.response.write(
+          jsonEncode({
+            '\$id': 'e1',
+            'status': 'completed',
+            'responseStatusCode': 200,
+            'responseBody': jsonEncode({'ok': true}),
+            'errors': '',
+            'logs': '',
+          }),
+        );
       }
       await request.response.close();
     });
@@ -87,44 +91,39 @@ void main() {
 
   tearDown(() async => server.close(force: true));
 
-  aw.Client clientFor() =>
-      aw.Client()..setEndpoint(endpoint)..setProject('injected');
+  aw.Client clientFor() => aw.Client()
+    ..setEndpoint(endpoint)
+    ..setProject('injected');
 
-  test('the hand-rolled sign-in goes to the injected client’s server', () async {
-    final backend = AppwriteAuthBackend(client: clientFor());
-    final outcome = await backend.signInWithPassword(
-      email: 'amina@example.com',
-      password: 'Password1!',
-    );
+  test(
+    'the hand-rolled sign-in goes to the injected client’s server',
+    () async {
+      final backend = AppwriteAuthBackend(client: clientFor());
+      final outcome = await backend.signInWithPassword(
+        email: 'amina@example.com',
+        password: 'Password1!',
+      );
 
-    expect(outcome.hasSession, isTrue);
-    expect(
-      seen.map((r) => r.uri.path),
-      contains('/v1/account/sessions/email'),
-    );
-    // And it carried the injected project, not the compiled-in one.
-    expect(
-      seen.first.headers.value('x-appwrite-project'),
-      'injected',
-    );
-  });
+      expect(outcome.hasSession, isTrue);
+      expect(
+        seen.map((r) => r.uri.path),
+        contains('/v1/account/sessions/email'),
+      );
+      // And it carried the injected project, not the compiled-in one.
+      expect(seen.first.headers.value('x-appwrite-project'), 'injected');
+    },
+  );
 
   test('a Function execution goes to the injected client’s server', () async {
-    final body = await createExecution(
-      clientFor(),
-      'client',
-      {'op': 'create'},
-      path: '/write',
-    );
+    final body = await createExecution(clientFor(), 'client', {
+      'op': 'create',
+    }, path: '/write');
 
     // `createExecution` answers with the execution envelope; the
     // adapters read `responseBody` out of it. What matters here is only
     // that it reached this server at all.
     expect(body[r'$id'], 'e1');
-    expect(
-      seen.single.uri.path,
-      '/v1/functions/client/executions',
-    );
+    expect(seen.single.uri.path, '/v1/functions/client/executions');
     expect(seen.single.headers.value('x-appwrite-project'), 'injected');
   });
 }
