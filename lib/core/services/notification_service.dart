@@ -31,7 +31,27 @@ class NotificationService {
   NotificationService._internal();
 
   bool _initialized = false;
-  bool _pushEnabled = false;
+
+  /// Whether FCM came up on this build at all.
+  ///
+  /// False when `Firebase.initializeApp()` or the messaging plugin threw,
+  /// which on iOS is exactly what a missing `GoogleService-Info.plist`
+  /// looks like (see `docs/DEPLOYMENT.md` § 1f).
+  bool _fcmAvailable = false;
+
+  /// Whether the OS notification permission is granted, or provisional.
+  bool _permissionGranted = false;
+
+  /// Delivery needs both: a working FCM *and* a user who allows it.
+  ///
+  /// These were one field, and the two getters below both returned it — so
+  /// `isPushAvailable && !hasPushPermission`, which is how the settings
+  /// screen asks "working but not allowed", was `x && !x` and never true.
+  /// The localised "permission needed" message it guards could not appear,
+  /// and `requestPushPermission` returned early once a permission had been
+  /// denied, so nothing could ask again.
+  bool get _pushEnabled => _fcmAvailable && _permissionGranted;
+
   ProfileProvider? _profileProvider;
 
   GoRouter? _router;
@@ -99,7 +119,10 @@ class NotificationService {
           sound: true,
           provisional: !SettingsProvider().pushNotifications,
         );
-        _pushEnabled =
+        // Reaching here means the plugin answered, so Firebase is live on
+        // this build whatever the user then decided.
+        _fcmAvailable = true;
+        _permissionGranted =
             settings.authorizationStatus == AuthorizationStatus.authorized ||
             settings.authorizationStatus == AuthorizationStatus.provisional;
 
@@ -118,11 +141,14 @@ class NotificationService {
           });
         }
       } on Exception catch (e) {
+        // Not a user-fixable state: no Firebase config, no token, no push.
+        // `isPushAvailable` stays false so the UI offers nothing to tap.
         developer.log(
-          'FCM setup error (push disabled): $e',
+          'FCM unavailable on this build (push disabled): $e',
           name: 'NotificationService',
         );
-        _pushEnabled = false;
+        _fcmAvailable = false;
+        _permissionGranted = false;
       }
 
       _initialized = true;
@@ -146,23 +172,26 @@ class NotificationService {
   }
 
   /// Whether the OS notification permission is currently granted.
-  bool get hasPushPermission => _pushEnabled;
+  bool get hasPushPermission => _permissionGranted;
 
-  /// Whether push is set up on this device (FCM configured and initialised).
-  bool get isPushAvailable => _pushEnabled;
+  /// Whether push is set up on this build at all (Firebase configured and
+  /// the messaging plugin live), regardless of what the user allowed.
+  bool get isPushAvailable => _fcmAvailable;
 
   /// Requests OS notification permission. On Android 13+ this shows the
   /// system dialog the first time. [fallbackToSettings] is kept for API
   /// compatibility with callers; FCM handles the dialog itself.
   Future<void> requestPushPermission({required bool fallbackToSettings}) async {
-    if (!_pushEnabled) return;
+    // Availability, not permission: the whole point of this call is to ask
+    // again after a refusal.
+    if (!_fcmAvailable) return;
     try {
       final settings = await FirebaseMessaging.instance.requestPermission(
         alert: true,
         badge: true,
         sound: true,
       );
-      _pushEnabled =
+      _permissionGranted =
           settings.authorizationStatus == AuthorizationStatus.authorized ||
           settings.authorizationStatus == AuthorizationStatus.provisional;
     } on Exception catch (e) {
@@ -177,7 +206,7 @@ class NotificationService {
   /// With FCM, opt-out is handled at the OS level — we simply skip
   /// subscribing to topics when the user disables push.
   Future<bool> setPushSubscribed(bool enabled) async {
-    if (!_pushEnabled) return false;
+    if (!_fcmAvailable) return false;
     try {
       await FirebaseMessaging.instance.setAutoInitEnabled(enabled);
       if (enabled && _userId != null) {
@@ -594,6 +623,16 @@ class NotificationService {
   void attachHistoryBoxForTesting(Box<Map> box) {
     _notificationsBox = box;
     _updateUnreadCount();
+  }
+
+  /// The two push flags, for tests that cannot start the plugin.
+  @visibleForTesting
+  void setPushStateForTesting({
+    required bool available,
+    required bool granted,
+  }) {
+    _fcmAvailable = available;
+    _permissionGranted = granted;
   }
 
   /// Signed-in user id for tests that bypass [onUserSignedIn].

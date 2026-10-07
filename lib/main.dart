@@ -71,7 +71,8 @@ Future<void> _bootstrap() async {
     debugPrint('Firebase initialization failed (push disabled): $e');
   }
 
-  // Initialize the backend (Appwrite when configured, Supabase otherwise).
+  // Initialize the backend. Appwrite is the only one; an unconfigured
+  // build gets the Unconfigured* backends and behaves as signed out.
   try {
     await initializeBackend();
   } on Exception catch (e) {

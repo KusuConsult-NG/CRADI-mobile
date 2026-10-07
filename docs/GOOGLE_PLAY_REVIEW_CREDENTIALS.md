@@ -88,11 +88,11 @@ The account can stop working between submissions:
   are `isApproved` / `isDisabled` on Appwrite and `is_approved` /
   `is_disabled` in Postgres.
 - **The account belongs to one project.** A reviewer account made against
-  Supabase does not exist on Appwrite, and which backend a build talks to is
-  decided by its defines — so a release built with the `APPWRITE_*` secrets
-  needs a reviewer account on the Appwrite project, created the same way
-  above. Check this before the first submission after the cutover; the
-  symptom is a reviewer reporting that correct credentials are rejected.
+  Supabase does not exist on Appwrite, and the app now talks to Appwrite
+  only — so the reviewer account has to exist on the Appwrite project the
+  release was built against, created the same way as above. Check it before
+  the first submission after the cutover; the symptom is a reviewer
+  reporting that correct credentials are rejected.
 
 ## Rotating the old ones
 

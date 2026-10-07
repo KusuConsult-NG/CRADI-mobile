@@ -150,15 +150,19 @@ jobs:
             echo "keyAlias=$KEY_ALIAS"
           } > android/key.properties
 
-      # Which backend the release talks to is decided here: `activeBackend`
-      # is Appwrite when the endpoint and project id are both non-empty and
-      # Supabase otherwise, so a tag built without the APPWRITE_* secrets
-      # ships a Supabase build. See docs/DEPLOYMENT.md section 6.
+      # Appwrite is the only backend, so a tag built without the endpoint
+      # and project id ships an app that starts permanently signed out.
+      # That is checked below rather than discovered on a handset.
       #
       # Empty values are dropped rather than written. A define that is
       # present but empty beats the Dart default — an unset
       # APPWRITE_DATABASE_ID secret would otherwise compile in `""` instead
       # of `cradi` and every call would 404.
+      #
+      # Push needs no secret here: the FCM token comes from the Firebase
+      # config committed at android/app/google-services.json, and the two
+      # provider ids below only matter in a project carrying both an FCM
+      # and an APNs provider. See docs/DEPLOYMENT.md section 6.
       - name: Write env.json (runtime config)
         env:
           APPWRITE_ENDPOINT: ${{ secrets.APPWRITE_ENDPOINT }}
@@ -166,9 +170,6 @@ jobs:
           APPWRITE_DATABASE_ID: ${{ secrets.APPWRITE_DATABASE_ID }}
           APPWRITE_PUSH_PROVIDER_ANDROID: ${{ secrets.APPWRITE_PUSH_PROVIDER_ANDROID }}
           APPWRITE_PUSH_PROVIDER_IOS: ${{ secrets.APPWRITE_PUSH_PROVIDER_IOS }}
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
-          ONESIGNAL_APP_ID: ${{ secrets.ONESIGNAL_APP_ID }}
           SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
         run: |
           jq -n '{APPWRITE_ENDPOINT: env.APPWRITE_ENDPOINT,
@@ -176,13 +177,14 @@ jobs:
                   APPWRITE_DATABASE_ID: env.APPWRITE_DATABASE_ID,
                   APPWRITE_PUSH_PROVIDER_ANDROID: env.APPWRITE_PUSH_PROVIDER_ANDROID,
                   APPWRITE_PUSH_PROVIDER_IOS: env.APPWRITE_PUSH_PROVIDER_IOS,
-                  SUPABASE_URL: env.SUPABASE_URL, SUPABASE_ANON_KEY: env.SUPABASE_ANON_KEY,
-                  ONESIGNAL_APP_ID: env.ONESIGNAL_APP_ID,
                   SENTRY_DSN: env.SENTRY_DSN}
                  | with_entries(select(.value != null and .value != ""))' > env.json
-          jq -r 'if (.APPWRITE_ENDPOINT // "") != "" and (.APPWRITE_PROJECT_ID // "") != ""
-                 then "backend: Appwrite (\(.APPWRITE_ENDPOINT))"
-                 else "backend: Supabase" end' env.json
+          if [ "$(jq -r '(.APPWRITE_ENDPOINT // "") != "" and (.APPWRITE_PROJECT_ID // "") != ""' env.json)" = "true" ]; then
+            jq -r '"backend: \(.APPWRITE_ENDPOINT)"' env.json
+          else
+            echo "::error::APPWRITE_ENDPOINT and APPWRITE_PROJECT_ID are not both set — this build would start signed out"
+            exit 1
+          fi
 
       - name: Build release APK
         run: flutter build apk --release --dart-define-from-file=env.json

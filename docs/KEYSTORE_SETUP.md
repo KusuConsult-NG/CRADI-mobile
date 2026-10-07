@@ -128,20 +128,25 @@ writes into `env.json` (see `docs/DEPLOYMENT.md` § 6):
 
 | Secret | For |
 | --- | --- |
-| `APPWRITE_ENDPOINT`, `APPWRITE_PROJECT_ID` | an Appwrite build. **Without these two the tag ships a Supabase build** — which backend the app talks to is decided by its defines |
+| `APPWRITE_ENDPOINT`, `APPWRITE_PROJECT_ID` | the backend. **The job fails without both**, because that APK would install and behave as permanently signed out |
 | `APPWRITE_DATABASE_ID` | only when the database is not `cradi` |
 | `APPWRITE_PUSH_PROVIDER_ANDROID`, `APPWRITE_PUSH_PROVIDER_IOS` | push, in a project with both an FCM and an APNs provider |
-| `SUPABASE_URL`, `SUPABASE_ANON_KEY` | a Supabase build |
-| `ONESIGNAL_APP_ID` | push on either stack — the device token comes from OneSignal |
 | `SENTRY_DSN` | crash reporting |
 
 The job drops empty ones rather than writing them, because a define that
 is present but empty beats the Dart default: an unset
 `APPWRITE_DATABASE_ID` would otherwise compile in `""` instead of `cradi`
-and every call would 404. It prints which backend it built.
+and every call would 404. It prints the endpoint it built against.
 
-`BACKEND_URL` used to be listed here and is not a define the app reads —
-nothing in `lib/` has ever looked it up.
+**Push needs no secret here.** The device token comes from
+`firebase_messaging`, which reads `android/app/google-services.json` —
+committed — and, on iOS, a `GoogleService-Info.plist` that does not exist
+yet. See `docs/DEPLOYMENT.md` § 1f.
+
+Two names that used to be listed here and are not defines the app reads:
+`BACKEND_URL`, which nothing in `lib/` ever looked up, and
+`ONESIGNAL_APP_ID` / the two `SUPABASE_*` values, which it read until the
+Appwrite-only change removed those clients.
 
 > Never add the Appwrite **API key**, the Supabase **service role key**,
 > the **Termii** key or the OneSignal **REST API key** here. They are
