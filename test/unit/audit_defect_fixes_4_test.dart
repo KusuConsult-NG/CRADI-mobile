@@ -2,7 +2,6 @@ import 'dart:io';
 
 import 'package:appwrite/appwrite.dart' show AppwriteException;
 import 'package:climate_app/core/services/appwrite/appwrite_errors.dart';
-import 'package:climate_app/core/services/backend_failure.dart';
 import 'package:climate_app/core/router/route_guard.dart';
 import 'package:climate_app/core/services/offline_storage_service.dart';
 import 'package:climate_app/core/services/notification_service.dart';
