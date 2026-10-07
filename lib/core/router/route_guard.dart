@@ -64,7 +64,9 @@ const String kDeepLinkScheme = 'cradi';
 /// this app rather than whatever the project's Site URL happens to be — that
 /// default is the admin panel, and app users who tapped the link landed on a
 /// staff login screen they have no account for. Covered by the `cradi://**`
-/// entry in the project's redirect allow list (docs/DEPLOYMENT.md § 1a.a).
+/// entry in the project's redirect allow list
+/// (docs/DEPLOYMENT-SUPABASE.md § 1a.a; the Appwrite stack has no such
+/// list — the panel's origin is a web platform instead).
 const String kPasswordResetRedirect = '$kDeepLinkScheme://reset-password';
 
 /// Location that collects the new password once a recovery session exists.

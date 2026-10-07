@@ -73,7 +73,7 @@ curl localhost:8080/health
 
 ## Deploy on Railway
 
-See `../docs/DEPLOYMENT.md` section 4 for the full first-time walkthrough
+See `../docs/DEPLOYMENT-SUPABASE.md` section 4 for the full first-time walkthrough
 (which variables, how to verify, what to do when the healthcheck fails).
 
 1. Railway: **New Project → Deploy from GitHub repo**, pick this repository
@@ -268,7 +268,7 @@ truncated to 320 characters (the description is shortened with `...`).
   claims, is rejected at insert time. The old "legacy" rows that matched a name
   in every state no longer exist; any that could not be resolved were moved to
   `public.authorities_unresolved_coverage` by that migration (see
-  `../docs/DEPLOYMENT.md` → *Authority SMS do not arrive* for the recovery
+  `../docs/DEPLOYMENT-SUPABASE.md` → *Authority SMS do not arrive* for the recovery
   procedure).
 - A report with no `state` matches **nothing** and sends no SMS, logged as
   `sms.report_without_state` with a hint saying why. With no state on either

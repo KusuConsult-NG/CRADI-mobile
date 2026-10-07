@@ -15,9 +15,14 @@ notifications) live in the database (RLS + triggers in
 `supabase/migrations/`) and the Railway backend — not in the app.
 
 > **Deploying for the first time?** Follow `docs/DEPLOYMENT.md` — the
-> end-to-end runbook (Supabase → first admin → OneSignal → Railway backend →
-> Railway admin → app build → smoke test). The sections below are the reference
-> for each piece.
+> end-to-end runbook for the **Appwrite** stack, which is what the app and
+> the admin panel are now written against (console → provision → Functions →
+> first admin → Railway admin → app build → smoke test).
+>
+> The Supabase stack is the one still in production and is being migrated
+> away from; its runbook is `docs/DEPLOYMENT-SUPABASE.md`, and the sections
+> below describe it. `docs/APPWRITE-MIGRATION.md` is the migration's record
+> and `docs/HANDOFF.md` is what remains.
 
 ## 1. Supabase project
 
@@ -57,7 +62,7 @@ notifications) live in the database (RLS + triggers in
    profiles**, set `role = 'admin'` and `is_approved = true` on that row.
    Approval is refused until Supabase Auth has confirmed the account's email or
    phone. Every other account needs an admin to approve it (Admin → Users).
-   Details: `docs/DEPLOYMENT.md` section 2.
+   Details: `docs/DEPLOYMENT-SUPABASE.md` section 2.
 8. Storage buckets `report-images` and `profile-images` are created by the
    migration (public read; uploads must be under `<user id>/…`).
 
@@ -85,7 +90,7 @@ targets users by these.
 Deploy `backend/` as described in `backend/README.md` (root directory
 `backend`, branch `supabase-migration`) and note its public URL (used for
 `POST /email`). Step-by-step, including every environment variable:
-`docs/DEPLOYMENT.md` section 4.
+`docs/DEPLOYMENT-SUPABASE.md` section 4.
 
 ## 4. App configuration (`env.json`)
 

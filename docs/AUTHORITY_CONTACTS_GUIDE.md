@@ -20,7 +20,7 @@ NULL and `(coverage_state, coverage_lga)` is a foreign key into
 `public.nigeria_lgas`, so a contact without a state, with an invented state, or
 with an LGA that is not in the state it claims, is rejected by the database.
 Contacts that predate the rule and could not be resolved were set aside in
-`public.authorities_unresolved_coverage`; see `DEPLOYMENT.md` →
+`public.authorities_unresolved_coverage`; see `DEPLOYMENT-SUPABASE.md` →
 *Authority SMS do not arrive* for how to get them back into service.
 
 A report whose own `state` is empty matches no contact and sends no SMS
