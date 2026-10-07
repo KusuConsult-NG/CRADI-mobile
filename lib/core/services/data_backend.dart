@@ -274,3 +274,130 @@ abstract interface class DataBackend {
   /// Whether the backend is reachable right now.
   Future<bool> ping();
 }
+
+/// Fallback returned when no backend is configured (e.g. in tests).
+class UnconfiguredDataBackend implements DataBackend {
+  const UnconfiguredDataBackend();
+
+  @override
+  bool get isConfigured => false;
+  @override
+  String? get currentUserId => null;
+  @override
+  String? get accessToken => null;
+
+  @override
+  Future<Map<String, dynamic>> createDocument({
+    required String collectionId,
+    required Map<String, dynamic> data,
+    String? documentId,
+  }) => throw const BackendNotConfiguredException();
+
+  @override
+  Future<Map<String, dynamic>?> upsertDocument({
+    required String collectionId,
+    required Map<String, dynamic> data,
+    String? documentId,
+    bool ignoreDuplicates = false,
+  }) => throw const BackendNotConfiguredException();
+
+  @override
+  Future<Map<String, dynamic>> getDocument({
+    required String collectionId,
+    required String documentId,
+  }) => throw const BackendNotConfiguredException();
+
+  @override
+  Future<List<Map<String, dynamic>>> listDocuments({
+    required String collectionId,
+    List<QueryFilter>? queries,
+    int? limitCount,
+    int offset = 0,
+    RelatedFields? related,
+  }) => throw const BackendNotConfiguredException();
+
+  @override
+  Future<int> countDocuments({
+    required String collectionId,
+    List<QueryFilter>? queries,
+  }) async => 0;
+
+  @override
+  Future<int> countDocumentsOrThrow({
+    required String collectionId,
+    List<QueryFilter>? queries,
+    Duration timeout = const Duration(seconds: 10),
+  }) => throw const BackendNotConfiguredException();
+
+  @override
+  Future<Map<String, dynamic>> updateDocument({
+    required String collectionId,
+    required String documentId,
+    required Map<String, dynamic> data,
+  }) => throw const BackendNotConfiguredException();
+
+  @override
+  Future<void> deleteDocument({
+    required String collectionId,
+    required String documentId,
+  }) => throw const BackendNotConfiguredException();
+
+  @override
+  Future<void> callOperation(String name, {Map<String, dynamic>? params}) =>
+      throw const BackendNotConfiguredException();
+
+  @override
+  Stream<List<Map<String, dynamic>>> subscribeToCollection({
+    required String collectionId,
+    List<QueryFilter>? queries,
+  }) => const Stream.empty();
+
+  @override
+  Stream<Map<String, dynamic>?> subscribeToDocument({
+    required String collectionId,
+    required String documentId,
+  }) => const Stream.empty();
+
+  @override
+  Future<String> uploadFile({
+    required String bucketId,
+    required String storagePath,
+    required List<int> fileBytes,
+    bool upsert = false,
+  }) => throw const BackendNotConfiguredException();
+
+  @override
+  Future<String> uploadFileFromPath({
+    required String bucketId,
+    required String storagePath,
+    required File file,
+    String? contentType,
+    bool upsert = false,
+    int maxDimension = 1920,
+    int quality = 85,
+  }) => throw const BackendNotConfiguredException();
+
+  @override
+  Future<String> uploadThumbnailFromPath({
+    required String bucketId,
+    required String storagePath,
+    required File file,
+    int maxDimension = 320,
+    int quality = 60,
+  }) => throw const BackendNotConfiguredException();
+
+  @override
+  String? thumbUrlFor(String url) => null;
+
+  @override
+  String displayUrl(String url, {int? width, int? quality}) => url;
+
+  @override
+  Future<void> deleteFile({
+    required String bucketId,
+    required String storagePath,
+  }) => throw const BackendNotConfiguredException();
+
+  @override
+  Future<bool> ping() async => false;
+}

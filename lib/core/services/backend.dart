@@ -6,6 +6,7 @@
 library;
 
 import 'package:climate_app/core/services/appwrite/appwrite_auth_backend.dart';
+import 'package:climate_app/core/services/appwrite/appwrite_config.dart';
 import 'package:climate_app/core/services/appwrite/appwrite_data_backend.dart';
 import 'package:climate_app/core/services/appwrite/appwrite_push_targets.dart';
 import 'package:climate_app/core/services/auth_backend.dart';
@@ -27,15 +28,19 @@ AppwriteAuthBackend get _awAuth =>
     _appwriteAuth ??= AppwriteAuthBackend(data: _awData);
 
 /// Documents, realtime and files.
-DataBackend get backend => _awData;
+DataBackend get backend =>
+    AppwriteConfig.isConfigured ? _awData : const UnconfiguredDataBackend();
 
 /// Sessions, sign-in and recovery.
-AuthBackend get authBackend => _awAuth;
+AuthBackend get authBackend =>
+    AppwriteConfig.isConfigured ? _awAuth : const UnconfiguredAuthBackend();
 
 /// Registers this device for push on Appwrite, with [token] —
 /// the FCM or APNs token — and subscribes it to its profile's topics.
 Future<bool> registerPushTarget(String token) async =>
-    (_appwritePush ??= AppwritePushTargets(data: _awData)).register(token);
+    AppwriteConfig.isConfigured
+        ? (_appwritePush ??= AppwritePushTargets(data: _awData)).register(token)
+        : false;
 
 /// Brings the backend up. Called once from `main()`, before `runApp`.
 ///
@@ -45,7 +50,9 @@ Future<bool> registerPushTarget(String token) async =>
 /// user the login screen for a frame before correcting itself.
 Future<void> initializeBackend() async {
   installBackendErrorVocabulary();
-  await _awAuth.restore();
+  if (AppwriteConfig.isConfigured) {
+    await _awAuth.restore();
+  }
 }
 
 /// Installs the error vocabulary without connecting to anything, so the

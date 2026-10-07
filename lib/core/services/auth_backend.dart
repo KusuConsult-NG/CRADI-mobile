@@ -297,3 +297,83 @@ abstract interface class AuthBackend {
 class AuthBackendNotConfigured extends SecureException {
   AuthBackendNotConfigured() : super((l) => l.errorContactSupport);
 }
+
+/// Fallback returned when no auth backend is configured (e.g. in tests).
+class UnconfiguredAuthBackend implements AuthBackend {
+  const UnconfiguredAuthBackend();
+
+  @override
+  bool get isConfigured => false;
+  @override
+  Stream<AuthChange> get changes => const Stream.empty();
+  @override
+  AuthUser? get currentUser => null;
+  @override
+  bool get hasSession => false;
+  @override
+  bool get isSessionExpired => false;
+
+  @override
+  Future<AuthOutcome> signUpWithPassword({
+    required String email,
+    required String password,
+    Map<String, dynamic>? data,
+  }) => throw AuthBackendNotConfigured();
+
+  @override
+  Future<AuthOutcome> signInWithPassword({
+    required String email,
+    required String password,
+  }) => throw AuthBackendNotConfigured();
+
+  @override
+  Future<void> sendPhoneOtp({
+    required String phone,
+    required bool createUser,
+    Map<String, dynamic>? data,
+  }) => throw AuthBackendNotConfigured();
+
+  @override
+  Future<void> resendSignUpCode(String email) =>
+      throw AuthBackendNotConfigured();
+
+  @override
+  Future<AuthOutcome> verifySignUpOtp({
+    required String email,
+    required String token,
+  }) => throw AuthBackendNotConfigured();
+
+  @override
+  Future<AuthOutcome> verifyPhoneOtp({
+    required String phone,
+    required String token,
+    Map<String, dynamic>? data,
+  }) => throw AuthBackendNotConfigured();
+
+  @override
+  Future<void> verifyRecoveryOtp({
+    required String email,
+    required String token,
+  }) => throw AuthBackendNotConfigured();
+
+  @override
+  Future<void> sendPasswordResetCode(String email) =>
+      throw AuthBackendNotConfigured();
+
+  @override
+  Future<void> updatePassword(String newPassword) =>
+      throw AuthBackendNotConfigured();
+
+  @override
+  Future<void> updateEmail(String newEmail, {String? password}) =>
+      throw AuthBackendNotConfigured();
+
+  @override
+  Future<AuthUser?> reloadUser() async => null;
+
+  @override
+  Future<void> refreshSession() async {}
+
+  @override
+  Future<void> signOut() async {}
+}
