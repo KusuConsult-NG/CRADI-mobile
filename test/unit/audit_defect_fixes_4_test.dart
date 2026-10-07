@@ -200,13 +200,12 @@ void main() {
   group('L5 / storage errors', () {
     test('4xx storage errors are permanent, conflicts / limits are not', () {
       // 413 Too Large → permanent
-      expect(
-        isPermanentSyncError(AppwriteException('too large', 413)),
-        isTrue,
-      );
+      expect(isPermanentSyncError(AppwriteException('too large', 413)), isTrue);
       // 403 Denied → permanent
       expect(
-        isPermanentSyncError(AppwriteException('denied', 403, 'general_access_forbidden')),
+        isPermanentSyncError(
+          AppwriteException('denied', 403, 'general_access_forbidden'),
+        ),
         isTrue,
       );
       // 409/429/408/500/unknown → not permanent

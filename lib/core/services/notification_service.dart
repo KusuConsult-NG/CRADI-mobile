@@ -575,7 +575,10 @@ class NotificationService {
       try {
         await _applyTags();
       } on Exception catch (e) {
-        developer.log('FCM topic update error: $e', name: 'NotificationService');
+        developer.log(
+          'FCM topic update error: $e',
+          name: 'NotificationService',
+        );
       }
     });
   }

@@ -39,8 +39,8 @@ AuthBackend get authBackend =>
 /// the FCM or APNs token — and subscribes it to its profile's topics.
 Future<bool> registerPushTarget(String token) async =>
     AppwriteConfig.isConfigured
-        ? (_appwritePush ??= AppwritePushTargets(data: _awData)).register(token)
-        : false;
+    ? (_appwritePush ??= AppwritePushTargets(data: _awData)).register(token)
+    : false;
 
 /// Brings the backend up. Called once from `main()`, before `runApp`.
 ///
