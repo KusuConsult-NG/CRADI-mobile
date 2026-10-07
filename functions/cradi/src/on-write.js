@@ -21,7 +21,9 @@
  * That is what `previousStatus` on the report is for: the write Function
  * records it, and this compares.
  */
+import { fnv1a64 } from './lib/appwrite.js';
 import { enqueue } from './lib/outbox.js';
+import { desiredTopics } from './lib/topics.js';
 
 export default async ({ req, res, log, error }) => {
   const event = req.headers['x-appwrite-event'] ?? '';
@@ -127,6 +129,25 @@ export function eventsFor(event, doc) {
         // are two events and the second is not dropped as a duplicate of
         // the first.
         key: `${id}-${doc.isDisabled === true ? 'off' : 'on'}`,
+        payload: { userId: id },
+      },
+      {
+        eventType: 'push_topics_changed',
+        // Keyed by the topics themselves, which is what makes this safe
+        // to raise on every profile write. Two consequences, both wanted:
+        //
+        // - an edit that does not move the user (a new phone number, a
+        //   role change) produces the key the last one did, so the
+        //   outbox refuses it as a duplicate and no subscription work
+        //   runs;
+        // - the handler's own write back of `pushTopics` raises this
+        //   event again with that same key, so the loop it would
+        //   otherwise start ends at the outbox rather than running
+        //   forever.
+        //
+        // `fnv1a64` because the ids have to fit 36 characters and a
+        // state-and-LGA list does not.
+        key: `${id}-${fnv1a64(desiredTopics(doc).join('|'))}`,
         payload: { userId: id },
       },
     ];

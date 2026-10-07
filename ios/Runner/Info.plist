@@ -104,13 +104,15 @@
 	</array>
 	<!-- EXPORT COMPLIANCE — deliberately NOT declared here.
 	     ITSAppUsesNonExemptEncryption = false would claim the app only uses
-	     HTTPS/TLS and the platform's own crypto. That is not accurate: the
-	     app bundles its own AES implementations to encrypt data at rest —
-	     Hive boxes are opened with an AES-256 cipher (hive_encryption_service
-	     .dart) and EncryptionService uses PointyCastle AES-256-GCM with
-	     PBKDF2-SHA256 (encryption_service.dart). The algorithms are standard,
-	     but they are not OS-provided and not limited to authentication, so
-	     the usual "exempt" answers do not obviously apply.
+	     HTTPS/TLS and the platform's own crypto. The app also encrypts data
+	     at rest: Hive boxes are opened with HiveAesCipher (AES-256) and the
+	     key is held in the Keychain through flutter_secure_storage — see
+	     hive_encryption_service.dart. package:crypto is used for hashing,
+	     not encryption. That is the whole of it.
+	     (An earlier version of this comment also named an
+	     encryption_service.dart implementing PointyCastle AES-256-GCM with
+	     PBKDF2-SHA256. No such file exists in this repository and
+	     PointyCastle is not a dependency; the claim was wrong.)
 	     Decide with whoever owns export compliance, then add the key (and,
 	     if it is true, an annual self-classification report). See
 	     docs/DEPLOYMENT.md "Export compliance". -->

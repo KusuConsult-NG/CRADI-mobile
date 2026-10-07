@@ -46,7 +46,10 @@ Delivery to the router is done in Dart by
 `lib/core/services/deep_link_service.dart` (an `app_links` listener), **not**
 by Flutter's framework deep linking — see the class comment for why. Do not
 add `FlutterDeepLinkingEnabled` to `Info.plist`: it would also push Supabase
-auth callbacks (password recovery, email confirmation) into `go_router`.
+auth callbacks (password recovery, email confirmation) into `go_router`. An
+Appwrite build has no such callbacks — its recovery and verification are
+typed codes, not links — so there the objection is only that the Dart
+listener is already the one consumer.
 
 ## Localization
 

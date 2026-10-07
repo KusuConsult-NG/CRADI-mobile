@@ -46,7 +46,11 @@ void main() {
     });
 
     test('and a real duplicate still is one', () {
-      final dup = AppwriteException('Already exists', 409, 'document_already_exists');
+      final dup = AppwriteException(
+        'Already exists',
+        409,
+        'document_already_exists',
+      );
       expect(classifyAppwriteFailure(dup), BackendFailure.duplicate);
       expect(isAppwritePermanent(dup), isTrue);
     });
@@ -54,8 +58,10 @@ void main() {
     test('a 409 with no type stays a duplicate, as the replay path needs', () {
       // An untyped 409 is the create-replay case; only the typed one is
       // the lock.
-      expect(classifyAppwriteFailure(AppwriteException('x', 409)),
-          BackendFailure.duplicate);
+      expect(
+        classifyAppwriteFailure(AppwriteException('x', 409)),
+        BackendFailure.duplicate,
+      );
     });
   });
 

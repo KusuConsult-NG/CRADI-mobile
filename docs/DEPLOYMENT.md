@@ -1,652 +1,347 @@
-# EWER / CRADI — deployment runbook
+# EWER / CRADI — deployment runbook (Appwrite stack)
 
-End-to-end, first-time deployment of the whole system, in dependency order.
-Written to be followed with the dashboards open. Every step says what to click,
-what to paste and how to check it worked before moving on.
+End-to-end, first-time deployment, in dependency order. Written to be
+followed with the console open: every step says what to do, what it needs
+from the step before, and how to tell it worked before you move on.
 
-**Repositories** (both on branch `supabase-migration`):
+This is the stack the app and the admin panel are written against. The
+Supabase stack that is still in production has its own runbook —
+`DEPLOYMENT-SUPABASE.md` — and stays up until the cutover is done; see
+*The cutover* at the end.
+
+**Repositories**
 
 | Repo | Contains |
 | --- | --- |
-| `KusuConsult-NG/CRADI-mobile` | Flutter app (`lib/`), Node backend (`backend/`), database schema (`supabase/`), Firebase import tool (`migration/firebase-to-supabase/`) |
+| `KusuConsult-NG/CRADI-mobile` | Flutter app (`lib/`), the two Appwrite Functions (`functions/cradi/`), the provisioning scripts (`infra/appwrite/`), the Supabase-era worker and schema (`backend/`, `supabase/`) kept for the old stack |
 | `KusuConsult-NG/CRADI-Mobile-Admin` | Next.js admin panel |
 
-**Order matters.** Supabase must exist before anything else; the first admin
-must exist before the admin panel is useful; OneSignal keys must exist before
-the backend can push; the backend URL must exist before the app is built.
+**Order matters.** The project and its API key come before anything can
+be provisioned; the schema comes before the Functions have anything to
+write; the Messaging providers come before a notification can be
+delivered; the admin panel's domain has to be a registered platform
+before a browser can talk to Appwrite at all; and the app build needs the
+project's ids.
 
 ```
-1. Supabase schema  →  2. First admin  →  3. OneSignal  →  4. Railway backend
-                                                        →  5. Railway admin
-                                                        →  6. Mobile app build
-                                     (7. optional Firebase import)  →  8. Smoke test
+1. Console: project, key, platforms, providers
+        ↓
+2. Provision the schema  →  3. Deploy the two Functions  →  4. First admin
+        ↓                                                          ↓
+5. Admin panel (Railway)  ←───────────────────────────────────────┘
+        ↓
+6. Mobile app build  →  7. Smoke test
 ```
 
 ### Secret handling — read once
 
 | Secret | Belongs in | Must never be in |
 | --- | --- | --- |
-| Supabase **service role key** | Railway backend variables, Railway admin variables, your local `.env.local` for `set-admin.mjs` | the Flutter app, any `NEXT_PUBLIC_*` variable, any committed file |
-| OneSignal **REST API key** | Railway backend variables only | the Flutter app, the admin panel, any committed file |
-| Resend / Termii / Twilio keys | Railway backend variables only | anywhere else |
-| Supabase **URL** and **anon key** | anywhere (they are public; access is enforced by RLS) | — |
-| OneSignal **App ID** | anywhere (public identifier) | — |
+| Appwrite **server API key** | your shell for provisioning, the Railway admin panel's `APPWRITE_API_KEY`, the Functions' own variables (set by `deploy.mjs`) | the Flutter app, any `NEXT_PUBLIC_*` variable, any committed file |
+| **Termii** API key and sender id | the `worker` Function's variables, set from the environment by `deploy.mjs` | the app, the panel, anywhere committed |
+| FCM service-account JSON, APNs key | the Appwrite console's Messaging providers | anywhere else, including this repository |
+| Appwrite **endpoint** and **project id** | anywhere (they are public; access is enforced by permissions, labels and the Functions) | — |
 
-The service role key **bypasses every Row Level Security policy**. Anyone
-holding it can read and write every row in the database, including other
-users' reports and profiles. It is a server-side secret: Railway environment
-variables and nothing else.
+The API key **bypasses every permission**, including the document-level
+ACLs that are the whole access-control design. Treat it exactly as the
+Supabase service role key was treated: a server-side secret, and nothing
+else.
 
----
-
-## 1. Supabase — apply the schema
-
-The project must be **empty**. `supabase/deploy/schema.sql` creates tables,
-types, functions, triggers and policies outright, so a second run fails with
-"already exists".
-
-1. Open the Supabase dashboard → your project → **SQL Editor** → **New query**.
-2. Open `supabase/deploy/schema.sql` from the `CRADI-mobile` repo, select all,
-   paste it into the editor, and **Run**.
-   * The file is generated from `supabase/migrations/*.sql` (12 migrations, in
-     filename order). Do not edit it by hand — see
-     `supabase/deploy/README.md` for the generator and the drift check.
-   * It runs as `postgres`, which is what the SQL editor uses. It needs that:
-     it creates two triggers on `auth.users` and four policies on
-     `storage.objects`.
-   * It takes a few seconds. The editor runs statement by statement; if a
-     statement fails, everything before it has already been applied — see
-     *Rollback* at the end.
-3. **Verify.** New query, run each of these:
-
-   ```sql
-   -- expect 17
-   select count(*) from information_schema.tables where table_schema = 'public';
-
-   -- expect 17 rows, every one with rowsecurity = true
-   select relname, relrowsecurity
-     from pg_class c join pg_namespace n on n.oid = c.relnamespace
-    where n.nspname = 'public' and c.relkind = 'r'
-    order by 1;
-
-   -- expect 37 policies in public and 4 on storage.objects
-   select schemaname, count(*) from pg_policies
-    where schemaname in ('public', 'storage') group by 1;
-
-   -- expect 8 rows (minimum_peer_confirmations = 2, escalation_timeout_minutes = 30, ...)
-   select key, value from public.app_settings order by key;
-
-   -- expect 10 seeded hazard guides
-   select count(*) from public.knowledge_base;
-   ```
-
-   The 21 tables are: `alerts`, `alerts_unresolved_target`, `app_settings`,
-   `authorities`, `authorities_unresolved_coverage`, `contacts`,
-   `knowledge_base`, `login_history`, `messages`, `ndpa_consents`,
-   `news_links`, `nigeria_lgas`, `nigeria_states`, `notification_outbox`,
-   `profiles`, `reports`, `scheduled_escalations`, `sms_deliveries`,
-   `trusted_devices`, `verification_overrides`, `verifications`.
-
-   `nigeria_states` (37 rows) and `nigeria_lgas` (770 rows) are canonical
-   reference data, read-only to clients. The two `*_unresolved_*` tables are
-   empty on a fresh project; they only ever hold rows that migrations
-   `20260927080000` / `20260927090000` had to set aside — see
-   [Authority SMS do not arrive](#authority-sms-do-not-arrive) below.
-
-4. **Storage buckets — already done.** The init migration inserts them; you do
-   **not** create them by hand. Confirm under **Storage**, or:
-
-   ```sql
-   select id, public, file_size_limit, allowed_mime_types from storage.buckets order by id;
-   ```
-
-   Expect exactly two: `profile-images` and `report-images`, both `public =
-   true`, `file_size_limit = 5242880` (5 MB), mime types
-   `image/jpeg, image/png, image/webp, image/heic`. Object paths must start with
-   the uploader's user id — that is what the storage policies enforce.
-
-5. **Auth settings** — every one of them is listed in **section 1a** below.
-   Work through that checklist now; auth does not work with the dashboard
-   defaults.
-
-6. **Collect the keys** — dashboard → **Project Settings → API**:
-   * **Project URL** → `https://<project-ref>.supabase.co`. Used by everything.
-   * **anon / public key** → mobile app (`SUPABASE_ANON_KEY`) and admin panel
-     (`NEXT_PUBLIC_SUPABASE_ANON_KEY`). Public.
-   * **`service_role` key** (revealed behind a "Reveal" control) →
-     `SUPABASE_SERVICE_ROLE_KEY` on the Railway backend and the Railway admin
-     service. **This key bypasses all Row Level Security.** Never put it in the
-     Flutter app, never in a `NEXT_PUBLIC_*` variable, never in a commit.
-
-> `supabase/tests/local_stubs.sql` is **for local Postgres testing only**. Never
-> run it against a Supabase project.
+Two Appwrite keys and two Termii keys are in these repositories' **public
+git history** and must be rotated at the vendor; see *Do this first* in
+`HANDOFF.md`. Rewriting history does not help — assume they are known.
 
 ---
 
-## 1a. Auth configuration — the complete checklist
+## 1. In the console, by hand
 
-Supabase ships with defaults that **do not work for this app**: the Site URL is
-`http://localhost:3000` and every email template sends a *link*, while the
-mobile app asks the user to type a **6-digit code**. That mismatch is why a
-recovery mail can arrive perfectly (SMTP fine) and still be useless.
+Four things no script creates, for good reasons: the project is a billing
+decision, the region cannot be changed afterwards, a platform is a
+browser-origin trust decision, and a provider means uploading a Google
+service-account key.
 
-Password recovery is the one flow with **two audiences**: the mobile app needs
-the 6-digit code, and the admin panel now has a browser page at
-`/reset-password`. The **Reset Password** template in section *d* below carries
-both, so one mail serves both. Do not trim it down to one half.
+### 1a. The project and its region
 
-### What each flow actually needs
+Create the project. **The region cannot be changed later** — moving an
+Appwrite Cloud project between regions means migrating everything a
+second time. The existing project is Frankfurt (`fra`), which is what
+`infra/appwrite/plan.mjs` defaults to.
 
-| Flow | App entry point | Sends to Supabase | Needs | Email template | Required variable |
-| --- | --- | --- | --- | --- | --- |
-| Registration (email) | `/register` → `AuthProvider.signUpWithEmail` | `auth.signUp(email, password, data: {name, role, phone, state, lga, ward, address})` | — | — | — |
-| Email confirmation | `/verify-otp` → `verifyOtpAndLogin` | `auth.verifyOTP(type: signup, email, token)` | **code** | **Confirm signup** | `{{ .Token }}` |
-| Resend confirmation | `/verify-otp`, and automatically after an `email_not_confirmed` login | `auth.resend(type: signup, email)` | **code** | **Confirm signup** | `{{ .Token }}` |
-| Sign-in | `/login` | `auth.signInWithPassword(email, password)` | — | — | — |
-| Password reset — send | `/forgot-password` (app), or Supabase → Users → *Send password recovery* | `auth.resetPasswordForEmail(email, redirectTo: 'cradi://reset-password')` (the app; the dashboard sends none) | **code + link** | **Reset Password** | `{{ .Token }}` **and** `{{ .ConfirmationURL }}` |
-| Password reset — confirm (mobile app) | `/reset-password` in the app | `auth.verifyOTP(type: recovery, email, token)` then `auth.updateUser(password:)` | **code** | **Reset Password** | `{{ .Token }}` |
-| Password reset — confirm (link, in the app) | `/reset-password?recovery=1` in the app | `supabase_flutter` consumes the callback → `passwordRecovery` event → `auth.updateUser(password:)` | **link** | **Reset Password** | `{{ .ConfirmationURL }}` |
-| Password reset — confirm (browser) | admin panel `/reset-password` | `auth.verifyOtp({token_hash, type: 'recovery'})` (or `setSession` from an `#access_token` fragment) then `auth.updateUser({password})` | **link** | **Reset Password** | `{{ .ConfirmationURL }}` |
-| Change sign-in email | Profile → email → `ProfileProvider.updateEmail` | `auth.updateUser(email:)` | **link** | **Change Email Address** (plus **Confirm Email Change** while *Secure email change* is on) | `{{ .ConfirmationURL }}` (the default) |
-| Session restore / refresh | automatic (`supabase_flutter` secure storage) | `POST /token?grant_type=refresh_token` | — | — | — |
-| Biometric unlock | lock screen | re-uses the persisted session, refreshes it if expired | — | — | — |
-| Sign-out | anywhere | `auth.signOut()` | — | — | — |
-| Admin panel sign-in | `https://cradi-mobile-admin-production.up.railway.app/login` | `auth.signInWithPassword` | — | — | — |
-| Phone / SMS OTP | **disabled in code** (`AuthProvider.phoneAuthEnabled = false`) | — | — | — | — |
+Note the **project id** and the **API endpoint**. The endpoint must end in
+`/v1`: it is the REST base, and without it every call lands on the
+console's HTML and 404s.
 
-Everything the **mobile app** does is code-based **except** the link in the
-recovery mail, which the app now handles too (see below). The email change is
-the one remaining flow whose link is built from the Site URL — which is why the
-Site URL is still not cosmetic.
+### 1b. A server API key
 
-**Where a recovery link lands.** `resetPasswordForEmail` used to be called
-without `redirectTo`, so GoTrue built the link from the **Site URL** — the
-admin panel. App users who tapped it were shown a staff login screen they have
-no account for. `AuthProvider.sendPasswordResetEmail` now passes
-`redirectTo: cradi://reset-password` (`kPasswordResetRedirect`), so:
+**Overview → Integrations → API keys.** It needs:
 
-* reset requested **in the app** → the link opens the app, `supabase_flutter`
-  establishes the recovery session, and the router parks on the reset screen
-  with only the new-password fields (`/reset-password?recovery=1`);
-* reset sent from the **Supabase dashboard** (staff) → no `redirectTo`, so the
-  link still resolves to the Site URL and the admin panel's `/reset-password`
-  page handles it, exactly as before;
-* the mail read on a **desktop** when the app requested it → `cradi://` will not
-  open, which is why the **code** stays in the template. Typing it in the app
-  is the fallback, and it always works.
-
-This is why the template below uses `{{ .ConfirmationURL }}` rather than a
-hand-built `{{ .SiteURL }}/reset-password?token_hash=…`: the hand-built link
-ignores `redirectTo` and always points at the admin panel.
-
-The admin panel keeps
-`detectSessionInUrl: false` on its shared Supabase client (turning it on would
-make every admin page try to consume tokens from its URL); its
-`/reset-password` page instead reads `token_hash` — or an `#access_token`
-fragment — out of the URL itself and hands it to a short-lived client of its
-own. No OAuth provider is involved anywhere.
-
-### a. URL Configuration — **Authentication → URL Configuration**
-
-* **Site URL**: `https://cradi-mobile-admin-production.up.railway.app`
-  The default `http://localhost:3000` is what makes a password-reset mail point
-  at a dead address. GoTrue applies an email change *server-side* when the link
-  is opened and only then redirects the browser here, so the admin login page is
-  a fine landing spot even though it ignores the URL fragment.
-* **Redirect URLs** (allow list) — GoTrue will only redirect a browser to a URL
-  on this list. Add all of these:
-  * `https://cradi-mobile-admin-production.up.railway.app/reset-password`
-    — **required**. This is where the link in the recovery mail lands (section
-    *d*). Without it GoTrue refuses the redirect and the staff-facing half of
-    password recovery does not work.
-  * `https://cradi-mobile-admin-production.up.railway.app/**`
-  * `https://cradi.ng/**` (the app-link host in `AndroidManifest.xml` / `Info.plist`)
-  * `cradi://**` (the custom scheme the app registers)
-
-### b. Providers — **Authentication → Providers**
-
-* **Email**: *Enabled*.
-  * **Confirm email: ON.** Required, not optional: the admin panel and the
-    `profiles_guard` trigger refuse to approve an account whose email (or phone)
-    is unconfirmed, so with confirmations off nobody could ever be approved.
-  * **Secure email change**: leave ON. The user then gets a confirmation link at
-    *both* the old and the new address and must open both.
-  * **Email OTP length: 6**, **Email OTP expiry: 3600 s**. The reset screen
-    rejects anything shorter than 6 characters and accepts up to 10, so a
-    longer OTP length set in the dashboard still works — but the wording in
-    the app and in the template below says "code", not "6-digit code", for
-    exactly that reason. Keep the two in step if you change it.
-* **Phone**: *Disabled*. `AuthProvider.phoneAuthEnabled` is `false`, and the
-  login and registration screens hide every phone control behind it. Enabling
-  the provider in the dashboard alone changes nothing — the constant has to be
-  flipped and the app rebuilt.
-
-### c. Sign-ups — **Authentication → Sign In / Providers**
-
-* **Allow new users to sign up: ON.** The registration screen calls `signUp`;
-  with sign-ups disabled Supabase answers `signup_disabled` and the app shows
-  "Registration is currently disabled".
-* **Allow anonymous sign-ins: OFF** (unused).
-
-### d. Email templates — **Authentication → Emails → Templates**
-
-Two templates must be changed from their shipped, link-based defaults. Paste
-these as-is.
-
-**Confirm signup** — subject `Your CRADI verification code`
-
-```html
-<h2>Confirm your CRADI / EWER account</h2>
-<p>Enter this code in the app to finish creating your account:</p>
-<p style="font-size:28px;font-weight:700;letter-spacing:6px;margin:24px 0">{{ .Token }}</p>
-<p>The code expires in one hour. If you did not create an account, ignore this email.</p>
+```
+databases.read  databases.write
+tables.read     tables.write      (documents.read / documents.write on older servers)
+teams.read      teams.write
+users.read      users.write
+functions.read  functions.write
+buckets.read    buckets.write
 ```
 
-**Reset Password** — subject `Your CRADI password reset code`
+Make it a **fresh** key. Do not reuse either of the two in public git
+history.
 
-This one template serves **both** audiences and must keep both halves:
+### 1c. A web platform for every browser origin
 
-* the **code** (`{{ .Token }}`) — for **mobile app users**, and the fallback
-  whenever the link cannot open the app (mail read on a desktop, a mail client
-  that strips custom schemes). The app's "Create New Password" screen accepts
-  it and calls `auth.verifyOTP(type: recovery)`. **Deleting the `{{ .Token }}`
-  half leaves anyone in that position with no way to reset at all.**
-* the **link** (`{{ .ConfirmationURL }}`) — which now goes wherever the reset
-  was *requested from*. Requested in the app, it opens the app; sent from the
-  Supabase dashboard, it lands on the admin panel's `/reset-password` page.
-  Both destinations must be on the Redirect URL allow list in section *a*
-  (`cradi://**` and the admin `/reset-password`), and both already are.
+**Settings → Platforms → Web.** Appwrite refuses a browser request from an
+origin it does not know, and the failure reads as a CORS error rather than
+as a misconfiguration.
 
-> **Do not** replace it with `{{ .SiteURL }}/reset-password?token_hash={{ .TokenHash }}`.
-> A hand-built link ignores `redirectTo` and always points at the admin panel —
-> that is precisely the bug this template change fixes.
+- `localhost` for local work on the panel;
+- the Railway domain once step 5 has generated one.
 
-```html
-<h2>Reset your CRADI / EWER password</h2>
+The mobile app does not need a platform entry (it is not a browser
+origin), but Flutter **web** builds would.
 
-<p><strong>Enter this code</strong> on the "Create New Password" screen in the
-CRADI app:</p>
-<p style="font-size:28px;font-weight:700;letter-spacing:6px;margin:24px 0">{{ .Token }}</p>
+### 1d. Messaging providers — and the way this fails
 
-<p>Or, if you are reading this on the phone the app is installed on,
-<a href="{{ .ConfirmationURL }}">tap here to set a new password</a>.</p>
+**Messaging → Providers.** Two are needed:
 
-<p>The code and the link are two forms of the same one-hour, single-use token —
-use whichever suits you. If you did not ask for a password reset, ignore this
-email — your password has not changed.</p>
+| Provider | For | Credentials |
+| --- | --- | --- |
+| **Push** — FCM | Android devices | the FCM v1 **service-account JSON** |
+| **Push** — APNs | iOS devices | an APNs **`.p8` key**, key id, team id, bundle id |
+| **Email** — SMTP (or any supported provider) | the typed codes `/auth` sends: registration, recovery, verification | SMTP host, port, credentials |
+
+> **Appwrite accepts a message with no enabled provider.** It answers
+> success, leaves the message `processing`, and delivers nothing. So a
+> missing provider is not a loud failure at deploy time — it is silence
+> afterwards. `infra/appwrite/local/bootstrap.mjs` records the same trap
+> for email, which is why the local stack provisions an SMTP provider by
+> hand.
+
+Those push credentials live inside OneSignal today. Getting them into
+Appwrite is a prerequisite for push on this stack, not an optimisation.
+
+**Note both push provider ids.** A target that names no provider is filed
+under the project's *default* push provider, so in a project with FCM and
+APNs every device on the non-default platform would be registered against
+a provider that cannot reach it — accepted at registration, silent at
+send time. The app build takes them as defines in step 6.
+
+### 1e. Auth settings
+
+**Auth → Settings**: Email/Password enabled. The app's own flows mint
+their codes through the `auth` route of the `client` Function, but the
+panel signs in with email and password.
+
+---
+
+## 2. Provision the schema
+
+Everything in this step is `infra/appwrite/` and is idempotent: every
+object is checked before it is written, and a half-finished run is
+resumed by running it again. **It never deletes anything** — a column in
+the project and not in the plan is reported, not dropped.
+
+```bash
+export APPWRITE_ENDPOINT=https://fra.cloud.appwrite.io/v1
+export APPWRITE_PROJECT_ID=<project id>
+export APPWRITE_API_KEY=<the fresh server key>
+export APPWRITE_DATABASE_ID=<database id>   # an existing database, or let the plan create `cradi`
+
+node infra/appwrite/provision.mjs --dry-run   # read-only: what it would do
+node infra/appwrite/provision.mjs --probe     # NOT read-only: provisions, and
+                                              # carries on past a quota refusal
+                                              # to list every limit in one run
+node infra/appwrite/provision.mjs             # the real run
+node infra/appwrite/verify.mjs                # non-zero on any difference
 ```
 
-`{{ .Token }}` is the OTP the app's reset screen asks for; `{{ .ConfirmationURL }}`
-is GoTrue's own verify link, which honours the `redirectTo` the request carried
-and falls back to the Site URL when it carried none.
+What this creates: the database, 19 collections with their columns and
+indexes, and the two buckets (`report-images`, `profile-images`). What it
+does **not** create: the project, the API key, the platforms, the
+Messaging providers, the ward teams (those are made on demand by the
+Functions and by the migration pipeline) and the messaging topics (created
+when the first device belonging in one registers — Phase 25).
 
-**Change Email Address** and **Confirm Email Change**: leave the defaults
-(`{{ .ConfirmationURL }}`). This is the only flow that needs a working link, so
-it is also the only one that depends on the Site URL above.
+Read before you run it:
 
-**Magic Link**, **Invite user**, **Reauthentication**: unused. The app never
-sends a magic link or an invite. `reauthentication_needed` is mapped to a
-message in `ProfileProvider.updateEmail`, but no screen collects a reauth code.
+- **`--probe` writes.** It differs from a real run only in carrying on
+  past a quota refusal. On a plan whose limits you do not know, that is
+  the cheap way to learn them all; on a project holding real data, read
+  `--dry-run` first.
+- **The plan's limits are not measured.** The numbers in
+  `infra/appwrite/README.md` are the free tier's, from 2 October 2026.
+  The plan has been upgraded since and nothing has been re-measured.
+- **One bucket instead of two** is still supported for a tier that allows
+  one: `provision.mjs --single-bucket` with `APPWRITE_BUCKET_ID` naming
+  the slot that is taken. On this plan it is the fallback, not the path —
+  see `CLOUD-VERIFICATION.md`.
+- **Index and row widths are MariaDB's**, not the plan's. Four indexes
+  need explicit `lengths` to stay inside the 767-byte limit, and a string
+  column sized generously costs four bytes per character of the 65,535 a
+  row gets. `extract-schema.mjs` sizes them for that; do not widen a
+  column without reading its comment.
 
-> After editing a template, send yourself a real reset **from the app** and read
-> the mail on the phone. It must contain **both** a numeric code and a link;
-> tapping the link must open the CRADI app on "Create New Password", not a
-> browser. Then send one from **Supabase → Users → Send password recovery** and
-> check that its link opens the admin panel's `/reset-password`. Both have to
-> work — they are the two audiences this one template serves.
-
-### e. SMTP — **Project Settings → Authentication → SMTP Settings**
-
-* Custom SMTP **enabled**, pointed at Resend. The sender domain must be verified
-  in Resend or every message is silently dropped.
-* **Sender email / name** must match a verified Resend identity.
-
-### f. Rate limits — **Authentication → Rate Limits**
-
-* **Emails sent per hour**: the default is `2` while the built-in SMTP is in
-  use. With custom SMTP raise it to at least `30`, otherwise a user who
-  registers, mistypes the code and asks for a resend hits
-  `over_email_send_rate_limit` and the app says "Too many attempts".
-* **Token verifications** and **sign-ins**: the defaults are fine.
-
-### g. What the code additionally assumes
-
-* The `on_auth_user_created` trigger reads the `raw_user_meta_data` keys `name`,
-  `role`, `phone`, `state`, `lga`, `ward`, `address` and creates the `profiles`
-  row. The client never inserts it, so a failure here leaves a user who can sign
-  in but has no profile.
-* A requested `role` outside the six self-service values is silently demoted to
-  `user`, and `is_approved` always starts `false` — every new account lands on
-  `/pending-approval` until an admin approves it.
-* The app subscribes to its own `profiles` row over Realtime, so **Realtime must
-  be enabled for `public.profiles`**: that is what makes an approval, a role
-  change or a disable take effect without a restart.
-* The admin panel has a password-reset screen at `/reset-password` (public, not
-  behind the admin sign-in guard). An admin who forgets their password asks for
-  a recovery mail — from the mobile app's `/forgot-password`, or from Supabase →
-  Authentication → Users → *Send password recovery* — and follows the link in
-  it. It works for any account, not only admins: the page uses its own
-  short-lived Supabase client, so the admin-only guard never sees the recovery
-  session. After the change it signs the account out everywhere, so the next
-  sign-in uses the new password.
-* The panel enforces the same password rules as the app
-  (`admin/lib/password.ts` mirrors `lib/core/utils/password_validator.dart`):
-  8–128 characters, upper and lower case, a digit, a special character, not a
-  common password, no sequential run such as `123` or `abc`. Supabase's own
-  *Minimum password length* / *Required characters* setting applies on top and
-  its message is shown verbatim.
-* Login throttling is **per device**, in the app's own `RateLimiter` (5 attempts
-  / 15 min, then an exponentially growing lock). It is independent of Supabase's
-  limits and clears itself when the lock expires or on the next successful
-  sign-in.
+`verify.mjs` prints three kinds of line: a problem (and exits non-zero), a
+`~` for a column whose size differs from the plan (informational — the
+project is the one that was built first), and a `?` for something the plan
+does not ask for, which is how a leftover bucket or column gets named
+instead of going quiet.
 
 ---
 
-## 2. Create the first admin
+## 3. Deploy the two Functions
 
-Row Level Security requires an approved admin before the admin panel shows
-anything, and the panel cannot create the first one. Chicken-and-egg: sign up
-like a normal user, then promote that row.
+```bash
+# Still in the shell from step 2, plus the SMS credentials:
+export TERMII_API_KEY=<key>
+export TERMII_SENDER_ID=CRADI
 
-1. **Sign up.** Either in the mobile app (once it is built, step 6), or
-   directly in the dashboard → **Authentication → Users → Add user** with
-   *Auto Confirm User* ticked, or by letting the admin panel's login page sit
-   idle and signing up in the app first. A `profiles` row is created
-   automatically by the `on_auth_user_created` trigger.
-2. **Confirm the email.** The account must have `email_confirmed_at` or
-   `phone_confirmed_at` set. If you created the user from the dashboard with
-   *Auto Confirm*, it already is. Otherwise, click the link/enter the code.
-3. **Promote.** Preferred path, from the `CRADI-Mobile-Admin` repo on your own
-   machine:
+node infra/appwrite/local/deploy.mjs
+```
 
-   ```bash
-   cd CRADI-Mobile-Admin
-   cp .env.example .env.local     # fill in URL, anon key, service role key
-   npm install
-   node --env-file=.env.local scripts/set-admin.mjs admin@example.org
-   ```
+It lives under `local/` because that is what it was written for, and it
+deploys to Cloud the same way — the one thing that differs between the two
+is how a running Function reaches the API back, and that is derived from
+the endpoint rather than hardcoded.
 
-   It looks the user up by exact email, refuses ambiguous matches, **refuses an
-   account that has not confirmed its email or phone**, sets
-   `role = 'admin', is_approved = true, is_disabled = false` on the `profiles`
-   row and clears any Auth ban. It needs `SUPABASE_SERVICE_ROLE_KEY` (or the
-   `NEXT_PUBLIC_SUPABASE_URL` / `SUPABASE_URL` pair) — run it from a trusted
-   machine only, and delete `.env.local` when you are done if the machine is
-   shared.
+| Function | Entrypoint | Trigger | What it is |
+| --- | --- | --- | --- |
+| `client` | `src/client.js` | the app and the panel, synchronously | the three routes a client calls: `/write`, `/auth`, `/operation`. `execute: ['any']`, because `/auth` must be reachable before there is a session; `/write` and `/operation` check the caller themselves |
+| `worker` | `src/worker.js` | events, and `* * * * *` | the outbox drain, the escalation cron, the reconciling sweep, and the write events. `execute: []` — no client can reach it |
 
-4. **SQL fallback** — if you cannot run Node, paste this into the SQL editor:
+Two, not seven, because the free plan allowed two: `docs/APPWRITE-FUNCTION-CONTRACTS.md`
+has the routing and the reasoning, and the merge stays on the upgraded
+plan because it is what everything is tested against.
 
-   ```sql
-   update public.profiles
-      set role = 'admin', is_approved = true, is_disabled = false
-    where email = 'admin@example.org'
-   returning id, email, role, is_approved, is_disabled;
-   ```
+**There is no Railway backend service on this stack.** `worker` is what
+`backend/` was: the outbox, the escalation cron and the Termii send, on
+Appwrite's own scheduler. `backend/` stays in the repository because it is
+what the Supabase stack still runs in production, and it reads and writes
+Supabase — pointing it at this project is not possible and not needed. The
+only Railway service here is the admin panel (step 5).
 
-   It must return exactly one row. Notes:
-   * The `profiles_guard` trigger only blocks privilege changes when
-     `auth.uid()` is non-null (i.e. a client session). The SQL editor has no
-     session, so this update is allowed.
-   * `profiles_guard_approval` still applies: if it raises *"This account has
-     not confirmed its email or phone yet"*, confirm the account first
-     (dashboard → **Authentication → Users → … → Confirm email**).
-   * If it returns 0 rows, the profile does not exist — the user never signed
-     up, or signed up before the schema was applied. Delete and re-create the
-     Auth user so the trigger fires.
+> **`deploy.mjs` replaces a Function's variables wholesale.** It deletes
+> what is there and sets what its environment carries. A `TERMII_API_KEY`
+> typed into the console by hand is gone after the next deploy, and the
+> script says so in its output: `SMS: OFF` means the two Termii variables
+> were not in the shell, and every authority SMS will be skipped.
 
-5. Every other account needs this admin to approve it: **Admin panel → Users →
-   Approve**. Unapproved roles grant nothing (`public.app_role()` returns the
-   role only for approved, non-disabled accounts).
+**Verify:**
+
+- `node infra/appwrite/verify.mjs` → both Functions present, deployed,
+  build `ready`, scopes complete, and `worker`'s schedule exactly
+  `* * * * *`. A Function with no deployment answers every call with a
+  500 and looks fine in the console.
+- `node infra/appwrite/cloud-check.mjs` → the behaviour a live project
+  must show: labels follow a profile's role, a label-gated read is empty
+  without the label and populated with it, the coverage guard, `expect`
+  as a real compare-and-set, `app_settings.value` round-tripping as a
+  string. It creates `cloudchk-*` rows and removes them, pass or fail.
+- A plan that floors cron frequency does not refuse a one-minute
+  schedule, it just runs it less often — and the drain and the escalation
+  sweep both assume a minute. Check the schedule the console reports
+  against what was asked for.
 
 ---
 
-## 3. OneSignal
+## 4. The first admin
 
-### 3a. Rotate the leaked REST API key — do this first
+The account must exist first: sign up in the app, or create it in the
+console under **Auth → Users** and confirm the address.
 
-The existing OneSignal REST API key for app
-`2e6f30a8-ef18-4091-9961-e6a6fe862322` was exposed publicly and must be
-considered compromised: anyone holding it can send push notifications to every
-user of the app.
+```bash
+cd ../CRADI-Mobile-Admin
+APPWRITE_ENDPOINT=$APPWRITE_ENDPOINT \
+APPWRITE_PROJECT_ID=$APPWRITE_PROJECT_ID \
+APPWRITE_API_KEY=$APPWRITE_API_KEY \
+APPWRITE_DATABASE_ID=$APPWRITE_DATABASE_ID \
+npm run set:admin -- admin@example.org
+```
 
-1. OneSignal dashboard → your app → **Settings → Keys & IDs**.
-2. Delete / revoke the existing **App API Key** (REST API key).
-3. Create a new one. Copy it **once** — you will paste it into Railway in step
-   4 and nowhere else.
-4. Do not commit it, do not put it in `env.json`, do not paste it into a chat
-   or an issue. If it leaks again, repeat this step.
+It sets the `profiles` row (`role = 'admin'`, `isApproved`, not disabled)
+**and the account's labels**, which is what the `read("label:admin")`
+permissions actually check. Without the label the panel signs in and shows
+nothing at all, because Appwrite answers a read you have no permission for
+with `200 {"total": 0}` rather than an error. That empty-but-successful
+answer is the single most misleading failure on this stack: if a list is
+empty and nothing looks wrong, suspect a label before you suspect the
+data.
 
-### 3b. Collect the App ID
-
-Same page, **App ID**: `2e6f30a8-ef18-4091-9961-e6a6fe862322`. This one is a
-public identifier — it goes into the Flutter build (`ONESIGNAL_APP_ID`) *and*
-into the backend.
-
-### 3c. Platform credentials
-
-* **Android**: *Settings → Push & In-App → Google Android (FCM)* — upload the
-  **FCM v1 service-account JSON**. Google still delivers Android pushes through
-  FCM; the credentials live inside OneSignal only. The Flutter app contains no
-  Firebase SDK and no `google-services.json`.
-* **iOS**: upload an APNs `.p8` key, and in Xcode add the *Push Notifications*
-  capability to the Runner target.
-
-### 3d. Android notification channel (optional)
-
-If you want a dedicated high-importance channel: *Settings → Android
-Categories* → create one (e.g. "Alerts") and copy its id into the backend as
-`ONESIGNAL_ANDROID_CHANNEL_ID`. It **must be a UUID**: the backend validates it
-and, if it is not, logs `config.onesignal_channel_invalid` and ignores it
-(OneSignal rejects every push naming an unknown channel, so a typo would
-silently break all Android pushes). Leave it empty if unsure.
-
-### 3e. Identity Verification
-
-Without it, any device can call `OneSignal.login(<someone else's uuid>)` or set
-any `lga` tag and receive that user's pushes. This is why every push body in
-this system is generic (ids and an event `type` only). Enabling Identity
-Verification (*Settings → Keys & IDs*) requires a follow-up change in the app
-(a server-issued JWT per external id) — see `backend/README.md`. Do not enable
-it until that exists, or sign-in will break push delivery.
-
-**Where the REST key goes:** Railway backend service variables, as
-`ONESIGNAL_REST_API_KEY`. Nowhere else.
+Every other account needs an admin to approve it (Admin → Users →
+Approve).
 
 ---
 
-## 4. Railway — backend service
+## 5. Admin panel (Railway)
 
-Source: `KusuConsult-NG/CRADI-mobile`, branch `supabase-migration`, **root
-directory `backend`**.
+Full steps, variables and troubleshooting: **`CRADI-Mobile-Admin/SETUP.md`**.
+What matters for the order here:
 
-1. Railway → **New Project → Deploy from GitHub repo** → `KusuConsult-NG/CRADI-mobile`.
-2. Service → **Settings → Source**:
-   * **Root Directory** = `backend`
-   * **Branch** = `supabase-migration`
-3. Railway then picks up `backend/railway.json`: Dockerfile build
-   (`backend/Dockerfile`, Node 22 Alpine, `npm ci --omit=dev`), start command
-   `node src/index.js`, healthcheck `GET /health` with a 60 s timeout, restart
-   `ON_FAILURE` up to 10 times. You do not set a build or start command by hand.
-4. Service → **Variables**. All 18 variables from `backend/.env.example`:
+| Variable | When it is read | |
+| --- | --- | --- |
+| `NEXT_PUBLIC_APPWRITE_ENDPOINT` | **build time** (inlined) | must end in `/v1`; also becomes the CSP's `connect-src`/`img-src` origin |
+| `NEXT_PUBLIC_APPWRITE_PROJECT_ID` | **build time** | public |
+| `NEXT_PUBLIC_APPWRITE_DATABASE_ID` | **build time** | optional; defaults to `cradi` |
+| `APPWRITE_API_KEY` | runtime, server only | the `/api/admin/*` routes. Never prefix it with `NEXT_PUBLIC_` |
 
-   | Variable | Required? | Default | Notes |
-   | --- | --- | --- | --- |
-   | `SUPABASE_URL` | **required** | — | `https://<project-ref>.supabase.co` (step 1.6) |
-   | `SUPABASE_SERVICE_ROLE_KEY` | **required** | — | Service role key (step 1.6). Bypasses RLS. |
-   | `ONESIGNAL_APP_ID` | for push | — | Step 3b. Unset → pushes are logged and skipped. |
-   | `ONESIGNAL_REST_API_KEY` | for push | — | The **rotated** key from step 3a. Unset → pushes skipped. |
-   | `ONESIGNAL_ANDROID_CHANNEL_ID` | no | — | Must be a UUID or it is ignored (step 3d). |
-   | `RESEND_API_KEY` | for email | — | Unset → `POST /email` returns 503. |
-   | `FROM_EMAIL` | no | `noreply@cradi.ng` | Must be on a domain verified in Resend. |
-   | `FROM_NAME` | no | `EWER Alert System` | |
-   | `SMS_PROVIDER` | for SMS | — | `termii` or `twilio`. Unset/unknown → authority SMS logged and skipped. |
-   | `TERMII_API_KEY` | if `termii` | — | |
-   | `SMS_SENDER_ID` | if `termii` | — | Registered Termii sender ID (the `from`). |
-   | `TWILIO_ACCOUNT_SID` | if `twilio` | — | |
-   | `TWILIO_AUTH_TOKEN` | if `twilio` | — | |
-   | `TWILIO_FROM` | if `twilio` | — | Sending number in E.164. |
-   | `PORT` | no | `8080` | Railway sets this for you. |
-   | `WORKER_POLL_MS` | no | `5000` | Outbox poll interval. |
-   | `ESCALATION_POLL_MS` | no | `60000` | Escalation cron interval. |
-   | `CORS_ORIGINS` | no | empty | Comma-separated browser origins allowed to call `POST /email`, or `*`. The mobile app needs none. |
+> `NEXT_PUBLIC_*` values are **inlined into the bundle by `npm run build`**,
+> so setting or changing one later does nothing until you trigger a fresh
+> deploy — a restart re-uses the same bundle. And `GET /api/health` returns
+> `{"ok": true}` unconditionally, so **Railway's healthcheck passes on a
+> completely misconfigured app.** Verify by opening the site and signing
+> in, never by the healthcheck.
 
-   **Only `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are hard requirements**
-   (`REQUIRED` in `backend/src/config.js`). If either is missing:
-   `src/index.js` logs `config.missing_required`, does **not** start the outbox
-   worker or the escalation cron, and `/health` returns **503** — which makes
-   Railway's healthcheck fail and the deploy fail. Every other variable only
-   degrades a feature and logs a warning (`config.onesignal_missing`,
-   `config.sms_missing`, `config.resend_missing`).
+Then: generate the domain, and **add it as a web platform** (step 1c) or
+every request from it is refused.
 
-   A partial SMS provider config counts as unconfigured: `smsConfigured()`
-   requires `TERMII_API_KEY` **and** `SMS_SENDER_ID` for `termii`, or all three
-   Twilio values for `twilio`.
-
-5. **Settings → Networking → Generate Domain.** Note the URL, e.g.
-   `https://cradi-backend.up.railway.app`. You need it to check `/health` and
-   to reach `POST /email`; the Flutter app does not call the backend directly
-   (it talks to Supabase, and the backend reacts to what the database queues),
-   so no build-time value is needed for it.
-6. **Verify:**
-
-   ```bash
-   curl -i https://<your-backend>.up.railway.app/health
-   ```
-
-   Expect **HTTP 200** and a body like:
-
-   ```json
-   {
-     "ok": true,
-     "config": { "supabase": true, "onesignal": true, "resend": true, "sms": true },
-     "workers": {
-       "outbox":      { "lastRunAt": "...", "lastSuccessAt": "...", "stale": false, "healthy": true },
-       "escalations": { "lastRunAt": "...", "lastSuccessAt": "...", "stale": false, "healthy": true }
-     }
-   }
-   ```
-
-   * `ok: false` with **503** → a required variable is missing.
-   * `workers` is `{}` → the worker and cron did not start, which only happens
-     when Supabase config is missing.
-   * A `config` flag is `false` → that integration is disabled but the service
-     is otherwise healthy.
-
-   In **Deploy Logs** the line to look for at start-up is:
-
-   ```
-   {"level":"info","event":"server.listening","port":8080,"config":{...},"workerPollMs":5000,"escalationPollMs":60000}
-   ```
-
-   The loops do not log on start — they log only on failure
-   (`outbox.tick_failed`, `escalations.tick_failed`). Their liveness is visible
-   in the `workers` block of `/health`, which is the thing to watch: a loop is
-   `healthy: false` when its last tick threw, and `stale: true` when it has not
-   completed a tick for more than 5× its poll interval.
-
-   One replica is enough. Several are safe (outbox rows are claimed with
-   `FOR UPDATE SKIP LOCKED`, every push carries an idempotency key).
-
-### The worker must stay running
-
-This service is not a website that can sleep between visitors. It polls for new
-reports every `WORKER_POLL_MS` (5 s) and for overdue escalations every
-`ESCALATION_POLL_MS` (60 s). If the container is suspended, evicted, or stopped
-because a trial credit ran out, the system fails **silently and in the worst
-direction**: the app keeps accepting reports and the admin panel keeps working,
-but no verification request, approval broadcast, authority SMS or escalation
-ever goes out. Nobody sees an error — the queue simply grows.
-
-Two consequences worth planning for:
-
-* **Check the plan, not just the deploy.** A free or trial tier that sleeps idle
-  services, or that expires after a credit, will stop the worker without
-  stopping anything else. Confirm the service is set to run continuously.
-* **Watch `/health` from outside Railway.** Point any uptime monitor at
-  `GET /health` (the free tier of any of them is enough) and alert on a non-200
-  or on `workers.*.stale = true`. That turns a silent failure into a message.
-
-Nothing is lost while the worker is down — `notification_outbox` rows stay
-queued and are delivered when it comes back, subject to their retry backoff
-(8 attempts). But an early-warning notification delivered hours late is not an
-early warning. Treat a stopped worker as an outage.
-
----
-
-## 5. Railway — admin panel service
-
-Source: `KusuConsult-NG/CRADI-Mobile-Admin`, branch `supabase-migration`, root
-directory = repository root.
-
-> ### `NEXT_PUBLIC_*` values are baked in at BUILD time
->
-> `lib/supabase.ts` and `lib/csp.ts` read `NEXT_PUBLIC_SUPABASE_URL` and
-> `NEXT_PUBLIC_SUPABASE_ANON_KEY` through `process.env`, and Next.js **inlines
-> them into the compiled bundle during `npm run build`**. Setting them after the
-> first build does nothing until you redeploy.
->
-> The failure is silent: `GET /api/health` returns `{"ok": true}`
-> unconditionally, so **Railway's healthcheck passes on a completely broken
-> app**. You get a "Configuration required" screen instead of the login page (and,
-> if only the URL is wrong, a Content-Security-Policy that blocks every request
-> to Supabase, so login fails with nothing obvious in the UI).
->
-> **Set both `NEXT_PUBLIC_*` variables before the first deploy. If you change
-> either one later, trigger a fresh deploy — a restart is not enough.**
-
-1. In the same Railway project (or a new one): **New → GitHub Repo** →
-   `KusuConsult-NG/CRADI-Mobile-Admin`.
-2. Service → **Settings → Source → Branch** = `supabase-migration`. Leave the
-   root directory at the repository root.
-3. `railway.json` configures the rest: **Nixpacks** builder, build command
-   `npm run build`, start command `npm start` (`next start -p ${PORT:-3000}`,
-   so it binds Railway's `$PORT`), healthcheck `GET /api/health` with a 100 s
-   timeout, restart `ON_FAILURE` up to 10 times. Node 22+ is required
-   (`engines` in `package.json`).
-4. Service → **Variables** — three, all of them needed:
-
-   | Variable | Required? | When it is read | Notes |
-   | --- | --- | --- | --- |
-   | `NEXT_PUBLIC_SUPABASE_URL` | **required** | **build time** (inlined) | `https://<project-ref>.supabase.co`. Also becomes the `connect-src` / `img-src` origin in the CSP. |
-   | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | **required** | **build time** (inlined) | Public anon key. Access enforced by RLS. |
-   | `SUPABASE_SERVICE_ROLE_KEY` | **required in practice** | runtime (server only) | Used by `/api/admin/users/*` (approve, revoke, role, location, block, delete). Without it those routes return `500 Server is not configured for admin actions.` — everything else still works. Never prefix it with `NEXT_PUBLIC_`. |
-
-   `PORT` is supplied by Railway. There is nothing else to set.
-
-5. **Settings → Networking → Generate Domain.**
-6. Optional: add that domain to Supabase → **Authentication → URL
-   Configuration** (only needed for auth email redirects; password sign-in
-   works without it).
-7. **Verify:**
-   * `curl https://<your-admin>.up.railway.app/api/health` → `{"ok":true}`
-     (liveness only — it proves nothing about configuration).
-   * Open the domain in a browser. You must get the **login page**, not a
-     "Configuration required" screen. That screen means the
-     `NEXT_PUBLIC_*` variables were missing at build time — set them and
-     redeploy.
-   * Sign in with the admin from step 2. You must land on the **dashboard**
-     with counts (users, reports, contacts, knowledge articles, active alerts).
-   * *"Access denied. This account is not an approved, active administrator."* →
-     step 2 did not take effect for that email.
-   * Empty lists with no error → RLS is returning nothing; re-check the
-     profile's `role` / `is_approved` / `is_disabled`.
+The panel also reads `NEXT_PUBLIC_APPWRITE_FN_CLIENT` (default `client`)
+and `NEXT_PUBLIC_APPWRITE_REPORT_IMAGES_BUCKET` (default `report-images`);
+neither needs setting against a project provisioned by step 2.
 
 ---
 
 ## 6. Mobile app build
 
-All runtime configuration is compile-time (`String.fromEnvironment`) in
-`lib/core/constants/app_config.dart`. There are **five** defines:
+All runtime configuration is compile-time (`String.fromEnvironment`), in
+`lib/core/constants/app_config.dart` and
+`lib/core/services/appwrite/appwrite_config.dart`.
+
+**Which backend a build talks to is decided by these defines, not by a
+flag:** `activeBackend` is Appwrite when `APPWRITE_ENDPOINT` and
+`APPWRITE_PROJECT_ID` are both non-empty, and Supabase otherwise
+(`lib/core/services/backend.dart`). There is no state in which the app is
+pointed at one and talking to the other — and a build with neither starts
+permanently signed out, which is what unit tests and UI work use.
 
 | `--dart-define` key | Required? | Value | Effect when empty |
 | --- | --- | --- | --- |
-| `SUPABASE_URL` | **yes** | `https://<project-ref>.supabase.co` | With either Supabase value empty, `AppConfig.isSupabaseConfigured` is false and the app starts permanently signed out (useful for UI work and tests). |
-| `SUPABASE_ANON_KEY` | **yes** | anon / publishable key | as above |
-| `ONESIGNAL_APP_ID` | for push | `2e6f30a8-ef18-4091-9961-e6a6fe862322` | push is disabled |
+| `APPWRITE_ENDPOINT` | **yes** | `https://fra.cloud.appwrite.io/v1` | the build falls back to the Supabase backend |
+| `APPWRITE_PROJECT_ID` | **yes** | the project id | as above |
+| `APPWRITE_DATABASE_ID` | if not `cradi` | the database id | defaults to `cradi` |
+| `APPWRITE_FN_CLIENT` | no | the client Function's id | defaults to `client` |
+| `APPWRITE_PUSH_PROVIDER_ANDROID` | for push on Android | the FCM provider's id | the target names no provider and is filed under the project's default — wrong, and silent, in a two-provider project |
+| `APPWRITE_PUSH_PROVIDER_IOS` | for push on iOS | the APNs provider's id | as above |
+| `ONESIGNAL_APP_ID` | for push | the OneSignal app id | **push is disabled entirely**, including on Appwrite: the device token still comes from OneSignal (see below) |
 | `SENTRY_DSN` | no | Sentry DSN | crash reporting disabled |
 | `APPWRITE_IMAGE_TRANSFORMS` | no | `true` | smaller renders are not requested; the full-size image is used |
+| `PROFILE_IMAGES_BUCKET` / `REPORT_IMAGES_BUCKET` | only on a one-bucket tier | the shared bucket's id | the planned ids, which step 2 provisions |
+| `SUPABASE_URL` / `SUPABASE_ANON_KEY` | only for a Supabase build | — | — |
 
-#### `APPWRITE_IMAGE_TRANSFORMS` (optional smaller renders)
+### Push still needs OneSignal, for now
+
+On the Appwrite backend the server delivers through Appwrite Messaging —
+but the **device token** comes from OneSignal, which owns the FCM and APNs
+registration. `AppwritePushTargets` registers that token as an Appwrite
+push target and asks the server to subscribe it to its topics. So an
+Appwrite build with no `ONESIGNAL_APP_ID` has no token to register and
+receives nothing.
+
+That is deliberate: it is Phase 3's mitigation for the cutover. OneSignal
+subscriptions cannot be transferred, so push reaches nobody until each
+device has opened the new build once — and a build that registers Appwrite
+targets *while still on OneSignal* means the tokens already exist on the
+day. See Phase 25 in `APPWRITE-MIGRATION.md`.
+
+### `APPWRITE_IMAGE_TRANSFORMS` (optional smaller renders)
 
 Delivery only. When set, `AppwriteDataBackend.displayUrl` asks Appwrite
 for the image at the size the view will draw it, by swapping `/view` for
@@ -668,33 +363,36 @@ small copy uploaded beside each photo, which is used either way —
 `DataBackend.thumbUrlFor` names it, and the full-size image is the
 fallback when it is missing.
 
-Anything that is not one of this backend's own file URLs — admin-set
-knowledge-base images on other hosts, `data:` URIs, local file paths —
-is left exactly as it is.
-
-`AppConfig` also holds non-configurable constants (the Android
-`applicationId`, the Play Store URL, table names and the two storage bucket
-names) — nothing to set there.
-
 ### Using `env.json`
 
 ```bash
 cp env.example.json env.json     # env.json is git-ignored
-# edit env.json: SUPABASE_URL, SUPABASE_ANON_KEY, ONESIGNAL_APP_ID, SENTRY_DSN,
-#                APPWRITE_IMAGE_TRANSFORMS (optional)
+# fill in APPWRITE_ENDPOINT, APPWRITE_PROJECT_ID, APPWRITE_DATABASE_ID,
+# the two push provider ids, ONESIGNAL_APP_ID, SENTRY_DSN
 flutter pub get
 flutter run   --dart-define-from-file=env.json
 flutter build apk --release --no-tree-shake-icons --dart-define-from-file=env.json
 ```
 
-`env.example.json` is the template and contains only placeholders. The CI
-release job writes `env.json` from the repository secrets `SUPABASE_URL`,
-`SUPABASE_ANON_KEY`, `ONESIGNAL_APP_ID` and `SENTRY_DSN`
-(`APPWRITE_IMAGE_TRANSFORMS` is left unset unless the secret is set).
-Signing: see `docs/KEYSTORE_SETUP.md`.
+`env.example.json` is the template. It ships with **`APPWRITE_PROJECT_ID`
+empty**, deliberately: an unedited copy configures no backend and the app
+starts permanently signed out, which is a clearer failure than pointing at a
+project that does not exist. Fill in the project id (and the database id, if
+it is not `cradi`) for an Appwrite build, or the two `SUPABASE_*` values for a
+Supabase one — not both.
 
-> **The OneSignal REST API key must never be passed to the app** — not in
-> `env.json`, not as a `--dart-define`, not in `AppConfig`, not obfuscated.
+The CI release job writes `env.json` from repository secrets of the same names —
+`APPWRITE_ENDPOINT`, `APPWRITE_PROJECT_ID`, `APPWRITE_DATABASE_ID`,
+`APPWRITE_PUSH_PROVIDER_ANDROID`, `APPWRITE_PUSH_PROVIDER_IOS`,
+`ONESIGNAL_APP_ID`, `SENTRY_DSN`, and the two Supabase ones — so **a
+tagged release builds whichever backend those secrets describe.** Set the
+Appwrite secrets before tagging, or the release is a Supabase build.
+Signing: `docs/KEYSTORE_SETUP.md`.
+
+> **No server secret is ever passed to the app** — not in `env.json`, not
+> as a define, not obfuscated. The app never sends a push or an SMS
+> itself; it asks a Function to. Anything compiled into an APK can be
+> extracted from it.
 
 ### iOS — platform configuration
 
@@ -715,7 +413,9 @@ archive:
 
 TestFlight and App Store builds are Release builds, so they carry
 `production`. With `development` in an uploaded build, APNs tokens are issued
-against the sandbox and **every push silently fails**.
+against the sandbox and **every push silently fails** — and on this stack that
+now means the Appwrite target carries a sandbox token too, so the failure
+survives the cutover.
 
 **Permission prompts are localized** through
 `ios/Runner/<lang>.lproj/InfoPlist.strings` (en, ha, yo, ig, pcm), listed in
@@ -735,18 +435,32 @@ to point at.
 
 `ITSAppUsesNonExemptEncryption` is **not** in `Info.plist`, so App Store
 Connect asks the encryption question on every upload. It was left out
-deliberately rather than answered `false`:
+deliberately rather than answered `false`. What the app actually does, read
+off the code rather than from memory:
 
 * `lib/core/services/hive_encryption_service.dart` opens the local Hive boxes
-  with an AES-256 cipher (key generated in-app, stored in the Keychain).
-* `lib/core/services/encryption_service.dart` implements AES-256-GCM with
-  PBKDF2-SHA256 (PointyCastle).
+  with **`HiveAesCipher`** (AES-256). The key is `Hive.generateSecureKey()`,
+  held in `flutter_secure_storage` — the iOS Keychain, with
+  `first_unlock` accessibility.
+* `lib/core/services/secure_storage_service.dart` is the same store for
+  smaller secrets.
+* `package:crypto` is a dependency, used for hashing (digests, the device
+  fingerprint), not for encryption.
+* Everything else is HTTPS/TLS and the platform's own crypto.
 
-The algorithms are standard, but they are **not** limited to HTTPS/TLS, the
-platform's own crypto, or authentication — the categories the usual "exempt"
-answers cover. Whoever owns export compliance should decide between declaring
-`false` and declaring the app 5D992.c mass market (which carries an annual
-self-classification report to BIS), then add the key.
+> **A correction to an earlier version of this section.** It also cited
+> `lib/core/services/encryption_service.dart` implementing AES-256-GCM with
+> PBKDF2-SHA256 through PointyCastle. **That file does not exist and never
+> has in this repository**; PointyCastle is not a dependency and nothing in
+> `lib/` implements either primitive. Anyone who answered the export
+> question on the strength of that line should re-read this list.
+
+Whoever owns export compliance should decide between declaring `false` and
+declaring the app 5D992.c mass market (which carries an annual
+self-classification report to BIS), then add the key. The list above is
+what the decision is about; it is not legal advice, and the fact that the
+only non-TLS use is at-rest encryption of a local cache with a
+platform-held key is the material point to put to whoever decides.
 
 ### Releasing an update — version numbers and the force-update gate
 
@@ -768,7 +482,7 @@ users would see a difference.
 
 `lib/core/services/remote_config_service.dart` compares this build's version
 (from `package_info_plus`) against the `app_min_version` row of the
-`app_settings` table. When the build is older, `ForceUpdateGate`
+`app_settings` collection. When the build is older, `ForceUpdateGate`
 (`lib/core/widgets/force_update_gate.dart`) blocks the whole app behind an
 "update required" screen whose button opens `AppConfig.playStoreUrl`.
 
@@ -785,6 +499,11 @@ breaking schema change):
    `app_min_version_message`.
 3. Leave it alone for an ordinary release. The gate is a lockout, not a nudge.
 
+`app_settings.value` is a **string** on this stack, and the `write` Function
+refuses a number for it — a setting written as `1.0.15` from the panel is
+right, one written as JSON `1` is refused rather than silently coerced
+(`cloud-check.mjs` asserts both directions).
+
 iOS has no App Store id yet, so the gate hides its "Update" button there
 (`AppConfig`); an iOS user sees the blocking screen with no way to act. Do not
 raise `app_min_version` once an iOS build is in users' hands until
@@ -794,23 +513,25 @@ raise `app_min_version` once an iOS build is in users' hands until
 
 - [ ] `version:` bumped in `pubspec.yaml` (build number always increases)
 - [ ] `CHANGELOG.md` updated
+- [ ] The Appwrite repository secrets are set, or the release is a Supabase
+      build (§ 6, *Using `env.json`*)
 - [ ] Tag pushed as `v<version>` — the `build-android-release` CI job only
       runs for `refs/tags/v*` and needs the signing secrets from
       `docs/KEYSTORE_SETUP.md`
 - [ ] APK/AAB uploaded and rollout live on Play
 - [ ] `app_min_version` raised **only if** this release is mandatory
 
-
 ### Before you trust a build — never-tested areas
 
 The app has been compiled but **never assembled into an APK in CI or run on a
-device**. The Dart half is verified: a full product-mode AOT compile of
-`lib/main.dart` with every package succeeds, and Android arm64 codegen produces
-a normal 12 MB `libapp.so` — the exact artifact a release APK embeds. The
-Android/Gradle half could not be built here (the environment blocks
-`dl.google.com`, so no SDK, NDK or Android Gradle Plugin). A static audit found
-the Gradle/AGP/Kotlin/JDK versions coherent and no `minSdk` conflict across the
-25 Android plugins (all need ≤ 24; the app sets 24).
+device**. The Dart half is verified: 843 tests pass, `flutter analyze
+--fatal-infos --fatal-warnings` is clean, and a full product-mode AOT compile
+of `lib/main.dart` with every package succeeds — Android arm64 codegen
+produces a normal 12 MB `libapp.so`, the exact artifact a release APK embeds.
+The Android/Gradle half could not be built in the environment this was written
+in (`dl.google.com` is blocked, so no SDK, NDK or Android Gradle Plugin). A
+static audit found the Gradle/AGP/Kotlin/JDK versions coherent and no `minSdk`
+conflict across the 25 Android plugins (all need ≤ 24; the app sets 24).
 
 Check these first on a real device, in this order — each compiles fine and
 fails only at runtime:
@@ -827,265 +548,259 @@ fails only at runtime:
    never run. Do a signed release build well before you need one.
 3. **The NDK.** `jni` is among the plugins, so `ndkVersion` 28.2.13676358 is
    genuinely required — a ~2 GB download on the first Android build.
-4. **Deep links.** `lib/core/services/deep_link_service.dart` listens for
+4. **Push, on this stack, end to end.** The device registers an Appwrite push
+   target and the server subscribes it to its topics; both halves are tested
+   against a server of the test's own, and neither has run against Appwrite
+   Cloud with a real provider. § 7 step 2 is the first time it does.
+5. **Deep links.** `lib/core/services/deep_link_service.dart` listens for
    `cradi://…` and `https://cradi.ng/…` with `app_links` and hands the mapped
-   location to `go_router`; Supabase auth callbacks are filtered out and left
-   to `supabase_flutter`. The mapping is unit-tested
-   (`test/unit/deep_link_service_test.dart`) but has never run on a device.
-   The Android manifest sets `android:autoVerify="true"` for `https://cradi.ng`,
-   which needs `https://cradi.ng/.well-known/assetlinks.json` published with the
-   **release** signing certificate's SHA-256; on iOS, Universal Links need the
-   *Associated Domains* entitlement (`applinks:cradi.ng`) and an
-   `apple-app-site-association` file. Without those, `https://` links open a
-   browser/chooser instead of the app — the `cradi://` scheme works regardless.
+   location to `go_router`. The mapping is unit-tested
+   (`test/unit/deep_link_service_test.dart`) but has never run on a device. On
+   a Supabase build its auth callbacks are filtered out and left to
+   `supabase_flutter`; an Appwrite build has no such consumer, so the filter is
+   inert there. The Android manifest sets `android:autoVerify="true"` for
+   `https://cradi.ng`, which needs `https://cradi.ng/.well-known/assetlinks.json`
+   published with the **release** signing certificate's SHA-256; on iOS,
+   Universal Links need the *Associated Domains* entitlement
+   (`applinks:cradi.ng`) and an `apple-app-site-association` file. Without
+   those, `https://` links open a browser/chooser instead of the app — the
+   `cradi://` scheme works regardless.
 
 One ProGuard leftover, listed so nobody reads it as protection: the
 `com.google.gson.**` keep rule matches no Java class in this app. The
 `okhttp3.**` rules do apply — OkHttp arrives transitively with Sentry and
 OneSignal.
 
-> Anything compiled into an APK can be extracted from it. The app never sends a
-> push itself; it asks the backend to. The REST key lives only in the Railway
-> backend environment. The same rule applies to the Supabase **service role
-> key** and any SMS/Resend credential.
-
 ---
 
-## 7. Firebase data import (optional)
+## 7. Post-deploy smoke test
 
-Only if you are bringing data over from the old Firebase project. Full
-procedure, flags and failure modes: **`migration/firebase-to-supabase/README.md`**.
-
-The one rule that cannot be broken:
-
-> **The Railway backend must stay stopped from the first `--apply` run until
-> the last one.** In Railway, scale the backend service to **0 replicas** (or
-> remove its active deployment) before the first `--apply`, and scale it back up
-> only after the final run.
-
-Imported reports and status changes fire the same database triggers as live
-ones, so a running backend would push years of historical events to real users'
-phones within seconds. The importer refuses `--apply` unless you also pass
-`--i-stopped-the-backend`, and it suppresses the outbox rows it creates — but
-that suppression happens at the end of a run, so a run killed in the middle
-leaves events a later run will not suppress. Hence: backend down for the whole
-import, up again afterwards.
-
-Back up the importer's state file after each `--apply` run; without it a re-run
-re-inserts instead of upserting.
-
----
-
-## 8. Post-deploy smoke test
-
-Do this in order, against the live deployment, with at least: one admin
-account, one reporter account (`user`), and **two** approved `ewm` accounts in
-the **same ward and LGA** as the report you are about to file. All accounts
-must be approved by the admin first (Admin → Users → Approve).
+In order, against the live deployment, with at least: one admin account, one
+reporter (`user`), and **two** approved `ewm` accounts in the **same ward and
+LGA** as the report you are about to file. All accounts must be approved by
+the admin first (Admin → Users → Approve), and every device must have opened
+the app at least once while signed in — that is when it registers its push
+target.
 
 Before you start, add one row under **Admin → Authorities** with
-`coverage_lga` = the report's LGA and `coverage_state` = the report's state,
-and a Nigerian phone number you control. Both are picked together from the
-list, which is grouped by state: the state is required, and a contact is texted
-only for its own state's LGA (`20260927090000`).
+`coverageLga` = the report's LGA and `coverageState` = the report's state, and
+a Nigerian phone number you control. Both are picked together from the list,
+which is grouped by state: the state is required, and a contact is texted only
+for its own state's LGA. The `write` Function enforces it — an authority whose
+LGA names no state is refused, which is the Postgres CHECK constraint carried
+across by hand because Appwrite has none.
 
 1. **Submit a report.** Reporter account, mobile app → new report in that ward
    / LGA. Expect `reports.status = 'pending'`.
 2. **Verification push arrives.** Both `ewm` devices (same ward *and* LGA,
    excluding the reporter) receive **"📋 Verification Request"**. This is the
-   `report_created` outbox event handled by the backend worker.
-   * Nothing arrived? `select * from public.notification_outbox where processed_at is null order by created_at desc;`
-     and check the backend logs.
+   `report_created` outbox event, drained by the `worker` Function within a
+   minute.
+   * Nothing arrived? Work § 8 *Pushes do not arrive* in order — on a first
+     deployment the answer is almost always a missing Messaging provider or a
+     device that has not registered a target.
 3. **Peers verify.** Both `ewm` accounts confirm the report. After the second
    confirmation (`app_settings.minimum_peer_confirmations`, default **2**) the
    status moves `pending → verified` automatically and the reporter gets a
    status push.
 4. **Approve in the admin panel.** Admin → Reports → set the report to
-   **approved**. This single transition is what triggers three things at once:
+   **approved**. This single transition triggers three things at once:
    * the **reporter** gets a generic status push;
-   * the **LGA broadcast**: every device tagged with that LGA (and, since the
-     report has a state, also tagged with that state) gets
+   * the **LGA broadcast**: the `lga-<state>-<lga>` topic gets
      **"🚨 Verified Hazard Alert"**;
    * the **authority SMS**: the `authorities` row you created receives
      `EWER ALERT: {SEVERITY} {hazard} reported in {ward}, {lga}. …`.
-5. **Confirm the broadcast** on a device tagged with that LGA that is **not**
-   the reporter and **not** one of the verifiers.
-6. **Confirm the SMS** on the authority phone. Then check it was recorded:
-
-   ```sql
-   select phone, status, created_at from public.sms_deliveries order by created_at desc limit 5;
-   ```
-
-   Expect a `sent` row. `rejected` means the provider refused the number.
-   Nothing at all → `SMS_PROVIDER` or its credentials are incomplete; the
-   backend logs `sms.skipped_not_configured`.
+5. **Confirm the broadcast** on a device in that LGA that is **not** the
+   reporter and **not** one of the verifiers.
+6. **Confirm the SMS** on the authority phone, then that it was recorded: the
+   `sms_deliveries` collection should hold a row for that number with
+   `status = 'sent'` and a provider message id. `rejected` means Termii
+   refused the number. Nothing at all → the `worker` Function has no
+   `TERMII_API_KEY`/`TERMII_SENDER_ID`; `deploy.mjs` prints `SMS: OFF` when it
+   deployed without them.
 7. **Create a targeted alert.** Admin → Community Alerts → new alert with
    **target state = X** and **target LGA = Y**. The state comes first and is
    required: six LGA names (Bassa, Ifelodun, Irepodun, Nasarawa, Obi,
    Surulere) belong to two states each, so an LGA on its own names no single
-   place. The database enforces it — `alerts` has a check constraint
-   (`alerts_target_lga_needs_state`) plus foreign keys into
-   `public.nigeria_states` / `public.nigeria_lgas`, so an alert with an LGA and
-   no state, an invented state, or an LGA that is not in the state it claims,
-   is rejected at insert time. The three targetings that remain are: one LGA of
-   one state; every LGA of one state (`All` + a state); and everyone
-   (`All`, no state).
+   place. The three targetings are: one LGA of one state (`lga-<state>-<lga>`);
+   every LGA of one state (`All` + a state → `state-<state>`); and everyone
+   (`All`, no state → `all-users`).
    * A device whose profile is in state X / LGA Y **receives** it.
-   * A device in a **different** LGA (or the same LGA name in a different
-     state — e.g. Obi in Benue vs Obi in Nasarawa) **does not**.
-   * *Known limitation:* a device with no `state` tag (an old build, or a
-     profile with no state) will not match a state-scoped alert. Test with a
-     current build.
-8. **Escalation (optional, slow).** File a report and leave it. After
+   * A device in a **different** LGA — or the same LGA name in a different
+     state, Obi in Benue against Obi in Nasarawa — **does not**.
+   * A device whose profile has no `state` is in `all-users` only, and will
+     not match a state-scoped alert. That is the same limitation the tag-based
+     stack had, for the same reason.
+8. **Move a user between LGAs.** Admin → Users → change that device owner's
+   state or LGA, then send a new alert to the **old** LGA: the device must
+   **not** receive it, and must receive one sent to the new LGA. This is the
+   subscription reconciliation, and it is the half of push that cannot be
+   checked by sending one message.
+9. **Escalation (optional, slow).** File a report and leave it. After
    `app_settings.escalation_timeout_minutes` (default 30) the cron sets
    `escalated = true` and notifies coordinators / project staff with
    **"⏰ Unverified Report Escalated"**.
 
 ---
 
-## 9. Rollback and troubleshooting
+## 8. Rollback and troubleshooting
 
-### The schema run failed partway
+### Provisioning failed partway
 
-The SQL editor applies statement by statement, so the objects created before
-the failing statement are still there. Do **not** re-run `schema.sql` on top —
-you will get a cascade of "already exists".
+Run it again. `provision.mjs` checks every object before it writes and reports
+`created` / `exists` / `updated`, so a resumed run is the normal recovery and
+there is no "already exists" cascade to clean up. It never deletes, so nothing
+it did is destructive.
 
-* **Cleanest fix:** Supabase dashboard → **Settings → General → Reset
-  database** (destroys all data), then run `schema.sql` again from the top.
-* **If you cannot reset** (there is data you need), drop only what was created
-  and start over:
+* **It stopped and named a quota.** `! stopped at <thing>: the project's plan
+  refused it` — nothing after that point would have succeeded either. Either
+  the plan needs upgrading or the design needs the fallback (`--single-bucket`
+  is the one that exists). `--probe` lists every limit in one run instead of
+  one round trip per limit.
+* **It reported a column it could not create at the planned size.** That is
+  MariaDB's row limit, not the plan's: `extract-schema.mjs` sizes columns to
+  fit 65,535 bytes at four bytes per character, and a hand-widened column
+  breaks it. See its header comment.
+* **An index was refused.** Appwrite caps an index at 767 bytes summed over
+  its string columns; the four that need explicit `lengths` have them in
+  `plan.mjs`.
+* **`verify.mjs` exits non-zero on a project you believe is right.** Read the
+  lines: `missing` is a real absence, `unreadable` means the key could not
+  read it (a scope is missing from the key, not a provisioning failure), `~`
+  is an informational size difference and `?` is something the plan does not
+  ask for. Only the first two are problems.
 
-  ```sql
-  -- destructive; removes the whole application schema
-  drop schema public cascade;
-  create schema public;
-  grant usage on schema public to anon, authenticated, service_role;
-  grant all on schema public to postgres;
-  -- then clean up the objects that live outside public:
-  drop trigger if exists on_auth_user_created on auth.users;
-  drop trigger if exists on_auth_user_updated on auth.users;
-  drop policy if exists "users upload own images"          on storage.objects;
-  drop policy if exists "users read own images"            on storage.objects;
-  drop policy if exists "users update own profile images"  on storage.objects;
-  drop policy if exists "users delete own profile images"  on storage.objects;
-  delete from storage.buckets where id in ('report-images', 'profile-images');
-  ```
+### A Function answers 500 to everything
 
-  then run `schema.sql` again. Note that dropping `public` also drops the
-  default privileges Supabase sets on it, so PostgREST may need
-  `notify pgrst, 'reload schema';` afterwards. Prefer **Reset database** when
-  you can.
-* **Before touching production again**, reproduce the failure locally — see
-  `supabase/deploy/README.md` for the plain-Postgres procedure. The file is
-  verified to apply cleanly to an empty database, so a failure means the
-  project was not empty, or the SQL editor's statement splitting choked on a
-  paste (try running it in a single paste, not in pieces).
+It has no deployment, or its build failed. Both look identical in the console
+to a healthy Function. `verify.mjs` reads the deployment id *and* the build
+status for exactly this reason. Re-run `deploy.mjs`, which waits for the
+builds and fails loudly if one does not reach `ready`.
 
-### Railway backend healthcheck fails
+If it is deployed and still failing, read the execution logs in the console:
+a Function that cannot reach the API back usually has the wrong
+`APPWRITE_FUNCTION_API_ENDPOINT` or a key with missing scopes, and
+`functions/cradi/src/lib/appwrite.js` names the URL in its error rather than
+letting `fetch` throw a bare "fetch failed".
 
-1. **Deploy Logs**: look for `config.missing_required`. It names the missing
-   variables. Only `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` can cause
-   this. Add them → redeploy.
-2. No such line, but the healthcheck still times out: check the service is
-   listening. The start log is `server.listening` with `"port": 8080`. Railway
-   injects `PORT`; do not hard-code a different one.
-3. `/health` returns 503 with `ok: false` → same as (1); the `config` block
-   shows which integration is missing.
-4. Build failed before that: the root directory must be `backend` so Railway
-   finds `backend/railway.json` and `backend/Dockerfile`. If it tried Nixpacks
-   at the repo root, the root directory is wrong.
-5. Crash loop (`restartPolicyMaxRetries: 10` exhausted): look for
-   `process.unhandled_rejection` in the logs.
+### The admin panel looks broken but is "healthy"
 
-### Railway admin panel looks broken but is "healthy"
+`GET /api/health` is a liveness probe that always returns `{"ok": true}`. If
+the panel shows a configuration error, or login silently fails, the
+`NEXT_PUBLIC_*` variables were wrong or missing **at build time**. Fix them
+and **trigger a new deploy** — a restart re-uses the same bundle.
 
-`/api/health` is a liveness probe that always returns `{"ok": true}`. If the
-panel shows a configuration error, or login silently fails, the `NEXT_PUBLIC_*`
-variables were wrong or missing **at build time**. Fix the variables and
-**trigger a new deploy** (Deployments → Redeploy). A restart re-uses the same
-broken bundle.
+If the browser reports a CORS error, the panel's origin is not a registered
+web platform (§ 1c).
+
+### Everything loads but every list is empty
+
+Suspect labels before data. Appwrite answers a read you have no permission for
+with `200 {"total": 0}` — not an error — so an account whose labels do not
+match the `read("label:…")` rules on `profiles` and `reports` sees a working
+app with nothing in it.
+
+* The first admin was promoted with `set:admin`, which sets the labels as well
+  as the row (§ 4)?
+* For anyone else: the `/write` route puts an account's labels back in step
+  with its profile whenever `role`, `isApproved` or `isDisabled` is in the
+  patch — so a change made **through the panel** sets them. A role edited
+  directly in the console's table editor never goes through the Function, so
+  the row says one thing and the account grants another.
+* If the label write itself failed, the Function logged it rather than failing
+  the call (the row was already written): look for `WARNING: profile <id> was
+  updated but its account labels were not`. Re-apply the same change through
+  the panel to retry it.
 
 ### Pushes do not arrive
 
-In order:
+In order, because each step makes the next one meaningful:
 
-1. `curl https://<backend>/health` → is `config.onesignal` `true`? If not,
-   `ONESIGNAL_APP_ID` / `ONESIGNAL_REST_API_KEY` are unset on Railway. Pushes
-   are logged and skipped, silently.
-2. Did the key get rotated (step 3a) without updating Railway? OneSignal will
-   reject every request with 401/403 — the backend logs it and the outbox rows
-   retry with backoff.
-3. Is the event queued at all?
-
-   ```sql
-   select id, event_type, attempts, last_error, processed_at, available_at
-     from public.notification_outbox
-    order by created_at desc limit 20;
-   ```
-
-   * No row → the database trigger did not fire (wrong status transition, or
+1. **Is there a push provider at all?** Console → Messaging → Providers, and
+   it must be *enabled*. Without one, Appwrite accepts the message, leaves it
+   `processing` and reports success (§ 1d). Check Messaging → Messages for
+   the message's state — `processing` long after it was sent is this.
+2. **Did the device register a target?** Console → Auth → that user →
+   Targets. A device registers on sign-in and whenever the token changes; the
+   app logs `Push target registered for <user>` when it did, and
+   `Push target registration failed: …` when it did not. No target at all,
+   on an Appwrite build, usually means no `ONESIGNAL_APP_ID` — that is where
+   the token comes from (§ 6).
+3. **Is the target subscribed?** Console → Messaging → Topics → the topic →
+   Subscribers. The user's `profiles.pushTopics` is what the server believes
+   it subscribed them to; if that is empty while a target exists, the
+   subscription call failed — the app calls `sync_push_subscriptions` after
+   registering, and the `worker` reconciles on every profile update.
+4. **Does the topic exist?** Topics are created when the first device
+   belonging in one registers, so an alert aimed at an LGA nobody has
+   registered in reaches nobody — correctly, but silently.
+5. **Is the event queued?** The `notification_outbox` collection:
+   `eventType`, `attempts`, `note`, `processedAt`, `availableAt`.
+   * No row → the write event did not fire (the wrong status transition, or
      the report was not `pending` on insert).
-   * Row with `processed_at` set and a note in `last_error` → the worker ran
-     and found nothing to do (e.g. no matching recipients in that ward/LGA).
-   * Row with `attempts` climbing and `last_error` set → the send is failing;
-     `last_error` says why.
-4. Stuck for good — 8 attempts is the cap:
-
-   ```sql
-   select * from public.notification_outbox where processed_at is null and attempts >= 8;
-   ```
-
-   Fix the cause, then reset them: `update public.notification_outbox set attempts = 0, available_at = now() where processed_at is null;`
-5. Targeting: the app sets OneSignal tags `role`, `lga`, `state`, `ward`,
-   `monitoring_zone`, each sanitised as
-   `value.toLowerCase().replace(/[^a-z0-9_]/g, '_')` ("Obio/Akpor" →
-   `obio_akpor`). A profile with an empty `lga`, or a device that has not
-   signed in since the tag was introduced, matches nothing. Check the device in
-   the OneSignal dashboard (Audience → Subscriptions → its external id).
-6. Android specifically: `ONESIGNAL_ANDROID_CHANNEL_ID` must be a UUID of a
-   channel that exists, or OneSignal rejects the push. Look for
-   `config.onesignal_channel_invalid` in the logs; clear the variable to fall
-   back to the default channel.
+   * `processedAt` set with a `note` → the handler ran and found nothing to do
+     (e.g. no eligible recipients in that ward/LGA).
+   * `attempts` climbing with a `note` → the send is failing and the note says
+     why. Backoff is exponential, capped at an hour.
+   * `attempts` at **8** → given up (`MAX_ATTEMPTS`). Fix the cause, then set
+     `attempts` back to 0 and `availableAt` to now for the stuck rows.
+6. **Is the `worker` running at all?** Its schedule is `* * * * *`; the
+   console's execution list should show a run a minute. A plan that floors
+   cron frequency runs it less often without refusing it, and the drain and
+   escalation both assume a minute.
+7. **iOS specifically:** a Release build carries `aps-environment:
+   production`. A `development` token registered as an Appwrite target fails
+   at APNs with nothing visible in the app.
 
 ### Authority SMS do not arrive
 
-`config.sms` in `/health` must be `true`. Then check `public.sms_deliveries`
-(service role only — query it from the SQL editor): a `claimed` row that never
-became `sent` means the process died mid-send, and that number is deliberately
-skipped rather than risk a double text. Also check the caps:
-`app_settings.max_sms_per_alert_event` (default 20 per report) and
-`max_sms_per_lga_per_day` (default 50 per state+LGA per Africa/Lagos day).
+1. `deploy.mjs` printed `SMS: OFF` → the `worker` has no Termii variables.
+   Re-deploy with `TERMII_API_KEY` and `TERMII_SENDER_ID` in the environment.
+   Remember it replaces a Function's variables wholesale, so a key typed into
+   the console does not survive.
+2. The `sms_deliveries` collection is the receipt log. A `claimed` row that
+   never became `sent` means the process died mid-send, and that number is
+   deliberately skipped rather than risk a double text.
+3. The caps: `app_settings.max_sms_per_alert_event` (default 20 per report)
+   and `max_sms_per_lga_per_day` (default 50 per state+LGA per Africa/Lagos
+   day).
+4. Every authority names the state of the LGA it covers and is texted for
+   that (state, LGA) only. A report whose `state` is empty therefore matches
+   **no** authority and sends nothing — deliberately, because texting the
+   wrong state's emergency desk is worse than texting no one. Fix the
+   report's state, not the query.
+5. Termii's send reply carries a `balance` field that read `0` while the
+   account held ₦3,610. Do not read it as the balance; check the Termii
+   dashboard.
 
-Every authority names the state of the LGA it covers, and is texted for that
-(state, LGA) only. Migration `20260927090000` made `coverage_state` NOT NULL
-and added foreign keys into `public.nigeria_states` / `public.nigeria_lgas`, so
-a contact with no state, an invented state, or an LGA that is not in the state
-it claims, is rejected at insert time. Six LGA names (Bassa, Ifelodun,
-Irepodun, Nasarawa, Obi, Surulere) exist in two states each: before that
-migration a state-less contact for one of them was texted about incidents in
-both.
+> **Before sending a real SMS from a script**, read the blast-radius note in
+> `HANDOFF.md`: `notifyApproved` texts *every* authority covering the
+> report's LGA, and on a live project those are real local-government
+> contacts. `infra/appwrite/local/e2e-sms-deployed.mjs` refuses to run unless
+> its own row is the only one covering the LGA it uses.
 
-A report whose `state` is empty therefore matches **no** authority and sends no
-SMS, logged as `sms.report_without_state`. That is deliberate — texting the
-wrong state's emergency desk is worse than texting no one — so fix the report's
-`state` rather than the query.
+---
 
-**If that migration quarantined contacts** it raised a `WARNING` naming each
-one, and copied them into `public.authorities_unresolved_coverage` (service
-role only). Those numbers are **no longer being texted**. Recover them:
+## The cutover
 
-```sql
--- SQL editor (service role)
-select id, name, organization, phone, coverage_lga, coverage_state, reason
-  from public.authorities_unresolved_coverage
- order by quarantined_at;
-```
+This runbook deploys the Appwrite stack. Moving the **existing** system onto
+it is a separate, ordered procedure, and the production run has not happened:
 
-For each row, establish which state that desk actually serves — ask them if you
-have to, never guess — re-add it under **Admin → Authorities** (the LGA list is
-grouped by state), then `delete` the row from the quarantine table. It holds
-real names and phone numbers, so do not leave it populated.
+* `APPWRITE-MIGRATION.md` **Phase 7** — the export → transform → import →
+  reconcile pipeline (`docs/appwrite-spike/migrate/`), proven against a
+  fixture. Read the pre-flight requirement before any window opens: Appwrite
+  refuses email addresses Postgres stores happily, and those users cannot be
+  created at all.
+* **Phase 8** — the decommission order, and why nothing should be turned off
+  yet. Supabase, the Railway worker, OneSignal and Resend stay up.
+* `HANDOFF.md` — what is still owed, including the keys to rotate.
+* `CLOUD-VERIFICATION.md` — the verification sequence to run against Cloud,
+  which overlaps this runbook's steps 2–3 and goes further.
+
+The two stacks can run side by side: `activeBackend` is decided by the build's
+defines, so one APK talks to Appwrite and the previous one talks to Supabase,
+and the app registers Appwrite push targets while still receiving OneSignal
+pushes — which is what makes the push gap at cutover survivable.
 
 ---
 
@@ -1093,10 +808,14 @@ real names and phone numbers, so do not leave it populated.
 
 | Topic | File |
 | --- | --- |
-| Schema generator, local verification, what `local_stubs.sql` fakes | `supabase/deploy/README.md` |
-| Backend internals: outbox, escalation cron, SMS, `/email` API, OneSignal contract | `backend/README.md` |
-| App configuration and Supabase auth settings | `README.md` |
+| The Supabase stack, still in production | `docs/DEPLOYMENT-SUPABASE.md` |
+| Provisioning internals, the tier's measured limits, the commands | `infra/appwrite/README.md` |
+| What the two Functions promise their callers | `docs/APPWRITE-FUNCTION-CONTRACTS.md` |
+| Verifying a live Cloud project, step by step | `docs/CLOUD-VERIFICATION.md` |
+| The migration's full record, phase by phase | `docs/APPWRITE-MIGRATION.md` |
+| What is still owed, and the keys to rotate | `docs/HANDOFF.md` |
+| A real Appwrite in a container, for local work | `infra/appwrite/local/README.md` |
 | Admin panel setup and troubleshooting | `CRADI-Mobile-Admin/SETUP.md` |
-| Firebase → Supabase import | `migration/firebase-to-supabase/README.md` |
 | Release signing | `docs/KEYSTORE_SETUP.md` |
 | Authority contact data entry | `docs/AUTHORITY_CONTACTS_GUIDE.md` |
+| iOS project detail | `ios/README.md` |

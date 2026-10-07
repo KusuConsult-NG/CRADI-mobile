@@ -3260,3 +3260,130 @@ matching a stand-in that was written from the same guess as the sender.
 The tier's real limits, and one message through Termii's live API from
 a deployed Function — a real key, a real sender id, a number you own.
 `docs/CLOUD-VERIFICATION.md` has both.
+
+---
+
+# Phase 25 — the push swap: targets, topics and who is in them
+
+Status: **built and tested**, and the half that needs a console is named
+below rather than guessed at.
+
+Phase 3 mapped OneSignal's tag targeting onto Appwrite topics and the
+*sending* half shipped with the migration: `alertTopics` decides that an
+admin alert goes to `all-users`, `state-<state>` or `lga-<state>-<lga>`,
+and `sendPush` posts to it. Nothing registered a device, nothing
+subscribed anything to a topic, and no script created a topic. On the
+Appwrite backend, push reached nobody.
+
+**It reached nobody quietly**, which is why this is worth a phase of its
+own. Appwrite accepts a push message addressed to a topic with no
+subscribers, answers `201`, and the outbox row reads `sent`. Every test
+in the suite agreed, because every test asserted the message was
+*accepted*. For an early-warning system that is the worst available
+failure mode: indistinguishable from a week with nothing to warn about.
+
+## The subscribed set is read back from the sender
+
+`desiredTopics` does not slug a state and an LGA. It calls `alertTopics`
+with the profile's own location and takes the topics it would address:
+
+```js
+desiredTopics({ state: 'Benue', lga: 'Obi' })
+// ['all-users', 'state-benue', 'lga-benue-obi']
+```
+
+A subscription whose id differs by one character from what the sender
+writes is a subscription to nothing, and nothing in the system would ever
+say so. This project has been bitten three times by a fake built out of
+the code it tests agreeing with itself; a second slug here would have been
+the fourth, and the only one where *both sides* could be wrong together
+with a green suite. Mutating `desiredTopics` to compose the id by hand
+fails the suite today — `Federal Capital Territory` overflows 36
+characters and `topicId` digests it, so the two sides part company exactly
+where a hand-written slug would.
+
+## Why `profiles.pushTopics` exists
+
+A user moved from Benue to Nasarawa must stop receiving Benue's warnings.
+Two things make that harder than it sounds:
+
+- Appwrite's event payload is the row with no "before" — the same problem
+  `previousStatus` solves for reports;
+- there is no endpoint that lists one user's subscriptions. Only one
+  topic's subscribers.
+
+So the server records what it subscribed them to. Reconciling is then a
+set difference: subscribe the desired, unsubscribe what is stored and no
+longer desired, write the new set back. Subscriber ids are
+`sub-<fnv1a64(targetId|topic)>`, so subscribing twice is a 409 and
+unsubscribing needs no stored id — the same property the outbox and the
+message id lean on.
+
+A user with no registered device is subscribed to nothing, so their
+`pushTopics` is empty rather than claiming subscriptions that do not
+exist.
+
+## Topics are created when somebody is in them
+
+Not provisioned. 37 states and 770 LGAs is 808 rows against a quota
+nobody has measured, and 769 of them would have no subscribers. Phase 3
+called two structures of that size "the sharpest version of the quota
+question still open"; creating a topic the first time a device in it
+registers answers the question instead — the count becomes the number of
+places that actually have users.
+
+## The token comes from OneSignal, deliberately
+
+Phase 3's mitigation for the cutover is a build that registers Appwrite
+targets *before* the switch, because OneSignal subscriptions cannot be
+transferred and push reaches nobody until each device opens the new build
+once. That build talks to both, and it already has what Appwrite wants:
+`OneSignal.User.pushSubscription.token` is documented in the plugin as
+"the APNS (iOS), GCM/FCM (Android) push token", which is exactly a
+target's identifier.
+
+So the swap adds no native configuration and no second push SDK. It takes
+the token OneSignal has already fetched, registers it as a target under an
+id kept in `SharedPreferences` (one per installation, so a refreshed token
+updates the target it has rather than leaving an expired one behind each
+launch), and calls `sync_push_subscriptions`. When OneSignal goes, the
+token's source changes and nothing else does.
+
+`backend.dart` answers `false` on the Supabase build and does nothing
+there, where OneSignal still holds both the token and the targeting.
+
+## The provider id is not optional in a two-platform project
+
+A target that names no provider is filed under the project's *default*
+push provider. A project with FCM for Android and APNs for iOS has one
+default and one that is not — so on the other platform every device would
+be registered against a provider that cannot deliver to it. Accepted at
+registration, silent at send time, and it would look exactly like the bug
+this phase closed.
+
+`APPWRITE_PUSH_PROVIDER_ANDROID` and `APPWRITE_PUSH_PROVIDER_IOS` are
+`--dart-define`s; empty means "this project has one provider, let it
+choose".
+
+## What the suites cover
+
+| | |
+|---|---|
+| `functions/cradi` | 277 unit tests, 25 of them new: the topic set against the sender's own mapping, the two Obis, subscriber-id determinism, every reconcile path (first run, second run, a move, no device, the last device gone, a 500 that must not be written off), the event keying that stops the write-back looping, the outbox handler and the operation |
+| `flutter test` | 843, 13 of them new: when the device registers and when it does not, and the SDK path against an HTTP server of the test's own — create, the 409 that means "already registered", the `PUT` that updates the token, and the subscription sync that must follow either |
+
+Three mutations were run against the new suite to prove it can fail: a
+hand-built slug (2 failures), a swallowed non-409 (1), and subscribing
+expired targets (1).
+
+## What is left, and it is a console job
+
+**Appwrite Messaging needs a push provider configured** — the FCM v1
+service-account JSON, and an APNs key for iOS. Those credentials live
+inside OneSignal today. Until they are in Appwrite, a target can be
+registered and a message will sit in `processing` for exactly the reason
+`bootstrap.mjs` records for email: Messaging accepts a message with no
+enabled provider and never delivers it.
+
+Nothing in `infra/appwrite` provisions a provider, by design — it would
+mean a service-account key in the repository's environment.

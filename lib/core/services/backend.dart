@@ -14,6 +14,7 @@ library;
 import 'package:climate_app/core/services/appwrite/appwrite_auth_backend.dart';
 import 'package:climate_app/core/services/appwrite/appwrite_config.dart';
 import 'package:climate_app/core/services/appwrite/appwrite_data_backend.dart';
+import 'package:climate_app/core/services/appwrite/appwrite_push_targets.dart';
 import 'package:climate_app/core/services/auth_backend.dart';
 import 'package:climate_app/core/services/supabase_auth_backend.dart';
 import 'package:climate_app/core/services/supabase_service.dart';
@@ -35,6 +36,7 @@ BackendKind get activeBackend =>
 
 AppwriteDataBackend? _appwriteData;
 AppwriteAuthBackend? _appwriteAuth;
+AppwritePushTargets? _appwritePush;
 
 AppwriteDataBackend get _awData => _appwriteData ??= AppwriteDataBackend();
 
@@ -54,6 +56,25 @@ DataBackend get backend => switch (activeBackend) {
 AuthBackend get authBackend => switch (activeBackend) {
   BackendKind.appwrite => _awAuth,
   BackendKind.supabase => SupabaseAuthBackend(),
+};
+
+/// Registers this device for push on the active backend, with [token] —
+/// the FCM or APNs token — and subscribes it to its profile's topics.
+///
+/// Answers `false` on the Supabase build without doing anything: there,
+/// OneSignal both holds the token and decides who receives what, so there
+/// is no target to register. During the cutover a build carries both, and
+/// this is the half that makes the Appwrite side ready before the switch
+/// (Phase 3: OneSignal subscriptions cannot be transferred, so push
+/// reaches nobody until each device has opened the new build once).
+///
+/// Shares the data backend's client for the same reason [_awAuth] does:
+/// one connection, one session.
+Future<bool> registerPushTarget(String token) async => switch (activeBackend) {
+  BackendKind.appwrite => (_appwritePush ??= AppwritePushTargets(
+    data: _awData,
+  )).register(token),
+  BackendKind.supabase => false,
 };
 
 /// Brings the backend up. Called once from `main()`, before `runApp`.

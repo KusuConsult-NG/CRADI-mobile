@@ -10,6 +10,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:climate_app/core/constants/app_config.dart';
 import 'package:climate_app/core/providers/settings_provider.dart';
+import 'package:climate_app/core/services/backend.dart' show registerPushTarget;
 import 'package:climate_app/core/services/hive_encryption_service.dart';
 import 'package:climate_app/core/services/supabase_mapping.dart'
     show parseTimestamp;
@@ -101,6 +102,19 @@ class NotificationService {
           _onForegroundNotification,
         );
         OneSignal.Notifications.addClickListener(_onNotificationClicked);
+        // A token arrives after `initialize` — the OS has to issue it —
+        // and again whenever the provider reissues one, which is the case
+        // a single registration at sign-in misses: the Appwrite target
+        // would keep a token nothing can be delivered to, and the only
+        // symptom would be silence.
+        //
+        // `addObserver` does not fire with the current state despite what
+        // its doc comment suggests (it only appends to a list — see the
+        // plugin's `pushsubscription.dart`), so this covers changes and
+        // `_syncSignedInUser` reads whatever token is already there.
+        OneSignal.User.pushSubscription.addObserver(
+          (state) => unawaited(syncPushTarget(state.current.token)),
+        );
         _pushEnabled = true;
 
         // Restore the user's Push Notifications setting.
@@ -447,6 +461,10 @@ class NotificationService {
     _baseTags = const {};
     _tagsKnown = false;
     _zone = null;
+    // The token is the device's, not the account's: the next user on this
+    // phone has the same one, and remembering it as registered would skip
+    // registering *their* target and leave them with no push at all.
+    _registeredToken = null;
     // Queued before any await, so a sign-in that follows runs after it.
     final logout = (!_pushEnabled || !wasSignedIn)
         ? Future<void>.value()
@@ -479,6 +497,66 @@ class NotificationService {
     } on Exception catch (e) {
       developer.log(
         'OneSignal login/tag error: $e',
+        name: 'NotificationService',
+      );
+    }
+    // After the identity, because the server subscribes the target to the
+    // topics of the profile it belongs to, and on Appwrite the session is
+    // what says whose target this is.
+    await syncPushTarget(_pushToken());
+  }
+
+  /// How this device is registered for push on the active backend.
+  ///
+  /// The locator's own function, replaced in tests. It answers `false` on
+  /// the Supabase build, where OneSignal holds the token and decides
+  /// delivery by tag, so this whole path is a no-op there.
+  @visibleForTesting
+  Future<bool> Function(String token) pushTargetRegistrar = registerPushTarget;
+
+  /// The last token handed to the registrar, so a repeated observer
+  /// callback with an unchanged token costs nothing.
+  String? _registeredToken;
+
+  String? _pushToken() {
+    try {
+      return OneSignal.User.pushSubscription.token;
+    } on Object catch (e) {
+      developer.log('Push token read failed: $e', name: 'NotificationService');
+      return null;
+    }
+  }
+
+  /// Registers [token] as this device's push target on the backend.
+  ///
+  /// Quiet about the three ordinary reasons there is nothing to do — no
+  /// user, no token yet, the same token as last time — and loud about a
+  /// failure, which is the whole point: a push path that silently stops
+  /// working looks exactly like one with nothing to deliver.
+  ///
+  /// It does not check [_pushEnabled]: a token is only ever produced by a
+  /// OneSignal that did initialise, so the guard would say nothing the
+  /// empty-token check does not — and it is what makes this reachable
+  /// from a test, which cannot start the plugin.
+  @visibleForTesting
+  Future<void> syncPushTarget(String? token) async {
+    final userId = _userId;
+    if (userId == null) return;
+    if (token == null || token.isEmpty) return;
+    if (token == _registeredToken) return;
+    try {
+      if (await pushTargetRegistrar(token)) {
+        _registeredToken = token;
+        developer.log(
+          'Push target registered for $userId',
+          name: 'NotificationService',
+        );
+      }
+    } on Object catch (e) {
+      // Not recorded as registered, so the next sign-in or token change
+      // tries again.
+      developer.log(
+        'Push target registration failed: $e',
         name: 'NotificationService',
       );
     }

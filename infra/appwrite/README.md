@@ -66,6 +66,13 @@ So this is a billing decision before it is an engineering one: a paid
 Cloud plan, or self-hosting. See *Phase 12* in
 `../../docs/APPWRITE-MIGRATION.md`.
 
+**Settled: the plan was upgraded (7 October 2026).** The table above is
+what the free tier answered and is kept as the record of it. None of
+those four numbers has been measured on the new plan, so the first thing
+a Cloud run does is `--probe` again — the Functions cap is the one the
+design could not live with, and the one-database and one-bucket caps are
+the two that changed how it provisions.
+
 **One more limit is known from the previous project's own config:**
 
 > Due to Appwrite free tier limits (max 1 bucket), Profile Photos and
@@ -77,6 +84,22 @@ one shared bucket instead, which is safe while file-level permissions
 stay on — see `SINGLE_BUCKET` in `plan.mjs` for what it does and does
 not cost. The app follows with `--dart-define PROFILE_IMAGES_BUCKET=...`
 and `REPORT_IMAGES_BUCKET=...`.
+
+Since the upgrade that is the fallback, not the Cloud path: a plain run
+provisions the two buckets `BUCKETS` declares, whose ids (`report-images`,
+`profile-images`) are already the defaults in `AppConfig` and in the admin
+panel, so neither needs a define or a variable. `--single-bucket` is still
+there for a one-bucket tier, and `APPWRITE_BUCKET_ID` no longer switches
+anything on its own — both scripts say so and ignore it when the flag is
+absent, because a leftover export silently checking the wrong bucket is
+how a verifier stops being one.
+
+One limit came off this list rather than being answered: **messaging
+topics**. Phase 3 wanted a topic per targetable group and counted ~650 of
+them; Phase 25 creates a topic the first time a device belonging in it
+registers, so nothing provisions topics and the quota exposure is the
+number of LGAs that actually have users. `--probe` still creates and
+deletes one, to learn whether the plan permits any at all.
 
 `provision.mjs` stops the moment the plan refuses something and says so,
 rather than burying it in two hundred lines — so running it is also how

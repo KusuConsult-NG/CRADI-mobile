@@ -1,4 +1,21 @@
-# CRADI / EWER backend (Railway)
+# CRADI / EWER backend (Railway) — the Supabase stack
+
+> **This service belongs to the stack being migrated away from.** On
+> Appwrite its three jobs are the `worker` Function
+> (`../functions/cradi/src/worker.js`), on Appwrite's own scheduler, and
+> there is no Railway backend at all.
+>
+> It is not dead: it is what runs in production, nothing has been
+> decommissioned, and nothing should be until the cutover has run and a
+> week of cross-checking has passed (`../docs/APPWRITE-MIGRATION.md`
+> Phase 8). It reads and writes Supabase and cannot be pointed at an
+> Appwrite project.
+>
+> Its SMS half is also the **reference implementation** the Appwrite port
+> was checked against — `src/sms/providers.js` was delivering real
+> messages, and Phase 24 found three ways the port had diverged from it,
+> one of which would have had Termii refuse every message. Prefer this
+> file over a document when the two disagree about Termii.
 
 Small Node 22 service that replaces the old Firebase Cloud Functions (and the
 legacy Appwrite functions). It runs next to Supabase (database, auth, storage)
@@ -73,14 +90,18 @@ curl localhost:8080/health
 
 ## Deploy on Railway
 
-See `../docs/DEPLOYMENT.md` section 4 for the full first-time walkthrough
+See `../docs/DEPLOYMENT-SUPABASE.md` section 4 for the full first-time walkthrough
 (which variables, how to verify, what to do when the healthcheck fails).
 
 1. Railway: **New Project → Deploy from GitHub repo**, pick this repository
    (`KusuConsult-NG/CRADI-mobile`).
-2. Service **Settings → Source → Root Directory = `backend`**, **Branch =
-   `supabase-migration`**. Railway then uses `backend/railway.json` (Dockerfile
-   build, `node src/index.js`, health check `/health`, restart on failure).
+2. Service **Settings → Source → Root Directory = `backend`**, and the
+   **Branch** the service already tracks. This said `supabase-migration`,
+   which is where the work lived when it was written; that branch has since
+   merged to `main`. Check what the live service points at before changing
+   it — repointing a running worker is a deploy, not a settings tweak.
+   Railway then uses `backend/railway.json` (Dockerfile build,
+   `node src/index.js`, health check `/health`, restart on failure).
 3. Service **Variables**: add the variables above (at least the two Supabase ones).
 4. **Settings → Networking → Generate Domain** to get a public URL for `/email`
    (e.g. `https://cradi-backend.up.railway.app`). Put that URL in the Flutter app config.
@@ -268,7 +289,7 @@ truncated to 320 characters (the description is shortened with `...`).
   claims, is rejected at insert time. The old "legacy" rows that matched a name
   in every state no longer exist; any that could not be resolved were moved to
   `public.authorities_unresolved_coverage` by that migration (see
-  `../docs/DEPLOYMENT.md` → *Authority SMS do not arrive* for the recovery
+  `../docs/DEPLOYMENT-SUPABASE.md` → *Authority SMS do not arrive* for the recovery
   procedure).
 - A report with no `state` matches **nothing** and sends no SMS, logged as
   `sms.report_without_state` with a hint saying why. With no state on either

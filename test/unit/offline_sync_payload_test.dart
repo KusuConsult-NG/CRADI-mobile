@@ -16,7 +16,10 @@ import 'package:climate_app/core/services/offline_storage_service.dart';
 void main() {
   group('a queued report', () {
     test('is forced to pending and stamped with the sync time', () {
-      final data = <String, dynamic>{'status': 'approved', 'hazardType': 'flood'};
+      final data = <String, dynamic>{
+        'status': 'approved',
+        'hazardType': 'flood',
+      };
       stampForSync('reports', data);
 
       // The client does not get to choose the status of a new report.

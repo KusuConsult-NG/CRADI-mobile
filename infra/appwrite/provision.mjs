@@ -39,8 +39,17 @@ const KEY = process.env.APPWRITE_API_KEY;
 
 const args = new Set(process.argv.slice(2));
 const DRY = args.has('--dry-run');
-// For a tier that allows one bucket. The previous project ran this way.
+// For a tier that allows one bucket. The previous project ran this way,
+// and so did the first Cloud run; the plan now allows the two the design
+// wants, so this is the fallback rather than the Cloud path.
 const SINGLE = args.has('--single-bucket');
+if (!SINGLE && process.env.APPWRITE_BUCKET_ID) {
+  console.log(
+    `# note: APPWRITE_BUCKET_ID=${process.env.APPWRITE_BUCKET_ID} is set and` +
+      ' --single-bucket is not, so it is ignored: provisioning the two' +
+      ' planned buckets.',
+  );
+}
 /**
  * Keep going past a quota refusal and report every limit at the end.
  *

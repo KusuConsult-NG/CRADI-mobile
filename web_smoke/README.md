@@ -1,5 +1,11 @@
 # `web_smoke/` — browser smoke-test harness (TEST ONLY)
 
+> **It exercises the Supabase backend.** The app chooses its backend from
+> its defines, and this rig builds with `SUPABASE_URL` only — so a green
+> run says nothing about the Appwrite path the app now ships against. For
+> that: `flutter test` (843), `functions/cradi` → `npm test` (277), and the
+> six end-to-end suites in `infra/appwrite/local/` against a real Appwrite.
+
 A throwaway rig that runs the **real** Flutter app in Chromium against a
 **local in-memory mock** of Supabase, walks every screen, screenshots each one
 and records console errors, uncaught exceptions and failed requests.

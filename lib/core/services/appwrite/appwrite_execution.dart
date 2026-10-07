@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'package:appwrite/appwrite.dart' as aw;
 import 'package:http/http.dart' as http;
 
-
 /// Runs an Appwrite Function and hands back the execution as the server
 /// sent it.
 ///

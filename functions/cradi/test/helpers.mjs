@@ -14,7 +14,22 @@ process.env.APPWRITE_FUNCTION_PROJECT_ID = 'test';
 process.env.APPWRITE_API_KEY = 'test-key';
 process.env.APPWRITE_DATABASE_ID = 'cradi';
 
-export function fakeAppwrite({ rows = {}, users = [], fail = {} } = {}) {
+export function fakeAppwrite({
+  rows = {},
+  users = [],
+  fail = {},
+  /**
+   * Messaging targets, as `GET /users/{id}/targets` returns them: at
+   * minimum `{ $id, userId, providerType }`. A device the app has
+   * registered is `providerType: 'push'`; the email target Appwrite
+   * creates for every account is `'email'`, and it is in the fixtures
+   * because subscribing one to a push topic is a plausible slip that
+   * nothing else would catch.
+   */
+  targets = [],
+  /** Topic ids that already exist, as a `--probe` run would leave them. */
+  topics = [],
+} = {}) {
   const calls = [];
   // Seeded rows get a `$createdAt` of now unless the fixture sets one.
   // The real server always has one, and the sweeps filter on it: a row
@@ -31,6 +46,9 @@ export function fakeAppwrite({ rows = {}, users = [], fail = {} } = {}) {
     }
   }
   const sentMessages = {};
+  const topicSet = new Set(topics);
+  /** subscriberId -> { topicId, targetId }, so a test can read the pairs. */
+  const subscriberSet = new Map();
   /** How many times each `fail` pattern has been applied, for `times`. */
   const failed = {};
 
@@ -192,10 +210,64 @@ export function fakeAppwrite({ rows = {}, users = [], fail = {} } = {}) {
     if (path.startsWith('/teams/')) return json(200, { $id: path.split('/')[2] });
     if (path === '/teams') return json(201, { $id: body.teamId });
 
+    // ── messaging targets and topics ─────────────────────────────────
+    //
+    // Modelled on Appwrite's own contract for ids rather than on what
+    // `lib/topics.js` happens to do with them: a second write of the
+    // same id is a 409, a read or delete of one that is not there is a
+    // 404, and a subscriber needs both its topic and its target to
+    // exist. Every one of those is a branch the reconciler relies on, so
+    // a fake that accepted everything would make the reconcile tests
+    // agree with the code instead of with the server.
+    const owned = path.match(/^\/users\/([^/]+)\/targets$/);
+    if (owned && method === 'GET') {
+      const owner = decodeURIComponent(owned[1]);
+      const mine = targets.filter((t) => t.userId === owner);
+      return json(200, { total: mine.length, targets: mine });
+    }
+    if (path === '/messaging/topics' && method === 'POST') {
+      if (topicSet.has(body.topicId)) {
+        return json(409, { message: 'exists', type: 'topic_already_exists' });
+      }
+      topicSet.add(body.topicId);
+      return json(201, { $id: body.topicId, name: body.name });
+    }
+    const topic = path.match(/^\/messaging\/topics\/([^/]+)$/);
+    if (topic && method === 'GET') {
+      const id = decodeURIComponent(topic[1]);
+      return topicSet.has(id)
+        ? json(200, { $id: id })
+        : json(404, { message: 'not found', type: 'topic_not_found' });
+    }
+    const subscribers = path.match(/^\/messaging\/topics\/([^/]+)\/subscribers$/);
+    if (subscribers && method === 'POST') {
+      const topicId = decodeURIComponent(subscribers[1]);
+      if (!topicSet.has(topicId)) {
+        return json(404, { message: 'topic not found', type: 'topic_not_found' });
+      }
+      if (!targets.some((t) => t.$id === body.targetId)) {
+        return json(404, { message: 'target not found', type: 'target_not_found' });
+      }
+      if (subscriberSet.has(body.subscriberId)) {
+        return json(409, { message: 'exists', type: 'subscriber_already_exists' });
+      }
+      subscriberSet.set(body.subscriberId, { topicId, targetId: body.targetId });
+      return json(201, { $id: body.subscriberId, topicId, targetId: body.targetId });
+    }
+    const subscriber = path.match(/^\/messaging\/topics\/([^/]+)\/subscribers\/([^/]+)$/);
+    if (subscriber && method === 'DELETE') {
+      const id = decodeURIComponent(subscriber[2]);
+      if (!subscriberSet.has(id)) {
+        return json(404, { message: 'not found', type: 'subscriber_not_found' });
+      }
+      subscriberSet.delete(id);
+      return json(204, null);
+    }
+
     return json(404, { message: `unstubbed ${method} ${path}` });
   };
 
-  return { calls, store, users, sentMessages };
+  return { calls, store, users, sentMessages, targets, topics: topicSet, subscribers: subscriberSet };
 }
 
 const stamp = (id, data, permissions) => ({

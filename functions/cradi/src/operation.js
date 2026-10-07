@@ -21,6 +21,7 @@ import {
   ErrorType,
 } from './lib/http.js';
 import { isAdmin } from './lib/policy.js';
+import { reconcileSubscriptions } from './lib/topics.js';
 import {
   COLLECTION as OUTBOX,
   enqueue,
@@ -36,7 +37,10 @@ const SUPERSEDED_BY_REOPEN = [
 ];
 import { escalationTimeoutMinutes, getSettings } from './lib/settings.js';
 
-const OPERATIONS = { reopen_report: reopenReport };
+const OPERATIONS = {
+  reopen_report: reopenReport,
+  sync_push_subscriptions: syncPushSubscriptions,
+};
 
 export default handler(async (context) => {
   const payload = readJson(context.req);
@@ -56,8 +60,40 @@ export default handler(async (context) => {
     ...context,
     userId,
     role: profile.body.role ?? 'user',
+    // The dispatcher has already read the row to check the account is
+    // set up; handing it over saves every operation that needs the
+    // caller's own profile a second read of what is in hand.
+    profile: profile.body,
   });
 });
+
+/**
+ * Subscribes the caller's own devices to the topics their profile implies.
+ *
+ * Any signed-in user, for themselves only — `userId` is the dispatcher's,
+ * read from the header Appwrite sets, so there is no parameter to forge.
+ *
+ * The client calls this after registering a push target, which is the one
+ * moment the server cannot see: a device token arrives in the app, and
+ * `profiles` does not change, so no event fires. Everything else that
+ * moves a user between topics is an edit to their profile, and
+ * `push_topics_changed` covers those.
+ *
+ * Idempotent, and cheap when there is nothing to do: subscribing a target
+ * that is already subscribed is a 409 the reconciler counts and ignores.
+ */
+async function syncPushSubscriptions(params, { userId, profile, log }) {
+  const result = await reconcileSubscriptions({ userId, profile, log });
+  // The topics are returned so the client can log what it joined; they
+  // are not a secret (an alert names its own LGA) and the client has no
+  // way to choose them.
+  return {
+    topics: result.topics,
+    targets: result.targets,
+    subscribed: result.subscribed,
+    removed: result.removed,
+  };
+}
 
 /**
  * Reopens a report: clears its peer votes, sets it back to pending and

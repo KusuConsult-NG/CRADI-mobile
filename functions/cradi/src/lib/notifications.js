@@ -193,6 +193,18 @@ export function alertTopics(alert) {
   return { all: false, topics: [topicId('lga', `${state}-${lga}`)] };
 }
 
+/**
+ * OneSignal could address "everyone" directly; Appwrite addresses topics,
+ * so "everyone" is a topic every account is subscribed to. Phase 3
+ * counted it among the ~650.
+ *
+ * It lives here, beside `alertTopics`, because the two have to agree:
+ * `lib/topics.js` subscribes a device to what this file says an alert
+ * would be addressed to, and a constant kept in the sender's own module
+ * cannot drift from the sender.
+ */
+export const ALL_USERS_TOPIC = 'all-users';
+
 /** A topic id: lower-case, hyphenated, and within Appwrite's 36 characters. */
 export function topicId(kind, name) {
   const slug = String(name ?? '')

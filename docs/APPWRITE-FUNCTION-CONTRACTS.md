@@ -4,9 +4,12 @@ The Appwrite adapters in `lib/core/services/appwrite/` are written against
 these three contracts, derived from what Phases 1–4 proved and from what
 the client now actually sends.
 
-They were three Functions. The Cloud plan allows **two Functions in
+They were three Functions. The Cloud plan allowed **two Functions in
 total** against the seven this backend needs (3 October 2026; see
-`CLOUD-VERIFICATION.md`), so they are now three routes of one —
+`CLOUD-VERIFICATION.md`), so they became three routes of one. The plan
+was upgraded on 7 October and the merge is staying — it is what the tests
+and both clients are written against, and it costs only the widened key
+scope `plan.mjs` describes. So the route is still one Function —
 `AppwriteConfig.clientFunctionId`, default `client`, entrypoint
 `functions/cradi/src/client.js`. Which route runs is the **execution's
 path**, passed as `path` on `createExecution` and read as `req.path`:
@@ -192,10 +195,29 @@ accepting a weak one.
 
 `{"operation": "reopen_report", "params": {"p_report_id": "..."}}`
 
-The RPCs. Today there is exactly one: `reopen_report`, which clears a
-report's peer votes, sets it back to pending and reschedules escalation —
-senior staff and admin only. It must check the caller's role itself; the
-`SECURITY DEFINER` function it replaces did.
+The RPCs, and one operation that is not an RPC.
+
+**`reopen_report`** clears a report's peer votes, sets it back to pending
+and reschedules escalation — senior staff and admin only. It must check
+the caller's role itself; the `SECURITY DEFINER` function it replaces did.
+
+**`sync_push_subscriptions`** subscribes the caller's own devices to the
+push topics their profile implies, and takes no parameters:
+
+```json
+{"operation": "sync_push_subscriptions"}
+```
+
+Answers `{"topics": [...], "targets": n, "subscribed": n, "removed": n}`.
+
+Any signed-in user, for themselves only — the dispatcher reads the caller
+from `x-appwrite-user-id`, so there is nothing in the body to forge, and a
+`userId` in `params` is ignored. It exists because registering a push
+target is the one thing the server cannot see happen: a device token
+arrives in the app, `profiles` does not change, and no event fires. Every
+other move between topics is a profile edit, which
+`push_topics_changed` covers. Idempotent, and cheap when there is nothing
+to do. See `functions/cradi/src/lib/topics.js`.
 
 ---
 
