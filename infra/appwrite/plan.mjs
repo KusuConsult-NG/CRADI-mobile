@@ -317,15 +317,27 @@ export const COLLECTIONS = [
  * Phase 3. Evidence is immutable: a bucket whose files are created and
  * never updated, with the ACL on each file.
  *
- * The single bucket's id is overridable because the tier's one bucket may
- * already be taken. On the Cloud project it is: the previous build's
- * `Shared Images Bucket`
- * (`6941e4e10034186aded8`) holds the only slot, so `cradi-files` cannot
- * be created and the existing bucket is reused instead. `provision.mjs`
- * reconciles its settings to `SINGLE_BUCKET` below — it was created with
- * `fileSecurity` off and update/delete for every signed-in user. The app
- * takes the same id through `PROFILE_IMAGES_BUCKET` and
- * `REPORT_IMAGES_BUCKET`.
+ * `BUCKETS` below is the plan: two buckets, with different ACLs. That is
+ * what a Cloud run provisions now that the plan has been upgraded past
+ * the one-bucket tier.
+ *
+ * `SINGLE_BUCKET` is the fallback for a tier that allows one, and the id
+ * is overridable because that tier's one slot may already be taken. On
+ * the Cloud project it was: the previous build's `Shared Images Bucket`
+ * (`6941e4e10034186aded8`) held the only slot, so `cradi-files` could not
+ * be created and the existing bucket was reused through
+ * `APPWRITE_BUCKET_ID`. `provision.mjs` reconciles a reused bucket's
+ * settings to `SINGLE_BUCKET` below — that one was created with
+ * `fileSecurity` off and update/delete for every signed-in user. In that
+ * mode the app takes the same id through `PROFILE_IMAGES_BUCKET` and
+ * `REPORT_IMAGES_BUCKET`; with the two planned buckets it needs neither
+ * define, because the ids below are the defaults the app already carries.
+ *
+ * That bucket is still on the Cloud project and `provision.mjs` deletes
+ * nothing, so `verify.mjs` lists it as something the plan does not ask
+ * for. The files in it do not move: anything uploaded under the
+ * single-bucket run keeps resolving against that id and nothing else,
+ * which is why the switch is only cheap while `reports` is empty.
  */
 export const SINGLE_BUCKET_ID = process.env.APPWRITE_BUCKET_ID ?? 'cradi-files';
 

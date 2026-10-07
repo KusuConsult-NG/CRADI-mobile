@@ -15,6 +15,33 @@ Both repositories: branch `claude/app-bug-fixes-z3ytqy`, merged to
 
 ---
 
+## Update — 7 October 2026: the Cloud plan was upgraded
+
+The two-Function cap that stopped the 3 October run should be gone. Only
+a run can say so — nothing has been measured against the new plan — so
+`--probe` stays the first step. What the upgrade changed, and what it did
+not:
+
+- **The consolidation stays.** `client` and `worker` are what the tests
+  and `APPWRITE-FUNCTION-CONTRACTS.md` describe; extra slots are not a
+  reason to unpick them.
+- **Buckets go to the two the plan declares** — the owner's call. A plain
+  `provision.mjs`, no `--single-bucket`, no `APPWRITE_BUCKET_ID`. The
+  shared bucket stays on the project with its files; `verify.mjs` now
+  lists it as something the plan does not ask for, and names a stale
+  `APPWRITE_BUCKET_ID` instead of quietly switching on it. This also makes
+  the admin panel's `report-images` default correct, which against the
+  shared bucket it was not — see `CLOUD-VERIFICATION.md`.
+- **Nothing else about the plan has been measured.** The limits table in
+  `infra/appwrite/README.md` is the free tier's. `--probe` first.
+- **Both blockers below still hold**, re-measured on 7 October from a
+  session container: 403 at the gateway for `fra.cloud.appwrite.io`,
+  `cloud.appwrite.io` and `api.ng.termii.com`, and not one of the six
+  variables set. So the order of work has not changed: rotate the keys,
+  clear the two settings, then the runbook.
+
+---
+
 ## The two blockers, both in environment settings
 
 Neither is a code problem and neither can be worked around from inside
@@ -44,9 +71,13 @@ belong in the environment's settings, never pasted into a chat; a
 
 ```
 APPWRITE_ENDPOINT, APPWRITE_PROJECT_ID, APPWRITE_API_KEY   # Cloud
-APPWRITE_DATABASE_ID, APPWRITE_BUCKET_ID                   # see CLOUD-VERIFICATION.md
+APPWRITE_DATABASE_ID                                       # see CLOUD-VERIFICATION.md
 TERMII_API_KEY, TERMII_SENDER_ID
 ```
+
+`APPWRITE_BUCKET_ID` is no longer one of them: it belongs to the
+one-bucket fallback, and setting it on this plan only earns a line of
+output saying it was ignored.
 
 ---
 
@@ -111,11 +142,12 @@ matches against their dashboard and the handset.
 ## Cloud is not yet carrying the consolidated Functions
 
 The 3 October Cloud run created `write` and `auth` and was refused the
-third, because **the plan allows two Functions** and the design had
+third, because **the free plan allowed two Functions** and the design had
 seven. That is what the consolidation fixed: `client` routes the three
 a client calls on the execution path, `worker` routes the four the
 server runs on its own by trigger. See
-`docs/APPWRITE-FUNCTION-CONTRACTS.md`.
+`docs/APPWRITE-FUNCTION-CONTRACTS.md`. The cap has since been lifted and
+the consolidation is staying — it is what everything is tested against.
 
 Cloud still holds whatever that run left. Expect `provision.mjs` to
 want to remove the old Function rows. Run `cloud-check.mjs` after the

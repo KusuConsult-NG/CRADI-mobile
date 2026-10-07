@@ -5,8 +5,11 @@
  *   APPWRITE_ENDPOINT=... APPWRITE_PROJECT_ID=... APPWRITE_API_KEY=... \
  *   node infra/appwrite/verify.mjs [--single-bucket]
  *
- * `--single-bucket` (or `APPWRITE_BUCKET_ID` set) checks the one bucket
- * `provision.mjs --single-bucket` makes, instead of the two.
+ * `--single-bucket` checks the one shared bucket
+ * `provision.mjs --single-bucket` makes, instead of the two the plan
+ * wants. It is the flag and nothing else: `APPWRITE_BUCKET_ID` used to
+ * switch this too, and a stale export then checked a bucket the last
+ * provisioning run never made.
  *
  * Exits non-zero when anything is missing. A verifier that cannot fail
  * is not a verifier — this project has already shipped one checker that
@@ -27,6 +30,14 @@ if (!ENDPOINT || !PROJECT || !KEY) {
 
 const problems = [];
 const note = (m) => problems.push(m);
+
+/**
+ * Differences that are not failures. `provision.mjs` deletes nothing, so
+ * a project carries what earlier runs left — and the exit code has to go
+ * on meaning "the plan is not satisfied", or nobody will trust it. These
+ * are printed either way and change no exit code.
+ */
+const extras = [];
 
 async function get(path) {
   const r = await fetch(`${ENDPOINT}${path}`, {
@@ -121,10 +132,24 @@ for (const c of COLLECTIONS) {
   }
 }
 
-// The same switch `provision.mjs` takes. Without it a single-bucket
-// project reported both planned buckets missing forever, which teaches
-// whoever reads the output to ignore it.
-const SINGLE = process.argv.includes('--single-bucket') || Boolean(process.env.APPWRITE_BUCKET_ID);
+// The same switch `provision.mjs` takes, and only the switch.
+//
+// `APPWRITE_BUCKET_ID` used to set it too, so that a one-bucket project
+// did not report both planned buckets missing forever. The plan is two
+// buckets again (the Cloud plan was upgraded — see `plan.mjs`), and that
+// variable is still in shells and runbooks from the single-bucket run:
+// left as it was, it would check the shared bucket, find it correct, and
+// print "the project matches the plan" while neither planned bucket
+// existed. That is the verifier-that-cannot-fail this file's header is
+// about, so a leftover variable is now named rather than obeyed.
+const SINGLE = process.argv.includes('--single-bucket');
+if (!SINGLE && process.env.APPWRITE_BUCKET_ID) {
+  console.log(
+    `note: APPWRITE_BUCKET_ID=${process.env.APPWRITE_BUCKET_ID} is set and` +
+      ' --single-bucket is not, so it is ignored: checking the two planned' +
+      ' buckets.',
+  );
+}
 for (const b of SINGLE ? [SINGLE_BUCKET] : BUCKETS) {
   const bucket = await get(`/storage/buckets/${b.id}`);
   if (!present(bucket, `bucket ${b.id}`)) continue;
@@ -136,6 +161,25 @@ for (const b of SINGLE ? [SINGLE_BUCKET] : BUCKETS) {
   if (livePerms !== [...b.permissions].sort().join(',')) {
     note(`bucket ${b.id}: permissions are [${bucket.body.$permissions}], plan says [${b.permissions}]`);
   }
+}
+
+// The buckets the project has and the plan does not. On the Cloud project
+// that is the single-bucket run's shared bucket, which still holds every
+// file uploaded before the switch to two and which nothing points at now.
+// Files are not moved by provisioning, and a bucket going quiet is the
+// kind of thing that is only noticed when somebody opens an old report.
+const listedBuckets = await get('/storage/buckets?queries[]=' + encodeURIComponent(
+  JSON.stringify({ method: 'limit', values: [100] }),
+));
+if (listedBuckets.ok) {
+  const planned = new Set((SINGLE ? [SINGLE_BUCKET] : BUCKETS).map((b) => b.id));
+  for (const b of listedBuckets.body?.buckets ?? []) {
+    if (!planned.has(b.$id)) {
+      extras.push(`bucket ${b.$id} ("${b.name}") is in the project, not in the plan — left alone`);
+    }
+  }
+} else {
+  note(`unreadable: the project's bucket list (${listedBuckets.status} ${listedBuckets.body?.message ?? ''})`);
 }
 
 for (const f of FUNCTIONS) {
@@ -166,8 +210,13 @@ for (const f of FUNCTIONS) {
   }
 }
 
+if (extras.length) {
+  console.log(`\n${extras.length} thing(s) in the project the plan does not ask for:`);
+  for (const e of extras) console.log(`  ? ${e}`);
+}
+
 if (problems.length === 0) {
-  console.log('The project matches the plan.');
+  console.log('\nThe project matches the plan.');
   process.exit(0);
 }
 console.error(`\n${problems.length} problem(s):`);

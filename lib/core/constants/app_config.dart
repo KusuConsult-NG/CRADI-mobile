@@ -64,6 +64,10 @@ class AppConfig {
   // its config says "Due to Appwrite free tier limits (max 1 bucket)".
   // Safe there as long as file-level permissions stay on; see
   // `infra/appwrite/plan.mjs`.
+  //
+  // The Cloud plan was upgraded on 7 October 2026 and provisions the two
+  // buckets named below, so neither define needs passing for it. The
+  // escape hatch stays for a one-bucket tier.
 
   static const String profileImagesBucket = String.fromEnvironment(
     'PROFILE_IMAGES_BUCKET',

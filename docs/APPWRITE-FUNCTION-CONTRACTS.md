@@ -4,9 +4,12 @@ The Appwrite adapters in `lib/core/services/appwrite/` are written against
 these three contracts, derived from what Phases 1–4 proved and from what
 the client now actually sends.
 
-They were three Functions. The Cloud plan allows **two Functions in
+They were three Functions. The Cloud plan allowed **two Functions in
 total** against the seven this backend needs (3 October 2026; see
-`CLOUD-VERIFICATION.md`), so they are now three routes of one —
+`CLOUD-VERIFICATION.md`), so they became three routes of one. The plan
+was upgraded on 7 October and the merge is staying — it is what the tests
+and both clients are written against, and it costs only the widened key
+scope `plan.mjs` describes. So the route is still one Function —
 `AppwriteConfig.clientFunctionId`, default `client`, entrypoint
 `functions/cradi/src/client.js`. Which route runs is the **execution's
 path**, passed as `path` on `createExecution` and read as `req.path`:

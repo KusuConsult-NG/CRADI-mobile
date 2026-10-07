@@ -7,12 +7,47 @@ be run from a machine that can reach Cloud.
 
 > **This container cannot.** The environment's network policy answers 403
 > at the gateway for `fra.cloud.appwrite.io`, for `cloud.appwrite.io` and
-> for `appwrite.io` — it has, through every phase. Every contact anything
-> in this repository has made with Cloud was the owner running a script
-> locally. That is what this file is for.
+> for `appwrite.io` — it has, through every phase, and it still did when
+> this was re-measured on 7 October 2026. Every contact anything in this
+> repository has made with Cloud was the owner running a script locally.
+> That is what this file is for.
 >
 > To run it from a Claude Code session instead, the environment's
-> **Network access** setting needs `fra.cloud.appwrite.io` allowed.
+> **Network access** setting needs `fra.cloud.appwrite.io` allowed, and
+> the six `APPWRITE_*`/`TERMII_*` variables below have to be in the
+> environment's settings — a session has none of them today.
+
+## The plan was upgraded — 7 October 2026
+
+The owner upgraded the Cloud plan, so the two-Function cap that stopped
+the first run should be gone. **Should**: nothing has been measured
+against the new plan from anywhere, which is why `--probe` is still the
+first thing in the sequence. What the upgrade does and does not change:
+
+| | |
+|---|---|
+| **Functions** | The two-Function cap is what the 7→2 consolidation worked around. **The consolidation stays.** It is what the 252 unit tests, the six e2e suites and `APPWRITE-FUNCTION-CONTRACTS.md` describe, and more slots is not a reason to unpick a merge that cost nothing but a widened key scope. Deploy `client` and `worker`. |
+| **Buckets** | Going to the two the plan declares — `report-images` and `profile-images`, different ACLs, as `BUCKETS` in `plan.mjs` has always said. So **no `--single-bucket` and no `APPWRITE_BUCKET_ID`** in the sequence below. |
+| Database | Still provisioned into the existing one (`APPWRITE_DATABASE_ID`). Whether the new plan allows more is unmeasured and does not matter: one is what this design needs. |
+| Everything else | Unmeasured on this plan. `--probe` first, and expect the numbers in `infra/appwrite/README.md` to be stale. |
+| Index width, row width | **Unchanged.** Those are MariaDB's 767-byte index limit and the row limit, not the plan's, so the `lengths` the first run needed are still needed. |
+
+Two buckets instead of one also settles a mismatch that would have shown
+as broken evidence thumbnails in the admin panel: it builds its image
+URLs from `REPORT_IMAGES_BUCKET` in the panel's own `lib/constants.ts`,
+which is `report-images`, while the single-bucket project's only bucket
+is `6941e4e10034186aded8`. With the planned buckets provisioned, the panel's
+default and `AppConfig`'s two defines are correct as they stand — nothing
+needs passing at build time. (The constant takes
+`NEXT_PUBLIC_APPWRITE_REPORT_IMAGES_BUCKET` now, for a project that goes
+back to one.)
+
+**The files already on Cloud do not move.** Whatever was uploaded into
+the shared bucket stays there and stays reachable only by that id;
+`verify.mjs` lists the bucket as something the plan does not ask for.
+That is cheap because `reports` was empty on 3 October — if it is not
+empty when you run this, the old rows' images need copying across before
+the panel and the app stop finding them.
 
 ## First Cloud run — 3 October 2026, from the owner's machine
 
@@ -58,8 +93,8 @@ has agreed to be texted.
 |---|---|
 | Endpoint | `https://fra.cloud.appwrite.io/v1` (Frankfurt) |
 | Project | `6941cdb400050e7249d5` |
-| Database | `6941e2c2003705bb5a25` — the previous Appwrite build's. The plan allows **one** database and the project already has it, so provisioning goes into that one: `APPWRITE_DATABASE_ID` is a variable, not a change. |
-| Buckets | the tier allowed **one**. `provision.mjs --single-bucket` provisions one; the app's bucket ids are `String.fromEnvironment`. Safe only while `fileSecurity` stays on. |
+| Database | `6941e2c2003705bb5a25` — the previous Appwrite build's. The free tier allowed **one** database and the project already had it, so provisioning goes into that one: `APPWRITE_DATABASE_ID` is a variable, not a change. |
+| Buckets | the free tier allowed **one** (`6941e4e10034186aded8`, the previous build's, reused). Since the upgrade a plain `provision.mjs` makes the two the plan declares and that one is left alone, holding its files. `--single-bucket` and `APPWRITE_BUCKET_ID` are the one-bucket fallback; neither belongs in a run against this plan. |
 
 The API key must be a **fresh** server key. Two keys from the previous
 project are in public git history and must not be reused. The key needs:
@@ -73,7 +108,8 @@ export APPWRITE_ENDPOINT=https://fra.cloud.appwrite.io/v1
 export APPWRITE_PROJECT_ID=6941cdb400050e7249d5
 export APPWRITE_DATABASE_ID=6941e2c2003705bb5a25
 export APPWRITE_API_KEY=...            # a fresh server key
-export APPWRITE_BUCKET_ID=6941e4e10034186aded8   # the tier's one bucket, reused
+# No APPWRITE_BUCKET_ID: that is the one-bucket fallback, and both scripts
+# now ignore it unless --single-bucket is passed (and say they are).
 
 # 1. What the plan asks for, against what the tier allows.
 #    --dry-run is read-only. --probe is NOT: it provisions for real and
@@ -83,7 +119,7 @@ node infra/appwrite/provision.mjs --probe
 
 # 2. Provision, then confirm. `provision.mjs` stops at the first quota
 #    refusal and names it; `verify.mjs` exits non-zero on any difference.
-node infra/appwrite/provision.mjs --single-bucket
+node infra/appwrite/provision.mjs
 node infra/appwrite/verify.mjs
 
 # 3. Deploy the two Functions (`client`, `worker`) and wait for
@@ -195,14 +231,21 @@ the environment rather than in a shell — `TERMII_API_KEY` and
 `TERMII_SENDER_ID` are read by `drain.js` from the Function's variables,
 which `deploy.mjs` sets from its own environment.
 
-### 2. The tier's real limits
+### 2. The plan's real limits
 
-584 teams, ~650 messaging topics, 19 collections, 187 columns, and 2
-Functions, one of them on a one-minute schedule. The one-database and
-one-bucket limits are known from the project's own history. The rest
-have never been measured against the live plan, which is what
+584 teams, ~650 messaging topics, 19 collections, 187 columns, 2 buckets,
+and 2 Functions, one of them on a one-minute schedule. **Every one of
+these is now unmeasured**: the numbers in `infra/appwrite/README.md` are
+the free tier's, and the plan was upgraded on 7 October. That is what
 `--probe` is for: it keeps going past a quota refusal and lists every
 limit in one run, instead of one round trip per limit.
+
+The schedule is the one to watch beyond the counts. `worker` runs
+`* * * * *` and carries three cadences on it; a plan that floors cron
+frequency does not refuse it at provisioning time, it just runs it less
+often, and the drain and the escalation sweep both assume a minute. Check
+the Function's own schedule in the console after `deploy.mjs` against
+what `plan.mjs` asked for — `verify.mjs` compares the two and says so.
 
 ## What `cloud-check.mjs` checks, and why each one
 
