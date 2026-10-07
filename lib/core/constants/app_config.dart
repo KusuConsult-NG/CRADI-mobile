@@ -77,4 +77,25 @@ class AppConfig {
     'REPORT_IMAGES_BUCKET',
     defaultValue: 'report-images',
   );
+
+  // ──────────────────── Appwrite push providers ────────────────────────────
+  //
+  // The Messaging provider each platform's device tokens belong to.
+  //
+  // A target that names no provider is filed under the project's default
+  // push provider. A project with FCM for Android and APNs for iOS has
+  // one of each, so on the platform that is not the default every device
+  // is registered against a provider that cannot deliver to it — and
+  // that is accepted at registration and silent at send time.
+  //
+  // Left empty when the project has a single provider, which is also
+  // what a build with no Messaging configured gets. See
+  // `AppwritePushTargets.providerId`.
+
+  static const String pushProviderAndroid = String.fromEnvironment(
+    'APPWRITE_PUSH_PROVIDER_ANDROID',
+  );
+  static const String pushProviderIos = String.fromEnvironment(
+    'APPWRITE_PUSH_PROVIDER_IOS',
+  );
 }

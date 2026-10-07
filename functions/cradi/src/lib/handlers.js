@@ -8,7 +8,9 @@
 import { Query, getRow, listRowsOrThrow, updateRow } from './appwrite.js';
 import { sendPush } from './messaging.js';
 import { PermanentEventError } from './outbox.js';
+import { reconcileSubscriptions } from './topics.js';
 import {
+  ALL_USERS_TOPIC,
   DISPUTE_REASON,
   adminAlertNotification,
   alertTopics,
@@ -204,15 +206,32 @@ export function createHandlers({ settings = {}, sms = null, log = () => {} } = {
       log(`alert_created ${alertId} -> ${JSON.stringify(target)}`);
       return null;
     },
+
+    /**
+     * Subscribes this user's devices to the topics their profile implies,
+     * and unsubscribes the ones it no longer does.
+     *
+     * The event fires on every profile update, so this mostly answers
+     * "nothing to do" in 409s. It matters on the two edits that move
+     * somebody: an admin changing their state or LGA, which would
+     * otherwise leave them hearing their old LGA's warnings and none of
+     * their new one's.
+     *
+     * A profile with no registered device is not an error: the client
+     * registers a push target when it has a token and asks for this same
+     * reconciliation then (`sync_push_subscriptions`).
+     */
+    async push_topics_changed(event, payload) {
+      const userId = payload.userId;
+      if (!userId) throw new PermanentEventError('payload: userId missing');
+      const profile = await readRow('profiles', userId);
+      if (!profile) return 'profile not found';
+      const result = await reconcileSubscriptions({ userId, profile, log });
+      if (result.targets === 0) return 'no push targets registered';
+      return null;
+    },
   };
 }
-
-/**
- * OneSignal could address "everyone" directly; Appwrite addresses topics,
- * so "everyone" is a topic every account is subscribed to at
- * registration. Phase 3 counted it among the ~650.
- */
-export const ALL_USERS_TOPIC = 'all-users';
 
 async function readRow(table, id) {
   const row = await getRow(table, id);

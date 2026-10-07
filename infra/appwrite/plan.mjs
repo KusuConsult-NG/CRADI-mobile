@@ -36,6 +36,19 @@ export const DATABASE_NAME = 'CRADI';
  * client cannot supply one.
  */
 const DENORMALISED = {
+  profiles: [
+    // The topics this profile's push targets are currently subscribed
+    // to, written by `lib/topics.js` after it subscribes them.
+    //
+    // Appwrite has no endpoint that lists one user's subscriptions, only
+    // one topic's subscribers, and an event payload carries no "before"
+    // — so without this a user moved from one LGA to another would keep
+    // receiving the old LGA's warnings and nothing could tell that the
+    // subscription was stale. Same reason as `previousStatus` below.
+    //
+    // 36 because that is Appwrite's id limit, and these are topic ids.
+    { key: 'pushTopics', type: 'string', size: 36, array: true, required: false },
+  ],
   reports: [
     { key: 'userName', type: 'string', size: 8192, required: false },
     { key: 'userRole', type: 'string', size: 64, required: false },
@@ -86,7 +99,7 @@ export const COLLECTIONS = [
   {
     id: 'profiles',
     name: 'Profiles',
-    columns: cols('profiles'),
+    columns: cols('profiles', DENORMALISED.profiles),
     indexes: [
       { key: 'by_role_lga_ward', type: 'key', attributes: ['role', 'lga', 'ward'] },
       { key: 'by_role', type: 'key', attributes: ['role'] },

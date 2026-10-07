@@ -42,6 +42,37 @@ not:
 
 ---
 
+## Update — 7 October 2026: push, end to end
+
+The gap that would have shown up as silence after the cutover is closed in
+code. `functions/cradi` addressed push topics that nothing was ever
+subscribed to, because nothing registered a device as an Appwrite push
+target — and Appwrite answers `201` to a message aimed at an empty topic,
+so every test and every outbox row said it had been sent.
+
+What landed (Phase 25 in `APPWRITE-MIGRATION.md` has the reasoning):
+
+- the app registers this device as a push target, with the token
+  OneSignal already holds, and asks the server to subscribe it;
+- the server subscribes each of a user's devices to `all-users`,
+  `state-<state>` and `lga-<state>-<lga>` — read back from `alertTopics`
+  rather than composed a second time — and unsubscribes the ones a move
+  leaves behind, remembering the set in a new `profiles.pushTopics`;
+- topics are created when the first device in one registers, which takes
+  Phase 3's 650-topic quota question off the table;
+- on the Supabase build it all no-ops, so one build can carry both
+  through the cutover, which is Phase 3's one mitigation for the fact
+  that OneSignal subscriptions cannot be transferred.
+
+**What is still owed is a console job, not code:** Appwrite Messaging
+needs a push provider (the FCM v1 service-account JSON, an APNs key for
+iOS) and an email provider, and the two provider ids then go into the app
+build as `--dart-define`s. Until the provider exists, Messaging accepts a
+push and leaves it `processing` — the same silent failure
+`bootstrap.mjs` records for email. See `CLOUD-VERIFICATION.md`.
+
+---
+
 ## The two blockers, both in environment settings
 
 Neither is a code problem and neither can be worked around from inside

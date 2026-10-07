@@ -148,6 +148,27 @@ npm run test:e2e:live
 npm run test:e2e:live:clean               # removes the seeded rows
 ```
 
+## Two console steps no script does
+
+**A Messaging push provider** — the FCM v1 service-account JSON, plus an
+APNs key for iOS. Those credentials live inside OneSignal today. Appwrite
+Messaging accepts a message with no enabled provider, leaves it
+`processing` and reports success, so this is a silent prerequisite rather
+than a loud one (`infra/appwrite/local/bootstrap.mjs` records the same
+trap for email, which is why the local stack provisions an SMTP provider
+by hand). Nothing in `infra/appwrite` creates one, deliberately: it would
+put a service-account key in this repository's environment.
+
+Note both provider ids afterwards. A target that names no provider is
+filed under the project's *default* push provider, so in a project with
+FCM and APNs every device on the non-default platform would be registered
+against a provider that cannot reach it — accepted, then silent. The app
+build takes them as `--dart-define APPWRITE_PUSH_PROVIDER_ANDROID=...` and
+`APPWRITE_PUSH_PROVIDER_IOS=...` (see Phase 25 in `APPWRITE-MIGRATION.md`).
+
+**An email provider**, for the same reason: `/auth` sends its typed codes
+through Messaging.
+
 The panel needs a **web platform** registered for its hostname, or
 Appwrite refuses every browser request as an unknown origin. `localhost`
 for a local run; the Railway domain for the deployed one.
@@ -233,8 +254,13 @@ which `deploy.mjs` sets from its own environment.
 
 ### 2. The plan's real limits
 
-584 teams, ~650 messaging topics, 19 collections, 187 columns, 2 buckets,
-and 2 Functions, one of them on a one-minute schedule. **Every one of
+584 teams, 19 collections, 189 columns (counted from `plan.mjs`, which
+is one more than this said before Phase 25 added `pushTopics` — the old
+figure was already short by one), 2 buckets, and 2 Functions, one
+of them on a one-minute schedule. Messaging topics are no longer part of
+that question: Phase 25 creates one the first time a device in it
+registers, so the count is the number of places that have users rather
+than 37 states and 770 LGAs provisioned empty. **Every one of
 these is now unmeasured**: the numbers in `infra/appwrite/README.md` are
 the free tier's, and the plan was upgraded on 7 October. That is what
 `--probe` is for: it keeps going past a quota refusal and lists every

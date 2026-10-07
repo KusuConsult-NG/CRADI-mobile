@@ -94,6 +94,13 @@ anything on its own — both scripts say so and ignore it when the flag is
 absent, because a leftover export silently checking the wrong bucket is
 how a verifier stops being one.
 
+One limit came off this list rather than being answered: **messaging
+topics**. Phase 3 wanted a topic per targetable group and counted ~650 of
+them; Phase 25 creates a topic the first time a device belonging in it
+registers, so nothing provisions topics and the quota exposure is the
+number of LGAs that actually have users. `--probe` still creates and
+deletes one, to learn whether the plan permits any at all.
+
 `provision.mjs` stops the moment the plan refuses something and says so,
 rather than burying it in two hundred lines — so running it is also how
 the rest of this question gets answered.
