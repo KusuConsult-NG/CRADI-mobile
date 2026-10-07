@@ -131,6 +131,36 @@ send time. The app build takes them as defines in step 6.
 their codes through the `auth` route of the `client` Function, but the
 panel signs in with email and password.
 
+### 1f. Firebase, for the device token
+
+Appwrite Messaging delivers *through* FCM and APNs, but the token it
+delivers to is minted by Firebase on the device. So the app needs Firebase
+platform configuration, and it is not a `--dart-define`:
+
+| Platform | File | State |
+| --- | --- | --- |
+| Android | `android/app/google-services.json` | **committed**, for Firebase project `ewer-8f788` |
+| iOS | `ios/Runner/GoogleService-Info.plist` | **missing** |
+
+For iOS: Firebase console → the project → add an iOS app with bundle id
+`com.westgatestratagem.climate_app.climate_app`, download the plist, and
+**add it to the Runner target in Xcode** (*File → Add Files*, tick Runner)
+— dropping it in the folder is not enough, it has to be in *Copy Bundle
+Resources*. Then upload the APNs `.p8` key to Firebase as well, since FCM
+is what talks to APNs.
+
+Without it, `Firebase.initializeApp()` throws, `main.dart` catches it and
+logs *"FCM unavailable on this build (push disabled)"*, and the app runs
+with no push at all on iOS. It does not crash, and nothing in the UI says
+so beyond `isPushAvailable` being false.
+
+`google-services.json` is client configuration and is designed to ship
+inside the APK — it is not a secret in the way the Appwrite API key is.
+But this repository is public, so confirm in the Google Cloud console that
+its `AIzaSy…` key carries **application restrictions** (package name plus
+the release SHA-1) and **API restrictions**; an unrestricted key of that
+shape can be used against other Google APIs billed to the project.
+
 ---
 
 ## 2. Provision the schema
@@ -305,12 +335,11 @@ All runtime configuration is compile-time (`String.fromEnvironment`), in
 `lib/core/constants/app_config.dart` and
 `lib/core/services/appwrite/appwrite_config.dart`.
 
-**Which backend a build talks to is decided by these defines, not by a
-flag:** `activeBackend` is Appwrite when `APPWRITE_ENDPOINT` and
-`APPWRITE_PROJECT_ID` are both non-empty, and Supabase otherwise
-(`lib/core/services/backend.dart`). There is no state in which the app is
-pointed at one and talking to the other — and a build with neither starts
-permanently signed out, which is what unit tests and UI work use.
+**Appwrite is the only backend.** Without `APPWRITE_ENDPOINT` and
+`APPWRITE_PROJECT_ID` the app starts and behaves as permanently signed
+out — `backend.dart` hands out `UnconfiguredDataBackend` and
+`UnconfiguredAuthBackend` — which is what unit tests and UI work use, and
+what must never reach Play. The release job fails rather than build it.
 
 | `--dart-define` key | Required? | Value | Effect when empty |
 | --- | --- | --- | --- |
@@ -320,26 +349,30 @@ permanently signed out, which is what unit tests and UI work use.
 | `APPWRITE_FN_CLIENT` | no | the client Function's id | defaults to `client` |
 | `APPWRITE_PUSH_PROVIDER_ANDROID` | for push on Android | the FCM provider's id | the target names no provider and is filed under the project's default — wrong, and silent, in a two-provider project |
 | `APPWRITE_PUSH_PROVIDER_IOS` | for push on iOS | the APNs provider's id | as above |
-| `ONESIGNAL_APP_ID` | for push | the OneSignal app id | **push is disabled entirely**, including on Appwrite: the device token still comes from OneSignal (see below) |
 | `SENTRY_DSN` | no | Sentry DSN | crash reporting disabled |
 | `APPWRITE_IMAGE_TRANSFORMS` | no | `true` | smaller renders are not requested; the full-size image is used |
 | `PROFILE_IMAGES_BUCKET` / `REPORT_IMAGES_BUCKET` | only on a one-bucket tier | the shared bucket's id | the planned ids, which step 2 provisions |
-| `SUPABASE_URL` / `SUPABASE_ANON_KEY` | only for a Supabase build | — | — |
 
-### Push still needs OneSignal, for now
+**There is no push define.** The device token comes from
+`firebase_messaging`, which reads Firebase's own platform files — see § 1f.
+A build whose Firebase config is missing or wrong has no token, registers
+no Appwrite target, and receives nothing; `NotificationService.isPushAvailable`
+is what reports that state.
 
-On the Appwrite backend the server delivers through Appwrite Messaging —
-but the **device token** comes from OneSignal, which owns the FCM and APNs
-registration. `AppwritePushTargets` registers that token as an Appwrite
-push target and asks the server to subscribe it to its topics. So an
-Appwrite build with no `ONESIGNAL_APP_ID` has no token to register and
-receives nothing.
+### Push, and the two topic namespaces that look alike
 
-That is deliberate: it is Phase 3's mitigation for the cutover. OneSignal
-subscriptions cannot be transferred, so push reaches nobody until each
-device has opened the new build once — and a build that registers Appwrite
-targets *while still on OneSignal* means the tokens already exist on the
-day. See Phase 25 in `APPWRITE-MIGRATION.md`.
+Delivery is: the `worker` Function posts to **Appwrite Messaging**, which
+sends through its FCM or APNs provider to the **Appwrite push targets**
+subscribed to the Appwrite **topic** it addressed. The app's part is to
+register its FCM token as a target and call `sync_push_subscriptions`;
+the server does the rest (`functions/cradi/src/lib/topics.js`).
+
+> `notification_service.dart` *also* calls
+> `FirebaseMessaging.subscribeToTopic` with names like `all-users` and
+> `lga_obi`. **Nothing sends to those.** FCM topics and Appwrite Messaging
+> topics are separate namespaces that here happen to share the string
+> `all-users`, and the server has no direct-FCM path. Those calls are
+> inert; do not read a device's FCM topic list as evidence of anything.
 
 ### `APPWRITE_IMAGE_TRANSFORMS` (optional smaller renders)
 
@@ -368,26 +401,25 @@ fallback when it is missing.
 ```bash
 cp env.example.json env.json     # env.json is git-ignored
 # fill in APPWRITE_ENDPOINT, APPWRITE_PROJECT_ID, APPWRITE_DATABASE_ID,
-# the two push provider ids, ONESIGNAL_APP_ID, SENTRY_DSN
+# the two push provider ids, SENTRY_DSN
 flutter pub get
 flutter run   --dart-define-from-file=env.json
 flutter build apk --release --no-tree-shake-icons --dart-define-from-file=env.json
 ```
 
 `env.example.json` is the template. It ships with **`APPWRITE_PROJECT_ID`
-empty**, deliberately: an unedited copy configures no backend and the app
-starts permanently signed out, which is a clearer failure than pointing at a
-project that does not exist. Fill in the project id (and the database id, if
-it is not `cradi`) for an Appwrite build, or the two `SUPABASE_*` values for a
-Supabase one — not both.
+empty**, deliberately: an unedited copy configures nothing and the app starts
+permanently signed out, which is a clearer failure than pointing at a project
+that does not exist.
 
-The CI release job writes `env.json` from repository secrets of the same names —
-`APPWRITE_ENDPOINT`, `APPWRITE_PROJECT_ID`, `APPWRITE_DATABASE_ID`,
-`APPWRITE_PUSH_PROVIDER_ANDROID`, `APPWRITE_PUSH_PROVIDER_IOS`,
-`ONESIGNAL_APP_ID`, `SENTRY_DSN`, and the two Supabase ones — so **a
-tagged release builds whichever backend those secrets describe.** Set the
-Appwrite secrets before tagging, or the release is a Supabase build.
-Signing: `docs/KEYSTORE_SETUP.md`.
+The CI release job writes `env.json` from repository secrets of the same
+names — `APPWRITE_ENDPOINT`, `APPWRITE_PROJECT_ID`,
+`APPWRITE_DATABASE_ID`, `APPWRITE_PUSH_PROVIDER_ANDROID`,
+`APPWRITE_PUSH_PROVIDER_IOS`, `SENTRY_DSN` — dropping the empty ones, and
+**fails the build if the endpoint and project id are not both set**, since
+that APK would install and behave as signed out. Push needs no secret
+here; it needs the Firebase files in § 1f. Signing:
+`docs/KEYSTORE_SETUP.md`.
 
 > **No server secret is ever passed to the app** — not in `env.json`, not
 > as a define, not obfuscated. The app never sends a push or an SMS
@@ -567,14 +599,25 @@ fails only at runtime:
 3. **Push, on this stack, end to end.** The device registers an Appwrite push
    target and the server subscribes it to its topics; both halves are tested
    against a server of the test's own, and neither has run against Appwrite
-   Cloud with a real provider. § 7 step 2 is the first time it does.
+   Cloud with a real provider. § 7 step 2 is the first time it does — and on
+   iOS it cannot until `GoogleService-Info.plist` exists (§ 1f), because
+   there is no token to register.
 4. **Deep links.** `lib/core/services/deep_link_service.dart` listens for
    `cradi://…` and `https://cradi.ng/…` with `app_links` and hands the mapped
    location to `go_router`. The mapping is unit-tested
-   (`test/unit/deep_link_service_test.dart`) but has never run on a device. On
-   a Supabase build its auth callbacks are filtered out and left to
-   `supabase_flutter`; an Appwrite build has no such consumer, so the filter is
-   inert there. The Android manifest sets `android:autoVerify="true"` for
+   (`test/unit/deep_link_service_test.dart`) but has never run on a device.
+
+   **`isSupabaseAuthLink` outlived what it protected.** `locationFor` still
+   drops any link carrying `access_token`, `code`, `error`, `error_code` or
+   `error_description` — in the query string or the fragment — because
+   `supabase_flutter` used to consume those. That package is gone, so
+   nothing consumes them now and such a link is silently dropped rather
+   than routed. Nothing the app currently sends uses those names, so it
+   costs nothing today; it will bite the first `cradi://…?code=…` link
+   anybody adds. Deciding whether to delete the filter or keep it is a
+   product call, not a cleanup.
+
+   The Android manifest sets `android:autoVerify="true"` for
    `https://cradi.ng`, which needs `https://cradi.ng/.well-known/assetlinks.json`
    published with the **release** signing certificate's SHA-256; on iOS,
    Universal Links need the *Associated Domains* entitlement
@@ -738,9 +781,10 @@ In order, because each step makes the next one meaningful:
 2. **Did the device register a target?** Console → Auth → that user →
    Targets. A device registers on sign-in and whenever the token changes; the
    app logs `Push target registered for <user>` when it did, and
-   `Push target registration failed: …` when it did not. No target at all,
-   on an Appwrite build, usually means no `ONESIGNAL_APP_ID` — that is where
-   the token comes from (§ 6).
+   `Push target registration failed: …` when it did not. No target at all
+   usually means no FCM token, which means the Firebase platform config is
+   missing — on iOS that is the absent `GoogleService-Info.plist` (§ 1f) and
+   the log line is `FCM unavailable on this build (push disabled)`.
 3. **Is the target subscribed?** Console → Messaging → Topics → the topic →
    Subscribers. The user's `profiles.pushTopics` is what the server believes
    it subscribed them to; if that is empty while a target exists, the
@@ -812,10 +856,18 @@ it is a separate, ordered procedure, and the production run has not happened:
 * `CLOUD-VERIFICATION.md` — the verification sequence to run against Cloud,
   which overlaps this runbook's steps 2–3 and goes further.
 
-The two stacks can run side by side: `activeBackend` is decided by the build's
-defines, so one APK talks to Appwrite and the previous one talks to Supabase,
-and the app registers Appwrite push targets while still receiving OneSignal
-pushes — which is what makes the push gap at cutover survivable.
+The two stacks no longer run side by side **in one build**: the Supabase
+client was removed, so a current APK talks to Appwrite or to nothing. An
+older APK still talks to Supabase, which is what keeps the deployed stack
+serving users during the window.
+
+That costs Phase 3's push mitigation. It assumed a build that registered
+Appwrite targets *while still on OneSignal*, so tokens would exist on the
+day; the current app registers FCM tokens with Appwrite and tells
+OneSignal nothing. So devices on an old build are reachable only through
+OneSignal and devices on a new one only through Appwrite, with no overlap
+until each handset updates. SMS is unaffected and is the announcement
+channel that survives the window.
 
 ---
 

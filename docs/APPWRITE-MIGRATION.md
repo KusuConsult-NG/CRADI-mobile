@@ -3349,6 +3349,15 @@ updates the target it has rather than leaving an expired one behind each
 launch), and calls `sync_push_subscriptions`. When OneSignal goes, the
 token's source changes and nothing else does.
 
+> **It went, the same day.** The Appwrite-only change removed OneSignal and
+> the token now comes from `firebase_messaging` — `syncPushTarget`,
+> `registerPushTarget`, `AppwritePushTargets` and `topics.js` are
+> untouched, which is the property this paragraph was claiming. Two
+> consequences that are not improvements: iOS has no
+> `GoogleService-Info.plist`, so there is no token to register there
+> (`DEPLOYMENT.md` § 1f), and the cutover mitigation this phase existed to
+> serve is gone with OneSignal — see *The cutover* in `DEPLOYMENT.md`.
+
 `backend.dart` answers `false` on the Supabase build and does nothing
 there, where OneSignal still holds both the token and the targeting.
 

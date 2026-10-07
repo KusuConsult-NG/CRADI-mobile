@@ -6,7 +6,7 @@ Early Warning and Emergency Response app for CRADI. Flutter client backed by:
 | --- | --- |
 | Auth, database, file storage, realtime | **Appwrite** (`infra/appwrite/`) |
 | Server jobs — push fan-out, escalation cron, the reconciling sweep, authority SMS | **Appwrite Functions** (`functions/cradi/`) |
-| Push and email delivery | **Appwrite Messaging** (the device token still comes from **OneSignal** — see § 2) |
+| Push and email delivery | **Appwrite Messaging**, over an FCM and an APNs provider; the device token comes from **`firebase_messaging`** (see § 2) |
 | Authority SMS | **Termii**, called directly by a Function |
 | Crash reporting (optional) | **Sentry** |
 
@@ -31,10 +31,12 @@ who may write what — are **not in the app**. They live in:
 > end-to-end runbook for the Appwrite stack (console → provision →
 > Functions → first admin → Railway admin → app build → smoke test).
 >
-> **The Supabase stack is still what runs in production.** It is being
-> migrated away from and nothing has been decommissioned; see
-> *The Supabase stack* at the end, `docs/DEPLOYMENT-SUPABASE.md` for its
-> runbook, `docs/APPWRITE-MIGRATION.md` for the migration's record and
+> **The app itself is Appwrite-only.** The Supabase client code was
+> removed, so one build can no longer talk to either — but the Supabase
+> *deployment* is still what runs in production and nothing has been
+> decommissioned. See *The Supabase stack* at the end,
+> `docs/DEPLOYMENT-SUPABASE.md` for its runbook,
+> `docs/APPWRITE-MIGRATION.md` for the migration's record and
 > `docs/HANDOFF.md` for what is still owed.
 
 ## 1. Appwrite project
@@ -87,18 +89,18 @@ Three topics, and a device is in all three that apply to it: `all-users`,
 because six LGA names exist in two states each — Obi is in both Benue and
 Nasarawa.
 
-**The device token still comes from OneSignal**, which owns the FCM and
-APNs registration. The app registers that token as an Appwrite *push
-target* and asks the server to subscribe it (`AppwritePushTargets` →
-`sync_push_subscriptions`). So an Appwrite build with no
-`ONESIGNAL_APP_ID` has no token to register and receives nothing.
+**The device token comes from `firebase_messaging`.** The app registers
+that token as an Appwrite *push target* and asks the server to subscribe
+it (`AppwritePushTargets` → `sync_push_subscriptions`). It was OneSignal
+until the Appwrite-only change; the token's source moved and nothing else
+did, which is what that module was built for.
 
-That is deliberate, and it is the one mitigation for the cutover:
-OneSignal subscriptions cannot be transferred, so push reaches nobody
-until each device has opened the new build once — and a build that
-registers Appwrite targets *while still on OneSignal* means the tokens
-already exist on the day. Phase 25 in `docs/APPWRITE-MIGRATION.md` has
-the reasoning; Phase 3 has the decision.
+So push needs Firebase platform configuration, not a define:
+
+| | |
+|---|---|
+| Android | `android/app/google-services.json`, committed. It is client configuration, designed to ship inside the APK — not a secret — but the repository is public, so the `AIzaSy…` key in it should carry application and API restrictions in the Google Cloud console. |
+| iOS | `ios/Runner/GoogleService-Info.plist`, **absent**. Without it `Firebase.initializeApp()` throws, `main.dart` catches it, and push is off on iOS. `NotificationService.isPushAvailable` is what reports that. |
 
 Two console steps are prerequisites, and **both fail silently**: Appwrite
 Messaging accepts a message with no enabled provider, answers success and
@@ -106,6 +108,14 @@ delivers nothing. An FCM provider (service-account JSON) and an APNs key
 have to exist, and their **provider ids** have to reach the app build, or
 every device on the project's non-default platform is registered against
 a provider that cannot deliver to it.
+
+> **The client also subscribes to FCM topics of its own**
+> (`FirebaseMessaging.subscribeToTopic`, in `notification_service.dart`),
+> with names like `all-users` and `lga_obi`. **Nothing sends to those.**
+> Delivery is Appwrite Messaging → an Appwrite topic → the targets
+> subscribed to it, and Appwrite topics are a separate namespace that
+> happens to share the string `all-users`. Those calls are inert; read
+> `functions/cradi/src/lib/topics.js` for the path that is live.
 
 ## 3. Server jobs
 
@@ -141,18 +151,15 @@ cp env.example.json env.json   # env.json is git-ignored
 | `APPWRITE_FN_CLIENT` | no | the client Function's id; defaults to `client` |
 | `APPWRITE_PUSH_PROVIDER_ANDROID` | for push | the FCM provider's id (§ 2) |
 | `APPWRITE_PUSH_PROVIDER_IOS` | for push | the APNs provider's id (§ 2) |
-| `ONESIGNAL_APP_ID` | for push | push is disabled when empty — including on Appwrite (§ 2) |
 | `SENTRY_DSN` | no | crash reporting is disabled when empty |
 | `APPWRITE_IMAGE_TRANSFORMS` | no | ask Appwrite's `/preview` for smaller renders; off when unset |
 | `PROFILE_IMAGES_BUCKET` / `REPORT_IMAGES_BUCKET` | only on a one-bucket tier | default to the two buckets the plan provisions |
-| `SUPABASE_URL` / `SUPABASE_ANON_KEY` | only for a Supabase build | see below |
 
-**Which backend a build talks to is decided by these defines, not by a
-flag.** `activeBackend` is Appwrite when the endpoint and project id are
-both non-empty and Supabase otherwise (`lib/core/services/backend.dart`),
-so one APK can talk to Appwrite while the previous one talks to Supabase.
-With neither configured the app starts but behaves as signed out, which is
-what UI work and the unit tests use.
+**Appwrite is the only backend.** Without the endpoint and project id the
+app starts and behaves as signed out — `backend.dart` hands out
+`UnconfiguredDataBackend`/`UnconfiguredAuthBackend` — which is what UI work
+and the unit tests use, and what a release must never ship. The release job
+fails rather than build one.
 
 `APPWRITE_IMAGE_TRANSFORMS` is a delivery-only optimisation. With it, a
 thumbnail is requested from Appwrite at the size it will be drawn
@@ -212,7 +219,7 @@ dart format --set-exit-if-changed .          # all three are CI gates
 
 | Suite | |
 | --- | --- |
-| `flutter test` | 843 tests |
+| `flutter test` | 795 tests (843 before the Supabase client was removed with its tests) |
 | `flutter test test/integration` | needs a live Appwrite and the defines `infra/appwrite/local/prep-dart.mjs` prints |
 | `functions/cradi` → `npm test` | 277 tests, no dependencies to install |
 | `infra/appwrite/local/e2e*.mjs` | six suites against a real Appwrite |
@@ -234,11 +241,12 @@ Two habits this migration was repeatedly caught by, both worth keeping:
 
 ## Building for release
 
-See `docs/KEYSTORE_SETUP.md` for signing. The CI release job (tags
-`v*` only) writes `env.json` from repository secrets of the same names as
-the keys above, dropping the empty ones, and prints which backend it
-built — **a tag built without the `APPWRITE_*` secrets ships a Supabase
-build.**
+See `docs/KEYSTORE_SETUP.md` for signing. The CI release job (tags `v*`
+only) writes `env.json` from repository secrets of the same names as the
+keys above, dropping the empty ones, and prints the endpoint it built
+against. **It fails the build when `APPWRITE_ENDPOINT` and
+`APPWRITE_PROJECT_ID` are not both set**, because that APK would install,
+start, and behave as permanently signed out.
 
 ```bash
 flutter build apk --release --no-tree-shake-icons --dart-define-from-file=env.json
@@ -251,19 +259,34 @@ has been decommissioned and nothing should be until the cutover has run
 and a week of cross-checking has passed (`docs/APPWRITE-MIGRATION.md`
 Phase 8).
 
+**No build of this app talks to it any more.** `supabase_service.dart`
+and `supabase_auth_backend.dart` are gone, so the only Supabase client
+left is the deployed stack's own: the Railway worker, the admin panel's
+history, and the SQL. What follows is where those live, not a thing you
+can point an APK at.
+
 | Piece | Where |
 | --- | --- |
 | Postgres schema, RLS, triggers | `supabase/migrations/`, generated into `supabase/deploy/schema.sql` |
 | Server jobs (outbox, escalation cron, `POST /email`) | `backend/`, on Railway — `backend/README.md` |
-| Push | OneSignal, targeted by the tags the app sets on sign-in |
+| Push | OneSignal, targeted by tags that the app no longer sets — any device on a current build is invisible to it |
 | Email | Resend |
 | Deployment runbook | `docs/DEPLOYMENT-SUPABASE.md` |
 | Firebase → Supabase import | `migration/firebase-to-supabase/README.md` |
 
-A Supabase build needs `SUPABASE_URL` and `SUPABASE_ANON_KEY` in
-`env.json` and no `APPWRITE_*` values. Both are public client
-credentials — the anon key only grants what the RLS policies allow — and
-the **service role key** is a server secret that bypasses every policy.
+Its anon key is a public client credential — it only grants what the RLS
+policies allow — while the **service role key** bypasses every policy and
+is a server secret. Both still matter for as long as that stack is
+serving users; neither is read by this app any more.
+
+**The push gap at cutover is now real rather than theoretical.** Phase 3's
+mitigation was a build that registered Appwrite targets while still on
+OneSignal, so tokens would exist on the day. That build no longer exists:
+the current app registers FCM tokens with Appwrite and tells OneSignal
+nothing. So every device still on an old build is reachable only by
+OneSignal, every device on a new one only by Appwrite, and the two sets
+do not overlap until each handset updates. Plan announcements by SMS,
+which is unaffected.
 
 ## Where things are written down
 

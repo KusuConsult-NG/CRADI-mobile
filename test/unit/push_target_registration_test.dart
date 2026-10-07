@@ -11,6 +11,8 @@ import 'package:climate_app/core/services/notification_service.dart';
 /// branches fails silently in production. A device that never registers
 /// and a topic with nothing in it both look exactly like a quiet week.
 void main() {
+  _pushFlagTests();
+
   late List<String> registered;
   late NotificationService service;
 
@@ -112,4 +114,50 @@ void main() {
       expect(registered, ['device-token', 'device-token']);
     },
   );
+}
+
+/// The two push flags, which were one.
+///
+/// `isPushAvailable` is "FCM came up on this build"; `hasPushPermission` is
+/// "the user allows notifications". Both used to return the same field, so
+/// the combination the settings screen asks about — working, but not
+/// allowed — could never be true, and the localised message it guards was
+/// unreachable. Asserted as the screen asks it.
+void _pushFlagTests() {
+  group('push availability and permission are different questions', () {
+    late NotificationService service;
+
+    setUp(() {
+      SharedPreferences.setMockInitialValues({});
+      service = NotificationService();
+    });
+
+    tearDown(
+      () => service.setPushStateForTesting(available: false, granted: false),
+    );
+
+    test('a build with no Firebase config offers nothing to tap', () {
+      service.setPushStateForTesting(available: false, granted: false);
+      expect(service.isPushAvailable, isFalse);
+      expect(service.hasPushPermission, isFalse);
+      // Nothing for the user to fix, so the screen must not prompt.
+      expect(service.isPushAvailable && !service.hasPushPermission, isFalse);
+    });
+
+    test('working FCM with a refused permission is the promptable case', () {
+      service.setPushStateForTesting(available: true, granted: false);
+      expect(service.isPushAvailable, isTrue);
+      expect(service.hasPushPermission, isFalse);
+      // This is the condition at settings_screen.dart that showed the
+      // "permission needed" message. It was `x && !x` before.
+      expect(service.isPushAvailable && !service.hasPushPermission, isTrue);
+    });
+
+    test('both true is the working case, and prompts nobody', () {
+      service.setPushStateForTesting(available: true, granted: true);
+      expect(service.isPushAvailable, isTrue);
+      expect(service.hasPushPermission, isTrue);
+      expect(service.isPushAvailable && !service.hasPushPermission, isFalse);
+    });
+  });
 }
