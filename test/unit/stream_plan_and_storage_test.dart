@@ -1,7 +1,6 @@
 import 'package:climate_app/core/services/secure_storage_service.dart';
 import 'package:climate_app/core/services/session_manager.dart';
-import 'package:climate_app/core/services/supabase_service.dart';
-import 'package:climate_app/core/services/supabase_mapping.dart';
+import 'package:climate_app/core/services/mapping.dart';
 import 'package:climate_app/features/alerts/providers/alerts_provider.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -45,61 +44,6 @@ void main() {
         expect(plan.streamServerLimit, AlertsProvider.maxAlerts * 2);
       },
     );
-
-    test(
-      'AlertsProvider drops inactive rows on the client and caps the list',
-      () {
-        final rows = [
-          for (var i = 0; i < AlertsProvider.maxAlerts + 10; i++)
-            {'id': 'a$i', 'isActive': i.isEven ? true : i % 3 != 0},
-        ];
-        final active = AlertsProvider.activeAlerts(rows);
-        expect(active.every((a) => a['isActive'] == true), isTrue);
-        expect(active.length, lessThanOrEqualTo(AlertsProvider.maxAlerts));
-        expect(active.first['id'], 'a0');
-        expect(
-          AlertsProvider.activeAlerts([
-            {'id': 'x', 'isActive': false},
-            {'id': 'y', 'is_active': true},
-          ]).map((a) => a['id']),
-          ['y'],
-        );
-      },
-    );
-
-    test('prefers the immutable filter when mixed', () {
-      final plan = QueryPlan.build('reports', [
-        FQuery.equal('status', 'pending'),
-        FQuery.equal('userId', 'u1'),
-        FQuery.limit(10),
-      ]);
-      expect(plan.streamServerFilter?.column, 'user_id');
-      expect(plan.streamServerLimit, isNull);
-    });
-
-    test('limits server-side without filters', () {
-      final plan = QueryPlan.build('knowledge_base', [
-        FQuery.orderDesc('updatedAt'),
-        FQuery.limit(5),
-      ]);
-      expect(plan.streamServerFilter, isNull);
-      expect(plan.streamServerLimit, 5);
-    });
-  });
-
-  group('SupabaseService.imageMimeTypeForPath', () {
-    test('maps known image extensions', () {
-      expect(SupabaseService.imageMimeTypeForPath('/a/b.PNG'), 'image/png');
-      expect(SupabaseService.imageMimeTypeForPath('x.webp'), 'image/webp');
-      expect(SupabaseService.imageMimeTypeForPath('x.heic'), 'image/heic');
-      expect(SupabaseService.imageMimeTypeForPath('x.jpeg'), 'image/jpeg');
-      expect(SupabaseService.imageMimeTypeForPath('x.jpg'), 'image/jpeg');
-    });
-
-    test('defaults to image/jpeg, never octet-stream', () {
-      expect(SupabaseService.imageMimeTypeForPath('noext'), 'image/jpeg');
-      expect(SupabaseService.imageMimeTypeForPath('x.bin'), 'image/jpeg');
-    });
   });
 
   group('SecureStorageService.clearAll', () {

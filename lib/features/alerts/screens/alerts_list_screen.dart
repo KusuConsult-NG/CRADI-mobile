@@ -18,8 +18,7 @@ import 'package:climate_app/shared/widgets/custom_toast.dart';
 import 'package:climate_app/shared/widgets/animated_list_item.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:climate_app/core/l10n/severity_label.dart';
-import 'package:climate_app/core/services/supabase_service.dart'
-    show parseTimestamp;
+import 'package:climate_app/core/services/backend.dart' show parseTimestamp;
 import 'package:climate_app/features/alerts/providers/alerts_provider.dart';
 import 'package:climate_app/features/alerts/screens/alert_severity.dart';
 import 'package:climate_app/features/profile/providers/profile_provider.dart';

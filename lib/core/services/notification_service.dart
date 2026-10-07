@@ -2,13 +2,12 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:developer' as developer;
 
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hive_flutter/hive_flutter.dart';
-import 'package:onesignal_flutter/onesignal_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:climate_app/core/constants/app_config.dart';
 import 'package:climate_app/core/providers/settings_provider.dart';
 import 'package:climate_app/core/services/backend.dart' show registerPushTarget;
 import 'package:climate_app/core/services/hive_encryption_service.dart';
@@ -16,16 +15,16 @@ import 'package:climate_app/core/services/supabase_mapping.dart'
     show parseTimestamp;
 import 'package:climate_app/features/profile/providers/profile_provider.dart';
 
-/// Push notifications via OneSignal.
+/// Push notifications via FCM + Appwrite Messaging topics.
 ///
-/// The Railway backend decides who receives what: it targets devices by
-/// external id (the Supabase user id, set with [OneSignal.login]) and by the
-/// data tags set here (role / lga / state / ward / monitoring_zone). There are
-/// no topic subscriptions or device tokens stored in the database.
+/// The Appwrite drain Function decides who receives what: it publishes to
+/// Appwrite Messaging topics (e.g. `role_field_agent`, `lga_ikeja`) that this
+/// service subscribes the device to after sign-in. Appwrite Messaging relays
+/// the message to FCM, which delivers it to the device.
 ///
-/// OneSignal displays notifications itself (including in the foreground);
-/// this service keeps a local history for the in-app notifications screen and
-/// routes taps.
+/// FCM displays notifications itself (including in the foreground via the
+/// background message handler); this service keeps a local history for the
+/// in-app notifications screen and routes taps.
 class NotificationService {
   static final NotificationService _instance = NotificationService._internal();
   factory NotificationService() => _instance;
@@ -53,7 +52,7 @@ class NotificationService {
   /// In-flight initialization, so concurrent callers share one run.
   Future<void>? _initFuture;
 
-  /// Signed-in user state used to (re)compute tags.
+  /// Signed-in user state used to (re)compute topic subscriptions.
   String? _userId;
   Map<String, String> _baseTags = const {};
   String? _zone;
@@ -65,9 +64,9 @@ class NotificationService {
   /// ValueNotifier for unread notification count
   final ValueNotifier<int> unreadCount = ValueNotifier<int>(0);
 
-  /// Initialize OneSignal and the local notification history.
+  /// Initialize FCM and the local notification history.
   ///
-  /// [profileProvider] lets the service keep the `monitoring_zone` tag in
+  /// [profileProvider] lets the service keep the `monitoring_zone` topic in
   /// sync when the user changes zone.
   Future<void> initialize({ProfileProvider? profileProvider}) async {
     if (profileProvider != null && profileProvider != _profileProvider) {
@@ -91,42 +90,39 @@ class NotificationService {
         encryptionCipher: cipher,
       );
 
-      if (AppConfig.oneSignalAppId.isEmpty) {
+      // FCM setup — gracefully disabled when Firebase is not configured.
+      try {
+        final messaging = FirebaseMessaging.instance;
+        final settings = await messaging.requestPermission(
+          alert: true,
+          badge: true,
+          sound: true,
+          provisional: !SettingsProvider().pushNotifications,
+        );
+        _pushEnabled =
+            settings.authorizationStatus == AuthorizationStatus.authorized ||
+            settings.authorizationStatus == AuthorizationStatus.provisional;
+
+        if (_pushEnabled) {
+          // Foreground messages: record to history; FCM does not show a
+          // heads-up by default in foreground, so we just log it.
+          FirebaseMessaging.onMessage.listen(_onForegroundMessage);
+          // Tapped from background / notification tray.
+          FirebaseMessaging.onMessageOpenedApp.listen(_onMessageTapped);
+          // Cold-start tap (app was terminated).
+          final initial = await messaging.getInitialMessage();
+          if (initial != null) _onMessageTapped(initial);
+          // Token refresh: update Appwrite push target
+          FirebaseMessaging.instance.onTokenRefresh.listen((token) {
+            unawaited(syncPushTarget(token));
+          });
+        }
+      } on Exception catch (e) {
         developer.log(
-          'ONESIGNAL_APP_ID not set — push notifications disabled',
+          'FCM setup error (push disabled): $e',
           name: 'NotificationService',
         );
-      } else {
-        await OneSignal.initialize(AppConfig.oneSignalAppId);
-        OneSignal.Notifications.addForegroundWillDisplayListener(
-          _onForegroundNotification,
-        );
-        OneSignal.Notifications.addClickListener(_onNotificationClicked);
-        // A token arrives after `initialize` — the OS has to issue it —
-        // and again whenever the provider reissues one, which is the case
-        // a single registration at sign-in misses: the Appwrite target
-        // would keep a token nothing can be delivered to, and the only
-        // symptom would be silence.
-        //
-        // `addObserver` does not fire with the current state despite what
-        // its doc comment suggests (it only appends to a list — see the
-        // plugin's `pushsubscription.dart`), so this covers changes and
-        // `_syncSignedInUser` reads whatever token is already there.
-        OneSignal.User.pushSubscription.addObserver(
-          (state) => unawaited(syncPushTarget(state.current.token)),
-        );
-        _pushEnabled = true;
-
-        // Restore the user's Push Notifications setting.
-        if (SettingsProvider().pushNotifications) {
-          // Not awaited: the permission dialog can stay open indefinitely
-          // and must not hold back initialization or identifying the user.
-          // No "open Settings" fallback dialog here: that would nag on
-          // every cold start once the user denied the OS prompt.
-          unawaited(_restorePushSubscription());
-        } else {
-          unawaited(setPushSubscribed(false));
-        }
+        _pushEnabled = false;
       }
 
       _initialized = true;
@@ -134,7 +130,7 @@ class NotificationService {
       await _ensureHistoryOwner(_userId);
       _updateUnreadCount();
 
-      // A user signed in while we were initializing — identify them now.
+      // A user signed in while we were initializing — subscribe them now.
       if (_userId != null) await _serialized(_syncSignedInUser);
 
       developer.log(
@@ -149,54 +145,26 @@ class NotificationService {
     }
   }
 
-  /// Asks for the OS permission without the "open Settings" fallback, then
-  /// undoes an earlier opt-out only when permission is granted: OneSignal's
-  /// optIn() prompts on its own (with the Settings fallback), which would
-  /// nag on every cold start after the user denied the OS prompt.
-  Future<void> _restorePushSubscription() async {
-    await requestPushPermission(fallbackToSettings: false);
-    try {
-      if (OneSignal.Notifications.permission &&
-          OneSignal.User.pushSubscription.optedIn != true) {
-        await setPushSubscribed(true);
-      }
-    } on Object catch (e) {
-      developer.log(
-        'Push opt-in restore failed: $e',
-        name: 'NotificationService',
-      );
-    }
-  }
-
   /// Whether the OS notification permission is currently granted.
-  bool get hasPushPermission {
-    if (!_pushEnabled) return false;
-    try {
-      return OneSignal.Notifications.permission;
-    } on Object catch (_) {
-      return false;
-    }
-  }
+  bool get hasPushPermission => _pushEnabled;
 
-  /// Whether push is set up on this device (OneSignal configured and
-  /// initialised).
+  /// Whether push is set up on this device (FCM configured and initialised).
   bool get isPushAvailable => _pushEnabled;
 
-  /// Asks for the OS notification permission. [fallbackToSettings] offers
-  /// to open the system settings when it was denied before; only use it for
-  /// an explicit user action (the Settings toggle), not at startup.
+  /// Requests OS notification permission. On Android 13+ this shows the
+  /// system dialog the first time. [fallbackToSettings] is kept for API
+  /// compatibility with callers; FCM handles the dialog itself.
   Future<void> requestPushPermission({required bool fallbackToSettings}) async {
     if (!_pushEnabled) return;
     try {
-      final granted = await OneSignal.Notifications.requestPermission(
-        fallbackToSettings,
+      final settings = await FirebaseMessaging.instance.requestPermission(
+        alert: true,
+        badge: true,
+        sound: true,
       );
-      if (!granted) {
-        developer.log(
-          'User declined notification permissions',
-          name: 'NotificationService',
-        );
-      }
+      _pushEnabled =
+          settings.authorizationStatus == AuthorizationStatus.authorized ||
+          settings.authorizationStatus == AuthorizationStatus.provisional;
     } on Exception catch (e) {
       developer.log(
         'Permission request error: $e',
@@ -205,15 +173,17 @@ class NotificationService {
     }
   }
 
-  /// Opts this device in to / out of push (the Settings toggle). Opting in
-  /// may show the OS permission prompt. Returns false when it failed.
+  /// Opts this device in/out of push (the Settings toggle).
+  /// With FCM, opt-out is handled at the OS level — we simply skip
+  /// subscribing to topics when the user disables push.
   Future<bool> setPushSubscribed(bool enabled) async {
     if (!_pushEnabled) return false;
     try {
-      if (enabled) {
-        await OneSignal.User.pushSubscription.optIn();
-      } else {
-        await OneSignal.User.pushSubscription.optOut();
+      await FirebaseMessaging.instance.setAutoInitEnabled(enabled);
+      if (enabled && _userId != null) {
+        await _serialized(_syncSignedInUser);
+      } else if (!enabled) {
+        await _unsubscribeAllTopics();
       }
       return true;
     } on Exception catch (e) {
@@ -225,47 +195,41 @@ class NotificationService {
     }
   }
 
-  // ─────────────────────────── OneSignal callbacks ──────────────────────────
+  // ─────────────────────────── FCM callbacks ───────────────────────────────
 
-  void _onForegroundNotification(OSNotificationWillDisplayEvent event) {
-    final n = event.notification;
+  void _onForegroundMessage(RemoteMessage message) {
+    final n = message.notification;
     developer.log(
-      'Foreground notification: ${n.title}',
+      'Foreground message: ${n?.title}',
       name: 'NotificationService',
     );
-    // Let OneSignal display it; just record it in the history.
     unawaited(
       _saveNotification(
-        notificationId: n.notificationId,
-        // Empty: the history screen shows a localised default title.
-        title: n.title ?? '',
-        body: n.body ?? '',
-        data: n.additionalData,
+        notificationId: message.messageId,
+        title: n?.title ?? '',
+        body: n?.body ?? '',
+        data: message.data.isNotEmpty ? message.data : null,
       ),
     );
   }
 
-  void _onNotificationClicked(OSNotificationClickEvent event) {
-    final n = event.notification;
-    final data = n.additionalData ?? const <String, dynamic>{};
+  void _onMessageTapped(RemoteMessage message) {
+    final n = message.notification;
+    final data = Map<String, dynamic>.from(message.data);
     developer.log(
-      'Notification clicked: ${n.title} $data',
+      'Notification tapped: ${n?.title} $data',
       name: 'NotificationService',
     );
-    // A push received in the foreground is already in the history: mark
-    // that entry read instead of recording a copy.
     unawaited(
       recordOpenedNotification(
-        notificationId: n.notificationId,
-        // Empty: the history screen shows a localised default title.
-        title: n.title ?? '',
-        body: n.body ?? '',
+        notificationId: message.messageId,
+        title: n?.title ?? '',
+        body: n?.body ?? '',
         data: data,
       ),
     );
     if (_router == null) {
-      // Cold start: navigate once the router is injected.
-      _pendingNavigation = Map<String, dynamic>.from(data);
+      _pendingNavigation = data;
       return;
     }
     _handleNotificationNavigation(data);
@@ -376,14 +340,14 @@ class NotificationService {
     router.go(route);
   }
 
-  // ─────────────────────────── Identity & tags ─────────────────────────────
+  // ─────────────────────────── Identity & topics ───────────────────────────
 
-  /// Sanitises a tag value exactly as the backend does.
+  /// Sanitises a topic segment exactly as the backend does.
   @visibleForTesting
   static String sanitizeTag(String value) =>
       value.toLowerCase().replaceAll(RegExp(r'[^a-z0-9_]'), '_');
 
-  /// Tags for the signed-in user (empty values are omitted).
+  /// Topic names for the signed-in user (empty values are omitted).
   @visibleForTesting
   static Map<String, String> tagsFor({
     String? role,
@@ -406,9 +370,14 @@ class NotificationService {
     };
   }
 
-  /// OneSignal login / logout / tag calls run one at a time, in call order,
-  /// so a logout for a previous user can never land after the login of the
-  /// next one.
+  /// FCM topic name for a given key/value pair (e.g. `role` + `field_agent`
+  /// → `role_field_agent`).
+  static String _topicFor(String key, String value) => '${key}_$value';
+
+  /// All-users broadcast topic — every device subscribes on sign-in.
+  static const String _allUsersTopic = 'all-users';
+
+  /// FCM topic subscribe/unsubscribe calls run one at a time.
   Future<void> _opChain = Future<void>.value();
 
   Future<void> _serialized(Future<void> Function() op) {
@@ -417,13 +386,11 @@ class NotificationService {
     return next;
   }
 
-  /// Whether [_baseTags] reflect the user's profile (false when the profile
-  /// could not be loaded: the existing tags are left untouched).
   bool _tagsKnown = false;
 
-  /// Call after a user signs in (from AuthProvider): identifies the device
-  /// with the Supabase user id and sets targeting tags. With [updateTags]
-  /// false (profile unavailable) only the identity is synced.
+  /// Call after a user signs in (from AuthProvider): subscribes the device to
+  /// the user's Appwrite Messaging topics. With [updateTags] false (profile
+  /// unavailable) only the all-users topic is subscribed.
   Future<void> onUserSignedIn({
     required String userId,
     String? role,
@@ -446,15 +413,13 @@ class NotificationService {
     _zone = (profileZone != null && profileZone.isNotEmpty)
         ? profileZone
         : monitoringZone;
-    // If not yet initialized, initialize() will sync once it finishes.
     if (!_initialized) return;
     final sync = _serialized(_syncSignedInUser);
     if (!sameUser) await _ensureHistoryOwner(userId);
     await sync;
   }
 
-  /// Call after the user signs out: detaches the device from the user so it
-  /// stops receiving their targeted notifications.
+  /// Call after the user signs out: unsubscribes all topics.
   Future<void> onUserSignedOut() async {
     final wasSignedIn = _userId != null;
     _userId = null;
@@ -465,52 +430,43 @@ class NotificationService {
     // phone has the same one, and remembering it as registered would skip
     // registering *their* target and leave them with no push at all.
     _registeredToken = null;
-    // Queued before any await, so a sign-in that follows runs after it.
     final logout = (!_pushEnabled || !wasSignedIn)
         ? Future<void>.value()
         : _serialized(() async {
-            // A new user signed in meanwhile: their login replaces the
-            // identity; logging out now would detach them.
-            if (_userId != null) return;
-            _appliedTags = const {};
+            if (_userId != null) return; // new user signed in meanwhile
             try {
-              await OneSignal.logout();
+              await _unsubscribeAllTopics();
+              _appliedTags = const {};
             } on Exception catch (e) {
               developer.log(
-                'OneSignal logout error: $e',
+                'FCM topic unsubscribe error: $e',
                 name: 'NotificationService',
               );
             }
           });
-    // The next account on this device must not see this one's history
-    // (unless that account already signed in meanwhile).
     if (_userId == null) await clearHistoryForSignOut();
     await logout;
   }
 
   Future<void> _syncSignedInUser() async {
-    final userId = _userId;
-    if (!_pushEnabled || userId == null) return;
+    if (!_pushEnabled || _userId == null) return;
     try {
-      await OneSignal.login(userId);
+      // Subscribe to all-users first, then role/lga/state/ward/zone topics.
+      await FirebaseMessaging.instance.subscribeToTopic(_allUsersTopic);
       if (_tagsKnown) await _applyTags();
     } on Exception catch (e) {
       developer.log(
-        'OneSignal login/tag error: $e',
+        'FCM topic subscribe error: $e',
         name: 'NotificationService',
       );
     }
     // After the identity, because the server subscribes the target to the
     // topics of the profile it belongs to, and on Appwrite the session is
     // what says whose target this is.
-    await syncPushTarget(_pushToken());
+    await syncPushTarget(await _pushToken());
   }
 
   /// How this device is registered for push on the active backend.
-  ///
-  /// The locator's own function, replaced in tests. It answers `false` on
-  /// the Supabase build, where OneSignal holds the token and decides
-  /// delivery by tag, so this whole path is a no-op there.
   @visibleForTesting
   Future<bool> Function(String token) pushTargetRegistrar = registerPushTarget;
 
@@ -518,9 +474,9 @@ class NotificationService {
   /// callback with an unchanged token costs nothing.
   String? _registeredToken;
 
-  String? _pushToken() {
+  Future<String?> _pushToken() async {
     try {
-      return OneSignal.User.pushSubscription.token;
+      return await FirebaseMessaging.instance.getToken();
     } on Object catch (e) {
       developer.log('Push token read failed: $e', name: 'NotificationService');
       return null;
@@ -564,15 +520,44 @@ class NotificationService {
 
   Future<void> _applyTags() async {
     final tags = {..._baseTags, ...tagsFor(monitoringZone: _zone)};
+
+    // Unsubscribe removed topics.
     final removed = _appliedTags.keys
         .where((k) => !tags.containsKey(k))
         .toList();
-    if (removed.isNotEmpty) await OneSignal.User.removeTags(removed);
-    if (tags.isNotEmpty) await OneSignal.User.addTags(tags);
+    for (final k in removed) {
+      await FirebaseMessaging.instance.unsubscribeFromTopic(
+        _topicFor(k, _appliedTags[k]!),
+      );
+    }
+
+    // Subscribe new / changed topics.
+    for (final entry in tags.entries) {
+      final prev = _appliedTags[entry.key];
+      if (prev == entry.value) continue;
+      if (prev != null) {
+        await FirebaseMessaging.instance.unsubscribeFromTopic(
+          _topicFor(entry.key, prev),
+        );
+      }
+      await FirebaseMessaging.instance.subscribeToTopic(
+        _topicFor(entry.key, entry.value),
+      );
+    }
     _appliedTags = tags;
   }
 
-  /// Keep the monitoring_zone tag in sync with the ProfileProvider.
+  Future<void> _unsubscribeAllTopics() async {
+    await FirebaseMessaging.instance.unsubscribeFromTopic(_allUsersTopic);
+    for (final entry in _appliedTags.entries) {
+      await FirebaseMessaging.instance.unsubscribeFromTopic(
+        _topicFor(entry.key, entry.value),
+      );
+    }
+    _appliedTags = const {};
+  }
+
+  /// Keep the monitoring_zone topic in sync with the ProfileProvider.
   void _onProfileChanged() {
     final provider = _profileProvider;
     if (provider == null || _userId == null || provider.isLoading) return;
@@ -582,7 +567,7 @@ class NotificationService {
     if (_initialized && _pushEnabled) unawaited(updateZoneSubscriptions());
   }
 
-  /// Re-apply tags after the user changes their monitoring zone.
+  /// Re-apply topic subscriptions after the user changes their monitoring zone.
   Future<void> updateZoneSubscriptions() async {
     if (!_pushEnabled || _userId == null || !_tagsKnown) return;
     await _serialized(() async {
@@ -590,7 +575,7 @@ class NotificationService {
       try {
         await _applyTags();
       } on Exception catch (e) {
-        developer.log('OneSignal tag error: $e', name: 'NotificationService');
+        developer.log('FCM topic update error: $e', name: 'NotificationService');
       }
     });
   }

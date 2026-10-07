@@ -75,14 +75,11 @@ dependencies:
   # Chat
   flutter_chat_ui: ^2.11.1
   flutter_chat_core: ^2.9.0  # Explicit dep — transitively used by flutter_chat_ui
-  # Backend – Supabase (auth, Postgres, storage, realtime)
-  supabase_flutter: ^2.10.0
-  # Incoming deep links (cradi:// and https://cradi.ng). Already pulled in by
-  # supabase_flutter for its auth callbacks; declared here because
-  # DeepLinkService imports it directly.
+  # Incoming deep links (cradi:// and https://cradi.ng).
   app_links: 7.0.0
-  # Push notifications
-  onesignal_flutter: ^5.3.0
+  # Push notifications via FCM + Appwrite Messaging topics
+  firebase_core: ^3.13.0
+  firebase_messaging: ^15.2.5
   # Crash reporting (optional — only initialised when SENTRY_DSN is set)
   sentry_flutter: ^9.0.0
   permission_handler: ^12.0.1

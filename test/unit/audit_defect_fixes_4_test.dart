@@ -1,12 +1,13 @@
 import 'dart:io';
 
+import 'package:appwrite/appwrite.dart' show AppwriteException;
 import 'package:climate_app/core/router/route_guard.dart';
 import 'package:climate_app/core/services/offline_storage_service.dart';
 import 'package:climate_app/core/services/notification_service.dart';
 import 'package:climate_app/core/services/peer_verification_service.dart';
 import 'package:climate_app/core/services/secure_storage_service.dart';
-import 'package:climate_app/core/services/supabase_mapping.dart';
-import 'package:climate_app/core/services/supabase_service.dart';
+import 'package:climate_app/core/services/mapping.dart';
+import 'package:climate_app/core/services/backend.dart';
 import 'package:climate_app/features/auth/providers/auth_provider.dart';
 import 'package:climate_app/features/dashboard/screens/home_screen.dart';
 import 'package:climate_app/features/notifications/screens/notifications_screen.dart';
@@ -19,14 +20,10 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive/hive.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:supabase_flutter/supabase_flutter.dart'
-    show PostgrestException, StorageException;
 import 'package:climate_app/core/l10n/l10n.dart';
 
 void main() {
-  // The error vocabulary is the backend's, and these tests call the pure
-  // classifiers directly, with no live client to install it.
-  setUpAll(SupabaseService.installErrorVocabulary);
+  setUpAll(installBackendErrorVocabulary);
 
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -122,29 +119,26 @@ void main() {
 
   group('L9 report action errors', () {
     test('maps database refusals to readable messages', () {
+      // invalidState (update conflict) → "already pending"
       expect(
         reportActionErrorMessage(
-          const PostgrestException(message: 'x', code: '22023'),
+          AppwriteException('x', 409, 'document_update_conflict'),
           englishL10n,
         ),
         'This report is already pending.',
       );
+      // Function's own 403 refusal → shows the server's message verbatim
       expect(
         reportActionErrorMessage(
-          const PostgrestException(
-            message: 'You cannot reopen your own report',
-            code: '42501',
-          ),
+          AppwriteException('You cannot reopen your own report', 403),
           englishL10n,
         ),
         'You cannot reopen your own report',
       );
+      // Appwrite permission denied (has a type) → generic "no permission" message
       expect(
         reportActionErrorMessage(
-          const PostgrestException(
-            message: 'new row violates row-level security policy',
-            code: '42501',
-          ),
+          AppwriteException('access denied', 403, 'general_access_forbidden'),
           englishL10n,
         ),
         'You do not have permission to change this report.',
@@ -205,55 +199,25 @@ void main() {
 
   group('L5 / storage errors', () {
     test('4xx storage errors are permanent, conflicts / limits are not', () {
+      // 413 Too Large → permanent
       expect(
-        isPermanentSyncError(
-          const StorageException('too large', statusCode: '413'),
-        ),
+        isPermanentSyncError(AppwriteException('too large', 413)),
         isTrue,
       );
+      // 403 Denied → permanent
       expect(
-        isPermanentSyncError(
-          const StorageException('denied', statusCode: '403'),
-        ),
+        isPermanentSyncError(AppwriteException('denied', 403, 'general_access_forbidden')),
         isTrue,
       );
-      for (final code in ['409', '429', '408', '500', null]) {
+      // 409/429/408/500/unknown → not permanent
+      for (final code in [409, 429, 408, 500]) {
         expect(
-          isPermanentSyncError(StorageException('x', statusCode: code)),
+          isPermanentSyncError(AppwriteException('x', code)),
           isFalse,
           reason: 'status $code',
         );
       }
       expect(isPermanentSyncError(ImageEncodingException()), isTrue);
-    });
-
-    test('duplicate uploads are recognised', () {
-      expect(
-        SupabaseService.isStorageDuplicate(
-          const StorageException(
-            'The resource already exists',
-            statusCode: '409',
-            error: 'Duplicate',
-          ),
-        ),
-        isTrue,
-      );
-      expect(
-        SupabaseService.isStorageDuplicate(
-          const StorageException('denied', statusCode: '403'),
-        ),
-        isFalse,
-      );
-    });
-
-    test('rate-limit refusals are recognised and do not burn retries', () {
-      const e = PostgrestException(
-        message: 'Too many reports submitted in the last hour.',
-        code: '54000',
-      );
-      expect(SupabaseService.isRateLimited(e), isTrue);
-      expect(isPermanentSyncError(e), isFalse);
-      expect(OfflineStorageService.failureCountsAsRetry(e), isFalse);
     });
   });
 

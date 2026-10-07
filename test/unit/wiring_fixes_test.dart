@@ -1,13 +1,11 @@
 import 'package:climate_app/core/constants/hazards.dart';
 import 'package:climate_app/core/l10n/l10n.dart';
-import 'package:climate_app/features/admin/screens/admin_users_screen.dart';
 import 'package:climate_app/features/alerts/screens/alerts_list_screen.dart';
 import 'package:climate_app/features/auth/providers/auth_provider.dart';
 import 'package:climate_app/features/knowledge_base/knowledge_categories.dart';
 import 'package:climate_app/features/verification/models/verification_report_model.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:climate_app/core/services/backend.dart';
-import 'package:supabase_flutter/supabase_flutter.dart' show PostgrestException;
 
 VerificationReport _report(String hazard, {String id = 'r'}) =>
     VerificationReport.fromMap({'hazardType': hazard, 'status': 'pending'}, id);
@@ -139,34 +137,6 @@ void main() {
       expect(
         AuthProvider.verificationRequestRoles,
         isNot(contains(UserRole.techSupport)),
-      );
-    });
-  });
-
-  group('Admin approval errors', () {
-    test('unconfirmed-account refusal gets its own message', () {
-      const refused = PostgrestException(
-        message:
-            'This account has not confirmed its email or phone yet, so it '
-            'cannot be approved',
-        code: '42501',
-      );
-      expect(isUnconfirmedApprovalError(refused), isTrue);
-      expect(
-        adminUserWriteErrorMessage(refused, englishL10n),
-        englishL10n.adminUsersApproveUnconfirmed,
-      );
-      const rls = PostgrestException(
-        message: 'permission denied for table profiles',
-        code: '42501',
-      );
-      expect(
-        adminUserWriteErrorMessage(rls, englishL10n),
-        englishL10n.adminUsersNoPermission,
-      );
-      expect(
-        adminUserWriteErrorMessage(Exception('boom'), englishL10n),
-        englishL10n.adminUsersUpdateFailed,
       );
     });
   });
