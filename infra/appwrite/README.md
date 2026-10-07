@@ -66,10 +66,12 @@ So this is a billing decision before it is an engineering one: a paid
 Cloud plan, or self-hosting. See *Phase 12* in
 `../../docs/APPWRITE-MIGRATION.md`.
 
-**Settled: the plan was upgraded (7 October 2026).** The table above is
-what the free tier answered and is kept as the record of it. None of
-those four numbers has been measured on the new plan, so the first thing
-a Cloud run does is `--probe` again — the Functions cap is the one the
+**The table above is the old project's free tier**
+(`6941cdb400050e7249d5`, measured 2 October 2026) and is kept as the
+record of it. The plan was upgraded on 7 October, and the work has since
+moved to a **different project** (`6ac51e70002ab6238fec`) — so not one of
+those four numbers describes what is being provisioned now. `--probe` is
+the only thing that does; run it first. The Functions cap is the one the
 design could not live with, and the one-database and one-bucket caps are
 the two that changed how it provisions.
 
@@ -147,10 +149,12 @@ node infra/appwrite/provision.mjs
 ```
 
 The endpoint defaults to Frankfurt; `APPWRITE_ENDPOINT` overrides it.
-The previous project was `6941cdb400050e7249d5` with database
-`6941e2c2003705bb5a25` — reuse or replace, but set
-`APPWRITE_DATABASE_ID` if you keep the old database id rather than
-`cradi`.
+
+The project in use is **`6ac51e70002ab6238fec`**, and it inherits nothing:
+leave `APPWRITE_DATABASE_ID` unset and the plan creates `cradi`. The
+earlier project was `6941cdb400050e7249d5` with database
+`6941e2c2003705bb5a25` — if you point this at that one instead, set
+`APPWRITE_DATABASE_ID` to keep its database id.
 
 **The API key must be a fresh one.** Two server keys from the previous
 project are in public git history.
