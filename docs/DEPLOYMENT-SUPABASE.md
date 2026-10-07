@@ -61,8 +61,9 @@ types, functions, triggers and policies outright, so a second run fails with
 1. Open the Supabase dashboard → your project → **SQL Editor** → **New query**.
 2. Open `supabase/deploy/schema.sql` from the `CRADI-mobile` repo, select all,
    paste it into the editor, and **Run**.
-   * The file is generated from `supabase/migrations/*.sql` (12 migrations, in
-     filename order). Do not edit it by hand — see
+   * The file is generated from `supabase/migrations/*.sql` (**14**
+     migrations, in filename order — this said 12, which was the count when
+     it was written). Do not edit it by hand — see
      `supabase/deploy/README.md` for the generator and the drift check.
    * It runs as `postgres`, which is what the SQL editor uses. It needs that:
      it creates two triggers on `auth.users` and four policies on

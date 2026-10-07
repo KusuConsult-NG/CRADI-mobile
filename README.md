@@ -4,93 +4,126 @@ Early Warning and Emergency Response app for CRADI. Flutter client backed by:
 
 | Piece | Service |
 | --- | --- |
-| Auth, Postgres database, file storage, realtime | **Supabase** (`supabase/`) |
-| Push notifications | **OneSignal** |
-| Server jobs (push fan-out, escalation cron, transactional email) | **Railway** (`backend/`, see `backend/README.md`) |
+| Auth, database, file storage, realtime | **Appwrite** (`infra/appwrite/`) |
+| Server jobs — push fan-out, escalation cron, the reconciling sweep, authority SMS | **Appwrite Functions** (`functions/cradi/`) |
+| Push and email delivery | **Appwrite Messaging** (the device token still comes from **OneSignal** — see § 2) |
+| Authority SMS | **Termii**, called directly by a Function |
 | Crash reporting (optional) | **Sentry** |
 
-Business rules that must not be bypassed (roles only apply once an admin
-approves an account, peer-verification threshold, escalation scheduling,
-notifications) live in the database (RLS + triggers in
-`supabase/migrations/`) and the Railway backend — not in the app.
+Business rules that must not be bypassed — a role only applies once an admin
+approves the account, the peer-verification threshold, escalation scheduling,
+who may write what — are **not in the app**. They live in:
+
+- **document-level ACLs plus account labels**, which is how a read is
+  refused. A label lives on the account, not the row, and the `write`
+  Function keeps the two in step;
+- the **`client` Function**, for the 14 of 19 collections whose rule an ACL
+  cannot express (`docs/APPWRITE-FUNCTION-CONTRACTS.md`);
+- the **`worker` Function**, for everything the server does on its own.
+
+> **Appwrite answers a read you have no permission for with `200
+> {"total": 0}`, not an error.** A working app showing empty lists is the
+> most common misconfiguration on this stack, and it is almost always a
+> missing label. Several bugs hid behind it during the migration; if a
+> list is empty and nothing looks wrong, suspect permissions before data.
 
 > **Deploying for the first time?** Follow `docs/DEPLOYMENT.md` — the
-> end-to-end runbook for the **Appwrite** stack, which is what the app and
-> the admin panel are now written against (console → provision → Functions →
-> first admin → Railway admin → app build → smoke test).
+> end-to-end runbook for the Appwrite stack (console → provision →
+> Functions → first admin → Railway admin → app build → smoke test).
 >
-> The Supabase stack is the one still in production and is being migrated
-> away from; its runbook is `docs/DEPLOYMENT-SUPABASE.md`, and the sections
-> below describe it. `docs/APPWRITE-MIGRATION.md` is the migration's record
-> and `docs/HANDOFF.md` is what remains.
+> **The Supabase stack is still what runs in production.** It is being
+> migrated away from and nothing has been decommissioned; see
+> *The Supabase stack* at the end, `docs/DEPLOYMENT-SUPABASE.md` for its
+> runbook, `docs/APPWRITE-MIGRATION.md` for the migration's record and
+> `docs/HANDOFF.md` for what is still owed.
 
-## 1. Supabase project
+## 1. Appwrite project
 
-1. Create a project at <https://supabase.com>.
-2. Apply the schema. Either paste
-   `supabase/deploy/schema.sql` (all 12 migrations, generated — see
-   `supabase/deploy/README.md`) into the dashboard **SQL Editor** on an empty
-   project, or, with the
-   [Supabase CLI](https://supabase.com/docs/guides/cli) installed:
+Everything the project needs, apart from four console steps, is scripted:
 
-   ```bash
-   supabase login
-   supabase link --project-ref <your-project-ref>
-   supabase db push
-   ```
+```bash
+export APPWRITE_ENDPOINT=https://fra.cloud.appwrite.io/v1
+export APPWRITE_PROJECT_ID=<project id>
+export APPWRITE_API_KEY=<a server API key>
+export APPWRITE_DATABASE_ID=<database id>     # or let the plan create `cradi`
 
-   Afterwards `public` holds 21 tables, all with RLS enabled.
+node infra/appwrite/provision.mjs --dry-run   # read-only: what it would do
+node infra/appwrite/provision.mjs             # 19 collections, their indexes, 2 buckets
+node infra/appwrite/verify.mjs                # non-zero on any difference
+node infra/appwrite/local/deploy.mjs          # the two Functions
+```
 
-3. **Authentication → Providers → Email**: keep *Confirm email* on.
-4. **Authentication → Email Templates**: the app verifies accounts and resets
-   passwords with **6-digit codes**, not links. Make sure these templates
-   contain `{{ .Token }}`:
-   - *Confirm signup* (account verification, `verifyOTP(type: signup)`)
-   - *Reset password* (recovery, `verifyOTP(type: recovery)`)
-   - *Change email address* (optional; a link is fine here)
-5. **Phone sign-up (optional)**: **Authentication → Providers → Phone**, enable
-   it and configure an SMS provider (Twilio, MessageBird, Vonage, Textlocal…;
-   for Termii use the *Send SMS* auth hook). The app sends the OTP with
-   `signInWithOtp(phone: '+234…')`. The phone option on the registration
-   screen is hidden until you set `_phoneAuthEnabled = true` in
-   `registration_screen.dart`.
-6. **Authentication → Rate Limits / Attack protection**: adjust to taste (the
-   app also rate-limits OTP resends locally).
-7. Create the first admin: sign up in the app (or add the user under
-   **Authentication → Users**), confirm its email, then run
-   `scripts/set-admin.mjs` in the admin repo — or, in **Table Editor →
-   profiles**, set `role = 'admin'` and `is_approved = true` on that row.
-   Approval is refused until Supabase Auth has confirmed the account's email or
-   phone. Every other account needs an admin to approve it (Admin → Users).
-   Details: `docs/DEPLOYMENT-SUPABASE.md` section 2.
-8. Storage buckets `report-images` and `profile-images` are created by the
-   migration (public read; uploads must be under `<user id>/…`).
+`provision.mjs` is idempotent and **never deletes anything** — a column in
+the project and not in the plan is reported, not dropped. `infra/appwrite/README.md`
+has the detail, including the tier limits that have been measured and the
+ones that have not.
 
-## 2. OneSignal
+The four steps no script does, because each is a decision rather than a
+configuration: the project and its **region** (which cannot be changed
+afterwards), the **API key**, a **web platform** for every browser origin
+(Appwrite refuses an origin it does not know, and it reads as a CORS
+error), and the **Messaging providers**. `docs/DEPLOYMENT.md` § 1 walks
+through them.
 
-1. Create an app at <https://onesignal.com>.
-2. Android: upload the **FCM v1 service-account JSON** in *Settings → Push &
-   In-App → Google Android (FCM)*. Google still delivers Android pushes through
-   FCM, so OneSignal needs these credentials; the app itself contains no
-   Firebase SDK or `google-services.json`.
-3. iOS: upload an APNs `.p8` key, and in Xcode add the *Push Notifications*
-   capability to the Runner target (Background Modes → Remote notifications is
-   already set in `Info.plist`). A Notification Service Extension is only
-   needed for rich media / badges.
-4. Put the OneSignal **App ID** in `env.json` (below) and the **REST API key**
-   on the Railway backend.
+The schema itself is derived, not hand-written: `infra/appwrite/columns.json`
+is generated from the Supabase migrations by `extract-schema.mjs`, so the
+two cannot silently disagree while both stacks exist.
 
-The app calls `OneSignal.login(<supabase user id>)` after sign-in, sets tags
-`role`, `lga`, `state`, `ward`, `monitoring_zone` (lower-cased, non
-`[a-z0-9_]` replaced by `_`) and `OneSignal.logout()` on sign-out. The backend
-targets users by these.
+**The first admin** must be promoted with the admin repo's
+`npm run set:admin -- <email>`, which sets the `profiles` row *and* the
+account's labels. Setting the row alone leaves a signed-in admin who can
+read nothing. Every other account is approved from the panel
+(Admin → Users).
 
-## 3. Railway backend
+## 2. Push notifications
 
-Deploy `backend/` as described in `backend/README.md` (root directory
-`backend`, branch `supabase-migration`) and note its public URL (used for
-`POST /email`). Step-by-step, including every environment variable:
-`docs/DEPLOYMENT-SUPABASE.md` section 4.
+Delivery is **Appwrite Messaging**: the `worker` Function posts to a topic
+or a list of user ids, and the message id is derived from the outbox event,
+so a double send is refused by the server rather than deduplicated by a
+vendor.
+
+Three topics, and a device is in all three that apply to it: `all-users`,
+`state-<state>`, `lga-<state>-<lga>`. The LGA topic is state-scoped
+because six LGA names exist in two states each — Obi is in both Benue and
+Nasarawa.
+
+**The device token still comes from OneSignal**, which owns the FCM and
+APNs registration. The app registers that token as an Appwrite *push
+target* and asks the server to subscribe it (`AppwritePushTargets` →
+`sync_push_subscriptions`). So an Appwrite build with no
+`ONESIGNAL_APP_ID` has no token to register and receives nothing.
+
+That is deliberate, and it is the one mitigation for the cutover:
+OneSignal subscriptions cannot be transferred, so push reaches nobody
+until each device has opened the new build once — and a build that
+registers Appwrite targets *while still on OneSignal* means the tokens
+already exist on the day. Phase 25 in `docs/APPWRITE-MIGRATION.md` has
+the reasoning; Phase 3 has the decision.
+
+Two console steps are prerequisites, and **both fail silently**: Appwrite
+Messaging accepts a message with no enabled provider, answers success and
+delivers nothing. An FCM provider (service-account JSON) and an APNs key
+have to exist, and their **provider ids** have to reach the app build, or
+every device on the project's non-default platform is registered against
+a provider that cannot deliver to it.
+
+## 3. Server jobs
+
+There is **no Railway backend service on this stack.** The `worker`
+Function is what `backend/` was — the outbox drain, the escalation cron,
+the reconciling sweep and the Termii send — on Appwrite's own scheduler
+(`* * * * *`, with the sweep checking the clock for its five-minute
+cadence).
+
+`backend/` stays in the repository because it is what the Supabase stack
+runs in production. It reads and writes Supabase and cannot be pointed at
+an Appwrite project.
+
+Two Functions in total, not seven, because that was the plan's limit when
+they were written: `client` routes the three a client calls on the
+execution's path, `worker` routes the four the server runs on its own by
+trigger. `docs/APPWRITE-FUNCTION-CONTRACTS.md` is the contract both
+clients are written against.
 
 ## 4. App configuration (`env.json`)
 
@@ -102,11 +135,24 @@ cp env.example.json env.json   # env.json is git-ignored
 
 | Key | Required | Notes |
 | --- | --- | --- |
-| `SUPABASE_URL` | yes | `https://<ref>.supabase.co` |
-| `SUPABASE_ANON_KEY` | yes | anon / publishable key (never the service-role key) |
-| `ONESIGNAL_APP_ID` | for push | push is disabled when empty |
+| `APPWRITE_ENDPOINT` | yes | `https://<region>.cloud.appwrite.io/v1` — **must end in `/v1`** |
+| `APPWRITE_PROJECT_ID` | yes | public; access is enforced by permissions and the Functions |
+| `APPWRITE_DATABASE_ID` | if not `cradi` | note: a define that is *present but empty* beats the default |
+| `APPWRITE_FN_CLIENT` | no | the client Function's id; defaults to `client` |
+| `APPWRITE_PUSH_PROVIDER_ANDROID` | for push | the FCM provider's id (§ 2) |
+| `APPWRITE_PUSH_PROVIDER_IOS` | for push | the APNs provider's id (§ 2) |
+| `ONESIGNAL_APP_ID` | for push | push is disabled when empty — including on Appwrite (§ 2) |
 | `SENTRY_DSN` | no | crash reporting is disabled when empty |
 | `APPWRITE_IMAGE_TRANSFORMS` | no | ask Appwrite's `/preview` for smaller renders; off when unset |
+| `PROFILE_IMAGES_BUCKET` / `REPORT_IMAGES_BUCKET` | only on a one-bucket tier | default to the two buckets the plan provisions |
+| `SUPABASE_URL` / `SUPABASE_ANON_KEY` | only for a Supabase build | see below |
+
+**Which backend a build talks to is decided by these defines, not by a
+flag.** `activeBackend` is Appwrite when the endpoint and project id are
+both non-empty and Supabase otherwise (`lib/core/services/backend.dart`),
+so one APK can talk to Appwrite while the previous one talks to Supabase.
+With neither configured the app starts but behaves as signed out, which is
+what UI work and the unit tests use.
 
 `APPWRITE_IMAGE_TRANSFORMS` is a delivery-only optimisation. With it, a
 thumbnail is requested from Appwrite at the size it will be drawn
@@ -115,7 +161,6 @@ original. It is **off by default** because image transformations are a
 plan-gated feature on Appwrite Cloud: where they are not included the
 request answers with an error rather than the image, and a broken
 thumbnail is worse than a large one. Self-hosted has no such limit.
-
 Leaving it unset changes nothing — the small copy uploaded beside each
 photo is still used, which is the bulk of the saving.
 
@@ -127,47 +172,111 @@ flutter run --dart-define-from-file=env.json
 flutter build apk --release --dart-define-from-file=env.json --no-tree-shake-icons
 ```
 
-Without `SUPABASE_URL` / `SUPABASE_ANON_KEY` the app starts but behaves as
-signed out (useful for UI work and tests).
+### Which project to point at
 
-### Values for the shared development project
+There is no shared development Appwrite project, and the Cloud project is
+the one being prepared for production — do not develop against it. Run a
+real Appwrite locally instead:
 
-The app has no hardcoded fallbacks: these are pasted into your local
-`env.json` (git-ignored) or passed with `--dart-define`.
+```bash
+./infra/appwrite/local/up.sh          # Appwrite 1.9.6 on :8090 (API) and :8091 (realtime)
+node infra/appwrite/local/bootstrap.mjs
+source infra/appwrite/local/.env.local
+node infra/appwrite/provision.mjs && node infra/appwrite/local/deploy.mjs
+```
 
-| Key | Value |
-| --- | --- |
-| `SUPABASE_URL` | `https://splfkqazwzybityoqmyv.supabase.co` |
-| `SUPABASE_ANON_KEY` | `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNwbGZrcWF6d3p5Yml0eW9xbXl2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTAzNjg5MzcsImV4cCI6MjEwNTk0NDkzN30.B3p-MTWYacngdF0uGCxDXZNqL7gxYMQNfKp_6i-7QfQ` |
-| `ONESIGNAL_APP_ID` | `2e6f30a8-ef18-4091-9961-e6a6fe862322` |
-Both Supabase values are public client credentials: the anon key only grants what the RLS
-policies allow, and the OneSignal app id only identifies the app.
+`infra/appwrite/local/README.md` has the rest, including the six
+end-to-end suites it makes runnable and why the server is pinned to
+1.9.6. The Cloud project's endpoint, project id and database id are
+recorded in `docs/CLOUD-VERIFICATION.md`.
 
-**The OneSignal REST API key is a server secret and must never appear in the
-app** — not in `env.json`, not in `AppConfig`, not obfuscated. It lives only in
-the Railway backend environment as `ONESIGNAL_REST_API_KEY`
-(see `backend/README.md`); the app never sends pushes itself, it asks the
-backend to.
+**No server secret is ever passed to the app** — not in `env.json`, not as
+a define, not obfuscated. The Appwrite **API key** bypasses every
+permission, including the ACLs that are the access-control design; the
+Termii key spends money. Both belong in a Function's variables or a
+server environment and nowhere else. The app never sends a push or an SMS
+itself; it asks a Function to.
 
-Server-tunable values (peer-confirmation threshold, escalation timeout, SMS
-caps, feature flags, minimum app version) are rows in the `app_settings`
-table.
+Server-tunable values (peer-confirmation threshold, escalation timeout,
+SMS caps, feature flags, minimum app version) are rows in the
+`app_settings` collection, and its `value` column is a **string** — the
+`write` Function refuses a number for it rather than coercing one.
 
 ## Development
 
 ```bash
-flutter analyze
+flutter analyze --fatal-infos --fatal-warnings
 flutter test
+dart format --set-exit-if-changed .          # all three are CI gates
 ```
+
+| Suite | |
+| --- | --- |
+| `flutter test` | 843 tests |
+| `flutter test test/integration` | needs a live Appwrite and the defines `infra/appwrite/local/prep-dart.mjs` prints |
+| `functions/cradi` → `npm test` | 277 tests, no dependencies to install |
+| `infra/appwrite/local/e2e*.mjs` | six suites against a real Appwrite |
+| `infra/appwrite/cloud-check.mjs` | the behaviour a live Cloud project must also show |
 
 Mocks are generated with `dart run build_runner build --delete-conflicting-outputs`.
 
+Two habits this migration was repeatedly caught by, both worth keeping:
+
+- **A fake built from the code it tests can only confirm the code agrees
+  with itself.** Three separate tests passed over real bugs that way.
+  Derive the expectation from an independent source — the committed
+  schema, the implementation that was in production, the producer
+  function. `functions/cradi/test/query-attributes.test.mjs` is the
+  pattern.
+- **A checker may not treat a failed or ambiguous result as a finding**,
+  in either direction. A reconciler that read a `400` as "zero rows" once
+  condemned a migration that was correct.
+
 ## Building for release
 
-See `docs/KEYSTORE_SETUP.md` for signing. The CI release job writes
-`env.json` from the repository secrets `SUPABASE_URL`, `SUPABASE_ANON_KEY`,
-`ONESIGNAL_APP_ID` and `SENTRY_DSN`.
+See `docs/KEYSTORE_SETUP.md` for signing. The CI release job (tags
+`v*` only) writes `env.json` from repository secrets of the same names as
+the keys above, dropping the empty ones, and prints which backend it
+built — **a tag built without the `APPWRITE_*` secrets ships a Supabase
+build.**
 
 ```bash
 flutter build apk --release --no-tree-shake-icons --dart-define-from-file=env.json
 ```
+
+## The Supabase stack
+
+Still in production, still deployable, being migrated away from. Nothing
+has been decommissioned and nothing should be until the cutover has run
+and a week of cross-checking has passed (`docs/APPWRITE-MIGRATION.md`
+Phase 8).
+
+| Piece | Where |
+| --- | --- |
+| Postgres schema, RLS, triggers | `supabase/migrations/`, generated into `supabase/deploy/schema.sql` |
+| Server jobs (outbox, escalation cron, `POST /email`) | `backend/`, on Railway — `backend/README.md` |
+| Push | OneSignal, targeted by the tags the app sets on sign-in |
+| Email | Resend |
+| Deployment runbook | `docs/DEPLOYMENT-SUPABASE.md` |
+| Firebase → Supabase import | `migration/firebase-to-supabase/README.md` |
+
+A Supabase build needs `SUPABASE_URL` and `SUPABASE_ANON_KEY` in
+`env.json` and no `APPWRITE_*` values. Both are public client
+credentials — the anon key only grants what the RLS policies allow — and
+the **service role key** is a server secret that bypasses every policy.
+
+## Where things are written down
+
+| | |
+| --- | --- |
+| Deploying the Appwrite stack | `docs/DEPLOYMENT.md` |
+| What the two Functions promise their callers | `docs/APPWRITE-FUNCTION-CONTRACTS.md` |
+| The migration, phase by phase, with what each one found | `docs/APPWRITE-MIGRATION.md` |
+| What is still owed, and the keys to rotate | `docs/HANDOFF.md` |
+| Verifying a live Cloud project | `docs/CLOUD-VERIFICATION.md` |
+| Provisioning internals and the measured tier limits | `infra/appwrite/README.md` |
+| A real Appwrite in a container | `infra/appwrite/local/README.md` |
+| Release signing | `docs/KEYSTORE_SETUP.md` |
+| Authority contact data entry | `docs/AUTHORITY_CONTACTS_GUIDE.md` |
+| iOS project detail | `ios/README.md` |
+| Admin panel | `CRADI-Mobile-Admin/README.md`, `SETUP.md` |

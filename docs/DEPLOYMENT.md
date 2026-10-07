@@ -680,8 +680,8 @@ builds and fails loudly if one does not reach `ready`.
 If it is deployed and still failing, read the execution logs in the console:
 a Function that cannot reach the API back usually has the wrong
 `APPWRITE_FUNCTION_API_ENDPOINT` or a key with missing scopes, and
-`lib/appwrite.js` names the URL in its error rather than letting `fetch`
-throw a bare "fetch failed".
+`functions/cradi/src/lib/appwrite.js` names the URL in its error rather than
+letting `fetch` throw a bare "fetch failed".
 
 ### The admin panel looks broken but is "healthy"
 

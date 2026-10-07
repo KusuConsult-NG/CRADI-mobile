@@ -1,5 +1,14 @@
 # `supabase/deploy/`
 
+> **This is the Supabase stack's schema.** On Appwrite the equivalent is
+> `infra/appwrite/` — `plan.mjs` declares the collections and
+> `provision.mjs` applies them over the REST API. The two are not
+> independent: `infra/appwrite/columns.json` is *generated from these
+> migrations* by `infra/appwrite/extract-schema.mjs`, so a column added
+> here and forgotten there shows up as a diff rather than as a write the
+> server rejects later. Keep this the source of truth while both stacks
+> exist.
+
 Artifacts for applying the schema to a Supabase project **without the Supabase
 CLI** — everything here is meant to be pasted into the dashboard SQL editor.
 
