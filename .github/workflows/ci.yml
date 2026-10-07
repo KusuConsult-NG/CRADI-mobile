@@ -3,6 +3,12 @@ name: CI
 on:
   push:
     branches: [main, develop]
+    # Without this the release job below can never run. A `branches` filter
+    # does not match a tag push, so a `v*` tag triggered nothing at all and
+    # `build-android-release`'s own `if: startsWith(github.ref,
+    # 'refs/tags/v')` was unreachable — the one job the release procedure
+    # depends on.
+    tags: ['v*']
   pull_request:
     branches: [main, develop]
 
