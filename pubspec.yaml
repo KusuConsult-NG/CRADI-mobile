@@ -80,7 +80,7 @@ dependencies:
   # Incoming deep links (cradi:// and https://cradi.ng). Already pulled in by
   # supabase_flutter for its auth callbacks; declared here because
   # DeepLinkService imports it directly.
-  app_links: ^7.2.1
+  app_links: 7.0.0
   # Push notifications
   onesignal_flutter: ^5.3.0
   # Crash reporting (optional — only initialised when SENTRY_DSN is set)
