@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:go_router/go_router.dart';
 import 'package:climate_app/features/auth/widgets/sign_out_notice_listener.dart';
 import 'package:climate_app/core/router/app_router.dart';
@@ -34,6 +36,14 @@ import 'package:climate_app/core/utils/error_handler.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:climate_app/core/l10n/l10n.dart';
 
+/// Top-level FCM background message handler (required by firebase_messaging).
+/// Runs in a separate isolate — keep it minimal.
+@pragma('vm:entry-point')
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  // History is written by the foreground handler; background messages are
+  // displayed by the OS automatically. Nothing to do here.
+}
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -53,11 +63,19 @@ Future<void> main() async {
 Future<void> _bootstrap() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Initialize Supabase (auth session is restored from secure storage).
+  // Firebase must be initialized before any firebase_messaging calls.
+  try {
+    await Firebase.initializeApp();
+    FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+  } on Exception catch (e) {
+    debugPrint('Firebase initialization failed (push disabled): $e');
+  }
+
+  // Initialize the backend (Appwrite when configured, Supabase otherwise).
   try {
     await initializeBackend();
   } on Exception catch (e) {
-    debugPrint('Supabase initialization failed: $e');
+    debugPrint('Backend initialization failed: $e');
   }
 
   // Server-side settings (peer threshold, SMS caps, feature flags) from the

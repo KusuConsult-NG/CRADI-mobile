@@ -1,6 +1,5 @@
 import 'package:climate_app/core/constants/hazards.dart';
-import 'package:climate_app/core/services/supabase_service.dart'
-    show parseTimestamp;
+import 'package:climate_app/core/services/backend.dart' show parseTimestamp;
 import 'package:climate_app/features/verification/providers/reports_status_provider.dart';
 import 'package:climate_app/features/verification/widgets/dispute_comment_dialog.dart';
 import 'package:climate_app/core/theme/app_colors.dart';

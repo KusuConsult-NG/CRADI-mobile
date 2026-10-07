@@ -1,7 +1,7 @@
 import 'package:climate_app/core/constants/hazards.dart';
 import 'package:climate_app/core/theme/app_colors.dart';
 import 'package:climate_app/core/utils/error_handler.dart';
-import 'package:climate_app/core/services/supabase_service.dart';
+import 'package:climate_app/core/services/backend.dart' show parseTimestamp;
 
 import 'package:climate_app/features/alerts/screens/alert_severity.dart';
 import 'package:climate_app/features/auth/providers/auth_provider.dart';

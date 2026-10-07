@@ -68,6 +68,7 @@ BackendFailure classifyAppwriteFailure(Object error) {
   switch (error.code) {
     case 401:
     case 403:
+    case 413:
       return BackendFailure.refused;
     case 404:
       return BackendFailure.notFound;

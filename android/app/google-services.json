@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "689251502200",
+    "project_id": "ewer-8f788",
+    "storage_bucket": "ewer-8f788.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:689251502200:android:3c102d339da6c4437e458d",
+        "android_client_info": {
+          "package_name": "com.westgatestratagem.climate_app.climate_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC1UtBDV_bO2Qbyz3vOihDCs747lM3ASCM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -44,9 +44,16 @@ class AppwriteDataBackend implements DataBackend {
     _account = aw.Account(_client);
   }
 
-  static aw.Client _defaultClient() => aw.Client()
-      .setEndpoint(AppwriteConfig.endpoint)
-      .setProject(AppwriteConfig.projectId);
+  static aw.Client _defaultClient() {
+    final client = aw.Client();
+    if (AppwriteConfig.endpoint.isNotEmpty) {
+      client.setEndpoint(AppwriteConfig.endpoint);
+    }
+    if (AppwriteConfig.projectId.isNotEmpty) {
+      client.setProject(AppwriteConfig.projectId);
+    }
+    return client;
+  }
 
   final aw.Client _client;
   late final aw.TablesDB _tables;

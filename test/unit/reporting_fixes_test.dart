@@ -8,12 +8,9 @@ import 'package:climate_app/features/verification/providers/reports_status_provi
 import 'package:flutter_test/flutter_test.dart';
 import 'package:climate_app/core/services/backend.dart';
 import 'package:http/http.dart' as http;
-import 'package:supabase_flutter/supabase_flutter.dart' show PostgrestException;
 import 'package:climate_app/core/l10n/l10n.dart';
 
 void main() {
-  // The error vocabulary is the backend's, and these tests call the pure
-  // classifiers directly, with no live client to install it.
   setUpAll(installBackendErrorVocabulary);
 
   group('Hazard metadata', () {
@@ -126,18 +123,6 @@ void main() {
       expect(isTransientNetworkError(const SocketException('x')), isTrue);
       expect(isTransientNetworkError(TimeoutException('x')), isTrue);
       expect(isTransientNetworkError(http.ClientException('x')), isTrue);
-    });
-
-    test('server refusals are permanent, not transient', () {
-      for (final code in ['42501', '23514', '23502', '22P02']) {
-        final e = PostgrestException(message: 'no', code: code);
-        expect(isPermanentSyncError(e), isTrue, reason: code);
-        expect(isTransientNetworkError(e), isFalse, reason: code);
-      }
-      expect(
-        isPermanentSyncError(const PostgrestException(message: 'x')),
-        isFalse,
-      );
     });
 
     test('terminal failures are detected', () {

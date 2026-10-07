@@ -9,19 +9,8 @@ class AppConfig {
   // Supplied at build time: flutter run --dart-define-from-file=env.json
   // (see env.example.json). Never commit real values.
 
-  static const String supabaseUrl = String.fromEnvironment('SUPABASE_URL');
-  static const String supabaseAnonKey = String.fromEnvironment(
-    'SUPABASE_ANON_KEY',
-  );
-  static const String oneSignalAppId = String.fromEnvironment(
-    'ONESIGNAL_APP_ID',
-  );
-
   /// Optional. Crash reporting is disabled when empty.
   static const String sentryDsn = String.fromEnvironment('SENTRY_DSN');
-
-  static bool get isSupabaseConfigured =>
-      supabaseUrl.isNotEmpty && supabaseAnonKey.isNotEmpty;
 
   // ─────────────────────── Store listing ───────────────────────────────────
 

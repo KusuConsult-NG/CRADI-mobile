@@ -4,7 +4,6 @@ import 'dart:io';
 import 'package:climate_app/core/l10n/l10n.dart';
 import 'package:climate_app/core/utils/error_handler.dart' as eh;
 import 'package:flutter_test/flutter_test.dart';
-import 'package:supabase_flutter/supabase_flutter.dart' as sb;
 
 /// The release-mode message scrubber decides what a user sees when
 /// something fails mid-flow. Nothing covered it before, partly because the
@@ -34,27 +33,6 @@ void main() {
         eh.ErrorHandler.genericMessage(Exception('permission denied'), l10n),
         l10n.errorNoPermission,
       );
-    });
-
-    test('a raw PostgREST error never reaches the user', () {
-      const e = sb.PostgrestException(
-        message:
-            'new row violates row-level security policy for table "reports"',
-        code: '42501',
-      );
-      final shown = eh.ErrorHandler.genericMessage(e, l10n);
-      expect(shown, l10n.errorContactSupport);
-      expect(shown, isNot(contains('row-level security')));
-      expect(shown, isNot(contains('reports')));
-    });
-
-    test("a Supabase AuthException's server text never reaches the user", () {
-      const e = sb.AuthApiException(
-        'Invalid login credentials',
-        statusCode: '400',
-      );
-      final shown = eh.ErrorHandler.genericMessage(e, l10n);
-      expect(shown, isNot(contains('Invalid login credentials')));
     });
 
     test('an internal SDK error is scrubbed to a support message', () {
