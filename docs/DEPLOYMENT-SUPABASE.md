@@ -817,6 +817,10 @@ raise `app_min_version` once an iOS build is in users' hands until
 
 ### Before you trust a build — never-tested areas
 
+> **Corrected in `DEPLOYMENT.md`.** CI's `build-android-debug` job does
+> assemble a debug APK, on every push and pull request. What has never run
+> is R8 and release signing. The paragraph below is left as it was written.
+
 The app has been compiled but **never assembled into an APK in CI or run on a
 device**. The Dart half is verified: a full product-mode AOT compile of
 `lib/main.dart` with every package succeeds, and Android arm64 codegen produces
