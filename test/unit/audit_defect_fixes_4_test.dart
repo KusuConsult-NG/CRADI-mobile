@@ -1,6 +1,8 @@
 import 'dart:io';
 
 import 'package:appwrite/appwrite.dart' show AppwriteException;
+import 'package:climate_app/core/services/appwrite/appwrite_errors.dart';
+import 'package:climate_app/core/services/backend_failure.dart';
 import 'package:climate_app/core/router/route_guard.dart';
 import 'package:climate_app/core/services/offline_storage_service.dart';
 import 'package:climate_app/core/services/notification_service.dart';
@@ -198,6 +200,9 @@ void main() {
   });
 
   group('L5 / storage errors', () {
+    setUp(() => registerBackendPermanentPredicate(isAppwritePermanent));
+    tearDown(() => resetBackendRetryPredicates());
+
     test('4xx storage errors are permanent, conflicts / limits are not', () {
       // 413 Too Large → permanent
       expect(isPermanentSyncError(AppwriteException('too large', 413)), isTrue);
@@ -208,8 +213,14 @@ void main() {
         ),
         isTrue,
       );
-      // 409/429/408/500/unknown → not permanent
-      for (final code in [409, 429, 408, 500]) {
+      // 409 duplicate → permanent: the write already landed; retrying is pointless
+      expect(
+        isPermanentSyncError(AppwriteException('x', 409)),
+        isTrue,
+        reason: 'duplicate is permanent under Appwrite semantics',
+      );
+      // 429/408/500/unknown → not permanent (transient or unknown, worth retrying)
+      for (final code in [429, 408, 500]) {
         expect(
           isPermanentSyncError(AppwriteException('x', code)),
           isFalse,
