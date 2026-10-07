@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main, develop, supabase-migration]
+    branches: [main, develop]
   pull_request:
-    branches: [main, develop, supabase-migration]
+    branches: [main, develop]
 
 # Cancel in-progress runs on the same branch to save quota
 concurrency:
