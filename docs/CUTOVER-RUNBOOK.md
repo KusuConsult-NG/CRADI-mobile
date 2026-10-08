@@ -90,20 +90,50 @@ having executed. Match the pin.
 Execute these pre-flight checks at least 24 hours prior to the scheduled cutover window.
 
 ### 3.1 Appwrite Cloud Infrastructure Check
-From the repository root, with the `APPWRITE_*` exports from section 2 in place.
 
-Run the cloud schema and plan verifier:
-```bash
-node infra/appwrite/verify.mjs
-```
-*Criteria:* no differences against `plan.mjs`. Unplanned extras are listed
-without failing the run, so read the output rather than only the exit code.
+One command, from the repository root, with the `APPWRITE_*` variables from
+section 2 in the environment:
 
-Run the automated probe and health check:
 ```bash
-node infra/appwrite/cloud-check.mjs
+node infra/appwrite/phase0.mjs
 ```
-*Criteria:* 8/8 checks pass, temporary test documents cleaned up.
+
+It runs the preflight, then `verify.mjs`, then `cloud-check.mjs`, stopping at the
+first failure. **It writes no migrated data** — it does not run
+`seed-identities.mjs`, `copy-tables.mjs` or `copy-storage.mjs`, which are the
+migration itself and need both a write freeze and the password decision in 5.1.
+On its own, Phase 0 changes nothing you would have to undo.
+
+Exit codes mean different things and the difference matters: **2** is not
+configured or not reachable — nothing was contacted, so it says nothing about the
+project. **1** is a check that failed. **0** is ready for Phase 1.
+
+- **Preflight.** Are the three variables set, and does `/health/version` answer
+  as Appwrite? That endpoint needs no key, so a failure there is the network or
+  the URL and nothing else. It is a separate step because the failure modes are
+  confusable and expensive: an egress policy that does not list the host answers
+  with *its own* 403 and *its own* body, which reads like a wrong endpoint, which
+  reads nothing like a rejected key — and only the last is about the project. The
+  run relays whatever actually answered rather than guessing. It also refuses to
+  start while `APPWRITE_BUCKET_ID` is set, because `plan.mjs` still reads it as
+  the single-bucket id and a stale value describes a bucket no provisioning run
+  ever made.
+- **`verify.mjs`** — does the live project match `plan.mjs`? Read-only.
+  *Criteria:* no differences. Unplanned extras are listed without changing the
+  exit code, so read the output and not only the code.
+- **`cloud-check.mjs`** — does the project *behave*? Eight probes that need a
+  write to answer, including that a label-gated collection is unreadable without
+  the label. Everything it creates is named `cloudchk-<stamp>` and deleted at the
+  end, including after a failure. If it reports that cleanup failed, remove the
+  rows it names before running anything else.
+  *Criteria:* 8/8 pass, cleanup clean.
+
+This is also the step that answers the one question the test harness in
+`docs/appwrite-spike/migrate` cannot: that harness models how Appwrite evaluates
+ACLs — table permissions, and a row's own only where row security is on — and
+only Appwrite can confirm the model. Run the pieces individually if you need to
+(`node infra/appwrite/verify.mjs`, `node infra/appwrite/cloud-check.mjs`);
+`--single-bucket` passes through to `verify.mjs`.
 
 ### 3.2 Push Providers Status in Appwrite Console
 Navigate to **Appwrite Cloud Console** -> **Project Settings** -> **Messaging**:

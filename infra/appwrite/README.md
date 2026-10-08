@@ -194,10 +194,23 @@ and `TERMII_API_KEY` / `TERMII_SENDER_ID` on `drain`). See
 
 ```
 APPWRITE_ENDPOINT=... APPWRITE_PROJECT_ID=... APPWRITE_API_KEY=... \
-node infra/appwrite/verify.mjs
+node infra/appwrite/phase0.mjs
 ```
 
-Read-only, and exits non-zero when anything is missing. It checks three
+Preflight, then `verify.mjs`, then `cloud-check.mjs`, stopping at the first
+failure. Writes no migrated data. Exit **2** means not configured or not
+reachable — nothing was contacted, so it says nothing about the project; **1**
+means a check failed.
+
+The preflight is its own step because the failure modes are confusable: an
+egress policy that does not list the host answers with its own 403 and its own
+body, which reads like a wrong endpoint, which reads nothing like a rejected
+key — and only the last is about the project. `/health/version` needs no key, so
+a failure there is the network or the URL and nothing else, and the run relays
+whatever actually answered.
+
+`verify.mjs` on its own is read-only, and exits non-zero when anything is
+missing. It checks three
 things a bare existence check would call fine: a column stuck in
 `processing` (present, and rejects every write), a Function created but
 never deployed (answers every call with a 500 and looks healthy in the

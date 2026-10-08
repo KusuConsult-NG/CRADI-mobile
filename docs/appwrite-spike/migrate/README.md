@@ -13,9 +13,9 @@ spike's `../env.json` is the fallback when they are unset.
 
     export MIGRATION_PASSWORD=…  # seed-identities sets it, reconcile signs in with it
 
-    # Schema, from the repo root — this is the provisioner, not a script here:
+    # Schema and first contact, from the repo root — not scripts in here:
     node infra/appwrite/provision.mjs
-    node infra/appwrite/verify.mjs
+    node infra/appwrite/phase0.mjs      # preflight + verify + behaviour probes
 
     node seed-identities.mjs   # users, ward teams, role labels — ALWAYS FIRST
     node copy-tables.mjs       # all nine collections, in dependency order
