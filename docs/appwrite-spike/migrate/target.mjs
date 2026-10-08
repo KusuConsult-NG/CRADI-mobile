@@ -38,12 +38,14 @@ function fromFile() {
 /**
  * Resolves the Appwrite target, or exits non-zero explaining what is missing.
  *
- * @param {{ requireKey?: boolean }} [opts] `false` for a script that only ever
- *   acts as a signed-in user (`reconcile.mjs`), which needs no API key.
+ * The key is required by all four scripts. `reconcile.mjs` used to be the
+ * exception — it signed in as each user with the shared seed password — but
+ * since the seeder imports Supabase's bcrypt hashes, nobody knows any user's
+ * password and the gate mints its sessions with the key instead.
  */
 let resolved = null;
 
-export function appwriteTarget({ requireKey = true } = {}) {
+export function appwriteTarget() {
   // Memoised: `seed-identities.mjs` imports `migrate.mjs` for `wardTeam`, so
   // two modules in one process ask for the target. One resolution, one log
   // line, and no way for the two to disagree.
@@ -55,7 +57,7 @@ export function appwriteTarget({ requireKey = true } = {}) {
 
   const missing = [];
   if (!project) missing.push('AW_PROJECT');
-  if (requireKey && !key) missing.push('AW_KEY');
+  if (!key) missing.push('AW_KEY');
   if (missing.length) {
     console.error(
       `Cannot reach Appwrite: ${missing.join(' and ')} not set, and ${SPIKE_ENV}` +
@@ -81,31 +83,4 @@ export function appwriteTarget({ requireKey = true } = {}) {
   };
   resolved = { endpoint, project, key, headers, aw };
   return resolved;
-}
-
-/**
- * The password migrated accounts are created with, and that `reconcile.mjs`
- * then signs in as to compare visibility.
- *
- * It used to be the literal `MigratedPassword123`, in the repository, applied
- * to every account the seeder created. Fine for a spike against a throwaway
- * local stack; a disclosed shared credential for ~650 real accounts the moment
- * the same script is pointed at Cloud, which the runbook told an operator to
- * do. So it has no default.
- *
- * Note what this does *not* solve: Supabase password hashes are not carried
- * over by this script, so every migrated user's own password stops working
- * regardless. See `docs/CUTOVER-RUNBOOK.md` Phase 2 for the two ways out.
- */
-export function migrationPassword() {
-  const pw = process.env.MIGRATION_PASSWORD ?? '';
-  if (pw.length < 8) {
-    console.error(
-      'MIGRATION_PASSWORD must be set (8+ characters). Both seed-identities.mjs' +
-        ' and reconcile.mjs read it, and they must agree for the reconciliation' +
-        ' gate to be able to sign in.',
-    );
-    process.exit(2);
-  }
-  return pw;
 }

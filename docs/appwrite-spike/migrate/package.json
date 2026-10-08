@@ -8,5 +8,8 @@
   },
   "dependencies": {
     "pg": "^8.11.0"
+  },
+  "scripts": {
+    "test": "node --test storage-ids.test.mjs copy-tables.test.mjs reconcile.test.mjs seed-identities.test.mjs"
   }
 }

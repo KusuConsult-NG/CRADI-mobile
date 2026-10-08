@@ -281,6 +281,116 @@ jobs:
       - name: Run tests
         run: npm test
 
+  # ── The Supabase → Appwrite migration pipeline ────────────────────────────
+  #
+  # This job exists because the pipeline was unprotected and it cost a
+  # production mistake: `seed-identities.mjs` was changed to import each
+  # account's own bcrypt hash, the change was never committed, and the earlier
+  # shared-password version ran against the live project. Nothing failed and
+  # nothing was red, because no job here ran the suite that watches which
+  # endpoint each account goes to.
+  #
+  # It needs a real Postgres, not a stub: the reconciliation gate queries the
+  # live RLS policies as each user and reads the effective policy back out of
+  # `pg_policies`, which is the whole point of it — a stand-in that agreed with
+  # the gate would verify nothing.
+  appwrite-migration-pipeline-test:
+    name: Appwrite Migration Pipeline (Node) Test
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        # 16, matching what the migrations are written against.
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        # Without a health check the first psql races the server's startup and
+        # the job fails on a connection refused that looks like a broken test.
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    env:
+      PGPASSWORD: postgres
+      PG_URL: postgres://postgres:postgres@127.0.0.1:5432/cradi_mig
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'          # Matches the package's engines field
+          cache: npm
+          cache-dependency-path: docs/appwrite-spike/migrate/package-lock.json
+
+      # The runner image ships a psql, but not contractually; installing it
+      # when it is absent is cheaper than a red build about a missing client.
+      - name: Ensure psql
+        run: |
+          command -v psql >/dev/null || {
+            sudo apt-get update -qq
+            sudo apt-get install -y --no-install-recommends postgresql-client
+          }
+
+      # Stubs, then every migration in order, then the fixture. `ON_ERROR_STOP`
+      # on all three: a migration that half-applies would leave the suite
+      # reporting visibility findings against a schema that never existed.
+      - name: Build the migration database
+        run: |
+          psql "postgres://postgres:postgres@127.0.0.1:5432/postgres" \
+            -v ON_ERROR_STOP=1 -qc 'create database cradi_mig'
+          psql "$PG_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/local_stubs.sql
+          for f in supabase/migrations/*.sql; do
+            echo "::group::$f"
+            psql "$PG_URL" -v ON_ERROR_STOP=1 -q -f "$f"
+            echo '::endgroup::'
+          done
+          psql "$PG_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/migration_fixture.sql
+
+      # Guards the fixture itself. Every suite below skips when a row it needs
+      # is absent, so a fixture that stopped carrying one branch would turn
+      # those tests into silent no-ops rather than failures.
+      - name: Check the fixture carries every branch
+        run: |
+          psql "$PG_URL" -v ON_ERROR_STOP=1 -qtAc "
+            do \$\$
+            declare n int;
+            begin
+              select count(*) into n from auth.users
+                where encrypted_password ~ '^\\\$2[aby]\\\$[0-9]{2}\\\$';
+              if n < 2 then raise exception 'need 2+ bcrypt accounts, found %', n; end if;
+              select count(*) into n from auth.users
+                where coalesce(encrypted_password, '') = '';
+              if n < 1 then raise exception 'need an account with no hash'; end if;
+              select count(*) into n from auth.users
+                where coalesce(encrypted_password, '') <> ''
+                  and encrypted_password !~ '^\\\$2[aby]\\\$[0-9]{2}\\\$';
+              if n < 1 then raise exception 'need an account with a non-bcrypt hash'; end if;
+              select count(*) into n from profiles
+                where role <> 'user' and not is_approved;
+              if n < 1 then raise exception 'need an unapproved staff account'; end if;
+              select count(*) into n from reports where coalesce(lga, '') = '';
+              if n <> 2 then raise exception 'need exactly 2 orphan reports, found %', n; end if;
+              select count(*) into n from storage.objects;
+              if n < 1 then raise exception 'need storage objects'; end if;
+            end
+            \$\$;
+          "
+
+      - name: Install dependencies
+        working-directory: docs/appwrite-spike/migrate
+        run: npm ci
+
+      - name: Run tests
+        working-directory: docs/appwrite-spike/migrate
+        run: npm test
+
   # ── Docker image builds (backend deploys from this Dockerfile) ────────────
   backend-docker-build:
     name: Backend Docker Build
