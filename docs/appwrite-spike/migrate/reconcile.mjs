@@ -17,6 +17,8 @@
  *   AW_ENDPOINT / AW_PROJECT   where to compare against
  *   AW_KEY              OPTIONAL, and never used for the comparison — see below
  *   MIGRATION_PASSWORD  the password seed-identities.mjs set
+ *   APPWRITE_DATABASE_ID  the database to read; must match what the copiers
+ *                       wrote to and what the app reads. Defaults to `cradi`.
  *   AW_ROWS_API         `tablesdb` (default, Appwrite >= 1.8) or `documents`
  *   RECONCILE_TABLES    comma-separated subset, for narrowing a failure
  *
@@ -40,7 +42,16 @@ const PG = process.env.PG_URL ?? 'postgres://postgres:postgres@localhost:5432/cr
  * running this against that stack.
  */
 const API = (process.env.AW_ROWS_API ?? 'tablesdb').trim();
-const DB = 'cradi';
+/**
+ * The same variable every other component reads, not a literal.
+ *
+ * This was hardcoded `cradi` while `copy-tables.mjs`, `copy-storage.mjs` and the
+ * Functions all honour `APPWRITE_DATABASE_ID`. With that variable set to
+ * anything else the copiers wrote to one database and the gate looked in
+ * another, so every table read 404'd — loudly, but for a reason that has nothing
+ * to do with the migration it is meant to be checking.
+ */
+const DB = process.env.APPWRITE_DATABASE_ID ?? 'cradi';
 const rowsPath = (table) =>
   API === 'documents'
     ? `/databases/${DB}/collections/${table}/documents`

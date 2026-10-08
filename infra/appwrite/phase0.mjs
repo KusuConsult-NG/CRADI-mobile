@@ -70,6 +70,69 @@ function preflightEnv() {
 }
 
 /**
+ * Which database everything will use, and whether they will agree.
+ *
+ * `verify.mjs` cannot answer this, and it is worth being precise about why:
+ * `plan.mjs` takes `DATABASE_ID` from the same `APPWRITE_DATABASE_ID`, so a
+ * passing verify means "the database this variable names matches the plan". It
+ * says nothing about whether that is the database the app reads. The two
+ * questions look identical in the output and are not.
+ *
+ * Five places resolve this independently, and every one of them defaults to
+ * `cradi`. If the variable says anything else, all five must carry it — and the
+ * Flutter one is a compile-time define, so it is baked into the APK and cannot
+ * be changed afterwards. Get it wrong and the data sits in one database while
+ * the app reads another, which Appwrite answers with `200 {"total": 0}`: an
+ * empty app and no error anywhere.
+ */
+async function preflightDatabase() {
+  const db = value('APPWRITE_DATABASE_ID');
+  if (!db || db === 'cradi') return true;
+
+  const url = value('APPWRITE_ENDPOINT').replace(/\/+$/, '');
+  const head = { 'x-appwrite-project': value('APPWRITE_PROJECT_ID'), 'x-appwrite-key': value('APPWRITE_API_KEY') };
+  const exists = async (id) => {
+    try {
+      const r = await fetch(`${url}/tablesdb/${encodeURIComponent(id)}`, {
+        headers: head,
+        signal: AbortSignal.timeout(20_000),
+      });
+      if (r.status === 404) return false;
+      if (!r.ok) return null;
+      return true;
+    } catch {
+      return null;
+    }
+  };
+
+  console.log(`\nAPPWRITE_DATABASE_ID is set to "${db}", not the default "cradi".`);
+  const alsoDefault = await exists('cradi');
+  if (alsoDefault === true) {
+    console.log(
+      '  A database named "cradi" ALSO exists in this project. Whichever of the\n' +
+        '  two the app reads is decided by its own build and its own variables, not\n' +
+        '  by this run — and reading the wrong one answers 200 with no rows.',
+    );
+  } else if (alsoDefault === false) {
+    console.log('  No database named "cradi" exists here, so a component that falls back');
+    console.log('  to the default would 404 rather than read an empty one. Louder, better.');
+  }
+  console.log(
+    '\n  Every one of these resolves the database on its own, and each defaults to\n' +
+      '  "cradi". All five must say "' + db + '":\n' +
+      '    - the two Appwrite Functions   APPWRITE_DATABASE_ID, set per Function\n' +
+      '    - the admin, server side       APPWRITE_DATABASE_ID\n' +
+      '    - the admin, browser side      NEXT_PUBLIC_APPWRITE_DATABASE_ID\n' +
+      '    - the Flutter app              APPWRITE_DATABASE_ID in env.json — a\n' +
+      '                                   COMPILE-TIME define, baked into the APK\n' +
+      '    - the migration scripts        APPWRITE_DATABASE_ID in this shell\n' +
+      '\n  verify.mjs cannot catch a mismatch: plan.mjs takes its id from this same\n' +
+      '  variable, so it checks the database you named, whichever one that is.',
+  );
+  return true;
+}
+
+/**
  * Is the endpoint reachable, and is it Appwrite?
  *
  * `/health/version` needs no key, so a failure here is the network or the URL
@@ -138,6 +201,7 @@ const single = process.argv.includes('--single-bucket');
 
 if (!preflightEnv()) process.exit(2);
 if (!(await preflightReach())) process.exit(2);
+if (!(await preflightDatabase())) process.exit(2);
 
 const verify = await run(
   'verify.mjs — does the project match plan.mjs? (read-only)',

@@ -63,10 +63,36 @@ the project is on a one-bucket tier; with it set, the verifier checks a
 single-bucket plan and can report that the project matches while neither planned
 bucket exists. It prints a note when it sees the variable — heed it.
 
-The database is `cradi`. Nothing reads an `AW_DATABASE_ID`: the migration scripts
-hardcode `/databases/cradi/`, and the tooling under `infra/appwrite` reads
-`APPWRITE_DATABASE_ID`, defaulting to `cradi`. `6941e2c2003705bb5a25` was the
-*previous* Cloud project's database — set nothing and leave it behind.
+### Which database, and the one thing Phase 0 cannot prove
+
+`APPWRITE_DATABASE_ID` decides this, and **five components resolve it
+independently, each defaulting to `cradi`**:
+
+| | variable | set where |
+|---|---|---|
+| the two Functions | `APPWRITE_DATABASE_ID` | per Function, in the console |
+| admin, server side | `APPWRITE_DATABASE_ID` | hosting env |
+| admin, browser side | `NEXT_PUBLIC_APPWRITE_DATABASE_ID` | hosting env |
+| Flutter app | `APPWRITE_DATABASE_ID` | `env.json` — **compile-time**, baked into the APK |
+| migration scripts | `APPWRITE_DATABASE_ID` | the operator's shell |
+
+Leave it unset everywhere and all five agree on `cradi`, which is the simplest
+thing that can be correct. Set it in some places and not others and the data
+sits in one database while the app reads another — which Appwrite answers with
+`200 {"total": 0}`: an empty app, and no error anywhere.
+
+**`verify.mjs` cannot catch that**, and the reason is worth stating plainly:
+`plan.mjs` takes its `DATABASE_ID` from the same variable. So a passing verify
+means "the database this variable names matches the plan" — never "this is the
+database the app reads". The two are indistinguishable in its output.
+`phase0.mjs` therefore reports the resolved database, says whether a `cradi`
+also exists alongside it, and lists all five places that must agree.
+
+`6941e2c2003705bb5a25` was the *previous* Cloud project's database. If it is in
+use in the current project, that is a deliberate choice and every one of the five
+must carry it; if it is a leftover export, unset it before anything writes.
+
+There is no `AW_DATABASE_ID`: nothing reads that name.
 
 Install the migration scripts' dependency once:
 ```bash
