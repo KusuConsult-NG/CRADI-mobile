@@ -167,7 +167,20 @@ deletes only accounts whose id is a Postgres profile id, so a real sign-up made
 after the migration is reported and skipped; `CONFIRM_DELETE_USERS` must equal
 the count the run itself takes, so a stale command deletes nothing; and a live
 session on a seeded account is a finding, because it means somebody used the
-shared password. Runbook 5.1 has the procedure. Everything else here is safe to
+shared password.
+
+`purge-dart-accounts.mjs` removes what `infra/appwrite/local/prep-dart.mjs` left
+in the Cloud project — accounts whose password is a literal in this repository,
+holding `label:ewr` and `label:approved`, plus their `profiles` rows and the
+`dart-foreign-*` reports. Same shape: audit by default, `CONFIRM_DELETE_DART`
+must match the count, and it deletes only ids matching `dart-<digits>` or
+`dart-reporter-<digits>` — never a bare `dart-` an operator typed, and it stops
+outright if such an id is also a Postgres profile. It is separate from
+`reseed-passwords.mjs` on purpose: that script refuses to touch anything whose
+id is not a profile id, which is what makes it safe, so these have to be their
+own deliberate act. The audit also answers whether the `dart-foreign-*` rows are
+in the database at all, which is the open question about whether Phase 4's gate
+missed them. Runbook 5.1 has the procedure. Everything else here is safe to
 re-run.
 
 It got this way late: the earlier seeder created every account with one shared
