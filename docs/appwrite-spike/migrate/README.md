@@ -22,11 +22,21 @@ spike's `../env.json` is the fallback when they are unset.
 that does not exist is accepted silently and grants nobody anything.
 
 `reconcile.mjs` compares per-user visibility, not row counts: it queries the
-live RLS policy as each user and that user's Appwrite session, and diffs.
-Verified to fail — granting one ward's team read on another ward's report
-makes it exit 1. It compares the **`reports`** collection only, which is where
-the RLS was hardest; it says nothing about `profiles`, `authorities`,
-`app_settings`, `verifications`, `alerts` or storage.
+live RLS policy as each user and that user's Appwrite session, and diffs the
+ids. It covers **every table a signed-in user can read** — 15 of them — and
+fails the run if the schema grows one that is neither reconciled nor listed as
+out of scope, because the version that compared `reports` alone still called
+its result "100% per-user visibility parity".
+
+    npm test                   # the gate's own tests; needs the Postgres above
+
+Narrow a failure with `RECONCILE_TABLES=profiles,reports`. Add `AW_KEY` for a
+per-table total — diagnosis only, never part of a verdict, since a key reads
+past the ACLs being compared. `AW_ROWS_API=documents` targets the spike's
+pre-1.8 stack; the default is TablesDB, which is what the app uses.
+
+Storage is reported, not compared: nothing here migrates the buckets, so there
+is no Supabase-object-name -> Appwrite-file-id mapping to diff.
 
 ## Pointing them somewhere else
 

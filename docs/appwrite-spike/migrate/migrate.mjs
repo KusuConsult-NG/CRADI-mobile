@@ -21,10 +21,18 @@ import { appwriteTarget } from './target.mjs';
 const PG = process.env.PG_URL ?? 'postgres://postgres:postgres@localhost:5432/cradi_mig';
 const DB = 'cradi';
 
-// Resolved and validated in one place for all four scripts. This one already
-// read the environment; it did not check it, so an unset AW_KEY sent the header
-// `undefined` and every write came back 401 one row at a time.
-const { aw } = appwriteTarget();
+/*
+ * Resolved inside `run()`, not at import.
+ *
+ * `seed-identities.mjs` and `reconcile.test.mjs` import this module for
+ * `wardTeam` and the `*Permissions` builders, which are pure and need no
+ * credentials. Resolving at module scope made those imports demand AW_PROJECT
+ * and AW_KEY, print a target line, and exit(2) without them.
+ *
+ * Validation itself was the fix this already needed: it read the environment
+ * but did not check it, so an unset AW_KEY sent the header `undefined` and
+ * every write came back 401, one row at a time.
+ */
 
 /**
  * The ward team id.
@@ -39,7 +47,14 @@ const { aw } = appwriteTarget();
  * Appwrite's 36-character limit. `functions/cradi/test/policy.test.mjs`
  * now checks all 584.
  */
-export { wardTeam } from '../../../functions/cradi/src/lib/appwrite.js';
+// Imported AND re-exported, deliberately in two statements:
+// `export { wardTeam } from '...'` re-exports without creating a local
+// binding, so `seed-identities.mjs` could import it from here while every call
+// inside this file threw `ReferenceError: wardTeam is not defined` — on the
+// first profile, before a single document was written.
+import { wardTeam } from '../../../functions/cradi/src/lib/appwrite.js';
+
+export { wardTeam };
 
 /**
  * Role name -> Appwrite label.
@@ -56,6 +71,29 @@ export { wardTeam } from '../../../functions/cradi/src/lib/appwrite.js';
  * nothing — which looks like empty data, not like a permissions bug.
  */
 export const roleLabel = (role) => String(role ?? '').replace(/_(.)/g, (_, c) => c.toUpperCase());
+
+/**
+ * The role Postgres would actually act on, which is not always `profiles.role`.
+ *
+ * `app_role()`:
+ *
+ *     case when p.is_approved and not p.is_disabled then p.role else 'user' end
+ *
+ * Every RLS policy branches on `app_role()`, never on the column. An Appwrite
+ * label carries no such condition, so assigning one straight from the column
+ * hands an unapproved or disabled staff account the reach its role implies —
+ * every profile, every report, every verification. Postgres showed them their
+ * own row and nothing else.
+ *
+ * This is the only place that rule is written down for the migration. The
+ * seeder assigns labels through it; `reconcile.test.mjs` asserts that an
+ * unapproved account gains nothing by it.
+ */
+export function effectiveRole(profile) {
+  const approved = profile?.is_approved === true || profile?.isApproved === true;
+  const disabled = profile?.is_disabled === true || profile?.isDisabled === true;
+  return approved && !disabled ? String(profile?.role ?? 'user') : 'user';
+}
 
 /** Roles that `reports_select` lets see everything. */
 const STAFF_ROLES = ['ewv', 'ewr', 'ldp_coordinator', 'project_staff', 'admin', 'techSupport'];
@@ -98,7 +136,7 @@ export function profilePermissions(row) {
   ];
 }
 
-async function upsert(collection, id, data, permissions) {
+async function upsert(aw, collection, id, data, permissions) {
   const r = await aw(`/databases/${DB}/collections/${collection}/documents`, {
     method: 'POST', body: JSON.stringify({ documentId: id, data, permissions }),
   });
@@ -108,6 +146,7 @@ async function upsert(collection, id, data, permissions) {
 }
 
 export async function run({ log = console.log } = {}) {
+  const { aw } = appwriteTarget();
   const client = new pg.Client({ connectionString: PG });
   await client.connect();
   const counts = {};
@@ -120,7 +159,7 @@ export async function run({ log = console.log } = {}) {
   counts.profiles = { source: profiles.length, created: 0, exists: 0 };
   for (const p of profiles) {
     if (p.ward) teams.add(wardTeam(p.state, p.lga, p.ward));
-    const r = await upsert('profiles', p.id, {
+    const r = await upsert(aw, 'profiles', p.id, {
       name: p.name ?? '', role: p.role ?? 'user',
       state: p.state ?? '', lga: p.lga ?? '', ward: p.ward ?? '',
       is_disabled: Boolean(p.is_disabled),
@@ -139,7 +178,7 @@ export async function run({ log = console.log } = {}) {
   for (const r of reports) {
     reportById.set(r.id, r);
     teams.add(wardTeam(r.state, r.lga, r.ward));
-    const res = await upsert('reports', r.id, {
+    const res = await upsert(aw, 'reports', r.id, {
       user_id: r.user_id, hazard_type: r.hazard_type ?? '',
       title: r.hazard_type ?? '', description: r.description ?? '',
       state: r.state, lga: r.lga, ward: r.ward, status: r.status,
@@ -156,7 +195,7 @@ export async function run({ log = console.log } = {}) {
   for (const v of verifications) {
     const report = reportById.get(v.report_id);
     if (!report) { counts.verifications.orphaned += 1; continue; }
-    const res = await upsert('verifications', v.id, {
+    const res = await upsert(aw, 'verifications', v.id, {
       report_id: v.report_id, verifier_id: v.verifier_id,
       is_confirmed: Boolean(v.is_confirmed), comment: v.comment ?? '',
       // Denormalised so the ACL has something to be derived from later, and

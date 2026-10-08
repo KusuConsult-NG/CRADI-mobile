@@ -7,7 +7,7 @@
  * and grants nobody anything, which is the quietest possible migration bug.
  */
 import pg from 'pg';
-import { wardTeam, roleLabel } from './migrate.mjs';
+import { wardTeam, roleLabel, effectiveRole } from './migrate.mjs';
 import { appwriteTarget, migrationPassword } from './target.mjs';
 const { aw } = appwriteTarget();
 const PASSWORD = migrationPassword();
@@ -18,7 +18,8 @@ await client.connect();
 // part collided for every profile sharing an id prefix, and five of six
 // users silently failed to create.
 const rows = (await client.query(
-  `select p.id, p.name, p.role, p.state, p.lga, p.ward, u.email
+  `select p.id, p.name, p.role, p.state, p.lga, p.ward,
+          p.is_approved, p.is_disabled, u.email
      from profiles p join auth.users u on u.id = p.id order by p.id`,
 )).rows;
 
@@ -42,9 +43,14 @@ for (const p of rows) {
   const u = await aw('/users', { method: 'POST', body: JSON.stringify({ userId: uid, email: p.email, password: PASSWORD, name: p.name ?? '' }) });
   if (u.status === 201) users += 1;
   else if (u.status !== 409) failures.push(`${p.id}: ${u.status} ${String(u.body?.message).slice(0, 90)}`);
-  if (p.role && p.role !== 'user') { const lr = await aw(`/users/${uid}/labels`, { method: 'PUT', body: JSON.stringify({ labels: [roleLabel(p.role)] }) });
-    if (lr.status === 200) labelled += 1; else failures.push(`label ${p.role}: ${lr.status}`); }
-  if (p.role === 'ewm' && p.ward) {
+  // `effectiveRole`, not `p.role`: an unapproved or disabled staff account is
+  // 'user' to every RLS policy, and a label would have given it the reach its
+  // column says. Labelling by the column was a privilege escalation the
+  // migration introduced, with nothing anywhere reporting it.
+  const role = effectiveRole(p);
+  if (role !== 'user') { const lr = await aw(`/users/${uid}/labels`, { method: 'PUT', body: JSON.stringify({ labels: [roleLabel(role)] }) });
+    if (lr.status === 200) labelled += 1; else failures.push(`label ${role}: ${lr.status}`); }
+  if (role === 'ewm' && p.ward) {
     const r = await aw(`/teams/${wardTeam(p.state, p.lga, p.ward)}/memberships`, { method: 'POST', body: JSON.stringify({ userId: uid, roles: ['ewm'], url: 'http://localhost/' }) });
     if (r.status < 400) joined += 1;
   }

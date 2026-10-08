@@ -305,8 +305,13 @@ with `infra/appwrite/verify.mjs`, as in Phase 0.
 ### What Identity Seeding Executes:
 1. **Ward Teams:** Creates an Appwrite Team for every distinct ward present in `profiles` and `reports`. Team ID format: `wardTeam(state, lga, ward)`.
 2. **Appwrite Users:** Creates an Appwrite Auth user for each `profiles` row joined with `auth.users`, preserving the Postgres `id` as `userId`.
-3. **Role Labels:** Assigns Appwrite alphanumeric user labels (`admin`, `ldpCoordinator`, `projectStaff`, `fieldAgent`, `ewm`, etc.) corresponding to `profiles.role`.
-4. **Ward Team Memberships:** Automatically enrolls Early Warning Monitors (`ewm`) into their respective ward teams.
+3. **Role Labels:** Assigns Appwrite alphanumeric user labels (`admin`,
+   `ldpCoordinator`, `projectStaff`, `ewv`, `ewr`, `ewm`) from
+   **`effectiveRole(profile)`**, not from `profiles.role` — see "The escalation
+   this gate was built to catch" in Phase 4. An unapproved or disabled account
+   gets no label, which is what Postgres does.
+4. **Ward Team Memberships:** Enrolls Early Warning Monitors (`ewm`) into their
+   ward teams, under the same `effectiveRole` condition.
 
 ### Validation
 Confirm the script exits with code `0` and that the `failures` array in its JSON
@@ -329,23 +334,61 @@ node migrate.mjs
 It is idempotent: every document keeps its Postgres UUID as its Appwrite id, so
 a re-run collides with 409 rather than duplicating.
 
-### Ordered Collections:
-1. **`profiles`:** Stamped with read/write permissions for `user:<userId>`.
-2. **`authorities`:** Public read permissions, admin-only write.
-3. **`app_settings`:** Read permission for all authenticated users, admin write.
-4. **`reports`:** Stamped with write-time ACLs:
-   - Creator user: `user:<userId>` (read + update)
-   - Ward team: `team:<wardTeam>` (read)
-   - Response roles: `label:admin`, `label:ldpCoordinator`, `label:fieldAgent` (read + update)
-5. **`verifications`:** Linked by report ID, stamped with voter user and admin ACLs.
-6. **`alerts`:** Broadcaster user and role-targeted broadcast ACLs.
+### What `migrate.mjs` actually writes
+
+**Three collections, not six.** An earlier version of this section listed six
+plus storage, in order, with ACL designs for each. `migrate.mjs` handles:
+
+1. **`profiles`** — `read("user:<id>")`, `read("team:<ward>")`, and read for the
+   labels `admin`, `ldpCoordinator`, `projectStaff`, `ewv`, `ewr`.
+2. **`reports`** — `read("user:<owner>")`, `read("team:<ward>")`, and read for
+   the six labels in `STAFF_ROLES`. This is the one that reproduces
+   `reports_select`, and the reason Phase 4 exists.
+3. **`verifications`** — `read("user:<verifier>")`, `read("team:<report's
+   ward>")`, and the same staff labels. `ward`/`lga`/`state` are denormalised
+   onto the row because the ACL has to be written down, and Appwrite cannot do
+   the `EXISTS` join Postgres used.
+
+There is no `label:fieldAgent` anywhere in this system; that name appeared only
+in the old version of this list.
+
+**Not migrated by any script here**, and reported as such by Phase 4:
+`alerts`, `authorities`, `app_settings`, `scheduled_escalations`,
+`knowledge_base`, `news_links`. Each has rows a signed-in user can read in
+Postgres and nothing in Appwrite. Writing them is work this runbook does not
+yet cover; until it is done, Phase 4 cannot pass.
 
 ### Storage Asset Migration
-Transfer storage assets from Supabase Storage S3 buckets to Appwrite Cloud Storage:
-1. Bucket `report-images`: Transfer all incident image attachments. Set read permission to `Any` (public viewable for incident reports).
-2. Bucket `avatars`: Transfer user avatars. Set read permission to `Any`, write permission to `user:<userId>`.
 
-Validate file counts and checksums against the Supabase bucket contents.
+**Also not implemented.** The buckets are `report-images` and `profile-images`
+(there is no `avatars` bucket — `plan.mjs` provisions those two names, and the
+admin and the Flutter client both read `report-images`). Both are `public: true`
+in Supabase, so the RLS on `storage.objects` governs listing and metadata
+rather than the URLs stored on rows.
+
+Nothing here transfers them, so there is no Supabase-object-name ->
+Appwrite-file-id mapping, which is also why Phase 4 reports storage instead of
+comparing it. When this is written, validate file counts and checksums against
+the Supabase bucket contents, and extend the gate.
+
+> ### The schema these scripts write is not the schema production provisions
+>
+> Worth knowing before you plan this phase. `prep.mjs` creates its own
+> collections with **snake_case** attributes (`user_id`, `hazard_type`,
+> `is_confirmed`) through the **`/databases/.../collections/.../documents`**
+> API. The real project, provisioned from `infra/appwrite/plan.mjs` and checked
+> by `verify.mjs`, has **camelCase** columns (`userId`, `hazardType`,
+> `isConfirmed`) reached through **`/tablesdb/.../tables/.../rows`** — the
+> document API is deprecated as of Appwrite 1.8 and the client SDK speaks
+> TablesDB.
+>
+> So `migrate.mjs` as written cannot write into a project this repository
+> provisions: every POST would be rejected for unknown attributes, against an
+> endpoint that is not the one in use. These scripts were built against the
+> spike's own 1.6.2 stack and its ad-hoc schema. Retargeting them — or writing
+> a migrator against `columns.json` — is a decision for whoever runs the
+> cutover, not something to discover mid-window. Phase 4's reconciler already
+> speaks TablesDB and takes `AW_ROWS_API=documents` for the old stack.
 
 ---
 
@@ -360,26 +403,66 @@ node reconcile.mjs
 ```
 
 ### What `reconcile.mjs` Proves:
-- For **every row in `profiles`**, not a sample: it queries Postgres with RLS
-  active as that user (`request.jwt.claim.sub` + `set role authenticated`),
-  signs in to Appwrite as that user with `MIGRATION_PASSWORD`, lists what the
-  session can see, and diffs the document ids.
-- **Fail Criteria:** exits `1` if any user sees more documents (permission leak)
-  or fewer (data loss), or if the sign-in fails. It pages the Appwrite list and
-  throws on a non-2xx rather than reading an error as an empty result — an
-  earlier version did the latter and confidently reported a total migration
-  failure for a correct migration.
-- **Success Criteria:** exits `0`, every user identical.
+- **Every table a signed-in user can read, for every user** — 15 of them, not a
+  sample of either. It queries Postgres with RLS active as that user
+  (`request.jwt.claim.sub` + `set role authenticated`), signs in to Appwrite as
+  that user with `MIGRATION_PASSWORD`, lists what the session can see, and diffs
+  the **ids**. Comparing ids rather than field values is what lets it be correct
+  about a project whose column names it does not know.
+- It reads the **effective** policy from `pg_policies` and quotes it on every
+  finding. Not from `supabase/deploy/schema.sql`: that file is a concatenation
+  in which later migrations redefine policies, and its first `profiles_select`
+  is not the one installed.
+- It **polices its own coverage**. Any table with an `authenticated` SELECT or
+  ALL policy that is neither reconciled nor listed as deliberately out of scope
+  fails the run with exit `2`. The previous version compared `reports` alone and
+  called the result "100% per-user visibility parity"; a list maintained by hand
+  drifts, a list that fails the run when it drifts does not.
+- **Fail Criteria:** exits `1` if any user sees more rows (permission leak) or
+  fewer (data loss), if a sign-in fails, or if a table holds rows in Postgres
+  that no user can read in Appwrite. It pages the listing and throws on a
+  non-2xx rather than reading an error as an empty result — an earlier version
+  did the latter and confidently reported a total migration failure for a
+  correct migration.
+- **Exit `2` is a configuration problem, not a verdict:** unreachable endpoint,
+  missing `MIGRATION_PASSWORD`, an uncovered table. Nothing was compared. A run
+  that never reached Appwrite must never read as a list of per-account problems,
+  so it stops at the first transport error rather than producing one finding per
+  user.
+- **Success Criteria:** exits `0`, every user identical in every table.
+
+With `AW_KEY` set it also prints each table's total row count, read with the
+key. That number is **diagnosis only and never part of a verdict** — a key reads
+past the ACLs that are the subject of the comparison. It exists to tell "nothing
+migrated this table" from "everything migrated and every ACL grants nobody",
+which look identical from a user session and need opposite fixes.
+
+Narrow a failure with `RECONCILE_TABLES=profiles,reports`. Point it at the
+spike's pre-1.8 stack with `AW_ROWS_API=documents`; the default is TablesDB,
+which is what the app and the Functions use.
 
 ### What it does NOT prove
-It compares the **`reports` collection only** — the one whose RLS was hardest,
-and the reason the gate exists. It says nothing about `profiles`,
-`authorities`, `app_settings`, `verifications`, `alerts`, or storage buckets.
-Treat a green run as "the hard case is right", not as visibility parity across
-the migration. Extending it to the other collections, and to file-level bucket
-permissions, is the work that would make this gate mean what Phase 4's heading
-claims. Until then, check the remaining collections by hand against the
-baseline counts from 4.4 and spot-check at least one document per role.
+- **Storage.** Reported, not compared, for the reason in Phase 3: nothing
+  migrates the buckets, so there is no id mapping to diff.
+- **That Appwrite evaluates ACLs the way the test harness does.** `npm test`
+  here runs the gate against a stand-in that implements the documented REST
+  contract and decides visibility by evaluating the permission strings
+  `migrate.mjs` actually stamps against the grants `seed-identities.mjs`
+  actually assigns. That pins the gate's own logic and catches ACL *design*
+  errors — it found the label escalation below — but only a run against a real
+  project proves Appwrite agrees. That run is this phase.
+
+### The escalation this gate was built to catch
+`seed-identities.mjs` used to assign a role label straight from
+`profiles.role`. Every RLS policy branches on `app_role()`, which returns
+`'user'` unless the account **is_approved and not is_disabled**. A label carries
+no such condition, so an unapproved or disabled staff account arrived in
+Appwrite holding the reach its column claimed — every profile, every report,
+every verification — where Postgres had shown it its own row and nothing else.
+
+The seeder now assigns labels and ward-team membership through
+`effectiveRole()`, exported from `migrate.mjs` so one rule serves the ACLs and
+the labels both. A finding caused by this marks `demotedRole: true`.
 
 ---
 
