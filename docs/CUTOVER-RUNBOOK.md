@@ -51,7 +51,10 @@ export AW_ENDPOINT="$APPWRITE_ENDPOINT"
 export AW_PROJECT="$APPWRITE_PROJECT_ID"
 export AW_KEY="$APPWRITE_API_KEY"
 export PG_URL="<SUPABASE_POSTGRES_DIRECT_URL>"       # Direct connection (port 5432 or 6543)
-export MIGRATION_PASSWORD="<SHARED_SEED_PASSWORD>"   # Read 5.1 before choosing this
+# No MIGRATION_PASSWORD. 5.1 chose to import the bcrypt hashes, so no script
+# here knows or sets anybody's password; `reconcile.mjs` mints a session with
+# AW_KEY instead of signing in. If you find the variable still exported from an
+# earlier run, unset it — nothing reads it, and it reads like a live secret.
 
 # Consumed by the worker Function, set in the Appwrite console, not here
 export TERMII_API_KEY="<TERMII_API_KEY>"
@@ -300,35 +303,72 @@ Save these numbers in your cutover execution log.
 
 ## 5. Phase 2: Appwrite Identity Seeding
 
-### 5.1 Decide what happens to everyone's password — before you run anything
+### 5.1 Everyone keeps their own password — and you get exactly one chance
 
-`seed-identities.mjs` does **not** carry Supabase password hashes across. It
-creates each account with one shared `MIGRATION_PASSWORD`, so after it runs, no
-user's own password works. That is fine for a rehearsal and wrong for
-production, and it is a product decision, not a scripting one. Two ways out:
+`seed-identities.mjs` imports each account's bcrypt hash from
+`auth.users.encrypted_password`, so every user keeps the password they already
+have and nobody has to be told anything. There is no `MIGRATION_PASSWORD` and no
+shared secret: no script in this repository knows any user's password.
 
-- **Import the hashes (preserves every user's password).** Supabase keeps bcrypt
-  in `auth.users.encrypted_password`, and Appwrite accepts a pre-hashed bcrypt
-  password on `POST /users/bcrypt` (`createBcryptUser` in the server SDKs),
-  taking `userId`, `email`, `password` and `name`. Users with a null or empty
-  `encrypted_password` — OAuth-only and magic-link-only accounts — have no hash
-  to import and need the plain `POST /users` path or none at all.
-  **This is not implemented in `seed-identities.mjs`, and nothing in this
-  repository has exercised it against Cloud.** Treat it as the change to make
-  and verify, not as a step to follow.
-  It also breaks Phase 4 as written: `reconcile.mjs` signs in as each user with
-  `MIGRATION_PASSWORD`, which it would no longer know. A password-free session
-  (`POST /users/{userId}/tokens`, exchanged via `PUT /account/sessions/token`)
-  is the shape of the answer, and is likewise unimplemented and untested here.
-- **Force a reset for everyone.** Run the seeder as it stands, then require a
-  password reset on first sign-in and say so in the Phase 1 broadcast. Phase
-  5.3's expired-link handling already catches users who click an old Supabase
-  reset mail, so the path exists. Budget for the support load: ~650 accounts.
+How it decides, per row:
 
-`MIGRATION_PASSWORD` has no default and must be at least 8 characters. Both
-`seed-identities.mjs` and `reconcile.mjs` read it and they must agree. It is a
-shared secret across every seeded account for as long as it is in force — keep
-the window short, and never commit it.
+| `auth.users.encrypted_password` | endpoint | result |
+| --- | --- | --- |
+| bcrypt (`$2a$`/`$2b$`/`$2y$`) | `POST /users/bcrypt` | the user's own password still works |
+| null or empty | `POST /users` | a passwordless account, which is what an OAuth-only or magic-link-only user had |
+| anything else | `POST /users` | account created, **counted as a failure**, id named — that user has lost their password and nobody would otherwise notice |
+
+The summary's `passwords` block is the thing to read: `imported`, `none`,
+`notBcrypt`, `alreadyExisted`.
+
+> **This step does not converge on a re-run, and it is the only one that does
+> not.** Appwrite takes a hash at creation and nowhere else — `POST /users/bcrypt`
+> and `POST /users/scrypt` and friends are creation endpoints, and
+> `PATCH /users/{userId}/password` accepts a **plaintext** only. There is no API
+> that sets a pre-existing hash on an existing account. So if an account is
+> already there, the seeder gets a 409, the hash is **not** imported, and the
+> account keeps whatever password the run that created it gave it. The seeder
+> counts those under `passwords.alreadyExisted` and names every one of them in
+> `failures` with "the bcrypt hash was NOT imported". A re-run that reports
+> `imported: 0, alreadyExisted: 650` has changed nothing.
+
+**If accounts already exist with a shared password** — because an earlier
+rehearsal of this runbook ran the pre-import seeder against the project — the
+only way to the hashes is to delete and re-create. Do it before the app ships,
+not after:
+
+```bash
+# 1. Confirm what is actually in the project, and that it is seeded accounts
+#    rather than real sign-ups. Compare the count to Phase 3's profiles count.
+curl -s -H "x-appwrite-project: $AW_PROJECT" -H "x-appwrite-key: $AW_KEY" \
+  "$AW_ENDPOINT/users?queries[]=%7B%22method%22%3A%22limit%22%2C%22values%22%3A%5B1%5D%7D" \
+  | python3 -c 'import json,sys; print(json.load(sys.stdin)["total"])'
+
+# 2. Delete them. The Postgres uuid is the Appwrite userId, so the ids come from
+#    Postgres and nothing has to be guessed.
+psql "$PG_URL" -tAc \
+  'select p.id from profiles p join auth.users u on u.id = p.id order by p.id' \
+  | while read -r id; do
+      curl -s -o /dev/null -w "%{http_code} $id\n" -X DELETE \
+        -H "x-appwrite-project: $AW_PROJECT" -H "x-appwrite-key: $AW_KEY" \
+        "$AW_ENDPOINT/users/$id"
+    done
+
+# 3. Re-seed. Expect alreadyExisted: 0 and imported ≈ the bcrypt count from 3.3.
+node seed-identities.mjs
+```
+
+Deleting an account does **not** touch the rows it owns: the row ACLs name
+`user:<uuid>`, the uuid comes from Postgres, and re-creating with the same
+`userId` restores the match exactly. What it does destroy is that account's
+sessions, labels and team memberships — the seeder re-creates the labels and
+memberships in the same run, and there are no sessions worth keeping before the
+app ships. **After** the app ships this becomes expensive: every signed-in user
+is logged out, and any push target registered against the old account is gone.
+
+Where there is no hash column at all — a Supabase export that dropped
+`encrypted_password` — the seeder exits `2` before creating anything rather than
+making 650 passwordless accounts and reporting success.
 
 ### 5.2 Provision the collections, then seed
 
@@ -338,7 +378,7 @@ npm install                      # once; pg is not declared anywhere else
 
 export AW_ENDPOINT="https://fra.cloud.appwrite.io/v1"
 export AW_PROJECT="6ac51e70002ab6238fec"
-# AW_KEY, PG_URL, MIGRATION_PASSWORD already exported in section 2.
+# AW_KEY and PG_URL already exported in section 2. No password: see 5.1.
 
 node seed-identities.mjs         # users, ward teams, role labels — ALWAYS FIRST
 ```
@@ -364,7 +404,10 @@ in Phase 0. Both are idempotent.
 
 ### What Identity Seeding Executes:
 1. **Ward Teams:** Creates an Appwrite Team for every distinct ward present in `profiles` and `reports`. Team ID format: `wardTeam(state, lga, ward)`.
-2. **Appwrite Users:** Creates an Appwrite Auth user for each `profiles` row joined with `auth.users`, preserving the Postgres `id` as `userId`.
+2. **Appwrite Users:** Creates an Appwrite Auth user for each `profiles` row
+   joined with `auth.users`, preserving the Postgres `id` as `userId`, and
+   importing that account's own bcrypt hash where it has one — see 5.1 for the
+   three cases and for why a 409 is not an import.
 3. **Role Labels:** Assigns Appwrite alphanumeric user labels (`admin`,
    `ldpCoordinator`, `projectStaff`, `ewv`, `ewr`, `ewm`) from
    **`effectiveRole(profile)`**, not from `profiles.role` — see "The escalation
@@ -375,11 +418,19 @@ in Phase 0. Both are idempotent.
 
 ### Validation
 Confirm the script exits with code `0` and that the `failures` array in its JSON
-summary is empty. A 409 on `/users` is *not* a failure — it means the account
-already exists, which is what makes the script safe to re-run; the script counts
-those separately and only reports real errors. Resolve anything in `failures`
-before proceeding to document migration: an ACL naming a user, label or team
-that was never created is accepted in silence and grants nobody anything.
+summary is empty. Resolve anything in `failures` before proceeding to document
+migration: an ACL naming a user, label or team that was never created is
+accepted in silence and grants nobody anything.
+
+Then read the `passwords` block, which is not covered by the exit code alone:
+
+- `imported` should be the bcrypt count from 3.3's source audit.
+- `none` should be the OAuth-only and magic-link-only count from the same audit.
+- `notBcrypt` should be `0`; each one is named in `failures`.
+- `alreadyExisted` should be `0` on a first run. **Anything else means those
+  accounts kept an older password and this run did not change it** — go back to
+  5.1. A 409 made this script safe to re-run for teams, labels and memberships,
+  and it has never made the password safe to re-run.
 
 ---
 
@@ -545,10 +596,19 @@ node reconcile.mjs
 ### What `reconcile.mjs` Proves:
 - **Every table a signed-in user can read, for every user** — 15 of them, not a
   sample of either. It queries Postgres with RLS active as that user
-  (`request.jwt.claim.sub` + `set role authenticated`), signs in to Appwrite as
-  that user with `MIGRATION_PASSWORD`, lists what the session can see, and diffs
-  the **ids**. Comparing ids rather than field values is what lets it be correct
-  about a project whose column names it does not know.
+  (`request.jwt.claim.sub` + `set role authenticated`), opens a real Appwrite
+  session as that user, lists what the session can see, and diffs the **ids**.
+  Comparing ids rather than field values is what lets it be correct about a
+  project whose column names it does not know.
+- **It does not know anybody's password, and does not need one.** Since 5.1
+  imports the hashes, there is no shared secret to sign in with: the gate mints a
+  session instead — `POST /users/{userId}/tokens` with `AW_KEY` returns a secret,
+  and `POST /account/sessions/token` exchanges it for a session cookie. `AW_KEY`
+  authorises that minting and nothing else; every row read still goes through the
+  user's own session, which is the property the whole gate rests on. A key-based
+  read would answer "fine" for every table however the permissions were stamped.
+  A token that comes back with an empty `secret` means the key was not sent, and
+  the gate says so rather than reading it as "this user sees nothing".
 - It reads the **effective** policy from `pg_policies` and quotes it on every
   finding. Not from `supabase/deploy/schema.sql`: that file is a concatenation
   in which later migrations redefine policies, and its first `profiles_select`
@@ -561,17 +621,35 @@ node reconcile.mjs
   fails the run with exit `2`. The previous version compared `reports` alone and
   called the result "100% per-user visibility parity"; a list maintained by hand
   drifts, a list that fails the run when it drifts does not.
+- **A refused table is reported as refused, never as zero rows.** A 401 or 403
+  on a listing means the table's own permissions do not admit that session, so
+  the read never happened. That is narrower than any RLS grant and therefore
+  never a leak — but it is not "this user sees nothing" either, and the summary
+  gives it a `denied` column of its own. The distinction is the only thing that
+  can speak for an **empty** table: seven of the fifteen hold no rows at cutover,
+  and a 401 read as `[]` matches Postgres's zero rows exactly, so a table nobody
+  could open would pass as clean right up to the day it filled up. Where every
+  session is denied a table that is not declared narrower on purpose, the run
+  fails and names what `plan.mjs` grants.
+- **Rows the copier declined are forgiven by name, not by filter.** `NOT_COPIED`
+  in `reconcile.mjs` mirrors each `skip` in `copy-tables.mjs` — the legacy
+  reports with no LGA, and the verifications attached to them — with a predicate
+  and a reason. Those rows stay in the Postgres side of the diff, are counted,
+  and are printed with their ids; they are simply not counted as losses.
+  Excluding them from the query instead would pass just as quietly while making
+  the gate unable to tell a declared skip from a production row that failed to
+  migrate, which is the one thing it is for.
 - **Fail Criteria:** exits `1` if any user sees more rows (permission leak) or
-  fewer (data loss), if a sign-in fails, or if a table holds rows in Postgres
-  that no user can read in Appwrite. It pages the listing and throws on a
-  non-2xx rather than reading an error as an empty result — an earlier version
-  did the latter and confidently reported a total migration failure for a
-  correct migration.
+  fewer (data loss), if a session cannot be minted, if a table holds rows in
+  Postgres that no user can read in Appwrite, or if a table refuses every
+  session without a declaration saying it should. It pages the listing and
+  throws on a non-2xx rather than reading an error as an empty result — an
+  earlier version did the latter and confidently reported a total migration
+  failure for a correct migration.
 - **Exit `2` is a configuration problem, not a verdict:** unreachable endpoint,
-  missing `MIGRATION_PASSWORD`, an uncovered table. Nothing was compared. A run
-  that never reached Appwrite must never read as a list of per-account problems,
-  so it stops at the first transport error rather than producing one finding per
-  user.
+  a missing `AW_KEY`, an uncovered table. Nothing was compared. A run that never
+  reached Appwrite must never read as a list of per-account problems, so it stops
+  at the first transport error rather than producing one finding per user.
 - **Success Criteria:** exits `0` — every user identical in every table, and
   every stored file present. The closing line names which of the two it checked:
   without `AW_KEY` the storage half is skipped and says so.

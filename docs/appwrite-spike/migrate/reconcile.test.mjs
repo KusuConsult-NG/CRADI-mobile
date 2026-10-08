@@ -34,7 +34,6 @@ import { spawn } from 'node:child_process';
 import pg from 'pg';
 
 const PG = process.env.PG_URL ?? 'postgres://postgres@127.0.0.1:5433/cradi_mig';
-const PASSWORD = 'reconcile-test-password';
 
 let reachable = true;
 let client;
@@ -86,12 +85,31 @@ const matches = (permissions, grants) =>
  * perfectly migrated while the real project served them from a table rule
  * nobody had checked.
  */
+/** Whether per-row ACLs are consulted at all for this table. */
+const rowSecurity = (t) => t.rowSecurity ?? t.documentSecurity ?? false;
+
 function canRead(table, row, grants, plan) {
   const t = plan.get(table);
   if (!t) return false;
-  const rowSecurity = t.rowSecurity ?? t.documentSecurity ?? false;
   if (matches(t.permissions, grants)) return true;
-  return rowSecurity ? matches(row.permissions, grants) : false;
+  return rowSecurity(t) ? matches(row.permissions, grants) : false;
+}
+
+/**
+ * May this session LIST the table at all?
+ *
+ * Appwrite answers 401 — it does not answer an empty page — when row security
+ * is off and the table's own permissions name no principal the session holds.
+ * Modelled because the gate's handling of that status is the difference between
+ * "this user can read nothing here" and "nobody checked", and a stand-in that
+ * filtered rows instead of refusing the query left that branch untested and
+ * every empty table reading as a clean match.
+ */
+function canList(table, grants, plan, denied) {
+  if (denied.has(table)) return false;
+  const t = plan.get(table);
+  if (!t) return false;
+  return rowSecurity(t) || matches(t.permissions, grants);
 }
 
 /** Every principal a signed-in user holds, for matching against ACL strings. */
@@ -155,22 +173,25 @@ before(async () => {
   }));
   const files = { 'report-images': [], 'profile-images': [] };
   // Two grant maps: what the seeder used to hand out, and what it hands out now.
+  // Keyed by user id: the gate mints a session for an id, never an email.
   const grantSets = {
-    fixed: new Map(
-      profiles.map((p) => [p.email, principals(p, grantsFor(p, helpers))]),
-    ),
+    fixed: new Map(profiles.map((p) => [p.id, principals(p, grantsFor(p, helpers))])),
     byColumn: new Map(
-      profiles.map((p) => [
-        p.email,
-        principals(p, grantsFor(p, helpers, { byColumn: true })),
-      ]),
+      profiles.map((p) => [p.id, principals(p, grantsFor(p, helpers, { byColumn: true }))]),
     ),
   };
+  /** The accounts seed-identities.mjs would have created. */
+  const accounts = new Set(profiles.map((p) => p.id));
+  const tokens = new Map();
   let grants = grantSets.fixed;
   const useGrants = (mode) => {
     grants = grantSets[mode];
   };
   const sessions = new Map();
+  // Tables the stand-in refuses to list for any session, whatever the plan
+  // says. Stands in for the mis-stamped permission that no row count can
+  // reveal — see the test that uses it.
+  const denied = new Set();
   // The six tables copy-tables.mjs writes. Emptied before every test, because
   // the stand-in's rows are shared mutable state and a test that runs the copier
   // would otherwise decide what the next test sees.
@@ -185,7 +206,12 @@ before(async () => {
   const clearFiles = () => {
     for (const b of Object.keys(files)) files[b] = [];
   };
-  fixtures = { rows, profiles, useGrants, clearCopied, COPIED, objects, files, clearFiles };
+  const denyList = (table) => denied.add(table);
+  const allowList = (table) => denied.delete(table);
+  fixtures = {
+    rows, profiles, useGrants, clearCopied, COPIED, objects, files, clearFiles,
+    denyList, allowList,
+  };
 
   server = createServer(async (req, res) => {
     const url = new URL(req.url, 'http://x');
@@ -194,20 +220,42 @@ before(async () => {
       res.end(JSON.stringify(body));
     };
 
-    if (req.method === 'POST' && url.pathname === '/v1/account/sessions/email') {
+    // `POST /users/{id}/tokens` — the secret comes back only for a keyed call,
+    // which is exactly what the gate checks for, so the stand-in enforces it.
+    const tm = /^\/v1\/users\/([^/]+)\/tokens$/.exec(url.pathname);
+    if (req.method === 'POST' && tm) {
+      const userId = decodeURIComponent(tm[1]);
+      if (!accounts.has(userId)) return send(404, { message: 'User with the requested ID could not be found' });
+      const secret = `tok_${Math.random().toString(36).slice(2, 8)}`;
+      const keyed = Boolean(req.headers['x-appwrite-key']);
+      if (keyed) tokens.set(secret, userId);
+      return send(201, {
+        $id: `t_${secret}`,
+        userId,
+        // Appwrite blanks it without a key. Reading that as "no rows" is the
+        // mistake the gate names explicitly.
+        secret: keyed ? secret : '',
+        expire: new Date(Date.now() + 15 * 60_000).toISOString(),
+      });
+    }
+
+    // `POST /account/sessions/token` — exchanges the secret for a session, with
+    // no key: node-appwrite 29's `createSession` sends only the project header.
+    if (req.method === 'POST' && url.pathname === '/v1/account/sessions/token') {
       let raw = '';
       for await (const c of req) raw += c;
-      const { email, password } = JSON.parse(raw || '{}');
-      if (password !== PASSWORD || !grants.has(email)) {
-        return send(401, { message: 'Invalid credentials' });
+      const { userId, secret } = JSON.parse(raw || '{}');
+      if (!secret || tokens.get(secret) !== userId) {
+        return send(401, { message: 'Invalid token passed in the request' });
       }
+      tokens.delete(secret); // single use, as a token is
       const sid = `a_session_${Math.random().toString(36).slice(2)}`;
-      sessions.set(sid, email);
+      sessions.set(sid, userId);
       res.writeHead(201, {
         'content-type': 'application/json',
         'set-cookie': `${sid}=1; Path=/; HttpOnly`,
       });
-      return res.end(JSON.stringify({ $id: sid }));
+      return res.end(JSON.stringify({ $id: sid, userId, secret: sid }));
     }
 
     const m = /^\/v1\/tablesdb\/cradi\/tables\/([a-z_]+)\/rows$/.exec(url.pathname);
@@ -245,9 +293,12 @@ before(async () => {
         visible = rows[table]; // the diagnostic total path: ACLs bypassed
       } else {
         const sid = String(req.headers.cookie ?? '').split('=')[0];
-        const email = sessions.get(sid);
-        if (!email) return send(401, { message: 'User (role: guests) missing scope' });
-        const held = grants.get(email);
+        const who = sessions.get(sid);
+        if (!who) return send(401, { message: 'User (role: guests) missing scope' });
+        const held = grants.get(who);
+        if (!canList(table, held, plan, denied)) {
+          return send(401, { message: `User (role: users) missing scope (collections.read)` });
+        }
         visible = rows[table].filter((r) => canRead(table, r, held, plan));
       }
 
@@ -379,7 +430,6 @@ function runGate(env = {}) {
         AW_ENDPOINT: base,
         AW_PROJECT: 'test',
         AW_KEY: 'test',
-        MIGRATION_PASSWORD: PASSWORD,
         ...env,
       },
     });
@@ -390,7 +440,15 @@ function runGate(env = {}) {
   });
 }
 
-/** Runs copy-tables.mjs against the stand-in and the live Postgres. */
+/**
+ * Runs copy-tables.mjs against the stand-in and the live Postgres.
+ *
+ * The streams are kept apart. The copier prints its JSON summary on stdout and
+ * its skip and error detail on stderr, and a caller that merged them and then
+ * took "everything from the first brace" parsed cleanly only while nothing was
+ * ever skipped — the first fixture row the copier declined broke every such
+ * test with a JSON syntax error about the summary, which was fine.
+ */
 function runCopy() {
   return new Promise((resolve) => {
     const child = spawn(process.execPath, ['copy-tables.mjs'], {
@@ -403,10 +461,19 @@ function runCopy() {
         AW_KEY: 'test',
       },
     });
-    let out = '';
-    child.stdout.on('data', (d) => (out += d));
-    child.stderr.on('data', (d) => (out += d));
-    child.on('close', (code) => resolve({ code, out }));
+    let stdout = '';
+    let stderr = '';
+    child.stdout.on('data', (d) => (stdout += d));
+    child.stderr.on('data', (d) => (stderr += d));
+    child.on('close', (code) =>
+      resolve({
+        code,
+        stdout,
+        stderr,
+        out: stdout + stderr,
+        report: JSON.parse(stdout.slice(stdout.indexOf('{'))),
+      }),
+    );
   });
 }
 
@@ -418,7 +485,7 @@ describe('copying every collection', () => {
 
     const first = await runCopy();
     assert.equal(first.code, 0, first.out);
-    const counts = JSON.parse(first.out.slice(first.out.indexOf('{'))).counts;
+    const counts = first.report.counts;
     for (const table of [
       'profiles', 'reports', 'verifications',
       'alerts', 'authorities', 'app_settings', 'scheduled_escalations',
@@ -428,23 +495,35 @@ describe('copying every collection', () => {
       assert.ok(c, `${table} missing from the summary`);
       assert.ok(c.source > 0, `${table}: fixture has no rows to copy`);
       assert.equal(c.failed, 0, `${table}: ${first.out}`);
-      assert.equal(c.created, c.source, `${table}: not every row was written`);
+      // Every source row is accounted for, as written or as declined on
+      // purpose — not "every row was written", which would make the copier's
+      // own `skip` predicates a test failure.
+      assert.equal(c.created + c.skipped, c.source, `${table}: rows unaccounted for`);
     }
+
+    // And the skips are the declared ones, not a silent shortfall: the fixture
+    // carries two orphan reports with no LGA, which is what `copy-tables.mjs`
+    // declines and what `reconcile.mjs`'s NOT_COPIED forgives.
+    assert.equal(counts.reports.skipped, 2, first.stderr);
+    assert.match(first.stderr, /has no LGA/);
 
     // Idempotent: the Postgres key is the Appwrite id, so a re-run collides.
     const second = await runCopy();
     assert.equal(second.code, 0, second.out);
-    const again = JSON.parse(second.out.slice(second.out.indexOf('{'))).counts;
+    const again = second.report.counts;
     for (const table of Object.keys(counts)) {
       assert.equal(again[table].created, 0, `${table}: re-run created rows`);
-      assert.equal(again[table].exists, counts[table].source, `${table}: not 409`);
+      assert.equal(
+        again[table].exists + again[table].skipped,
+        counts[table].source,
+        `${table}: not 409`,
+      );
     }
   });
 
   test('no Postgres column is silently dropped', async (t) => {
     if (!reachable) return t.skip('no Postgres');
-    const { out } = await runCopy();
-    const report = JSON.parse(out.slice(out.indexOf('{')));
+    const { report } = await runCopy();
     assert.deepEqual(
       report.unplannedColumns,
       {},
@@ -495,6 +574,94 @@ describe('copying every collection', () => {
       /every user sees exactly what they saw before, in every table, and every stored file arrived/,
     );
     assert.equal(code, 0, out);
+  });
+
+  test('the rows the copier declines are forgiven by name, not by filter', async (t) => {
+    if (!reachable) return t.skip('no Postgres');
+    await runCopy();
+    const { code, out } = await runGate();
+    assert.equal(code, 0, out);
+
+    // The two orphan reports are still counted on the Postgres side, named,
+    // and printed with the reason. An earlier version excluded them from the
+    // query, which passed just as quietly but could no longer have told a
+    // declared skip from a row that failed to migrate.
+    assert.match(out, /reports: 2 source row\(s\) were NOT copied, ACCEPTED by declaration/);
+    assert.match(out, /legacy orphan rows with no LGA/);
+    assert.match(out, /where lga is null or lga = ''/);
+    assert.match(out, /0000000b0f01/, 'the declined ids belong in the output');
+  });
+
+  test('a row missing for any other reason is still a finding', async (t) => {
+    if (!reachable) return t.skip('no Postgres');
+    await runCopy();
+    // Drop a report that is NOT one of the declared orphans, as a copy that
+    // silently lost a row would. The declaration must forgive its two ids and
+    // nothing else.
+    const victim = fixtures.rows.reports.find((r) => !r.$id.includes('0f0'));
+    assert.ok(victim, 'fixture needs a non-orphan report in Appwrite');
+    fixtures.rows.reports = fixtures.rows.reports.filter((r) => r !== victim);
+
+    const { code, out } = await runGate();
+    assert.equal(code, 1, out);
+    const lost = findings(out).failures.filter((f) => f.table === 'reports');
+    assert.ok(lost.length, out);
+    for (const f of lost) {
+      assert.ok(f.lost?.includes(victim.$id), `the lost row should be named: ${f.lost}`);
+      // The declared ids are counted beside the loss, never inside it.
+      assert.deepEqual(
+        f.lost.filter((id) => id.includes('0f0')),
+        [],
+        'a declared skip must not be reported as a loss',
+      );
+    }
+    // And the declaration is still credited, for the one user whose RLS showed
+    // them the orphans in the first place: a citizen never saw them, so there
+    // is nothing for the declaration to forgive on their row.
+    assert.ok(
+      lost.some((f) => f.notCopied === 2),
+      'the user who could see the orphans should have both credited',
+    );
+  });
+
+  test('a table that admits nobody is a finding, not an empty one', async (t) => {
+    if (!reachable) return t.skip('no Postgres');
+    await runCopy();
+
+    // `messages` is empty in Postgres and empty in Appwrite, so every row
+    // count on both sides is zero and no comparison of counts can say anything
+    // about it. Only the status code can, and the gate used to read a 401 as
+    // `[]` — which made a table nobody could open indistinguishable from a
+    // table with nothing in it, and reported it as a clean match.
+    const clean = await runGate();
+    assert.equal(clean.code, 0, clean.out);
+    assert.match(clean.out, /^messages\s+\d+\s+\d+\s+\d+\s+0\s/m, clean.out);
+
+    fixtures.denyList('messages');
+    try {
+      const { code, out } = await runGate();
+      assert.equal(code, 1, 'a table no session can open must not pass');
+      const f = findings(out).failures.find((x) => x.table === 'messages');
+      assert.ok(f, out);
+      assert.match(f.error, /every one of the \d+ sessions was DENIED the table/);
+      // The row counts are byte-for-byte what they were in the passing run.
+      // The verdict changed because the status code was kept, nothing else.
+      assert.match(out, /^messages\s+\d+\s+\d+\s+\d+\s+[1-9]/m, out);
+    } finally {
+      fixtures.allowList('messages');
+    }
+  });
+
+  test('the tables that deny on purpose say so in the summary', async (t) => {
+    if (!reachable) return t.skip('no Postgres');
+    await runCopy();
+    const { code, out } = await runGate();
+    assert.equal(code, 0, out);
+    // Denied for every session, and declared — so it passes, and the `denied`
+    // column is what says the permission was exercised at all.
+    assert.match(out, /^scheduled_escalations\s+(\d+)\s+\d+\s+\d+\s+\1\s/m, out);
+    // Denied for the five who hold neither label, read by the one admin.
+    assert.match(out, /^verification_overrides\s+\d+\s+\d+\s+\d+\s+[1-9]/m, out);
   });
 });
 

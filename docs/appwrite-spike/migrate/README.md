@@ -11,8 +11,6 @@ spike's `../env.json` is the fallback when they are unset.
     for f in supabase/migrations/*.sql; do psql -d cradi_mig -v ON_ERROR_STOP=1 -f "$f"; done
     # …seed or restore real data…
 
-    export MIGRATION_PASSWORD=…  # seed-identities sets it, reconcile signs in with it
-
     # Schema and first contact, from the repo root — not scripts in here:
     node infra/appwrite/provision.mjs
     node infra/appwrite/phase0.mjs      # preflight + verify + behaviour probes
@@ -53,12 +51,29 @@ fails the run if the schema grows one that is neither reconciled nor listed as
 out of scope, because the version that compared `reports` alone still called
 its result "100% per-user visibility parity".
 
-    npm test                   # the gate's own tests; needs the Postgres above
+A table that refuses the session (401/403) is reported under its own `denied`
+column, never as an empty read. The two are only the same when the table has
+rows: seven of the fifteen are empty at cutover, and for those a 401 read as
+"sees nothing" matches Postgres's zero rows exactly — a table nobody could open
+passing as clean until the day it filled up. Rows `copy-tables.mjs` declines are
+forgiven by name through `NOT_COPIED`, which keeps them in the diff with their
+ids and reasons rather than filtering them out of the query; a filter would make
+the gate unable to tell a declared skip from a row that failed to migrate.
+
+    npm test                   # needs the Postgres above
 
 Narrow a failure with `RECONCILE_TABLES=profiles,reports`. Add `AW_KEY` for a
 per-table total — diagnosis only, never part of a verdict, since a key reads
 past the ACLs being compared. `AW_ROWS_API=documents` targets the spike's
 pre-1.8 stack; the default is TablesDB, which is what the app uses.
+
+The suites: `storage-ids.test.mjs` (pure), `copy-tables.test.mjs`,
+`reconcile.test.mjs` (the copiers and the gate against a real Postgres and an
+Appwrite stand-in that evaluates the permission strings `migrate.mjs` actually
+stamps), and `seed-identities.test.mjs` (which endpoint each account goes to,
+and what a re-run does to a password). None of them run in CI, because they need
+a Postgres carrying every migration — run them by hand before any Phase 2 or 3
+step.
 
 `migrate.mjs` no longer copies anything: it is the ACL and identity module that
 `copy-tables.mjs` and `seed-identities.mjs` import. `prep.mjs` is gone with it —
@@ -87,7 +102,7 @@ times.
 ## Pointing them somewhere else
 
     AW_ENDPOINT=https://fra.cloud.appwrite.io/v1 \
-    AW_PROJECT=… AW_KEY=… MIGRATION_PASSWORD=… node seed-identities.mjs
+    AW_PROJECT=… AW_KEY=… node seed-identities.mjs
 
 `AW_ENDPOINT` defaults to `http://localhost:8080/v1`. Every script prints the
 endpoint and project it resolved, on stderr, before doing anything — because
@@ -100,17 +115,32 @@ Until recently only `migrate.mjs` read those variables. The other three had
 not exist in this repository's layout — so they could not be aimed at Cloud at
 all, while `docs/CUTOVER-RUNBOOK.md` presented them as the Cloud procedure.
 
-## `MIGRATION_PASSWORD`, and what it does not fix
+## Passwords
 
-`seed-identities.mjs` creates every account with this password and
-`reconcile.mjs` signs in as every user with it, so the two runs must agree. It
-has no default: it used to be the literal `MigratedPassword123` in this file's
-sibling, which is acceptable against a throwaway local stack and a disclosed
-shared credential for ~650 real accounts the moment the same script is pointed
-at Cloud.
+Nothing here knows anybody's password, and there is no `MIGRATION_PASSWORD` any
+more. `seed-identities.mjs` imports each account's own bcrypt hash from
+`auth.users.encrypted_password` via `POST /users/bcrypt`, so every user keeps
+the password they have; an account with no hash — OAuth-only, magic-link-only —
+is created without one, which is what it had. A hash in some other format is
+counted and named in `failures`, never dropped in silence.
 
-It is still a shared password, so it is not a production identity strategy.
-**These scripts do not carry Supabase password hashes over**, so every migrated
-user's own password stops working whatever you set here. The runbook's Phase 2
-covers the two ways out — importing the bcrypt hashes, or a forced reset for
-everyone — and which one you pick is a product decision, not a scripting one.
+`reconcile.mjs` therefore cannot sign in, and does not try: it mints a session
+with `POST /users/{userId}/tokens` + `POST /account/sessions/token`, which is
+what `AW_KEY` is for there. Every row it reads still goes through that user's
+own session — a key-based read would bypass the ACLs that are the whole subject
+of the comparison.
+
+**The one step that does not converge on a re-run.** Appwrite takes a hash only
+at creation; `PATCH /users/{userId}/password` accepts a plaintext and no
+endpoint sets a pre-existing hash on an existing account. So an account that is
+already there gets a 409 and keeps whatever password created it. The seeder
+counts those under `passwords.alreadyExisted` and names each one, and the
+runbook's 5.1 has the delete-and-re-create procedure for a project already
+seeded with a shared password. Everything else here is safe to re-run.
+
+It got this way late: the earlier seeder created every account with one shared
+password and the earlier gate signed in with it, which is acceptable against a
+throwaway local stack and a disclosed shared credential for ~650 real accounts
+the moment the same script is pointed at Cloud. `seed-identities.test.mjs`
+exists because that version ran against the production project — nothing failed,
+nothing was red, and the summary line read "users created" either way.
