@@ -42,6 +42,24 @@ not:
 
 ---
 
+## Update — 7 October 2026: a different Cloud project
+
+The work has moved to **`6ac51e70002ab6238fec`**. Everything this file
+says about `6941cdb400050e7249d5` — the database to provision into, the
+bucket holding the only slot, the pre-consolidation `write` and `auth`
+Functions left behind by the 3 October run — describes that project and
+not this one. The new project inherits none of it, which removes those
+constraints rather than dating them.
+
+What the new project has, as reported by the owner: the two push
+providers (`fcm` enabled, `apns` registered but not yet enabled), and a
+green run of `infra/appwrite/push-smoke-test.mjs` covering target
+registration, topic reconciliation and the Benue→Nasarawa move. What it
+still needs is in `CLOUD-VERIFICATION.md`, and the quota numbers in
+`infra/appwrite/README.md` are the old project's.
+
+---
+
 ## Update — 7 October 2026: push, end to end
 
 The gap that would have shown up as silence after the cutover is closed in

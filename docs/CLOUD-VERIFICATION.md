@@ -35,8 +35,9 @@ first thing in the sequence. What the upgrade does and does not change:
 Two buckets instead of one also settles a mismatch that would have shown
 as broken evidence thumbnails in the admin panel: it builds its image
 URLs from `REPORT_IMAGES_BUCKET` in the panel's own `lib/constants.ts`,
-which is `report-images`, while the single-bucket project's only bucket
-is `6941e4e10034186aded8`. With the planned buckets provisioned, the panel's
+which is `report-images`, while the old project's only bucket was
+`6941e4e10034186aded8`. On the new project the planned name is simply
+correct. With the planned buckets provisioned, the panel's
 default and `AppConfig`'s two defines are correct as they stand — nothing
 needs passing at build time. (The constant takes
 `NEXT_PUBLIC_APPWRITE_REPORT_IMAGES_BUCKET` now, for a project that goes
@@ -50,6 +51,10 @@ empty when you run this, the old rows' images need copying across before
 the panel and the app stop finding them.
 
 ## First Cloud run — 3 October 2026, from the owner's machine
+
+Against the **old** project (`6941cdb400050e7249d5`). The server-behaviour
+findings below still hold; the quota ones were that project's plan and say
+nothing about the current one.
 
 Cloud answered **2.3.0**. What it settled:
 
@@ -89,12 +94,30 @@ has agreed to be texted.
 
 ## What is already known about the Cloud project
 
+**The project changed.** Everything above describes `6941cdb400050e7249d5`,
+the project the migration was prepared against. The work now runs against a
+**new** project, which makes several of that history's constraints
+irrelevant rather than merely dated: there is no previous build's database
+to provision into, and no previous build's bucket holding the only slot.
+
 | | |
 |---|---|
 | Endpoint | `https://fra.cloud.appwrite.io/v1` (Frankfurt) |
-| Project | `6941cdb400050e7249d5` |
-| Database | `6941e2c2003705bb5a25` — the previous Appwrite build's. The free tier allowed **one** database and the project already had it, so provisioning goes into that one: `APPWRITE_DATABASE_ID` is a variable, not a change. |
-| Buckets | the free tier allowed **one** (`6941e4e10034186aded8`, the previous build's, reused). Since the upgrade a plain `provision.mjs` makes the two the plan declares and that one is left alone, holding its files. `--single-bucket` and `APPWRITE_BUCKET_ID` are the one-bucket fallback; neither belongs in a run against this plan. |
+| Project | **`6ac51e70002ab6238fec`** |
+| Database | Not inherited. With `APPWRITE_DATABASE_ID` unset, `provision.mjs` creates `cradi` — which is what the push smoke test's own default implies it ran against. Record the id here once a run confirms it. |
+| Buckets | Nothing is holding a slot, so a plain `provision.mjs` creates both `report-images` and `profile-images`. `--single-bucket` and `APPWRITE_BUCKET_ID` have no reason to appear in a run against this project. |
+| Push providers | `fcm` (Android, enabled) and `apns` (iOS, **registered but not enabled** — it needs the Apple `.p8` key, Key ID and Team ID). The app takes these ids as `--dart-define APPWRITE_PUSH_PROVIDER_ANDROID=fcm` and `APPWRITE_PUSH_PROVIDER_IOS=apns`. |
+
+**What does *not* carry over from the old project:** the leftover
+pre-consolidation `write` and `auth` Functions, the shared
+`6941e4e10034186aded8` bucket that `verify.mjs` would list as unplanned, and
+the quota measurements in `infra/appwrite/README.md` — those were that
+project's plan, not this one's. `--probe` is the only thing that says what
+this project allows.
+
+**What does carry over**, because it is the server's behaviour rather than
+the project's: the 767-byte index limit and the row-width ceiling, and
+every `lengths` the first run had to add to satisfy them.
 
 The API key must be a **fresh** server key. Two keys from the previous
 project are in public git history and must not be reused. The key needs:
@@ -105,11 +128,11 @@ project are in public git history and must not be reused. The key needs:
 
 ```bash
 export APPWRITE_ENDPOINT=https://fra.cloud.appwrite.io/v1
-export APPWRITE_PROJECT_ID=6941cdb400050e7249d5
-export APPWRITE_DATABASE_ID=6941e2c2003705bb5a25
+export APPWRITE_PROJECT_ID=6ac51e70002ab6238fec
 export APPWRITE_API_KEY=...            # a fresh server key
+# No APPWRITE_DATABASE_ID: nothing is inherited, so the plan creates `cradi`.
 # No APPWRITE_BUCKET_ID: that is the one-bucket fallback, and both scripts
-# now ignore it unless --single-bucket is passed (and say they are).
+# ignore it unless --single-bucket is passed (and say they are).
 
 # 1. What the plan asks for, against what the tier allows.
 #    --dry-run is read-only. --probe is NOT: it provisions for real and

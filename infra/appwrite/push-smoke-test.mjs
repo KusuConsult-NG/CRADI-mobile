@@ -4,7 +4,9 @@
  * as specified in docs/DEPLOYMENT.md §7 steps 2 and 8.
  *
  * Runs against live Appwrite Cloud:
- *   1. Registers a device target for a user in Benue / Obi
+ *   1. Registers a device target for a user in Benue / Obi, bound to the
+ *      Messaging provider the app would bind it to, and reads the binding
+ *      back
  *   2. Reconciles topics: asserts target is subscribed to all-users, state-benue, lga-benue-obi
  *   3. Asserts profiles.pushTopics records the subscribed topics
  *   4. Moves the user from Benue / Obi to Nasarawa / Obi (step 8)
@@ -19,6 +21,19 @@ const PROJECT = (process.env.APPWRITE_PROJECT_ID || '').trim();
 const KEY = (process.env.APPWRITE_API_KEY || '').trim();
 const DB = (process.env.APPWRITE_DATABASE_ID || 'cradi').trim();
 const CLIENT_FUNCTION = (process.env.APPWRITE_FN_CLIENT || 'client').trim();
+
+/**
+ * The Messaging provider this target belongs to, as the app binds it.
+ *
+ * The token below is FCM-shaped, so this reads the Android define's value
+ * and defaults to it. Binding matters even while FCM is the only enabled
+ * provider: Appwrite files a target that names none under the project's
+ * *default* push provider, which is right by accident today and wrong the
+ * moment APNs is enabled — an iOS target would be accepted against FCM
+ * and then deliver nothing. Empty means "do not bind", which is what
+ * `AppwritePushTargets.providerId` sends for an unconfigured build.
+ */
+const PUSH_PROVIDER = (process.env.APPWRITE_PUSH_PROVIDER_ANDROID ?? 'fcm').trim();
 
 if (!EP || !PROJECT || !KEY) {
   console.error('Missing APPWRITE_ENDPOINT, APPWRITE_PROJECT_ID, or APPWRITE_API_KEY');
@@ -139,12 +154,27 @@ async function run() {
         targetId,
         identifier: `fcm-token-${stamp}`,
         name: `Smoke Device ${stamp}`,
-        providerId: process.env.APPWRITE_PUSH_PROVIDER_ANDROID || 'fcm',
+        ...(PUSH_PROVIDER ? { providerId: PUSH_PROVIDER } : {}),
       },
     });
     assert.ok(targetRes.ok, `Failed to register push target: ${JSON.stringify(targetRes.body)}`);
     made.push({ kind: 'target', userId, id: targetId });
     ok(`device target registered: ${targetId}`);
+
+    // The binding, read back rather than assumed. A target filed under the
+    // default provider looks identical to a bound one until there are two
+    // providers, and by then the symptom is silence.
+    if (PUSH_PROVIDER) {
+      note(`providerId sent: ${PUSH_PROVIDER}, returned: ${targetRes.body.providerId}`);
+      assert.equal(
+        targetRes.body.providerId,
+        PUSH_PROVIDER,
+        `target was filed under provider "${targetRes.body.providerId}", not "${PUSH_PROVIDER}"`,
+      );
+      ok(`target bound to provider ${PUSH_PROVIDER}`);
+    } else {
+      note('APPWRITE_PUSH_PROVIDER_ANDROID is empty: target left to the default provider');
+    }
 
     // 4. Invoke sync_push_subscriptions via operation Function
     step('4. Invoke sync_push_subscriptions operation');
