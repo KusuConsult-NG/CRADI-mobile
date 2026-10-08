@@ -568,7 +568,7 @@ class AuthProvider extends ChangeNotifier {
 
     _startProfileListener(user.id);
 
-    _syncPushIdentity(user.id, profile);
+    _syncPushIdentity(user.id);
 
     final phone = await _storage.getPhoneNumber();
     if (stale()) return;
@@ -584,22 +584,13 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
-  /// Identifies this device to OneSignal with the user id and targeting
-  /// tags. The role tag is the effective role (what the database grants).
-  /// Without a profile row (fetch failed) only the identity is synced: the
-  /// role is unknown, and tagging it as `user` would drop staff targeting.
-  void _syncPushIdentity(String uid, Map<String, dynamic>? profile) {
-    unawaited(
-      NotificationService().onUserSignedIn(
-        userId: uid,
-        role: userRole?.dbValue,
-        lga: profile?['lga'] as String?,
-        state: profile?['state'] as String?,
-        ward: profile?['ward'] as String?,
-        monitoringZone: profile?['monitoringZone'] as String?,
-        updateTags: profile != null,
-      ),
-    );
+  /// Registers this device's push target against the signed-in account.
+  ///
+  /// No targeting is sent, and none is taken: the `worker` Function derives
+  /// the user's topics from their own `profiles` row. The role, LGA, state and
+  /// ward this used to forward were OneSignal tags, and OneSignal is gone.
+  void _syncPushIdentity(String uid) {
+    unawaited(NotificationService().onUserSignedIn(userId: uid));
   }
 
   /// Applies role / approval / verification / disabled flags from a
@@ -689,8 +680,12 @@ class AuthProvider extends ChangeNotifier {
               return;
             }
             if (changed) {
-              // Role / approval / ward changed: refresh push targeting.
-              _syncPushIdentity(uid, data);
+              // Belt and braces. The profile write raises
+              // `push_topics_changed`, which reconciles subscriptions
+              // server-side; re-registering the target asks for the same
+              // reconciliation over the execution path, so a dropped event
+              // does not leave the user on their old LGA's topics.
+              _syncPushIdentity(uid);
               notifyListeners();
             }
           },

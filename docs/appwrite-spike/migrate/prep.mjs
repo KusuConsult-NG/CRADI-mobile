@@ -1,9 +1,6 @@
 /** Collections, attributes and ward teams the migration needs to land in. */
-import { readFileSync } from 'node:fs';
-const { project, key } = JSON.parse(readFileSync('../spike/env.json', 'utf8'));
-const EP = 'http://localhost:8080/v1';
-const H = { 'content-type': 'application/json', 'x-appwrite-project': project, 'x-appwrite-key': key };
-const aw = async (p, o = {}) => { const r = await fetch(`${EP}${p}`, { ...o, headers: H }); return { status: r.status, body: await r.json().catch(() => null) }; };
+import { appwriteTarget } from './target.mjs';
+const { aw } = appwriteTarget();
 
 const str = (c, k, size = 256) => aw(`/databases/cradi/collections/${c}/attributes/string`, { method: 'POST', body: JSON.stringify({ key: k, size, required: false }) });
 const int = (c, k) => aw(`/databases/cradi/collections/${c}/attributes/integer`, { method: 'POST', body: JSON.stringify({ key: k, required: false, default: 0 }) });

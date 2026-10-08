@@ -3056,6 +3056,12 @@ abstract class AppLocalizations {
   /// **'Enter your email address to receive a password reset code.'**
   String get forgotBody;
 
+  /// Shown on the forgot password screen when the user arrived from a legacy Supabase auth link.
+  ///
+  /// In en, this message translates to:
+  /// **'This password reset link came from our previous sign-in system and no longer works. Enter your email below and we will send you a new one.'**
+  String get forgotLegacyLinkExpired;
+
   /// Hint of email fields on auth screens.
   ///
   /// In en, this message translates to:

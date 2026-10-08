@@ -78,11 +78,22 @@ void main() {
       expect(auth('https://cradi.ng/alert/a1'), isFalse);
     });
 
-    test('are never routed, whatever path they carry', () {
-      expect(loc('cradi://login-callback/#access_token=t'), isNull);
-      expect(loc('cradi://report/r1?code=abc'), isNull);
-      expect(loc('https://cradi.ng/reset-password?code=abc'), isNull);
-      expect(loc('https://cradi.ng/#access_token=t&type=recovery'), isNull);
+    test('are mapped to expired password reset notice', () {
+      expect(
+        loc('cradi://login-callback/#access_token=t'),
+        '/forgot-password?expired=1',
+      );
+      expect(loc('cradi://report/r1?code=abc'), '/forgot-password?expired=1');
+      expect(
+        loc('https://cradi.ng/reset-password?code=abc'),
+        '/forgot-password?expired=1',
+      );
+      expect(
+        loc('https://cradi.ng/#access_token=t&type=recovery'),
+        '/forgot-password?expired=1',
+      );
+      expect(loc('https://evil.com/reset?code=abc'), isNull);
+      expect(loc('other://auth?code=abc'), isNull);
     });
   });
 

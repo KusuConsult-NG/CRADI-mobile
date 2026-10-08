@@ -2161,6 +2161,10 @@
   "@forgotBody": {
     "description": "Text on the forgot password screen."
   },
+  "forgotLegacyLinkExpired": "This password reset link came from our previous sign-in system and no longer works. Enter your email below and we will send you a new one.",
+  "@forgotLegacyLinkExpired": {
+    "description": "Shown on the forgot password screen when the user arrived from a legacy Supabase auth link."
+  },
   "authEmailHint": "Enter your email",
   "@authEmailHint": {
     "description": "Hint of email fields on auth screens."

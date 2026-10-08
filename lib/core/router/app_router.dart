@@ -55,6 +55,14 @@ import 'package:provider/provider.dart';
 import 'package:climate_app/core/l10n/l10n.dart';
 
 /// Create router with authentication guards
+/// Whether [uri] is the forgot-password route reached from a dead legacy auth
+/// link, rather than opened normally.
+///
+/// `DeepLinkService.locationFor` is what produces this query. Keep the two in
+/// step: nothing fails loudly if they drift, the banner just never appears.
+@visibleForTesting
+bool isLegacyExpiredLink(Uri uri) => uri.queryParameters['expired'] == '1';
+
 GoRouter createRouter(BuildContext context) {
   final authProvider = Provider.of<AuthProvider>(context, listen: false);
   final connectivityProvider = Provider.of<ConnectivityProvider>(
@@ -102,7 +110,9 @@ GoRouter createRouter(BuildContext context) {
       GoRoute(path: '/login', builder: (context, state) => const LoginScreen()),
       GoRoute(
         path: '/forgot-password',
-        builder: (context, state) => const ForgotPasswordScreen(),
+        builder: (context, state) => ForgotPasswordScreen(
+          isLegacyExpired: isLegacyExpiredLink(state.uri),
+        ),
       ),
       GoRoute(
         path: '/reset-password',

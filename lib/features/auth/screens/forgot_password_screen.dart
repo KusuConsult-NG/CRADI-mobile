@@ -10,7 +10,9 @@ import 'package:climate_app/core/l10n/l10n.dart';
 import 'package:climate_app/core/utils/screen_security.dart';
 
 class ForgotPasswordScreen extends StatefulWidget {
-  const ForgotPasswordScreen({super.key});
+  final bool isLegacyExpired;
+
+  const ForgotPasswordScreen({super.key, this.isLegacyExpired = false});
 
   @override
   State<ForgotPasswordScreen> createState() => _ForgotPasswordScreenState();
@@ -76,7 +78,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
         ),
       ),
       body: SafeArea(
-        child: Padding(
+        child: SingleChildScrollView(
           padding: const EdgeInsets.all(24.0),
           child: _isSuccess ? _buildSuccessView() : _buildFormView(),
         ),
@@ -123,6 +125,39 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
             ),
             textAlign: TextAlign.center,
           ),
+          if (widget.isLegacyExpired) ...[
+            const SizedBox(height: 20),
+            Container(
+              key: const Key('legacy-link-expired-banner'),
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: Colors.amber.shade50,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.amber.shade300),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    Icons.info_outline,
+                    color: Colors.amber.shade900,
+                    size: 22,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      context.l10n.forgotLegacyLinkExpired,
+                      style: GoogleFonts.lexend(
+                        fontSize: 13,
+                        color: Colors.amber.shade900,
+                        height: 1.4,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
           const SizedBox(height: 48),
           TextFormField(
             controller: _emailController,
@@ -145,7 +180,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
               return null;
             },
           ),
-          const Spacer(),
+          const SizedBox(height: 40),
           ElevatedButton(
             onPressed: _isLoading ? null : _submit,
             style: ElevatedButton.styleFrom(

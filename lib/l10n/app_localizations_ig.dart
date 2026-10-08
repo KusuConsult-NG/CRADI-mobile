@@ -1698,6 +1698,10 @@ class AppLocalizationsIg extends AppLocalizations {
       'Tinye adreesị imel gị ka ị nata koodu ntọghachi paswọọdụ.';
 
   @override
+  String get forgotLegacyLinkExpired =>
+      'Njikọ ntọghachi paswọọdụ a sitere na usoro nbanye ochie anyị, ọ naghịzi arụ ọrụ. Tinye adreesị imel gị n’okpuru, anyị ga-ezitere gị nke ọhụrụ.';
+
+  @override
   String get authEmailHint => 'Tinye imel gị';
 
   @override

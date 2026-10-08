@@ -492,6 +492,7 @@
   "accessCodeBodyNoEmail": "A ti fi kóòdù ìjẹ́rìísí oní-nọ́mbà 6 ránṣẹ́ sí ímeèlì rẹ.\nTẹ kóòdù náà láti mú àkáǹtì rẹ ṣiṣẹ́.",
   "forgotTitle": "O Gbàgbé Ọ̀rọ̀ Aṣínà?",
   "forgotBody": "Tẹ àdírẹ́sì ímeèlì rẹ láti gba kóòdù àtúntò ọ̀rọ̀ aṣínà.",
+  "forgotLegacyLinkExpired": "Ọ̀nà àtúntò ọ̀rọ̀ aṣínà yìí wá láti inú ẹ̀rọ̀ ìwọlé àtijọ́ wa, kò sì ṣiṣẹ́ mọ́. Tẹ ímeèlì rẹ sí ìsàlẹ̀, a ó rán tuntun sí ọ.",
   "authEmailHint": "Tẹ ímeèlì rẹ",
   "authEmailRequired": "Jọ̀wọ́ tẹ ímeèlì rẹ",
   "authEmailInvalid": "Jọ̀wọ́ tẹ ímeèlì tó tọ́",

@@ -13,13 +13,21 @@ import 'package:climate_app/core/services/backend.dart' show registerPushTarget;
 import 'package:climate_app/core/services/hive_encryption_service.dart';
 import 'package:climate_app/core/services/supabase_mapping.dart'
     show parseTimestamp;
-import 'package:climate_app/features/profile/providers/profile_provider.dart';
 
 /// Push notifications via FCM + Appwrite Messaging topics.
 ///
 /// The Appwrite drain Function decides who receives what: it publishes to
-/// Appwrite Messaging topics (e.g. `role_field_agent`, `lga_ikeja`) that this
-/// service subscribes the device to after sign-in. Appwrite Messaging relays
+/// Appwrite Messaging topics, which `functions/cradi/src/lib/notifications.js`
+/// derives from the alert's target — `all-users`, `state-benue`, or the
+/// state-scoped `lga-benue-obi` (state-scoped so that Obi in Benue and Obi in
+/// Nasarawa, which share a name and nothing else, stay distinct). Hyphens, not
+/// underscores: see `topicId` in that file.
+///
+/// Nothing here subscribes the device to those topics: the `worker` Function
+/// does it server-side from the user's `profiles` row, on every profile write
+/// (`push_topics_changed` -> `reconcileSubscriptions`). This service's only
+/// part in addressing is registering the device's push target, which is what
+/// gives the server something to subscribe. Appwrite Messaging then relays
 /// the message to FCM, which delivers it to the device.
 ///
 /// FCM displays notifications itself (including in the foreground via the
@@ -52,8 +60,6 @@ class NotificationService {
   /// denied, so nothing could ask again.
   bool get _pushEnabled => _fcmAvailable && _permissionGranted;
 
-  ProfileProvider? _profileProvider;
-
   GoRouter? _router;
   Map<String, dynamic>? _pendingNavigation;
 
@@ -72,11 +78,8 @@ class NotificationService {
   /// In-flight initialization, so concurrent callers share one run.
   Future<void>? _initFuture;
 
-  /// Signed-in user state used to (re)compute topic subscriptions.
+  /// Signed-in user state.
   String? _userId;
-  Map<String, String> _baseTags = const {};
-  String? _zone;
-  Map<String, String> _appliedTags = const {};
 
   static const String _notificationsBoxName = 'notifications_history';
   Box<Map>? _notificationsBox;
@@ -85,15 +88,7 @@ class NotificationService {
   final ValueNotifier<int> unreadCount = ValueNotifier<int>(0);
 
   /// Initialize FCM and the local notification history.
-  ///
-  /// [profileProvider] lets the service keep the `monitoring_zone` topic in
-  /// sync when the user changes zone.
-  Future<void> initialize({ProfileProvider? profileProvider}) async {
-    if (profileProvider != null && profileProvider != _profileProvider) {
-      _profileProvider?.removeListener(_onProfileChanged);
-      _profileProvider = profileProvider;
-      _profileProvider!.addListener(_onProfileChanged);
-    }
+  Future<void> initialize() async {
     if (_initialized) return;
     _initFuture ??= _initialize().whenComplete(() {
       // Allow a retry if initialization did not complete (e.g. error).
@@ -203,16 +198,13 @@ class NotificationService {
   }
 
   /// Opts this device in/out of push (the Settings toggle).
-  /// With FCM, opt-out is handled at the OS level — we simply skip
-  /// subscribing to topics when the user disables push.
+  /// With FCM, opt-out is handled at the OS / SDK level via setAutoInitEnabled.
   Future<bool> setPushSubscribed(bool enabled) async {
     if (!_fcmAvailable) return false;
     try {
       await FirebaseMessaging.instance.setAutoInitEnabled(enabled);
       if (enabled && _userId != null) {
         await _serialized(_syncSignedInUser);
-      } else if (!enabled) {
-        await _unsubscribeAllTopics();
       }
       return true;
     } on Exception catch (e) {
@@ -369,44 +361,9 @@ class NotificationService {
     router.go(route);
   }
 
-  // ─────────────────────────── Identity & topics ───────────────────────────
+  // ──────────────────────── Identity & push target ─────────────────────────
 
-  /// Sanitises a topic segment exactly as the backend does.
-  @visibleForTesting
-  static String sanitizeTag(String value) =>
-      value.toLowerCase().replaceAll(RegExp(r'[^a-z0-9_]'), '_');
-
-  /// Topic names for the signed-in user (empty values are omitted).
-  @visibleForTesting
-  static Map<String, String> tagsFor({
-    String? role,
-    String? lga,
-    String? state,
-    String? ward,
-    String? monitoringZone,
-  }) {
-    final raw = {
-      'role': role,
-      'lga': lga,
-      'state': state,
-      'ward': ward,
-      'monitoring_zone': monitoringZone,
-    };
-    return {
-      for (final e in raw.entries)
-        if (e.value != null && e.value!.isNotEmpty)
-          e.key: sanitizeTag(e.value!),
-    };
-  }
-
-  /// FCM topic name for a given key/value pair (e.g. `role` + `field_agent`
-  /// → `role_field_agent`).
-  static String _topicFor(String key, String value) => '${key}_$value';
-
-  /// All-users broadcast topic — every device subscribes on sign-in.
-  static const String _allUsersTopic = 'all-users';
-
-  /// FCM topic subscribe/unsubscribe calls run one at a time.
+  /// FCM operations run one at a time.
   Future<void> _opChain = Future<void>.value();
 
   Future<void> _serialized(Future<void> Function() op) {
@@ -415,83 +372,38 @@ class NotificationService {
     return next;
   }
 
-  bool _tagsKnown = false;
-
-  /// Call after a user signs in (from AuthProvider): subscribes the device to
-  /// the user's Appwrite Messaging topics. With [updateTags] false (profile
-  /// unavailable) only the all-users topic is subscribed.
-  Future<void> onUserSignedIn({
-    required String userId,
-    String? role,
-    String? lga,
-    String? state,
-    String? ward,
-    String? monitoringZone,
-    bool updateTags = true,
-  }) async {
+  /// Call after a user signs in (from AuthProvider): registers this device's
+  /// push target against the account.
+  ///
+  /// Takes no targeting information. The `worker` Function subscribes the
+  /// target to topics from the user's own `profiles` row, so anything passed
+  /// here would be a second copy of what the server already reads — and a
+  /// copy that goes stale the moment an admin edits the row.
+  Future<void> onUserSignedIn({required String userId}) async {
     final sameUser = _userId == userId;
     _userId = userId;
-    if (updateTags) {
-      _baseTags = tagsFor(role: role, lga: lga, state: state, ward: ward);
-      _tagsKnown = true;
-    } else if (!sameUser) {
-      _baseTags = const {};
-      _tagsKnown = false;
-    }
-    final profileZone = _profileProvider?.monitoringZone;
-    _zone = (profileZone != null && profileZone.isNotEmpty)
-        ? profileZone
-        : monitoringZone;
     if (!_initialized) return;
     final sync = _serialized(_syncSignedInUser);
     if (!sameUser) await _ensureHistoryOwner(userId);
     await sync;
   }
 
-  /// Call after the user signs out: unsubscribes all topics.
+  /// Call after the user signs out: clears user state and history.
   Future<void> onUserSignedOut() async {
-    final wasSignedIn = _userId != null;
     _userId = null;
-    _baseTags = const {};
-    _tagsKnown = false;
-    _zone = null;
     // The token is the device's, not the account's: the next user on this
     // phone has the same one, and remembering it as registered would skip
     // registering *their* target and leave them with no push at all.
     _registeredToken = null;
-    final logout = (!_pushEnabled || !wasSignedIn)
-        ? Future<void>.value()
-        : _serialized(() async {
-            if (_userId != null) return; // new user signed in meanwhile
-            try {
-              await _unsubscribeAllTopics();
-              _appliedTags = const {};
-            } on Exception catch (e) {
-              developer.log(
-                'FCM topic unsubscribe error: $e',
-                name: 'NotificationService',
-              );
-            }
-          });
-    if (_userId == null) await clearHistoryForSignOut();
-    await logout;
+    await clearHistoryForSignOut();
   }
 
   Future<void> _syncSignedInUser() async {
     if (!_pushEnabled || _userId == null) return;
-    try {
-      // Subscribe to all-users first, then role/lga/state/ward/zone topics.
-      await FirebaseMessaging.instance.subscribeToTopic(_allUsersTopic);
-      if (_tagsKnown) await _applyTags();
-    } on Exception catch (e) {
-      developer.log(
-        'FCM topic subscribe error: $e',
-        name: 'NotificationService',
-      );
-    }
-    // After the identity, because the server subscribes the target to the
-    // topics of the profile it belongs to, and on Appwrite the session is
-    // what says whose target this is.
+    // Registers the device FCM push token with Appwrite, and asks the server
+    // to reconcile this account's topic subscriptions from its `profiles` row
+    // (state and LGA — there are no role or zone topics; nothing publishes to
+    // them).
     await syncPushTarget(await _pushToken());
   }
 
@@ -545,71 +457,6 @@ class NotificationService {
         name: 'NotificationService',
       );
     }
-  }
-
-  Future<void> _applyTags() async {
-    final tags = {..._baseTags, ...tagsFor(monitoringZone: _zone)};
-
-    // Unsubscribe removed topics.
-    final removed = _appliedTags.keys
-        .where((k) => !tags.containsKey(k))
-        .toList();
-    for (final k in removed) {
-      await FirebaseMessaging.instance.unsubscribeFromTopic(
-        _topicFor(k, _appliedTags[k]!),
-      );
-    }
-
-    // Subscribe new / changed topics.
-    for (final entry in tags.entries) {
-      final prev = _appliedTags[entry.key];
-      if (prev == entry.value) continue;
-      if (prev != null) {
-        await FirebaseMessaging.instance.unsubscribeFromTopic(
-          _topicFor(entry.key, prev),
-        );
-      }
-      await FirebaseMessaging.instance.subscribeToTopic(
-        _topicFor(entry.key, entry.value),
-      );
-    }
-    _appliedTags = tags;
-  }
-
-  Future<void> _unsubscribeAllTopics() async {
-    await FirebaseMessaging.instance.unsubscribeFromTopic(_allUsersTopic);
-    for (final entry in _appliedTags.entries) {
-      await FirebaseMessaging.instance.unsubscribeFromTopic(
-        _topicFor(entry.key, entry.value),
-      );
-    }
-    _appliedTags = const {};
-  }
-
-  /// Keep the monitoring_zone topic in sync with the ProfileProvider.
-  void _onProfileChanged() {
-    final provider = _profileProvider;
-    if (provider == null || _userId == null || provider.isLoading) return;
-    final zone = provider.monitoringZone;
-    if (zone == _zone) return;
-    _zone = zone;
-    if (_initialized && _pushEnabled) unawaited(updateZoneSubscriptions());
-  }
-
-  /// Re-apply topic subscriptions after the user changes their monitoring zone.
-  Future<void> updateZoneSubscriptions() async {
-    if (!_pushEnabled || _userId == null || !_tagsKnown) return;
-    await _serialized(() async {
-      if (_userId == null || !_tagsKnown) return;
-      try {
-        await _applyTags();
-      } on Exception catch (e) {
-        developer.log(
-          'FCM topic update error: $e',
-          name: 'NotificationService',
-        );
-      }
-    });
   }
 
   // ─────────────────────────── Local history ───────────────────────────────

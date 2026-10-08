@@ -1723,6 +1723,10 @@ class AppLocalizationsHa extends AppLocalizations {
       'Shigar da adireshin imel ɗinka don karɓar lambar sake saita kalmar sirri.';
 
   @override
+  String get forgotLegacyLinkExpired =>
+      'Wannan hanyar sake saita kalmar sirri ta zo daga tsohon tsarin shiga namu kuma ba ta aiki yanzu. Shigar da imel ɗinka a ƙasa, za mu aika maka sabuwa.';
+
+  @override
   String get authEmailHint => 'Shigar da imel ɗinka';
 
   @override

@@ -1710,6 +1710,10 @@ class AppLocalizationsPcm extends AppLocalizations {
       'Put your email address make we send you password reset code.';
 
   @override
+  String get forgotLegacyLinkExpired =>
+      'Dis password reset link na from our old sign-in system, so e no work again. Put your email below and we go send you new one.';
+
+  @override
   String get authEmailHint => 'Put your email';
 
   @override
