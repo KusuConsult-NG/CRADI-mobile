@@ -86,49 +86,86 @@ function preflightEnv() {
  * empty app and no error anywhere.
  */
 async function preflightDatabase() {
-  const db = value('APPWRITE_DATABASE_ID');
-  if (!db || db === 'cradi') return true;
-
   const url = value('APPWRITE_ENDPOINT').replace(/\/+$/, '');
-  const head = { 'x-appwrite-project': value('APPWRITE_PROJECT_ID'), 'x-appwrite-key': value('APPWRITE_API_KEY') };
-  const exists = async (id) => {
-    try {
-      const r = await fetch(`${url}/tablesdb/${encodeURIComponent(id)}`, {
-        headers: head,
-        signal: AbortSignal.timeout(20_000),
-      });
-      if (r.status === 404) return false;
-      if (!r.ok) return null;
-      return true;
-    } catch {
-      return null;
-    }
+  const head = {
+    'x-appwrite-project': value('APPWRITE_PROJECT_ID'),
+    'x-appwrite-key': value('APPWRITE_API_KEY'),
   };
+  const inUse = value('APPWRITE_DATABASE_ID') || 'cradi';
 
-  console.log(`\nAPPWRITE_DATABASE_ID is set to "${db}", not the default "cradi".`);
-  const alsoDefault = await exists('cradi');
-  if (alsoDefault === true) {
-    console.log(
-      '  A database named "cradi" ALSO exists in this project. Whichever of the\n' +
-        '  two the app reads is decided by its own build and its own variables, not\n' +
-        '  by this run — and reading the wrong one answers 200 with no rows.',
-    );
-  } else if (alsoDefault === false) {
-    console.log('  No database named "cradi" exists here, so a component that falls back');
-    console.log('  to the default would 404 rather than read an empty one. Louder, better.');
+  let found = null;
+  try {
+    const r = await fetch(`${url}/tablesdb`, { headers: head, signal: AbortSignal.timeout(20_000) });
+    if (r.ok) {
+      const body = await r.json().catch(() => null);
+      const list = body?.databases ?? body?.tablesDB ?? body?.tablesdb ?? null;
+      if (Array.isArray(list)) found = list.map((d) => String(d.$id));
+    }
+  } catch {
+    // Not fatal: the listing is a diagnosis, and the two checks that decide the
+    // exit code do not depend on it.
   }
-  console.log(
-    '\n  Every one of these resolves the database on its own, and each defaults to\n' +
-      '  "cradi". All five must say "' + db + '":\n' +
-      '    - the two Appwrite Functions   APPWRITE_DATABASE_ID, set per Function\n' +
-      '    - the admin, server side       APPWRITE_DATABASE_ID\n' +
-      '    - the admin, browser side      NEXT_PUBLIC_APPWRITE_DATABASE_ID\n' +
-      '    - the Flutter app              APPWRITE_DATABASE_ID in env.json — a\n' +
-      '                                   COMPILE-TIME define, baked into the APK\n' +
-      '    - the migration scripts        APPWRITE_DATABASE_ID in this shell\n' +
-      '\n  verify.mjs cannot catch a mismatch: plan.mjs takes its id from this same\n' +
-      '  variable, so it checks the database you named, whichever one that is.',
-  );
+
+  if (!found) {
+    console.log(`\ndatabases  could not be listed; proceeding with "${inUse}"`);
+    return true;
+  }
+
+  console.log(`\ndatabases  ${found.map((d) => (d === inUse ? `${d}  <- in use` : d)).join('\n           ')}`);
+
+  if (!found.includes(inUse)) {
+    console.error(
+      `\n"${inUse}" is not among them. Provision it, or correct` +
+        ' APPWRITE_DATABASE_ID.',
+    );
+    return false;
+  }
+
+  const extras = found.filter((d) => d !== inUse);
+  if (extras.length) {
+    /*
+     * An extra database is not harmless, and which way it bites depends on
+     * whether it is the default.
+     *
+     * A component resolves the database on its own, and every one of them falls
+     * back to `cradi`. So while a leftover NON-default database exists, a
+     * component still carrying that old id reads a valid, empty database and is
+     * answered `200 {"total": 0}` — an empty screen and no error. Delete it and
+     * the same component gets a 404 instead: still broken, but loudly, and
+     * traceable in one step.
+     *
+     * Before anything is migrated both are empty and a stale pointer costs
+     * nothing. After Phase 2 the real data is in one of them, and that is when
+     * the silence matters. So this is worth clearing up now rather than then.
+     */
+    console.log(
+      `\n${extras.length} other database(s) in this project: ${extras.join(', ')}`,
+    );
+    console.log(
+      '  Nothing here reads them — every component defaults to "cradi" — so they\n' +
+        '  are only reachable by something still carrying the old id. While they\n' +
+        '  exist, such a component reads an empty database and is answered 200 with\n' +
+        '  no rows; without them it gets a 404. The second is far easier to find,\n' +
+        '  and before Phase 2 both are equally empty, so now is the cheap moment to\n' +
+        '  remove them.',
+    );
+  }
+
+  if (value('APPWRITE_DATABASE_ID') && value('APPWRITE_DATABASE_ID') !== 'cradi') {
+    console.log(
+      `\nAPPWRITE_DATABASE_ID is "${inUse}", not the default "cradi". Five things\n` +
+        '  resolve the database independently and each defaults to "cradi", so all\n' +
+        '  five must say "' + inUse + '":\n' +
+        '    - the two Appwrite Functions   APPWRITE_DATABASE_ID, set per Function\n' +
+        '    - the admin, server side       APPWRITE_DATABASE_ID\n' +
+        '    - the admin, browser side      NEXT_PUBLIC_APPWRITE_DATABASE_ID\n' +
+        '    - the Flutter app              APPWRITE_DATABASE_ID in env.json — a\n' +
+        '                                   COMPILE-TIME define, baked into the APK\n' +
+        '    - the migration scripts        APPWRITE_DATABASE_ID in this shell\n' +
+        '\n  verify.mjs cannot catch a mismatch: plan.mjs takes its id from this same\n' +
+        '  variable, so it checks the database you named, whichever one that is.',
+    );
+  }
   return true;
 }
 
