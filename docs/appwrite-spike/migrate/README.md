@@ -71,7 +71,10 @@ The suites: `storage-ids.test.mjs` (pure), `copy-tables.test.mjs`,
 `reconcile.test.mjs` (the copiers and the gate against a real Postgres and an
 Appwrite stand-in that evaluates the permission strings `migrate.mjs` actually
 stamps), and `seed-identities.test.mjs` (which endpoint each account goes to,
-and what a re-run does to a password).
+and what a re-run does to a password), and `reseed-passwords.test.mjs` (the
+recovery, driven to its actual end: re-seeding without deleting changes
+nothing, the delete spares what the seeder did not create, and the accounts
+come back holding their own hashes).
 
 They run in CI, in the `Appwrite Migration Pipeline (Node) Test` job, against a
 `postgres:16` service container built the same way as above. They did not, and
@@ -145,9 +148,17 @@ of the comparison.
 at creation; `PATCH /users/{userId}/password` accepts a plaintext and no
 endpoint sets a pre-existing hash on an existing account. So an account that is
 already there gets a 409 and keeps whatever password created it. The seeder
-counts those under `passwords.alreadyExisted` and names each one, and the
-runbook's 5.1 has the delete-and-re-create procedure for a project already
-seeded with a shared password. Everything else here is safe to re-run.
+counts those under `passwords.alreadyExisted` and names each one.
+
+`reseed-passwords.mjs` is the way out for a project already seeded with a
+shared password: it audits (reads only), then deletes and lets the seeder
+re-create. Three things make it safe to point at production — it deletes only
+accounts whose id is a Postgres profile id, so a real sign-up made after the
+migration is reported and skipped; `CONFIRM_DELETE_USERS` must equal the count
+the run itself takes, so a stale command deletes nothing; and a live session on
+a seeded account is a finding, because it means somebody used the shared
+password. Runbook 5.1 has the procedure. Everything else here is safe to
+re-run.
 
 It got this way late: the earlier seeder created every account with one shared
 password and the earlier gate signed in with it, which is acceptable against a
