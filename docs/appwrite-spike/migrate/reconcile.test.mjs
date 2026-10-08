@@ -112,9 +112,7 @@ before(async () => {
   const plan = new Map(
     (await import('../../../infra/appwrite/plan.mjs')).COLLECTIONS.map((c) => [c.id, c]),
   );
-  const migrate = await import('./migrate.mjs');
-  const { wardTeam, roleLabel, reportPermissions, verificationPermissions, profilePermissions } =
-    migrate;
+  const { wardTeam, roleLabel } = await import('./migrate.mjs');
 
   const profiles = (
     await client.query(
@@ -122,20 +120,11 @@ before(async () => {
          from profiles p join auth.users u on u.id = p.id order by p.name`,
     )
   ).rows;
-  const reports = (await client.query(`select * from reports`)).rows;
-  const verifications = (await client.query(`select * from verifications`)).rows;
-  const reportById = new Map(reports.map((r) => [r.id, r]));
 
-  // Rows as the migrator writes them: id plus the stamped ACL. Only the three
-  // collections migrate.mjs actually handles — the rest are deliberately absent,
-  // which is what the gate should report about them.
-  const rows = {
-    profiles: profiles.map((p) => ({ $id: p.id, permissions: profilePermissions(p) })),
-    reports: reports.map((r) => ({ $id: r.id, permissions: reportPermissions(r) })),
-    verifications: verifications
-      .filter((v) => reportById.has(v.report_id))
-      .map((v) => ({ $id: v.id, permissions: verificationPermissions(v, reportById.get(v.report_id)) })),
-  };
+  // Every table starts empty, as an unmigrated project is. `copy-tables.mjs`
+  // writes all nine now, so nothing here pre-populates them — a fixture that
+  // did would be asserting about itself.
+  const rows = { profiles: [], reports: [], verifications: [] };
   // Everything else the gate reconciles: present as a table, empty of rows,
   // because no script in this directory migrates them. That is the state the
   // gate must report, not crash on.
@@ -186,6 +175,7 @@ before(async () => {
   // the stand-in's rows are shared mutable state and a test that runs the copier
   // would otherwise decide what the next test sees.
   const COPIED = [
+    'profiles', 'reports', 'verifications',
     'alerts', 'authorities', 'app_settings', 'scheduled_escalations',
     'knowledge_base', 'news_links',
   ];
@@ -420,7 +410,7 @@ function runCopy() {
   });
 }
 
-describe('copying the six collections nothing migrated', () => {
+describe('copying every collection', () => {
   beforeEach(() => fixtures?.clearCopied());
 
   test('writes every row, and the second run is a no-op', async (t) => {
@@ -430,6 +420,7 @@ describe('copying the six collections nothing migrated', () => {
     assert.equal(first.code, 0, first.out);
     const counts = JSON.parse(first.out.slice(first.out.indexOf('{'))).counts;
     for (const table of [
+      'profiles', 'reports', 'verifications',
       'alerts', 'authorities', 'app_settings', 'scheduled_escalations',
       'knowledge_base', 'news_links',
     ]) {
@@ -596,13 +587,47 @@ describe('copying the storage buckets', () => {
     assert.doesNotMatch(row.data.imageUrl, /supabase/);
   });
 
-  test('a column that never arrived is named, not reported as nothing to do', async (t) => {
+  test('an unmigrated table is named, not reported as nothing to do', async (t) => {
     if (!reachable) return t.skip('no Postgres');
+    // Nothing copied yet, so there is no row to carry a URL at all. The run
+    // must say that, not "0 of 0 rewritten", which reads like success.
     const { out } = await runCopyStorage();
-    // migrate.mjs carries neither image column, so every migrated report and
-    // profile is missing it. "0 of 3 rewritten" would read like success.
-    assert.match(out, /reports\.imageUrls: column ABSENT on all \d+ row\(s\)/, out);
-    assert.match(out, /profiles\.profileImageUrl: column ABSENT on all \d+ row\(s\)/, out);
+    assert.match(out, /reports\.imageUrls: no rows yet/, out);
+    assert.match(out, /profiles\.profileImageUrl: no rows yet/, out);
+  });
+
+  test('the retargeted collections carry their images across', async (t) => {
+    if (!reachable) return t.skip('no Postgres');
+    const { fileIdFor } = await import('./storage-ids.mjs');
+    // The point of the retarget: `migrate.mjs` carried neither image column, so
+    // every photograph in the system was lost. copy-tables.mjs carries both.
+    const r = (
+      await client.query(
+        `select id, image_urls from reports
+          where array_length(image_urls, 1) > 0 limit 1`,
+      )
+    ).rows[0];
+    const pr = (
+      await client.query(
+        `select id, profile_image_url from profiles
+          where profile_image_url like '%/storage/v1/object/%' limit 1`,
+      )
+    ).rows[0];
+    if (!r || !pr) return t.skip('fixture has no stored images on rows');
+
+    await runCopy();
+    const { out } = await runCopyStorage();
+    assert.match(out, /reports\.imageUrls: 1 of \d+ row\(s\) rewritten/, out);
+    assert.match(out, /profiles\.profileImageUrl: 1 of \d+ row\(s\) rewritten/, out);
+
+    const row = fixtures.rows.reports.find((x) => x.$id === r.id);
+    const at = /\/storage\/v1\/object\/public\/([^/]+)\/(.+)$/.exec(r.image_urls[0]);
+    assert.deepEqual(row.data.imageUrls, [
+      `${base}/storage/buckets/${at[1]}/files/${fileIdFor(at[2])}/view?project=test`,
+    ]);
+
+    const prow = fixtures.rows.profiles.find((x) => x.$id === pr.id);
+    assert.doesNotMatch(prow.data.profileImageUrl, /supabase/);
   });
 
   test('the gate reports a missing file, then stops once it is there', async (t) => {
@@ -649,6 +674,7 @@ describe('the reconciliation gate', () => {
     // Serve the grants the seeder handed out BEFORE the fix: a label straight
     // from profiles.role. This is the escalation the gate exists to find.
     fixtures.useGrants('byColumn');
+    await runCopy();
     try {
       const { code, out } = await runGate();
       assert.equal(code, 1);
@@ -667,7 +693,9 @@ describe('the reconciliation gate', () => {
       for (const f of leaks) {
         assert.ok(f.appwrite > f.postgres, `${f.table}: expected a leak, not a loss`);
         assert.equal(f.demotedRole, true, `${f.table}: the cause should be named`);
-        assert.match(f.policy, /app_role\(\)|auth\.uid\(\)/, 'quote the live policy');
+        // The live policy, whatever it is for that table — the leak now shows
+        // on `authorities` too, whose policy is a bare `is_staff()`.
+        assert.match(f.policy, new RegExp(`^${f.table}_select: \\S`), f.policy);
       }
     } finally {
       fixtures.useGrants('fixed');
@@ -678,6 +706,7 @@ describe('the reconciliation gate', () => {
     if (!reachable) return t.skip('no Postgres');
     const pending = fixtures.profiles.find((p) => !p.is_approved && p.role !== 'user');
     assert.ok(pending);
+    await runCopy();
     const { out } = await runGate();
     const report = findings(out);
     const migrated = new Set(['profiles', 'reports', 'verifications']);
@@ -689,6 +718,7 @@ describe('the reconciliation gate', () => {
 
   test('the users the migration gets right come back clean', async (t) => {
     if (!reachable) return t.skip('no Postgres');
+    await runCopy();
     const { out } = await runGate();
     const report = findings(out);
     const approved = fixtures.profiles.filter((p) => p.is_approved && !p.is_disabled);

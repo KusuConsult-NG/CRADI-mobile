@@ -284,23 +284,27 @@ export AW_ENDPOINT="https://fra.cloud.appwrite.io/v1"
 export AW_PROJECT="6ac51e70002ab6238fec"
 # AW_KEY, PG_URL, MIGRATION_PASSWORD already exported in section 2.
 
-node prep.mjs                    # collections and attributes
 node seed-identities.mjs         # users, ward teams, role labels — ALWAYS FIRST
 ```
 
+The schema comes from `infra/appwrite/provision.mjs`, run from the repo root as
+in Phase 0 — not from a script in this directory. `prep.mjs` used to create the
+spike's own snake_case collections and has been deleted: nothing writes to that
+shape any more, so running it would have provisioned a second wrong schema beside
+the real one.
+
 Every script prints the endpoint and project it resolved, on stderr, before it
 does anything. **Read that line.** The reason it is there: until recently
-`prep.mjs`, `seed-identities.mjs` and `reconcile.mjs` had
+`prep.mjs` (now deleted), `seed-identities.mjs` and `reconcile.mjs` had
 `http://localhost:8080/v1` baked in and read their credentials from a path that
 does not exist in this repository, so they ignored `AW_ENDPOINT`, `AW_PROJECT`
 and `AW_KEY` entirely — and Appwrite answers a misdirected or unpermitted read
 with `200 {"total": 0}` rather than an error, so a run against the wrong project
 does not fail, it reports that there was nothing to do.
 
-If `prep.mjs` is redundant because the schema already exists, it is harmless:
-every create answers 409 on a second run. For the full planned schema — indexes,
-column widths, the two buckets — use `infra/appwrite/provision.mjs` and confirm
-with `infra/appwrite/verify.mjs`, as in Phase 0.
+For the full planned schema — indexes, column widths, the two buckets — use
+`infra/appwrite/provision.mjs` and confirm with `infra/appwrite/verify.mjs`, as
+in Phase 0. Both are idempotent.
 
 ### What Identity Seeding Executes:
 1. **Ward Teams:** Creates an Appwrite Team for every distinct ward present in `profiles` and `reports`. Team ID format: `wardTeam(state, lga, ward)`.
@@ -325,61 +329,71 @@ that was never created is accepted in silence and grants nobody anything.
 
 ## 6. Phase 3: Data Migration Sequence
 
-Run the migrator, from the same directory and the same exported environment as
-Phase 2:
-```bash
-node migrate.mjs
-```
-
-It is idempotent: every document keeps its Postgres UUID as its Appwrite id, so
-a re-run collides with 409 rather than duplicating.
-
-### What `migrate.mjs` actually writes
-
-**Three collections, not six.** An earlier version of this section listed six
-plus storage, in order, with ACL designs for each. `migrate.mjs` handles:
-
-1. **`profiles`** — `read("user:<id>")`, `read("team:<ward>")`, and read for the
-   labels `admin`, `ldpCoordinator`, `projectStaff`, `ewv`, `ewr`.
-2. **`reports`** — `read("user:<owner>")`, `read("team:<ward>")`, and read for
-   the six labels in `STAFF_ROLES`. This is the one that reproduces
-   `reports_select`, and the reason Phase 4 exists.
-3. **`verifications`** — `read("user:<verifier>")`, `read("team:<report's
-   ward>")`, and the same staff labels. `ward`/`lga`/`state` are denormalised
-   onto the row because the ACL has to be written down, and Appwrite cannot do
-   the `EXISTS` join Postgres used.
-
-There is no `label:fieldAgent` anywhere in this system; that name appeared only
-in the old version of this list.
-
-### The other six: `copy-tables.mjs`
+One script, nine collections, from the same directory and the same exported
+environment as Phase 2:
 
 ```bash
 node copy-tables.mjs
 ```
 
-`alerts`, `authorities`, `app_settings`, `scheduled_escalations`,
-`knowledge_base` and `news_links` — the six Phase 4 used to report as holding
-rows in Postgres and nothing at all in Appwrite.
+It is idempotent: every row keeps its Postgres primary key as its Appwrite `$id`,
+so a re-run answers 409 rather than duplicating.
 
-Unlike `migrate.mjs`, this writes into **the schema the project actually has**:
-columns from `infra/appwrite/columns.json`, the camelCase rule from
-`extract-schema.mjs`'s own `toField`, the per-row ACL from `policy.js`'s
-`RULES`, and the `/tablesdb/…/tables/…/rows` endpoint the app and the Functions
-use. Nothing is restated — each of those is imported, so none of them can drift
-from what `verify.mjs` holds the project to.
+### Order, and why it is not a preference
+
+`profiles` → `reports` → `verifications`, then the other six in any order. A
+report's ACL names the ward team its author belongs to, and a verification's
+names the team of the report it votes on, so each of the first three needs the
+one before it read first. `copy-tables.mjs` holds that order in `TABLES`; it is
+not something the operator sequences by hand.
+
+1. **`profiles`** — `read("user:<id>")`, `read("team:<ward>")`, and read for
+   `admin`, `ldpCoordinator`, `projectStaff`, `ewv`, `ewr`.
+2. **`reports`** — `read("user:<owner>")`, `read("team:<ward>")`, and read for
+   the six labels in `STAFF_ROLES`. This is the one that reproduces
+   `reports_select`, and the reason Phase 4 exists.
+3. **`verifications`** — `read("user:<verifier>")`, `read("team:<report's
+   ward>")`, and the same staff labels. A vote on a report that did not migrate
+   is **skipped**, not written: its ACL would name a ward derived from nothing.
+4. **`alerts`**, **`authorities`**, **`app_settings`**,
+   **`scheduled_escalations`**, **`knowledge_base`**, **`news_links`** — the six
+   that had nothing writing them at all. Their ACLs come from `policy.js`'s
+   `RULES`, and five of the six are in fact read from **table-level**
+   permissions: `plan.mjs` leaves row security off for them, so the row's ACL is
+   stored and inert. It is written anyway, so a migrated row and one the `client`
+   Function creates later are indistinguishable, and so switching row security on
+   later does not silently empty the table.
+
+There is no `label:fieldAgent` anywhere in this system; that name appeared only
+in an earlier version of this list.
+
+### What it writes into, and what it refuses to lose
+
+The schema is read from **`plan.mjs`'s `COLLECTIONS`** — what
+`infra/appwrite/provision.mjs` actually creates — and not from `columns.json`.
+That file is derived from the migrations alone, and the plan adds the
+denormalised columns Appwrite needs and Postgres never had: `reports.userName`
+and `userRole`, `verifications.verifierName`, `state`, `lga`, `ward`. Reading the
+narrower file is what made those look unplanned, and is why this phase was
+believed to need a `plan.mjs` change first. **It does not.**
+
+Those Appwrite-only values come from the same expressions `write.js` uses —
+the author's profile for a report, `stampReportLocation` for a verification — so
+a migrated row carries what a new one would. `reports.previousStatus` is
+deliberately left unset: it exists so an event Function can tell a status change
+from any other edit, and stamping a migrated row's current status would announce
+a change that never happened.
+
+Everything else is imported rather than restated: the camelCase rule is
+`extract-schema.mjs`'s own `toField`, and the ACLs are the functions the
+migration and the Function already use. None of them can drift from what
+`verify.mjs` holds the project to.
 
 *Criteria:* every table reports `failed: 0`, and `unplannedColumns` is empty. A
-Postgres column with no column in the plan has nowhere to go, so it is reported
+Postgres column with no planned column has nowhere to go, so it is reported
 rather than dropped in silence — add it to the migrations and re-run
-`extract-schema.mjs`, or accept the loss knowingly. Idempotent: the Postgres key
-becomes the Appwrite `$id`, so a re-run answers 409 and creates nothing.
-
-Note that five of the six are read from **table-level** permissions, not per-row
-ACLs: `plan.mjs` leaves row security off for them, so the ACL each row carries
-is stored and inert. It is written anyway, so that a row created by the migration
-and a row created later by the `client` Function are indistinguishable — and so
-that turning row security on later does not silently empty the table.
+`extract-schema.mjs`, or accept the loss knowingly. A value longer than its
+column fails rather than being truncated.
 
 ### Storage Asset Migration: `copy-storage.mjs`
 
@@ -407,15 +421,21 @@ no error anywhere.
 It then rewrites the Supabase URLs still on migrated rows — `reports.imageUrls`,
 `profiles.profileImageUrl`, `knowledge_base.imageUrl`. `news_links.url` is
 deliberately left alone: it links to someone else's article, not a file of ours.
-A column absent from every migrated row is reported as **ABSENT**, not as "0
-rewritten": `migrate.mjs` carries neither image column, so every migrated report
-and profile is currently missing its images, and "0 of 3 rewritten" would read
-like there was nothing to do.
+All three carry across now. They did not before: `migrate.mjs` wrote neither
+image column, so every photograph in the system was being lost — silently, since
+"0 of 3 rewritten" reads like there was nothing to do. The run therefore
+distinguishes three cases by name: the table is **not migrated yet**, it has **no
+rows yet**, or the column is **ABSENT on all N rows** — the last meaning whatever
+migrated that table does not carry it, which is the one that loses data.
 
-*Criteria:* `failed: 0` per bucket, and the gate's bucket table showing
-`missing 0`. Idempotent — the id is a function of the path, so a re-run answers
-409 and uploads nothing. `STORAGE_MAP` writes the path -> id mapping as JSON,
-which is what a retargeted `migrate.mjs` would need to carry `imageUrls` across.
+*Criteria:* `failed: 0` per bucket, the gate's bucket table showing `missing 0`,
+and no column reported ABSENT. Idempotent — the id is a function of the path, so
+a re-run answers 409 and uploads nothing; the rewrite is idempotent because an
+Appwrite URL no longer matches the Supabase pattern it looks for. `STORAGE_MAP`
+writes the path -> id mapping as JSON.
+
+Run it **after** `copy-tables.mjs`: the rewrite edits rows, so the rows have to
+be there.
 
 Both buckets are `public: true` in Supabase and `read("any")` in Appwrite, so
 the bytes are reachable by everyone in both. One widening, recorded here rather
@@ -424,24 +444,35 @@ folder, while an Appwrite bucket readable by `any` can be listed by anyone. That
 exposes which files exist, not their contents, since the contents were already
 public in both.
 
-> ### The schema these scripts write is not the schema production provisions
+> ### A migrated row is readable by more roles than a new one
 >
-> Worth knowing before you plan this phase. `prep.mjs` creates its own
-> collections with **snake_case** attributes (`user_id`, `hazard_type`,
-> `is_confirmed`) through the **`/databases/.../collections/.../documents`**
-> API. The real project, provisioned from `infra/appwrite/plan.mjs` and checked
-> by `verify.mjs`, has **camelCase** columns (`userId`, `hazardType`,
-> `isConfirmed`) reached through **`/tablesdb/.../tables/.../rows`** — the
-> document API is deprecated as of Appwrite 1.8 and the client SDK speaks
-> TablesDB.
+> The one thing left to decide about this phase, and it is a product question.
 >
-> So `migrate.mjs` as written cannot write into a project this repository
-> provisions: every POST would be rejected for unknown attributes, against an
-> endpoint that is not the one in use. These scripts were built against the
-> spike's own 1.6.2 stack and its ad-hoc schema. Retargeting them — or writing
-> a migrator against `columns.json` — is a decision for whoever runs the
-> cutover, not something to discover mid-window. Phase 4's reconciler already
-> speaks TablesDB and takes `AW_ROWS_API=documents` for the old stack.
+> `copy-tables.mjs` stamps `migrate.mjs`'s permissions on the three collections
+> with row security on, because those were written to reproduce the RLS policy
+> each row was protected by — and Phase 4 confirms they do. The `client`
+> Function stamps `policy.js`'s `RULES` on a row created *after* the cutover,
+> and that is a **narrower** set:
+>
+> | | migrated row also grants | new row does not |
+> |---|---|---|
+> | `profiles` | ward team, `ldpCoordinator`, `projectStaff`, `ewv`, `ewr` | — |
+> | `reports` | `ldpCoordinator`, `projectStaff`, `techSupport` | — |
+> | `verifications` | the verifier themselves, `ldpCoordinator`, `projectStaff`, `techSupport` | — |
+>
+> Narrowing access during a cutover is not the migration's call, so migrated
+> rows match Postgres and the difference is written down rather than split.
+> `copy-tables.test.mjs` pins it, so changing either side fails until the new
+> difference is written down too.
+>
+> Part of it looks deliberate: `profiles` is narrow because the fields a
+> reviewer needs — `userName`, `reporterName`, `verifierName` — are denormalised
+> onto the rows that reference them, so no cross-profile read is needed. Part
+> looks like an oversight: `ldpCoordinator` and `projectStaff` are in `DECIDERS`
+> and may approve, reject and reopen a report, and `RULES.reports` does not let
+> them read one. The admin panel is unaffected either way — it reads through the
+> Function with an API key, which bypasses ACLs — so the symptom would be a
+> coordinator seeing an empty list in the Flutter app.
 
 ---
 

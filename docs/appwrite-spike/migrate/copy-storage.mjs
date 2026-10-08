@@ -193,7 +193,9 @@ export async function run({ log = console.log } = {}) {
     }
     if (stat.skipped) {
       log(`${table}.${column}: table not migrated yet, nothing to rewrite`);
-    } else if (stat.rows > 0 && stat.absent === stat.rows) {
+    } else if (stat.rows === 0) {
+      log(`${table}.${column}: no rows yet — copy-tables.mjs runs before this`);
+    } else if (stat.absent === stat.rows) {
       // Worth its own line: "0 of 3 rewritten" reads like there was nothing to
       // do, when in fact the column never arrived and every image is lost.
       log(

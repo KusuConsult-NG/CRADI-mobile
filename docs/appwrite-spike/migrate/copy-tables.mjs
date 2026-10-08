@@ -1,53 +1,92 @@
 /**
- * The six collections `migrate.mjs` never wrote, copied into the schema the
- * project actually has.
+ * Every collection, copied into the schema the project actually has.
  *
- * `alerts`, `authorities`, `app_settings`, `scheduled_escalations`,
- * `knowledge_base`, `news_links`. Phase 4's reconciler reported each of them as
- * holding rows a signed-in user can read in Postgres and nothing at all in
- * Appwrite — because nothing migrated them.
+ * `migrate.mjs` wrote `profiles`, `reports` and `verifications` in snake_case
+ * through the deprecated `/databases/…/collections/…/documents` API, against
+ * the ad-hoc schema `prep.mjs` creates. The project this repository provisions
+ * has camelCase columns under `/tablesdb/…/tables/…/rows`, so those writes
+ * could not land in it at all. The other six had nothing writing them.
  *
- * Three sources of truth, all imported rather than restated:
+ * Both halves are here now, in dependency order, through one mechanism.
  *
- *   - **columns** from `infra/appwrite/columns.json`, which `extract-schema.mjs`
- *     derives from the migrations and `verify.mjs` holds the project to. A
- *     Postgres column whose camelCase name is not in there is not written, and
- *     is reported — it has nowhere to go, and finding that out from a 400 at
- *     3am is the thing this avoids.
+ * Four sources of truth, all imported rather than restated:
+ *
+ *   - **columns** from `plan.mjs`'s `COLLECTIONS` — not `columns.json`. That
+ *     file is derived from the migrations alone, and the plan adds the
+ *     denormalised columns Appwrite needs and Postgres never had
+ *     (`verifications.state`, `reports.userName`, …). Reading the narrower one
+ *     is what made those look unplanned, and is why this was thought to need a
+ *     `plan.mjs` change: it does not. A Postgres column with no planned column
+ *     is still reported rather than dropped in silence.
  *   - **the camelCase rule** from `extract-schema.mjs`'s own `toField`, so the
  *     names here cannot drift from the names provisioned.
- *   - **the ACL** from `policy.js`'s `RULES`, so a migrated row carries exactly
- *     what the `client` Function stamps on a row created afterwards.
- *
- * It writes through `/tablesdb/…/tables/…/rows`, which is what the app, the
- * admin and the Functions use. (`migrate.mjs`'s three collections still write
- * snake_case through the deprecated documents API against the spike's own
- * schema — see the note in `docs/CUTOVER-RUNBOOK.md` Phase 3. They are not
- * retargeted here because `verifications` denormalises `ward`/`lga`/`state`
- * onto the row for its ACL and `columns.json` has no such columns, so doing it
- * faithfully needs a `plan.mjs` change.)
+ *   - **the ACL**: `policy.js`'s `RULES` for the six, and `migrate.mjs`'s
+ *     `*Permissions` builders for the three. Those two disagree, deliberately
+ *     — see `ACL_SOURCE` below.
+ *   - **the denormalised values** from the same expressions `write.js` uses, so
+ *     a migrated row and one created afterwards carry the same thing.
  *
  * Idempotent: the Postgres primary key becomes the Appwrite `$id`, so a re-run
  * answers 409 rather than duplicating.
  */
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import { dirname, resolve } from 'node:path';
 import pg from 'pg';
 import { appwriteTarget } from './target.mjs';
 import { toField } from '../../../infra/appwrite/extract-schema.mjs';
 import { RULES } from '../../../functions/cradi/src/lib/policy.js';
+import { COLLECTIONS } from '../../../infra/appwrite/plan.mjs';
+import {
+  profilePermissions,
+  reportPermissions,
+  verificationPermissions,
+} from './migrate.mjs';
 
-const HERE = dirname(fileURLToPath(import.meta.url));
-const REPO = resolve(HERE, '..', '..', '..');
-const COLUMNS = JSON.parse(readFileSync(resolve(REPO, 'infra/appwrite/columns.json'), 'utf8'));
+/** What `provision.mjs` actually creates, denormalised columns included. */
+const COLUMNS = Object.fromEntries(COLLECTIONS.map((c) => [c.id, c.columns]));
 
 const PG = process.env.PG_URL ?? 'postgres://postgres:postgres@localhost:5432/cradi_mig';
 const DB = process.env.APPWRITE_DATABASE_ID ?? 'cradi';
 const rowsPath = (table) => `/tablesdb/${DB}/tables/${table}/rows`;
 
 /**
- * The six, with the Postgres primary key that becomes `$id`.
+ * Where each collection's ACL comes from, and why the two sources disagree.
+ *
+ * `policy.js`'s `RULES` is what the `client` Function stamps on a row created
+ * after the cutover. `migrate.mjs`'s builders were written to reproduce the
+ * Postgres RLS policy the row was protected by, and Phase 4's gate confirms
+ * they do. For the three collections with row security on, those are **not the
+ * same set**, and the migration uses the RLS-faithful one:
+ *
+ *   profiles      RULES: self, admin, techSupport
+ *                 here:  self, ward team, admin, ldpCoordinator, projectStaff,
+ *                        ewv, ewr                — as `profiles_select` had it
+ *   reports       RULES: owner, ward team, ewv, ewr, admin
+ *                 here:  + ldpCoordinator, projectStaff, techSupport
+ *   verifications RULES: ward team, ewv, ewr, admin
+ *                 here:  + the verifier themselves, + ldpCoordinator,
+ *                        projectStaff, techSupport
+ *
+ * Narrowing access during a cutover is not this script's call to make: the
+ * migration's one invariant is that every user sees what they saw. So migrated
+ * rows match Postgres, and rows created afterwards are narrower — a real
+ * inconsistency, pinned by a test in `copy-tables.test.mjs` so that changing
+ * either side forces a decision rather than drifting. Whether `RULES` is
+ * deliberately narrower (denormalisation removed the need for those reads) or
+ * simply missed `ldpCoordinator` and `projectStaff`, who are in `DECIDERS` and
+ * must be able to act on a report, is a product question.
+ */
+export const ACL_SOURCE = {
+  profiles: 'migrate.mjs (RLS-faithful)',
+  reports: 'migrate.mjs (RLS-faithful)',
+  verifications: 'migrate.mjs (RLS-faithful)',
+};
+
+/**
+ * Every collection, in dependency order, with the Postgres primary key that
+ * becomes `$id`.
+ *
+ * `profiles` before `reports` before `verifications`: a report's ACL names the
+ * ward team its author belongs to, and a verification's names the team of the
+ * report it votes on, so each needs the one before it read first.
  *
  * `app_settings` is keyed by `key` and not by `id` — and `key` is also a
  * planned column, so it is written as data *and* used as the row id. Nothing
@@ -55,6 +94,49 @@ const rowsPath = (table) => `/tablesdb/${DB}/tables/${table}/rows`;
  * gets that right without a rule about it.
  */
 export const TABLES = [
+  {
+    table: 'profiles',
+    pgId: 'id',
+    acl: (row) => profilePermissions(row),
+    // `pushTopics` is Appwrite-only and the worker owns it: it records what a
+    // device is currently subscribed to, which at migration time is nothing.
+  },
+  {
+    table: 'reports',
+    pgId: 'id',
+    acl: (row) => reportPermissions(row),
+    // Exactly what `RULES.reports.create` stamps, from the author's profile.
+    // Appwrite cannot join, and the report list shows who filed it.
+    derive: (row, { profiles }) => {
+      const author = profiles.get(row.user_id);
+      return { userName: author?.name ?? '', userRole: author?.role ?? 'user' };
+    },
+    // `previousStatus` is deliberately unset: it exists so an event Function
+    // can tell a status change from any other edit, and a migrated row has no
+    // previous status. Stamping the current one would announce a change that
+    // did not happen.
+  },
+  {
+    table: 'verifications',
+    pgId: 'id',
+    acl: (row, { reports }) => verificationPermissions(row, reports.get(row.report_id)),
+    // `stampReportLocation` and `RULES.verifications.create`, which is where
+    // the ward team in the ACL above comes from.
+    derive: (row, { reports, profiles }) => {
+      const report = reports.get(row.report_id);
+      const verifier = profiles.get(row.verifier_id);
+      return {
+        verifierName: verifier?.name ?? '',
+        state: report.state,
+        lga: report.lga,
+        ward: report.ward,
+      };
+    },
+    // A vote on a report that did not migrate has no ward to be read by, and
+    // its ACL would name a team derived from nothing.
+    skip: (row, { reports }) =>
+      reports.has(row.report_id) ? null : `report ${row.report_id} was not migrated`,
+  },
   { table: 'alerts', pgId: 'id' },
   { table: 'authorities', pgId: 'id' },
   { table: 'app_settings', pgId: 'key' },
@@ -102,9 +184,13 @@ export function coerce(value, column) {
   }
 }
 
-/** The ACL the `client` Function would stamp, or none when it owns no rule. */
-export function aclFor(table, rowId) {
-  const rule = RULES[table];
+/**
+ * The row's permissions: the table's own builder where it has one, else what
+ * the `client` Function would stamp, else none at all.
+ */
+export function aclFor(target, row, rowId, context) {
+  if (typeof target.acl === 'function') return target.acl(row, context);
+  const rule = RULES[target.table];
   if (typeof rule?.acl !== 'function') return null;
   return rule.acl({ documentId: rowId });
 }
@@ -115,9 +201,13 @@ export function aclFor(table, rowId) {
  * Separated from the writing so the mapping can be checked without a server,
  * and so a whole table can be validated before anything is sent.
  */
-export function buildRow(row, { table, pgId }) {
+export function buildRow(row, target, context = {}) {
+  const { table, pgId } = target;
   const planned = new Map((COLUMNS[table] ?? []).map((c) => [c.key, c]));
   if (!planned.size) return { error: `no columns planned for ${table}` };
+
+  const skipped = target.skip?.(row, context);
+  if (skipped) return { skip: skipped };
 
   const rowId = String(row[pgId] ?? '');
   if (!ROW_ID.test(rowId)) {
@@ -142,12 +232,25 @@ export function buildRow(row, { table, pgId }) {
     }
   }
 
+  // Appwrite-only columns, from the same expressions `write.js` uses. Written
+  // after the Postgres ones so a derived value wins where both exist.
+  for (const [key, value] of Object.entries(target.derive?.(row, context) ?? {})) {
+    const column = planned.get(key);
+    if (!column) return { error: `derived ${key} has no planned column` };
+    try {
+      const v = coerce(value, column);
+      if (v !== null) data[key] = v;
+    } catch (e) {
+      return { error: `${key}: ${e.message}` };
+    }
+  }
+
   const missing = [...planned.values()]
     .filter((c) => c.required && data[c.key] === undefined)
     .map((c) => c.key);
   if (missing.length) return { error: `required column(s) unset: ${missing.join(', ')}` };
 
-  return { rowId, data, permissions: aclFor(table, rowId), unplanned };
+  return { rowId, data, permissions: aclFor(target, row, rowId, context), unplanned };
 }
 
 export async function run({ log = console.log } = {}) {
@@ -159,14 +262,31 @@ export async function run({ log = console.log } = {}) {
   const failures = [];
   const unplannedColumns = {};
 
+  // Read once, for the ACLs and the denormalised columns: a report's ACL names
+  // its author's ward team, a verification's names the report's.
+  const context = { profiles: new Map(), reports: new Map() };
+  for (const [key, table, idCol] of [
+    ['profiles', 'profiles', 'id'],
+    ['reports', 'reports', 'id'],
+  ]) {
+    for (const row of (await client.query(`select * from public.${table}`)).rows) {
+      context[key].set(row[idCol], row);
+    }
+  }
+
   for (const target of TABLES) {
     const { table, pgId } = target;
     const { rows } = await client.query(`select * from public.${table} order by ${pgId}`);
-    const stat = { source: rows.length, created: 0, exists: 0, failed: 0 };
+    const stat = { source: rows.length, created: 0, exists: 0, failed: 0, skipped: 0 };
     counts[table] = stat;
 
     for (const row of rows) {
-      const built = buildRow(row, target);
+      const built = buildRow(row, target, context);
+      if (built.skip) {
+        stat.skipped += 1;
+        failures.push({ table, id: String(row[pgId]), skipped: built.skip });
+        continue;
+      }
       if (built.error) {
         stat.failed += 1;
         failures.push({ table, id: String(row[pgId]), error: built.error });
@@ -199,7 +319,8 @@ export async function run({ log = console.log } = {}) {
     }
     log(
       `${table.padEnd(22)} ${stat.source} row(s): ${stat.created} created, ` +
-        `${stat.exists} already there, ${stat.failed} failed`,
+        `${stat.exists} already there, ${stat.failed} failed` +
+        (stat.skipped ? `, ${stat.skipped} skipped` : ''),
     );
   }
 
@@ -219,9 +340,15 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     }
     console.error('Add them to the migrations and re-run extract-schema.mjs, or accept the loss.');
   }
-  if (failures.length) {
-    console.error(`\n${failures.length} row(s) failed:`);
-    console.error(JSON.stringify(failures.slice(0, 20), null, 2));
+  const errors = failures.filter((f) => f.error);
+  const skips = failures.filter((f) => f.skipped);
+  if (skips.length) {
+    console.error(`\n${skips.length} row(s) skipped:`);
+    console.error(JSON.stringify(skips.slice(0, 20), null, 2));
+  }
+  if (errors.length) {
+    console.error(`\n${errors.length} row(s) failed:`);
+    console.error(JSON.stringify(errors.slice(0, 20), null, 2));
     process.exitCode = 1;
   }
 }

@@ -13,10 +13,12 @@ spike's `../env.json` is the fallback when they are unset.
 
     export MIGRATION_PASSWORD=…  # seed-identities sets it, reconcile signs in with it
 
-    node prep.mjs              # collections and attributes
+    # Schema, from the repo root — this is the provisioner, not a script here:
+    node infra/appwrite/provision.mjs
+    node infra/appwrite/verify.mjs
+
     node seed-identities.mjs   # users, ward teams, role labels — ALWAYS FIRST
-    node migrate.mjs           # profiles, reports, verifications
-    node copy-tables.mjs       # the other six, into the schema the project has
+    node copy-tables.mjs       # all nine collections, in dependency order
     SUPABASE_URL=… node copy-storage.mjs   # the buckets, and the URLs on rows
     node reconcile.mjs         # exits non-zero if any user's visibility changed
 
@@ -26,16 +28,23 @@ labels through `accountLabels` from `functions/cradi/src/lib/policy.js` — the
 same rule `write.js` applies at runtime, so a migrated account starts with
 exactly what a later profile edit would give it.
 
-`copy-tables.mjs` handles `alerts`, `authorities`, `app_settings`,
-`scheduled_escalations`, `knowledge_base` and `news_links`, which nothing used
-to migrate. It is schema-driven: columns come from `infra/appwrite/columns.json`,
-the camelCase rule from `extract-schema.mjs`'s own `toField`, and each row's ACL
-from `policy.js`'s `RULES`, so a migrated row carries what the `client` Function
-stamps on one created afterwards. A Postgres column with no column in the plan
-is reported rather than dropped in silence. It writes through
-`/tablesdb/…/tables/…/rows`, which is what the app and the Functions use —
-unlike `migrate.mjs`, whose three collections still target the spike's own
-snake_case schema through the deprecated documents API.
+`copy-tables.mjs` handles all nine collections, in dependency order — a
+report's ACL names its author's ward team and a verification's names the
+report's, so `profiles` is read before `reports` before `verifications`.
+
+It is schema-driven from **`plan.mjs`'s `COLLECTIONS`**, not `columns.json`:
+that file is derived from the migrations alone, and the plan adds the
+denormalised columns Appwrite needs and Postgres never had
+(`verifications.state`, `reports.userName`). The camelCase rule comes from
+`extract-schema.mjs`'s own `toField`, and the Appwrite-only values from the same
+expressions `write.js` uses. A Postgres column with no planned column is
+reported, not dropped in silence.
+
+The ACLs for the six come from `policy.js`'s `RULES`, so a migrated row carries
+what the `client` Function stamps on one created afterwards. The three with row
+security on use `migrate.mjs`'s builders instead, which reproduce the RLS. Those
+two sets differ — see `ACL_SOURCE` in `copy-tables.mjs` for which roles and why
+narrowing access mid-cutover is not this script's call.
 
 `reconcile.mjs` compares per-user visibility, not row counts: it queries the
 live RLS policy as each user and that user's Appwrite session, and diffs the
@@ -50,6 +59,12 @@ Narrow a failure with `RECONCILE_TABLES=profiles,reports`. Add `AW_KEY` for a
 per-table total — diagnosis only, never part of a verdict, since a key reads
 past the ACLs being compared. `AW_ROWS_API=documents` targets the spike's
 pre-1.8 stack; the default is TablesDB, which is what the app uses.
+
+`migrate.mjs` no longer copies anything: it is the ACL and identity module that
+`copy-tables.mjs` and `seed-identities.mjs` import. `prep.mjs` is gone with it —
+it created the spike's own snake_case collections, which nothing writes to now,
+so running it would have provisioned a second wrong schema beside the real one.
+`infra/appwrite/provision.mjs` is the provisioner, and `verify.mjs` checks it.
 
 `copy-storage.mjs` copies both buckets and then rewrites the Supabase URLs
 still sitting on migrated rows. The file id is **not** the migration's to
