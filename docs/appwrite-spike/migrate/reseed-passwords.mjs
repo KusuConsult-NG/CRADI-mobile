@@ -40,6 +40,15 @@ import { appwriteTarget } from './target.mjs';
 const { endpoint: EP, project, key: KEY, aw } = appwriteTarget();
 const PG = process.env.PG_URL ?? 'postgres://postgres:postgres@localhost:5432/cradi_mig';
 const DELETE = process.argv.includes('--delete');
+/*
+ * Proceed even though the re-seed would leave people worse off.
+ *
+ * This exists because the audit refuses the delete when re-seeding would import
+ * fewer passwords than the accounts hold today — and that refusal has to be
+ * overridable for the one legitimate case, a project whose users genuinely have
+ * no password to import. It is not a `--force`: every other refusal stands.
+ */
+const ACCEPT_LOSS = process.argv.includes('--accept-password-loss');
 const BCRYPT = /^\$2[aby]\$\d{2}\$/;
 
 /** Every Appwrite account in the project, paged. */
@@ -55,7 +64,19 @@ async function allAccounts() {
       throw new Error(`list users: ${r.status} ${String(r.body?.message ?? '').slice(0, 140)}`);
     }
     const page = r.body?.users ?? [];
-    out.push(...page.map((u) => ({ id: u.$id, email: u.email ?? '', name: u.name ?? '' })));
+    out.push(
+      ...page.map((u) => ({
+        id: u.$id,
+        email: u.email ?? '',
+        name: u.name ?? '',
+        // Appwrite stamps `passwordUpdate` when an account is given a password
+        // and leaves it empty when it has none, which is the only way from
+        // outside to tell "can sign in" from "cannot". Absent entirely — an
+        // older server, a changed model — reads as unknown rather than as
+        // either answer, and the interlock below falls back accordingly.
+        hasPassword: 'passwordUpdate' in u ? Boolean(u.passwordUpdate) : null,
+      })),
+    );
     if (page.length < 100) break;
     cursor = page[page.length - 1].$id;
   }
@@ -126,6 +147,11 @@ console.log(`${'  seeded (deletable)'.padEnd(26)} ${String(seeded.length).padSta
 console.log(`${'  NOT from the seeder'.padEnd(26)} ${String(foreign.length).padStart(5)}`);
 console.log(`${'  in postgres, not here'.padEnd(26)} ${String(absent.length).padStart(5)}`);
 console.log(`${'  with live sessions'.padEnd(26)} ${String(withSessions).padStart(5)}`);
+const withPassword = seeded.filter((a) => a.hasPassword === true).length;
+const passwordKnown = seeded.some((a) => a.hasPassword !== null);
+if (passwordKnown) {
+  console.log(`${'  with a password now'.padEnd(26)} ${String(withPassword).padStart(5)}`);
+}
 console.log(
   `\nafter re-seeding, passwords: ${hashes.bcrypt} imported,` +
     ` ${hashes.none} passwordless (no hash to import),` +
@@ -133,6 +159,45 @@ console.log(
 );
 
 const findings = [];
+/*
+ * The interlock this script was missing, and the reason it is here.
+ *
+ * The first version treated "what would be imported" as information and let the
+ * delete proceed on the operator's count alone. Pointed at the real project it
+ * printed `0 imported, 170 passwordless` and still said "to delete the 170
+ * seeded account(s): …" — because its only password finding was a hash in the
+ * wrong *format*, and a hash that is simply absent is not that. Running it
+ * would have replaced 170 accounts that could sign in with 170 that could not:
+ * strictly worse than the shared password it was meant to repair, and
+ * irreversible, since the accounts it deleted were the only place that password
+ * existed.
+ *
+ * So the invariant is now stated and enforced: the operation must not reduce
+ * the number of accounts that can sign in. It compares what the re-seed would
+ * import against what the accounts hold TODAY — not against the row count,
+ * which says nothing about passwords.
+ */
+const wouldLose = passwordKnown
+  ? Math.max(0, withPassword - hashes.bcrypt)
+  : (hashes.bcrypt === 0 && seeded.length > 0 ? seeded.length : 0);
+if (wouldLose > 0) {
+  findings.push({
+    finding:
+      `STOP: re-seeding would import ${hashes.bcrypt} password(s) for ` +
+      `${seeded.length} account(s), leaving ${wouldLose} of them unable to sign in` +
+      (passwordKnown ? ` that can today` : ' (this server does not report which have one)') +
+      '. Postgres has no bcrypt hash to import for them, which usually means' +
+      ' auth.users was mirrored through Supabase\'s Auth REST admin API —' +
+      ' /auth/v1/admin/users does not return encrypted_password. Point PG_URL at' +
+      ' the Supabase Postgres directly (port 5432 or the 6543 pooler), or load an' +
+      ' export of auth.users(id, encrypted_password) into the mirror, then audit' +
+      ' again. --accept-password-loss overrides this if the accounts genuinely' +
+      ' have no password to keep.',
+    importable: hashes.bcrypt,
+    seeded: seeded.length,
+    haveAPasswordNow: passwordKnown ? withPassword : 'unknown',
+  });
+}
 if (foreign.length) {
   findings.push({
     finding: `${foreign.length} Appwrite account(s) are not in Postgres, so the seeder did not` +
@@ -173,6 +238,15 @@ if (!DELETE) {
 // this run just counted — so a command copied from an older audit, or aimed at
 // a project with a different population, stops here instead of deleting a set
 // nobody looked at.
+// Checked before the count, because no count makes this one acceptable.
+if (wouldLose > 0 && !ACCEPT_LOSS) {
+  console.error(
+    `\nRefusing to delete: ${wouldLose} account(s) would come back unable to sign in.` +
+      ' Read the finding above. Nothing was changed.',
+  );
+  process.exit(2);
+}
+
 const confirmed = Number(process.env.CONFIRM_DELETE_USERS ?? NaN);
 if (confirmed !== seeded.length) {
   console.error(

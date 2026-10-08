@@ -10,6 +10,31 @@
  * how the app works and therefore what is worth testing.
  */
 const EP = process.env.APPWRITE_ENDPOINT;
+
+/*
+ * Local only, and now enforced.
+ *
+ * This script creates verified accounts whose password is the literal below, in
+ * a repository, gives them `label:ewr` and `label:approved`, writes a profile
+ * and a report, and cleans up nothing. All of that is fine against a throwaway
+ * stack and is a published staff credential anywhere else — and it reached the
+ * production Cloud project, eleven times, because nothing stopped it from
+ * following whatever `APPWRITE_ENDPOINT` happened to be exported. The accounts
+ * it left there had to be found by a password audit weeks later.
+ *
+ * `ALLOW_REMOTE=1` is deliberately awkward: there is no good reason to want it.
+ */
+const LOCAL = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\]|appwrite\.local)(:|\/|$)/;
+if (!LOCAL.test(String(EP ?? '')) && process.env.ALLOW_REMOTE !== '1') {
+  console.error(
+    `Refusing to run against ${EP || '(APPWRITE_ENDPOINT unset)'}.\n` +
+      'This creates accounts with a password that is a literal in this' +
+      " repository, grants them staff labels, and deletes nothing. It is for a\n" +
+      'local stack only — see infra/appwrite/local/.env.local. Set ALLOW_REMOTE=1' +
+      ' only if you are certain, and clean up after yourself.',
+  );
+  process.exit(2);
+}
 const H = {
   'content-type': 'application/json',
   'x-appwrite-project': process.env.APPWRITE_PROJECT_ID,

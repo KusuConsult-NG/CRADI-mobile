@@ -62,17 +62,31 @@ function seed() {
   });
 }
 
+/*
+ * Why the delete tests below pass `--accept-password-loss`.
+ *
+ * The fixture carries one account whose hash is argon2 and one with no hash at
+ * all, so re-seeding genuinely brings two accounts back unable to sign in. The
+ * script is right to refuse that by default; these tests are about what the
+ * delete does once the operator has accepted it, so they say so rather than
+ * dropping the two accounts and losing that coverage.
+ */
+const DELETE_ACCEPTING_LOSS = ['--delete', '--accept-password-loss'];
+
 const deletesSent = () =>
   calls.filter((c) => c.method === 'DELETE').map((c) => c.path.replace('/v1/users/', ''));
 
 /**
  * The findings the fixture is supposed to produce, and nothing else.
  *
- * It carries one account whose hash is argon2, so a correct audit always
- * reports that one and always exits 1. Asserting a clean exit would mean
- * removing that account, and with it the coverage of the case where a password
- * cannot come across at all.
+ * Two are inherent to it: one account's hash is argon2 and one has none, so a
+ * correct audit always reports the unimportable hash AND the resulting password
+ * loss, and always exits 1. Asserting a clean exit would mean dropping those
+ * accounts, and with them the coverage of the cases where a password cannot
+ * come across. Matched on their own wording so a *third* finding still fails.
  */
+const EXPECTED_FINDINGS = [/not bcrypt/, /STOP: re-seeding would import/];
+
 function unexpectedFindings(out) {
   const at = out.indexOf('[');
   if (at === -1) return [];
@@ -83,7 +97,7 @@ function unexpectedFindings(out) {
   } catch {
     return [{ finding: `could not parse the findings block from:\n${out}` }];
   }
-  return findings.filter((f) => !/not bcrypt/.test(f.finding));
+  return findings.filter((f) => !EXPECTED_FINDINGS.some((re) => re.test(f.finding)));
 }
 
 before(async () => {
@@ -109,7 +123,14 @@ before(async () => {
     };
 
     if (req.method === 'GET' && url.pathname === '/v1/users') {
-      const all = [...accounts.entries()].map(([id, a]) => ({ $id: id, email: a.email, name: '' }));
+      const all = [...accounts.entries()].map(([id, a]) => ({
+        $id: id,
+        email: a.email,
+        name: '',
+        // What Appwrite returns: a timestamp once the account has a password,
+        // empty when it has none. The interlock reads exactly this.
+        passwordUpdate: a.password ? '2026-10-01T00:00:00.000+00:00' : '',
+      }));
       const queries = url.searchParams.getAll('queries[]').map((q) => JSON.parse(q));
       const limit = queries.find((q) => q.method === 'limit')?.values?.[0] ?? 25;
       const cursor = queries.find((q) => q.method === 'cursorAfter')?.values?.[0];
@@ -172,9 +193,14 @@ after(async () => {
 
 beforeEach(() => {
   calls = [];
-  // The production state this script is for: every profile has an account, and
-  // nobody has signed in yet.
-  accounts = new Map(profileIds?.map((id) => [id, { email: `${id}@example.ng`, sessions: 0 }]));
+  // The production state this script is for: every profile has an account, it
+  // holds the old shared password, and nobody has signed in yet.
+  accounts = new Map(
+    profileIds?.map((id) => [
+      id,
+      { email: `${id}@example.ng`, sessions: 0, password: 'SharedMigrationPassword', hashed: false },
+    ]),
+  );
 });
 
 describe('recovering the passwords', () => {
@@ -191,7 +217,7 @@ describe('recovering the passwords', () => {
 
   test('deletes every seeded account, and only those', async (t) => {
     if (!reachable) return t.skip('no Postgres');
-    const { code, out } = await run(['--delete'], {
+    const { code, out } = await run(DELETE_ACCEPTING_LOSS, {
       CONFIRM_DELETE_USERS: String(profileIds.length),
     });
     assert.equal(code, 0, out);
@@ -215,7 +241,9 @@ describe('recovering the passwords', () => {
     assert.match(audit.out, new RegExp(`CONFIRM_DELETE_USERS=${profileIds.length}`), audit.out);
 
     calls = [];
-    const del = await run(['--delete'], { CONFIRM_DELETE_USERS: String(profileIds.length) });
+    const del = await run(DELETE_ACCEPTING_LOSS, {
+      CONFIRM_DELETE_USERS: String(profileIds.length),
+    });
     assert.equal(del.code, 0, del.out);
     assert.ok(!deletesSent().includes('68ff00112233445566aa'), 'it deleted a real sign-up');
     assert.deepEqual([...accounts.keys()], ['68ff00112233445566aa']);
@@ -225,10 +253,12 @@ describe('recovering the passwords', () => {
     if (!reachable) return t.skip('no Postgres');
     for (const value of [String(profileIds.length + 1), '0', 'all', undefined]) {
       calls = [];
-      const { code, out } = await run(['--delete'], { CONFIRM_DELETE_USERS: value });
+      // Accepting the loss, so the count is the only thing left to refuse on —
+      // otherwise this would pass on the other refusal and prove nothing.
+      const { code, out } = await run(DELETE_ACCEPTING_LOSS, { CONFIRM_DELETE_USERS: value });
       assert.equal(code, 2, `CONFIRM_DELETE_USERS=${value} should refuse: ${out}`);
       assert.deepEqual(deletesSent(), [], `${value}: nothing may be deleted on a refusal`);
-      assert.match(out, /Refusing to delete/, out);
+      assert.match(out, /and this run counted/, out);
     }
     assert.equal(accounts.size, profileIds.length);
   });
@@ -243,14 +273,50 @@ describe('recovering the passwords', () => {
     assert.match(out, /with live sessions\s+1/, out);
   });
 
+  test('refuses the delete when nothing could be imported back', async (t) => {
+    if (!reachable) return t.skip('no Postgres');
+    // What the real project looked like: the mirror carries no hashes at all,
+    // because auth.users came through Supabase's Auth REST admin API, which
+    // does not return encrypted_password. Deleting here would replace 170
+    // accounts that can sign in with 170 that cannot — and the accounts are the
+    // only place that password exists, so there is no way back.
+    await client.query('update auth.users set encrypted_password = null');
+    try {
+      const audit = await run();
+      assert.equal(audit.code, 1, audit.out);
+      assert.match(audit.out, /STOP: re-seeding would import 0 password\(s\)/, audit.out);
+      assert.match(audit.out, /does not return encrypted_password/, audit.out);
+
+      calls = [];
+      const del = await run(['--delete'], { CONFIRM_DELETE_USERS: String(profileIds.length) });
+      assert.equal(del.code, 2, 'a correct count must not buy this delete');
+      assert.deepEqual(deletesSent(), [], 'nothing may be deleted');
+      assert.equal(accounts.size, profileIds.length);
+      assert.match(del.out, /Refusing to delete/, del.out);
+
+      // Overridable, because a project whose users genuinely have no password
+      // is a real case — but only by saying so explicitly.
+      calls = [];
+      const forced = await run(DELETE_ACCEPTING_LOSS, {
+        CONFIRM_DELETE_USERS: String(profileIds.length),
+      });
+      assert.equal(forced.code, 0, forced.out);
+      assert.equal(deletesSent().length, profileIds.length);
+    } finally {
+      await client.query(
+        `update auth.users set encrypted_password = v.h from (values
+           ('00000000-0000-0000-0000-00000000a001'::uuid,'$2a$10$abcdefghijklmnopqrstuv0123456789ABCDEFGHIJKLMNOPQRST'),
+           ('00000000-0000-0000-0000-00000000a002','$2b$12$bcdefghijklmnopqrstuvw0123456789ABCDEFGHIJKLMNOPQRST'),
+           ('00000000-0000-0000-0000-00000000a003','$2y$10$cdefghijklmnopqrstuvwx0123456789ABCDEFGHIJKLMNOPQRST'),
+           ('00000000-0000-0000-0000-00000000a004','$2a$10$defghijklmnopqrstuvwxy0123456789ABCDEFGHIJKLMNOPQRST'),
+           ('00000000-0000-0000-0000-00000000a005','$argon2id$v=19$m=65536,t=3,p=4$abc$def')
+         ) as v(id, h) where auth.users.id = v.id`,
+      );
+    }
+  });
+
   test('the recovery ends with every importable hash actually imported', async (t) => {
     if (!reachable) return t.skip('no Postgres');
-    // The state production is in: accounts that exist, created by the old
-    // seeder, so none of them carries a hash.
-    for (const a of accounts.values()) {
-      a.password = 'SharedMigrationPassword';
-      a.hashed = false;
-    }
     const expected = new Map(
       (
         await client.query(
@@ -269,7 +335,9 @@ describe('recovering the passwords', () => {
     assert.equal(blocked.report.passwords.alreadyExisted, profileIds.length, blocked.out);
     for (const a of accounts.values()) assert.equal(a.hashed, false, 'nothing should have changed');
 
-    const del = await run(['--delete'], { CONFIRM_DELETE_USERS: String(profileIds.length) });
+    const del = await run(DELETE_ACCEPTING_LOSS, {
+      CONFIRM_DELETE_USERS: String(profileIds.length),
+    });
     assert.equal(del.code, 0, del.out);
 
     const after = await seed();
@@ -291,7 +359,7 @@ describe('recovering the passwords', () => {
 
   test('a second delete is a no-op, not a failure', async (t) => {
     if (!reachable) return t.skip('no Postgres');
-    await run(['--delete'], { CONFIRM_DELETE_USERS: String(profileIds.length) });
+    await run(DELETE_ACCEPTING_LOSS, { CONFIRM_DELETE_USERS: String(profileIds.length) });
     // Everything is gone, so the audit now counts zero seeded accounts and the
     // interlock for a re-run is 0 — which is the honest number.
     calls = [];

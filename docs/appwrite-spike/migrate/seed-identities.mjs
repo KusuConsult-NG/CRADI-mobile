@@ -62,6 +62,28 @@ const rows = (await client.query(
      from profiles p join auth.users u on u.id = p.id order by p.id`,
 )).rows;
 
+// The column existing is not the same as the hashes being in it. A mirror built
+// from Supabase's Auth REST admin API has the column and no values, because
+// `/auth/v1/admin/users` does not return `encrypted_password` — and the only
+// symptom is this script reporting success while creating every account
+// passwordless. That is how the live project ended up with accounts nobody had
+// the password to, so it is a refusal rather than a note.
+if (rows.length && rows.every((r) => !String(r.encrypted_password ?? '').trim())) {
+  console.error(
+    `All ${rows.length} account(s) have an empty encrypted_password, so there is` +
+      ' nothing to import and every account would be created WITHOUT a password.\n' +
+      'That is what a mirror built through /auth/v1/admin/users looks like: the' +
+      ' API does not return the hash.\nPoint PG_URL at the Supabase Postgres' +
+      ' directly (port 5432, or the 6543 pooler), or re-run sync-supabase.mjs' +
+      ' with SUPABASE_DB_URL set.\nSet ALLOW_PASSWORDLESS=1 if these accounts' +
+      ' genuinely have no password — see 5.1 in docs/CUTOVER-RUNBOOK.md.',
+  );
+  if (process.env.ALLOW_PASSWORDLESS !== '1') {
+    await client.end();
+    process.exit(2);
+  }
+}
+
 const teams = new Set();
 for (const p of rows) if (p.ward) teams.add(wardTeam(p.state, p.lga, p.ward));
 // Reports can sit in wards no profile lives in.

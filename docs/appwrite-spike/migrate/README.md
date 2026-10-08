@@ -131,6 +131,15 @@ all, while `docs/CUTOVER-RUNBOOK.md` presented them as the Cloud procedure.
 
 ## Passwords
 
+**The hashes have to be in the database `PG_URL` points at, and one obvious way
+of building it does not put them there.** `sync-supabase.mjs` mirrors
+`auth.users` from `GET /auth/v1/admin/users`, which does not return
+`encrypted_password` — so without `SUPABASE_DB_URL` the mirror has the column
+and no values. `sync-supabase.mjs` now says so loudly, `seed-identities.mjs`
+refuses to run when every row is empty, and `reseed-passwords.mjs` refuses a
+delete that would import fewer passwords than the accounts already hold. All
+three guards exist because the live project was seeded from such a mirror.
+
 Nothing here knows anybody's password, and there is no `MIGRATION_PASSWORD` any
 more. `seed-identities.mjs` imports each account's own bcrypt hash from
 `auth.users.encrypted_password` via `POST /users/bcrypt`, so every user keeps
@@ -152,12 +161,13 @@ counts those under `passwords.alreadyExisted` and names each one.
 
 `reseed-passwords.mjs` is the way out for a project already seeded with a
 shared password: it audits (reads only), then deletes and lets the seeder
-re-create. Three things make it safe to point at production — it deletes only
-accounts whose id is a Postgres profile id, so a real sign-up made after the
-migration is reported and skipped; `CONFIRM_DELETE_USERS` must equal the count
-the run itself takes, so a stale command deletes nothing; and a live session on
-a seeded account is a finding, because it means somebody used the shared
-password. Runbook 5.1 has the procedure. Everything else here is safe to
+re-create. Four things make it safe to point at production — it refuses a delete
+that would leave accounts unable to sign in at all, whatever count is passed; it
+deletes only accounts whose id is a Postgres profile id, so a real sign-up made
+after the migration is reported and skipped; `CONFIRM_DELETE_USERS` must equal
+the count the run itself takes, so a stale command deletes nothing; and a live
+session on a seeded account is a finding, because it means somebody used the
+shared password. Runbook 5.1 has the procedure. Everything else here is safe to
 re-run.
 
 It got this way late: the earlier seeder created every account with one shared

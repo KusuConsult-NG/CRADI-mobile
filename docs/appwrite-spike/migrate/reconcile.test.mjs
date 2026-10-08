@@ -188,6 +188,7 @@ before(async () => {
     grants = grantSets[mode];
   };
   const sessions = new Map();
+  const liveSessions = () => sessions.size;
   // Tables the stand-in refuses to list for any session, whatever the plan
   // says. Stands in for the mis-stamped permission that no row count can
   // reveal — see the test that uses it.
@@ -210,7 +211,7 @@ before(async () => {
   const allowList = (table) => denied.delete(table);
   fixtures = {
     rows, profiles, useGrants, clearCopied, COPIED, objects, files, clearFiles,
-    denyList, allowList,
+    denyList, allowList, liveSessions,
   };
 
   server = createServer(async (req, res) => {
@@ -256,6 +257,17 @@ before(async () => {
         'set-cookie': `${sid}=1; Path=/; HttpOnly`,
       });
       return res.end(JSON.stringify({ $id: sid, userId, secret: sid }));
+    }
+
+    // `DELETE /account/sessions/current` — the gate ending the session it
+    // minted. Modelled so the cleanup is asserted rather than assumed: without
+    // it the gate left one live session per user behind, on every run.
+    if (req.method === 'DELETE' && url.pathname === '/v1/account/sessions/current') {
+      const sid = String(req.headers.cookie ?? '').split('=')[0];
+      if (!sessions.has(sid)) return send(401, { message: 'User (role: guests) missing scope' });
+      sessions.delete(sid);
+      res.writeHead(204);
+      return res.end();
     }
 
     const m = /^\/v1\/tablesdb\/cradi\/tables\/([a-z_]+)\/rows$/.exec(url.pathname);
@@ -578,6 +590,19 @@ describe('copying every collection', () => {
       /every user sees exactly what they saw before, in every table, and every stored file arrived/,
     );
     assert.equal(code, 0, out);
+  });
+
+  test('it leaves no session behind', async (t) => {
+    if (!reachable) return t.skip('no Postgres');
+    await runCopy();
+    const { code, out } = await runGate();
+    assert.equal(code, 0, out);
+    // One per user was minted. A read-only check must end them: a session left
+    // live for Appwrite's default year reads from outside exactly like somebody
+    // signing in with a leaked password, and the password-recovery audit treats
+    // that as a finding.
+    assert.equal(fixtures.liveSessions(), 0, out);
+    assert.doesNotMatch(out, /could not be ended/, out);
   });
 
   test('the rows the copier declines are forgiven by name, not by filter', async (t) => {
