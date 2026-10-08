@@ -29,6 +29,7 @@
 import { test, before, after, beforeEach, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
+import { Readable } from 'node:stream';
 import { spawn } from 'node:child_process';
 import pg from 'pg';
 
@@ -38,7 +39,9 @@ const PASSWORD = 'reconcile-test-password';
 let reachable = true;
 let client;
 let server;
+let supabase;
 let base;
+let supabaseBase;
 let fixtures;
 
 /**
@@ -146,6 +149,22 @@ before(async () => {
 
   const { accountLabels } = await import('../../../functions/cradi/src/lib/policy.js');
   const helpers = { wardTeam, roleLabel, accountLabels };
+
+  // Storage. The object list is real — `storage.objects` in the live database —
+  // and each gets deterministic bytes so a size mismatch after the round trip
+  // would show. The Appwrite side starts empty, as an unmigrated project is.
+  const objects = (
+    await client.query(
+      `select bucket_id, name from storage.objects
+        where name is not null and name <> '' order by bucket_id, name`,
+    )
+  ).rows.map((o) => ({
+    ...o,
+    bytes: new Uint8Array(
+      Array.from({ length: 64 + (o.name.length % 32) }, (_, i) => (i * 7 + o.name.length) % 256),
+    ),
+  }));
+  const files = { 'report-images': [], 'profile-images': [] };
   // Two grant maps: what the seeder used to hand out, and what it hands out now.
   const grantSets = {
     fixed: new Map(
@@ -173,7 +192,10 @@ before(async () => {
   const clearCopied = () => {
     for (const t of COPIED) rows[t] = [];
   };
-  fixtures = { rows, profiles, useGrants, clearCopied, COPIED };
+  const clearFiles = () => {
+    for (const b of Object.keys(files)) files[b] = [];
+  };
+  fixtures = { rows, profiles, useGrants, clearCopied, COPIED, objects, files, clearFiles };
 
   server = createServer(async (req, res) => {
     const url = new URL(req.url, 'http://x');
@@ -250,18 +272,102 @@ before(async () => {
       }
       return send(200, {
         total: visible.length,
-        rows: page.slice(0, limit).map((r) => ({ $id: r.$id })),
+        // Appwrite returns a row's columns alongside its id, and the URL
+        // rewrite reads one of them — returning only `$id` left that path
+        // untested and passing.
+        rows: page.slice(0, limit).map((r) => ({ $id: r.$id, ...(r.data ?? {}) })),
       });
     }
+    // What copy-storage.mjs writes, and what the gate lists.
+    const sm = /^\/v1\/storage\/buckets\/([a-z-]+)\/files$/.exec(url.pathname);
+    if (sm) {
+      const bucket = sm[1];
+      if (!(bucket in files)) return send(404, { message: 'Bucket not found' });
+      if (req.method === 'POST') {
+        const form = await new Response(Readable.toWeb(req), {
+          headers: { 'content-type': req.headers['content-type'] ?? '' },
+        }).formData();
+        const fileId = String(form.get('fileId') ?? '');
+        if (!fileId) return send(400, { message: 'Missing required parameter: fileId' });
+        if (fileId.length > 36) return send(400, { message: 'Invalid `fileId`' });
+        if (files[bucket].some((f) => f.$id === fileId)) {
+          return send(409, { message: 'File with the requested ID already exists' });
+        }
+        const blob = form.get('file');
+        const bytes = new Uint8Array(await blob.arrayBuffer());
+        files[bucket].push({ $id: fileId, name: blob.name, size: bytes.length, bytes });
+        return send(201, { $id: fileId, name: blob.name, sizeOriginal: bytes.length });
+      }
+      if (req.method === 'GET') {
+        if (!req.headers['x-appwrite-key']) {
+          return send(401, { message: 'User (role: guests) missing scope' });
+        }
+        const all = files[bucket];
+        const qs2 = url.searchParams.getAll('queries[]').map((q) => JSON.parse(q));
+        const limit = qs2.find((q) => q.method === 'limit')?.values?.[0] ?? 25;
+        const cursor = qs2.find((q) => q.method === 'cursorAfter')?.values?.[0];
+        let page = all;
+        if (cursor) {
+          const at = all.findIndex((f) => f.$id === cursor);
+          page = at === -1 ? [] : all.slice(at + 1);
+        }
+        return send(200, {
+          total: all.length,
+          files: page.slice(0, limit).map((f) => ({ $id: f.$id, name: f.name })),
+        });
+      }
+    }
+
+    // The rewrite's PATCH.
+    const pm = /^\/v1\/tablesdb\/cradi\/tables\/([a-z_]+)\/rows\/(.+)$/.exec(url.pathname);
+    if (req.method === 'PATCH' && pm) {
+      const [, ptable, rowId] = pm;
+      const row = rows[ptable]?.find((r) => r.$id === decodeURIComponent(rowId));
+      if (!row) return send(404, { message: 'Row not found' });
+      let raw = '';
+      for await (const c of req) raw += c;
+      const { data } = JSON.parse(raw || '{}');
+      row.data = { ...(row.data ?? {}), ...(data ?? {}) };
+      return send(200, { $id: row.$id, ...row.data });
+    }
+
     send(404, { message: `Unknown route ${req.method} ${url.pathname}` });
   });
 
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
   base = `http://127.0.0.1:${server.address().port}/v1`;
+
+  /*
+   * A second origin, standing in for Supabase Storage.
+   *
+   * The bytes have to come from somewhere, and `copy-storage.mjs` reads them
+   * over HTTP from `SUPABASE_URL`. Serving them here makes the copy a real
+   * round trip — a download, a multipart upload, and a size to compare — rather
+   * than an assertion about what a function returned.
+   */
+  supabase = createServer((req, res) => {
+    const m = /^\/storage\/v1\/object\/public\/([^/]+)\/(.+)$/.exec(req.url ?? '');
+    if (!m) {
+      res.writeHead(404, { 'content-type': 'application/json' });
+      return res.end('{"error":"not found"}');
+    }
+    const bucket = decodeURIComponent(m[1]);
+    const name = m[2].split('/').map(decodeURIComponent).join('/');
+    const object = objects.find((o) => o.bucket_id === bucket && o.name === name);
+    if (!object) {
+      res.writeHead(404, { 'content-type': 'application/json' });
+      return res.end('{"error":"Object not found"}');
+    }
+    res.writeHead(200, { 'content-type': 'image/jpeg' });
+    res.end(Buffer.from(object.bytes));
+  });
+  await new Promise((r) => supabase.listen(0, '127.0.0.1', r));
+  supabaseBase = `http://127.0.0.1:${supabase.address().port}`;
 });
 
 after(async () => {
   if (server) await new Promise((r) => server.close(r));
+  if (supabase) await new Promise((r) => supabase.close(r));
   if (client && reachable) await client.end();
 });
 
@@ -374,6 +480,8 @@ describe('copying the six collections nothing migrated', () => {
   test('the gate passes once they are copied', async (t) => {
     if (!reachable) return t.skip('no Postgres');
     await runCopy();
+    // Storage too: the gate's verdict now covers whether every file arrived.
+    await runCopyStorage();
     const { code, out } = await runGate();
 
     const report = findings(out);
@@ -391,8 +499,122 @@ describe('copying the six collections nothing migrated', () => {
     // the run says so out loud rather than passing in silence.
     assert.match(out, /authorities: \d+ user\(s\) see fewer rows/);
     assert.match(out, /ACCEPTED as a deliberate narrowing/);
-    assert.match(out, /every user sees exactly what they saw before/);
+    assert.match(
+      out,
+      /every user sees exactly what they saw before, in every table, and every stored file arrived/,
+    );
     assert.equal(code, 0, out);
+  });
+});
+
+/** Runs copy-storage.mjs against both stand-ins and the live Postgres. */
+function runCopyStorage() {
+  return new Promise((resolve) => {
+    const child = spawn(process.execPath, ['copy-storage.mjs'], {
+      cwd: import.meta.dirname,
+      env: {
+        ...process.env,
+        PG_URL: PG,
+        AW_ENDPOINT: base,
+        AW_PROJECT: 'test',
+        AW_KEY: 'test',
+        SUPABASE_URL: supabaseBase,
+      },
+    });
+    let out = '';
+    child.stdout.on('data', (d) => (out += d));
+    child.stderr.on('data', (d) => (out += d));
+    child.on('close', (code) => resolve({ code, out }));
+  });
+}
+
+describe('copying the storage buckets', () => {
+  beforeEach(() => {
+    fixtures?.clearFiles();
+    fixtures?.clearCopied();
+  });
+
+  test('every object arrives, under the id the app will ask for', async (t) => {
+    if (!reachable) return t.skip('no Postgres');
+    const { fileIdFor } = await import('./storage-ids.mjs');
+
+    const { code, out } = await runCopyStorage();
+    assert.equal(code, 0, out);
+    const report = JSON.parse(out.slice(out.indexOf('{')));
+
+    let expected = 0;
+    for (const o of fixtures.objects) expected += 1;
+    const copied = Object.values(report.buckets).reduce((n, b) => n + b.copied, 0);
+    assert.equal(copied, expected, out);
+    for (const b of Object.values(report.buckets)) assert.equal(b.failed, 0, out);
+
+    // The id is the whole point: a file under any other id is unreachable,
+    // because the client derives it from the path and nothing persists it.
+    for (const o of fixtures.objects) {
+      const want = fileIdFor(o.name);
+      const got = fixtures.files[o.bucket_id].find((f) => f.$id === want);
+      assert.ok(got, `${o.bucket_id}/${o.name} is not under ${want}`);
+      assert.equal(got.size, o.bytes.length, `${o.name}: bytes did not survive`);
+    }
+  });
+
+  test('a second run copies nothing', async (t) => {
+    if (!reachable) return t.skip('no Postgres');
+    await runCopyStorage();
+    const { code, out } = await runCopyStorage();
+    assert.equal(code, 0, out);
+    const report = JSON.parse(out.slice(out.indexOf('{')));
+    for (const [bucket, b] of Object.entries(report.buckets)) {
+      assert.equal(b.copied, 0, `${bucket}: re-run uploaded again`);
+      assert.equal(b.exists, b.source, `${bucket}: not answered 409`);
+    }
+  });
+
+  test('a Supabase URL left on a migrated row is rewritten to Appwrite', async (t) => {
+    if (!reachable) return t.skip('no Postgres');
+    const { fileIdFor } = await import('./storage-ids.mjs');
+    const withUrl = (
+      await client.query(
+        `select id, image_url from knowledge_base
+          where image_url like '%/storage/v1/object/%' limit 1`,
+      )
+    ).rows[0];
+    if (!withUrl) return t.skip('fixture has no Supabase URL on a row');
+
+    await runCopy();            // knowledge_base must exist to be rewritten
+    const { out } = await runCopyStorage();
+    assert.match(out, /knowledge_base\.imageUrl: 1 of \d+ row\(s\) rewritten/, out);
+
+    const row = fixtures.rows.knowledge_base.find((r) => r.$id === withUrl.id);
+    assert.ok(row, 'the row should have been copied');
+    const at = /\/storage\/v1\/object\/public\/([^/]+)\/(.+)$/.exec(withUrl.image_url);
+    assert.match(
+      row.data.imageUrl,
+      new RegExp(`/storage/buckets/${at[1]}/files/${fileIdFor(at[2])}/view`),
+      row.data.imageUrl,
+    );
+    assert.doesNotMatch(row.data.imageUrl, /supabase/);
+  });
+
+  test('a column that never arrived is named, not reported as nothing to do', async (t) => {
+    if (!reachable) return t.skip('no Postgres');
+    const { out } = await runCopyStorage();
+    // migrate.mjs carries neither image column, so every migrated report and
+    // profile is missing it. "0 of 3 rewritten" would read like success.
+    assert.match(out, /reports\.imageUrls: column ABSENT on all \d+ row\(s\)/, out);
+    assert.match(out, /profiles\.profileImageUrl: column ABSENT on all \d+ row\(s\)/, out);
+  });
+
+  test('the gate reports a missing file, then stops once it is there', async (t) => {
+    if (!reachable) return t.skip('no Postgres');
+    const before = await runGate();
+    assert.equal(before.code, 1);
+    assert.match(before.out, /object\(s\) are not in Appwrite under the id/, before.out);
+
+    await runCopyStorage();
+    const after = await runGate();
+    assert.match(after.out, /^report-images\s/m, after.out);
+    assert.doesNotMatch(after.out, /are not in Appwrite under the id/, after.out);
   });
 });
 

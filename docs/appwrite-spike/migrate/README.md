@@ -17,6 +17,7 @@ spike's `../env.json` is the fallback when they are unset.
     node seed-identities.mjs   # users, ward teams, role labels — ALWAYS FIRST
     node migrate.mjs           # profiles, reports, verifications
     node copy-tables.mjs       # the other six, into the schema the project has
+    SUPABASE_URL=… node copy-storage.mjs   # the buckets, and the URLs on rows
     node reconcile.mjs         # exits non-zero if any user's visibility changed
 
 `seed-identities.mjs` runs first because an ACL naming a team, label or user
@@ -50,8 +51,23 @@ per-table total — diagnosis only, never part of a verdict, since a key reads
 past the ACLs being compared. `AW_ROWS_API=documents` targets the spike's
 pre-1.8 stack; the default is TablesDB, which is what the app uses.
 
-Storage is reported, not compared: nothing here migrates the buckets, so there
-is no Supabase-object-name -> Appwrite-file-id mapping to diff.
+`copy-storage.mjs` copies both buckets and then rewrites the Supabase URLs
+still sitting on migrated rows. The file id is **not** the migration's to
+choose: the Flutter client derives it from the storage path at render time and
+nothing persists it, so a file under any other id is unreachable and the only
+symptom is an image that does not load. `storage-ids.mjs` is a port of
+`AppwriteDataBackend.fileIdFor`, pinned by `storage-ids.test.mjs` against the
+cases the Dart suite asserts. Two paths colliding on one id stops the run,
+because the second upload would replace the first user's evidence.
+
+It needs `SUPABASE_URL` to read the bytes (both buckets are public;
+`SUPABASE_SERVICE_ROLE_KEY` is only for one that is not). `STORAGE_MAP=path`
+writes the path -> id mapping as JSON.
+
+The gate compares storage by **presence**: every Supabase object must be in
+Appwrite under the id the app will ask for. Not per-user — both systems serve
+these buckets to everyone, so a per-user diff would be the same answer six
+times.
 
 ## Pointing them somewhere else
 

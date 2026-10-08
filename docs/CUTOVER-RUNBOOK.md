@@ -381,18 +381,48 @@ is stored and inert. It is written anyway, so that a row created by the migratio
 and a row created later by the `client` Function are indistinguishable — and so
 that turning row security on later does not silently empty the table.
 
-### Storage Asset Migration
+### Storage Asset Migration: `copy-storage.mjs`
 
-**Also not implemented.** The buckets are `report-images` and `profile-images`
-(there is no `avatars` bucket — `plan.mjs` provisions those two names, and the
-admin and the Flutter client both read `report-images`). Both are `public: true`
-in Supabase, so the RLS on `storage.objects` governs listing and metadata
-rather than the URLs stored on rows.
+```bash
+SUPABASE_URL="https://<ref>.supabase.co" \
+STORAGE_MAP=storage-map.json \
+node copy-storage.mjs
+```
 
-Nothing here transfers them, so there is no Supabase-object-name ->
-Appwrite-file-id mapping, which is also why Phase 4 reports storage instead of
-comparing it. When this is written, validate file counts and checksums against
-the Supabase bucket contents, and extend the gate.
+The buckets are `report-images` and `profile-images` — there is no `avatars`
+bucket; `plan.mjs` provisions those two names and both clients read them.
+
+**The file id is not ours to choose.** The Flutter client derives it from the
+storage path when it renders an image (`AppwriteDataBackend.fileIdFor`) and
+nothing persists the mapping — the comment in that file is blunt about why: "a
+digest of the path, and a digest cannot be inverted". A file copied under any
+other id is unreachable, the request 404s, and the only symptom is an image that
+does not load. `storage-ids.mjs` is a port of that function, pinned by
+`storage-ids.test.mjs` against the cases the Dart suite asserts.
+
+Two different paths colliding on one id **stops the run** before anything is
+uploaded, because the second upload would replace the first user's evidence with
+no error anywhere.
+
+It then rewrites the Supabase URLs still on migrated rows — `reports.imageUrls`,
+`profiles.profileImageUrl`, `knowledge_base.imageUrl`. `news_links.url` is
+deliberately left alone: it links to someone else's article, not a file of ours.
+A column absent from every migrated row is reported as **ABSENT**, not as "0
+rewritten": `migrate.mjs` carries neither image column, so every migrated report
+and profile is currently missing its images, and "0 of 3 rewritten" would read
+like there was nothing to do.
+
+*Criteria:* `failed: 0` per bucket, and the gate's bucket table showing
+`missing 0`. Idempotent — the id is a function of the path, so a re-run answers
+409 and uploads nothing. `STORAGE_MAP` writes the path -> id mapping as JSON,
+which is what a retargeted `migrate.mjs` would need to carry `imageUrls` across.
+
+Both buckets are `public: true` in Supabase and `read("any")` in Appwrite, so
+the bytes are reachable by everyone in both. One widening, recorded here rather
+than fixed: Supabase's RLS on `storage.objects` let a user list only their own
+folder, while an Appwrite bucket readable by `any` can be listed by anyone. That
+exposes which files exist, not their contents, since the contents were already
+public in both.
 
 > ### The schema these scripts write is not the schema production provisions
 >
@@ -436,6 +466,9 @@ node reconcile.mjs
   finding. Not from `supabase/deploy/schema.sql`: that file is a concatenation
   in which later migrations redefine policies, and its first `profiles_select`
   is not the one installed.
+- It checks the **storage buckets** by presence: every Supabase object must be
+  in Appwrite under the id the app derives from its path. A missing file fails
+  the run.
 - It **polices its own coverage**. Any table with an `authenticated` SELECT or
   ALL policy that is neither reconciled nor listed as deliberately out of scope
   fails the run with exit `2`. The previous version compared `reports` alone and
@@ -452,7 +485,9 @@ node reconcile.mjs
   that never reached Appwrite must never read as a list of per-account problems,
   so it stops at the first transport error rather than producing one finding per
   user.
-- **Success Criteria:** exits `0`, every user identical in every table.
+- **Success Criteria:** exits `0` — every user identical in every table, and
+  every stored file present. The closing line names which of the two it checked:
+  without `AW_KEY` the storage half is skipped and says so.
 
 With `AW_KEY` set it also prints each table's total row count, read with the
 key. That number is **diagnosis only and never part of a verdict** — a key reads
@@ -465,8 +500,12 @@ spike's pre-1.8 stack with `AW_ROWS_API=documents`; the default is TablesDB,
 which is what the app and the Functions use.
 
 ### What it does NOT prove
-- **Storage.** Reported, not compared, for the reason in Phase 3: nothing
-  migrates the buckets, so there is no id mapping to diff.
+- **Storage beyond presence.** The gate checks that every Supabase object is in
+  Appwrite under the id the app will ask for, and nothing else. It does not
+  compare bytes or checksums, and it does not diff per user — both systems serve
+  these buckets to everyone, so that would be the same answer six times. It
+  needs `AW_KEY`, because listing a bucket is an admin read and presence is not
+  a question about ACLs.
 - **That Appwrite evaluates ACLs the way the test harness does.** `npm test` in
   `docs/appwrite-spike/migrate` runs the gate — and `copy-tables.mjs` — against
   a stand-in that implements the documented REST contract and decides visibility

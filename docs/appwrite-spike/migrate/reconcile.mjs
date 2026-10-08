@@ -448,47 +448,115 @@ for (const t of targets) {
 }
 
 /*
- * Storage is reported, not reconciled, and the distinction is deliberate.
+ * Storage, compared by presence rather than by who can see it.
  *
- * Both Supabase buckets are `public: true`, so the RLS on `storage.objects`
- * governs listing and metadata rather than the URLs stored on rows. Comparing
- * that to Appwrite would need the Supabase-object-name -> Appwrite-file-id
- * mapping, and no script in this directory migrates storage, so no such
- * mapping exists to compare against. Inventing one here would produce a
- * checker that agrees with itself.
+ * Both Supabase buckets are `public: true` and both Appwrite buckets grant
+ * `read("any")`, so every file is readable by everyone in both systems and a
+ * per-user diff of the bytes would be six identical answers. What can actually
+ * go wrong is a file that did not arrive, or arrived under an id the app will
+ * never ask for — `storage-ids.mjs` has why that id is not ours to choose.
+ *
+ * One widening, recorded rather than failed: Supabase's RLS on
+ * `storage.objects` let a user list only their own folder, while an Appwrite
+ * bucket readable by `any` can be listed by anyone. The bytes were already
+ * public in both, so this exposes which files exist, not their contents.
+ *
+ * Needs AW_KEY: listing a bucket is an admin read here, and presence is not a
+ * question about ACLs.
  */
-let buckets = null;
+const storage = { buckets: {}, missing: [], extra: 0 };
+let storageChecked = false;
 try {
-  buckets = (
+  const objects = (
     await client.query(
-      `select bucket_id, count(*) as objects
-         from storage.objects group by bucket_id order by bucket_id`,
+      `select bucket_id, name from storage.objects
+        where name is not null and name <> '' order by bucket_id, name`,
     )
   ).rows;
+
+  if (!KEY) {
+    console.log('\nstorage: not compared (needs AW_KEY to list a bucket).');
+  } else {
+    storageChecked = true;
+    const { fileIdFor } = await import('./storage-ids.mjs');
+    const byBucket = new Map();
+    for (const o of objects) {
+      if (!byBucket.has(o.bucket_id)) byBucket.set(o.bucket_id, []);
+      byBucket.get(o.bucket_id).push(o.name);
+    }
+    for (const [bucket, names] of byBucket) {
+      const present = new Set();
+      let cursor = null;
+      for (;;) {
+        const queries = [JSON.stringify({ method: 'limit', values: [100] })];
+        if (cursor) queries.push(JSON.stringify({ method: 'cursorAfter', values: [cursor] }));
+        const qs = queries.map((q) => `queries[]=${encodeURIComponent(q)}`).join('&');
+        const r = await fetch(`${EP}/storage/buckets/${bucket}/files?${qs}`, {
+          headers: { 'x-appwrite-project': project, 'x-appwrite-key': KEY },
+        });
+        const b = await r.json().catch(() => null);
+        if (!r.ok) throw new Error(`list ${bucket}: ${r.status} ${String(b?.message ?? '').slice(0, 120)}`);
+        const page = b?.files ?? [];
+        for (const f of page) present.add(f.$id);
+        if (page.length < 100) break;
+        cursor = page[page.length - 1].$id;
+      }
+      const missing = names.filter((n) => !present.has(fileIdFor(n)));
+      storage.buckets[bucket] = {
+        supabase: names.length,
+        appwrite: present.size,
+        missing: missing.length,
+      };
+      // A thumbnail is derived, so an Appwrite-only file is expected, not a
+      // finding. Counted so a wildly wrong number is still visible.
+      storage.extra += Math.max(0, present.size - (names.length - missing.length));
+      for (const n of missing.slice(0, 20)) {
+        storage.missing.push({ bucket, name: n, expectedId: fileIdFor(n) });
+      }
+    }
+  }
 } catch (e) {
-  // A stubbed or restricted storage schema is not a reconciliation failure.
-  console.log(`\nstorage inventory unavailable: ${String(e.message).slice(0, 90)}`);
+  // A stubbed or restricted storage schema is not a reconciliation failure, but
+  // it is not a pass either: say which.
+  console.log(`\nstorage: not compared (${String(e.message).slice(0, 100)})`);
 }
 
 await client.end();
 
-if (buckets?.length) {
-  console.log('\nstorage (NOT reconciled):');
-  for (const b of buckets) {
-    console.log(`  ${b.bucket_id}: ${b.objects} object(s) in Supabase`);
+if (storageChecked) {
+  console.log(`\n${'bucket'.padEnd(18)}  supabase  appwrite  missing`);
+  for (const [b, s] of Object.entries(storage.buckets)) {
+    console.log(
+      `${b.padEnd(18)} ${String(s.supabase).padStart(9)} ${String(s.appwrite).padStart(9)} ` +
+        `${String(s.missing).padStart(8)}`,
+    );
+  }
+  if (storage.extra) {
+    console.log(
+      `\n${storage.extra} Appwrite file(s) have no Supabase object — expected for` +
+        ' derived thumbnails.',
+    );
+  }
+  if (storage.missing.length) {
+    console.log(
+      `\n${storage.missing.length} object(s) are not in Appwrite under the id the` +
+        ' app will ask for:',
+    );
+    console.log(JSON.stringify(storage.missing, null, 2));
   }
 }
-console.log(
-  '\nstorage is not compared: no script here migrates it, so there is no' +
-    '\nSupabase-object-name -> Appwrite-file-id mapping to diff. Phase 3 of' +
-    '\ndocs/CUTOVER-RUNBOOK.md has to cover it before this gate can.',
-);
 
-if (!failures.length && !unmigrated.length) {
-  console.log('\nevery user sees exactly what they saw before, in every table');
+if (!failures.length && !unmigrated.length && !storage.missing.length) {
+  console.log(
+    `\nevery user sees exactly what they saw before, in every table` +
+      `${storageChecked ? ', and every stored file arrived' : ''}`,
+  );
   process.exit(0);
 }
 
-console.log(`\n${failures.length} finding(s), ${unmigrated.length} unmigrated table(s):`);
-console.log(JSON.stringify({ failures, unmigrated }, null, 2));
+console.log(
+  `\n${failures.length} finding(s), ${unmigrated.length} unmigrated table(s),` +
+    ` ${storage.missing.length} missing file(s):`,
+);
+console.log(JSON.stringify({ failures, unmigrated, storage }, null, 2));
 process.exit(1);
