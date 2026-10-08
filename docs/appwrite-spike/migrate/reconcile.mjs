@@ -58,6 +58,28 @@ const rowsKey = API === 'documents' ? 'documents' : 'rows';
  * verifications on any report they can see — a transitive rule, and the kind
  * that is easiest to get wrong when it has to be written down as an ACL.
  */
+/**
+ * A table whose Appwrite access is deliberately NARROWER than the RLS was.
+ *
+ * Postgres granted reads that nothing actually used, and `plan.mjs` provisions
+ * the narrower set on purpose. Without somewhere to say so, the gate fails
+ * forever on two tables and an operator learns to ignore it, which is worse
+ * than not checking.
+ *
+ * This only ever forgives a **loss**. A leak — a user seeing a row Postgres
+ * would not have shown them — still fails, for every table, always. Narrower is
+ * safe; wider is the thing this gate exists to prevent.
+ */
+const NARROWER_ON_PURPOSE = {
+  authorities:
+    'plan.mjs grants read("label:admin"); Postgres granted all staff. The only' +
+    ' consumer is the admin panel, which lib/appwrite-server.ts gates to an' +
+    ' approved, non-disabled admin, so no staff role ever read this.',
+  scheduled_escalations:
+    'plan.mjs grants nobody; Postgres granted ldp_coordinator, project_staff and' +
+    ' admin. Written and read by the worker cron only — no client queries it.',
+};
+
 const TARGETS = [
   { table: 'profiles', pgId: 'id' },
   { table: 'reports', pgId: 'id' },
@@ -286,7 +308,9 @@ if (!people.length) {
 console.log(`reconciling ${targets.length} table(s) for ${people.length} user(s) via ${API}\n`);
 
 const failures = [];
-const perTable = new Map(targets.map((t) => [t.table, { pg: 0, aw: 0, users: 0, clean: 0 }]));
+const perTable = new Map(
+  targets.map((t) => [t.table, { pg: 0, aw: 0, users: 0, clean: 0, narrowed: 0 }]),
+);
 
 for (const p of people) {
   const { cookie, error, transport } = await signIn(p.email);
@@ -340,6 +364,13 @@ for (const p of people) {
       cells.push(`${t.table}=${before.length}`);
       continue;
     }
+    // A declared narrowing forgives rows the user can no longer see, and
+    // nothing else. Anything they can newly see is still a finding.
+    if (!leaked.length && t.table in NARROWER_ON_PURPOSE) {
+      stat.narrowed += 1;
+      cells.push(`${t.table}=${before.length}/${after.length}~`);
+      continue;
+    }
     cells.push(`${t.table}=${before.length}/${after.length}!`);
     failures.push({
       user: p.id,
@@ -361,7 +392,7 @@ for (const p of people) {
 
 const NAMEW = Math.max(14, ...targets.map((t) => t.table.length));
 console.log(
-  `\n${'table'.padEnd(NAMEW)}  users  clean  pg seen  aw seen  total in appwrite`,
+  `\n${'table'.padEnd(NAMEW)}  users  clean  narrowed  pg seen  aw seen  total in appwrite`,
 );
 const unmigrated = [];
 for (const t of targets) {
@@ -370,22 +401,51 @@ for (const t of targets) {
   const totalCell = total === null ? '      (no AW_KEY)' : String(total).padStart(17);
   console.log(
     `${t.table.padEnd(NAMEW)} ${String(s.users).padStart(6)} ${String(s.clean).padStart(6)} ` +
-      `${String(s.pg).padStart(8)} ${String(s.aw).padStart(8)} ${totalCell}`,
+      `${String(s.narrowed).padStart(9)} ${String(s.pg).padStart(8)} ${String(s.aw).padStart(8)} ` +
+      `${totalCell}`,
   );
-  if (s.pg > 0 && s.aw === 0) {
+
+  // An empty table is the alarm, and a declared narrowing must never hide it:
+  // "nobody may read this" and "there is nothing to read" look identical from a
+  // session, and only one of them is acceptable.
+  if (total === 0 && s.pg > 0) {
+    unmigrated.push({
+      table: t.table,
+      diagnosis: 'the table is EMPTY in Appwrite — nothing migrated it',
+    });
+    continue;
+  }
+  if (s.pg > 0 && s.aw === 0 && total === null) {
     unmigrated.push({
       table: t.table,
       diagnosis:
-        total === 0
-          ? 'the table is EMPTY in Appwrite — nothing migrated it'
-          : total === null
-            ? 'no user can see a row; set AW_KEY to tell "not migrated" from "ACLs grant nobody"'
-            : `${total} row(s) exist but NO user can read one — every ACL grants nobody`,
+        t.table in NARROWER_ON_PURPOSE
+          ? 'no user can read a row, which is expected here — but without AW_KEY' +
+            ' there is no way to confirm the rows were migrated at all'
+          : 'no user can see a row; set AW_KEY to tell "not migrated" from' +
+            ' "ACLs grant nobody"',
+    });
+    continue;
+  }
+  if (s.pg > 0 && s.aw === 0 && total > 0 && !(t.table in NARROWER_ON_PURPOSE)) {
+    unmigrated.push({
+      table: t.table,
+      diagnosis: `${total} row(s) exist but NO user can read one — every ACL grants nobody`,
     });
   }
 }
 
 for (const u of unmigrated) console.log(`\n${u.table}: ${u.diagnosis}`);
+
+for (const t of targets) {
+  const s = perTable.get(t.table);
+  if (s.narrowed > 0) {
+    console.log(
+      `\n${t.table}: ${s.narrowed} user(s) see fewer rows than Postgres showed` +
+        ` them, ACCEPTED as a deliberate narrowing.\n  ${NARROWER_ON_PURPOSE[t.table]}`,
+    );
+  }
+}
 
 /*
  * Storage is reported, not reconciled, and the distinction is deliberate.

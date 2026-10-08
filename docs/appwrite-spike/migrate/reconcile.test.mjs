@@ -26,7 +26,7 @@
  *
  *   PG_URL=postgres://… node --test reconcile.test.mjs
  */
-import { test, before, after, describe } from 'node:test';
+import { test, before, after, beforeEach, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { spawn } from 'node:child_process';
@@ -50,23 +50,52 @@ let fixtures;
  * teams for `ewm` only, so that finding was the fixture's, not the
  * migration's.
  */
-function grantsFor(p, { wardTeam, roleLabel, effectiveRole }, { byColumn = false } = {}) {
+function grantsFor(p, { wardTeam, roleLabel, accountLabels }, { byColumn = false } = {}) {
   const g = [`user:${p.id}`];
-  // `byColumn` reproduces the bug the seeder shipped with: a label straight
-  // from `profiles.role`, with no approval condition. The fixed seeder goes
-  // through `effectiveRole`, which is what every RLS policy branches on.
-  const role = byColumn ? String(p.role ?? 'user') : effectiveRole(p);
-  if (role !== 'user') g.push(`label:${roleLabel(role)}`);
-  if (role === 'ewm' && p.ward) g.push(`team:${wardTeam(p.state, p.lga, p.ward)}`);
+  // `byColumn` reproduces what both the seeder and `write.js` used to do: the
+  // role label from `profiles.role` alone, with no approval condition. The
+  // fixed path asks `accountLabels`, which is `app_role()`'s rule and the one
+  // the running system uses.
+  const labels = byColumn
+    ? [String(p.role ?? 'user')].filter((r) => r !== 'user').map(roleLabel)
+    : accountLabels({ role: p.role, isApproved: p.is_approved, isDisabled: p.is_disabled });
+  for (const l of labels) g.push(`label:${l}`);
+  if (labels.includes('ewm') && p.ward) g.push(`team:${wardTeam(p.state, p.lga, p.ward)}`);
   return new Set(g);
 }
 
-/** Appwrite reads a row when any read() principal on it is one of your grants. */
-const canRead = (permissions, grants) =>
-  permissions.some((perm) => {
+/** Whether any `read("…")` in [permissions] names a principal the user holds. */
+const matches = (permissions, grants) =>
+  (permissions ?? []).some((perm) => {
     const m = /^read\("([^"]+)"\)$/.exec(perm);
     return m && grants.has(m[1]);
   });
+
+/**
+ * Appwrite's actual rule, which is the whole reason this is modelled rather
+ * than assumed: **row permissions are consulted only when the table has row
+ * security switched on.** With it off, the table's own permissions decide, and
+ * a per-row ACL is stored but inert.
+ *
+ * `plan.mjs` sets `documentSecurity: true` on `profiles`, `reports` and
+ * `verifications` and leaves it off for the six this suite also migrates. A
+ * stand-in that consulted row ACLs everywhere would have reported those six as
+ * perfectly migrated while the real project served them from a table rule
+ * nobody had checked.
+ */
+function canRead(table, row, grants, plan) {
+  const t = plan.get(table);
+  if (!t) return false;
+  const rowSecurity = t.rowSecurity ?? t.documentSecurity ?? false;
+  if (matches(t.permissions, grants)) return true;
+  return rowSecurity ? matches(row.permissions, grants) : false;
+}
+
+/** Every principal a signed-in user holds, for matching against ACL strings. */
+function principals(p, grants) {
+  // `any` and `users` are roles Appwrite gives every request and every session.
+  return new Set([...grants, 'any', 'users']);
+}
 
 before(async () => {
   client = new pg.Client({ connectionString: PG });
@@ -77,6 +106,9 @@ before(async () => {
     return;
   }
 
+  const plan = new Map(
+    (await import('../../../infra/appwrite/plan.mjs')).COLLECTIONS.map((c) => [c.id, c]),
+  );
   const migrate = await import('./migrate.mjs');
   const { wardTeam, roleLabel, reportPermissions, verificationPermissions, profilePermissions } =
     migrate;
@@ -112,12 +144,18 @@ before(async () => {
     rows[t] = [];
   }
 
-  const helpers = { wardTeam, roleLabel, effectiveRole: migrate.effectiveRole };
+  const { accountLabels } = await import('../../../functions/cradi/src/lib/policy.js');
+  const helpers = { wardTeam, roleLabel, accountLabels };
   // Two grant maps: what the seeder used to hand out, and what it hands out now.
   const grantSets = {
-    fixed: new Map(profiles.map((p) => [p.email, grantsFor(p, helpers)])),
+    fixed: new Map(
+      profiles.map((p) => [p.email, principals(p, grantsFor(p, helpers))]),
+    ),
     byColumn: new Map(
-      profiles.map((p) => [p.email, grantsFor(p, helpers, { byColumn: true })]),
+      profiles.map((p) => [
+        p.email,
+        principals(p, grantsFor(p, helpers, { byColumn: true })),
+      ]),
     ),
   };
   let grants = grantSets.fixed;
@@ -125,7 +163,17 @@ before(async () => {
     grants = grantSets[mode];
   };
   const sessions = new Map();
-  fixtures = { rows, profiles, useGrants };
+  // The six tables copy-tables.mjs writes. Emptied before every test, because
+  // the stand-in's rows are shared mutable state and a test that runs the copier
+  // would otherwise decide what the next test sees.
+  const COPIED = [
+    'alerts', 'authorities', 'app_settings', 'scheduled_escalations',
+    'knowledge_base', 'news_links',
+  ];
+  const clearCopied = () => {
+    for (const t of COPIED) rows[t] = [];
+  };
+  fixtures = { rows, profiles, useGrants, clearCopied, COPIED };
 
   server = createServer(async (req, res) => {
     const url = new URL(req.url, 'http://x');
@@ -151,6 +199,30 @@ before(async () => {
     }
 
     const m = /^\/v1\/tablesdb\/cradi\/tables\/([a-z_]+)\/rows$/.exec(url.pathname);
+
+    if (req.method === 'POST' && m) {
+      // What `copy-tables.mjs` writes. Keyed by rowId so a re-run answers 409,
+      // which is the idempotency the runbook leans on.
+      const table = m[1];
+      if (!(table in rows)) return send(404, { message: `Table not found: ${table}` });
+      let raw = '';
+      for await (const c of req) raw += c;
+      const { rowId, data, permissions } = JSON.parse(raw || '{}');
+      if (!rowId) return send(400, { message: 'Missing required parameter: rowId' });
+      if (rows[table].some((r) => r.$id === rowId)) {
+        return send(409, { message: `Row with the requested ID already exists` });
+      }
+      // Reject a column the plan does not have, exactly as the server would —
+      // this is what catches a snake_case write against a camelCase table.
+      const planned = new Set((plan.get(table)?.columns ?? []).map((c) => c.key));
+      const unknown = Object.keys(data ?? {}).filter((k) => !planned.has(k));
+      if (unknown.length) {
+        return send(400, { message: `Unknown attribute: "${unknown[0]}"` });
+      }
+      rows[table].push({ $id: rowId, permissions: permissions ?? [], data });
+      return send(201, { $id: rowId, ...data });
+    }
+
     if (req.method === 'GET' && m) {
       const table = m[1];
       if (!(table in rows)) return send(404, { message: `Table not found: ${table}` });
@@ -163,7 +235,8 @@ before(async () => {
         const sid = String(req.headers.cookie ?? '').split('=')[0];
         const email = sessions.get(sid);
         if (!email) return send(401, { message: 'User (role: guests) missing scope' });
-        visible = rows[table].filter((r) => canRead(r.permissions, grants.get(email)));
+        const held = grants.get(email);
+        visible = rows[table].filter((r) => canRead(table, r, held, plan));
       }
 
       // Cursor paging, as documented: limit + cursorAfter on $id.
@@ -192,6 +265,13 @@ after(async () => {
   if (client && reachable) await client.end();
 });
 
+/** The gate's findings, or an empty report when it exited clean. */
+function findings(out) {
+  const at = out.indexOf('finding(s)');
+  if (at === -1) return { failures: [], unmigrated: [] };
+  return JSON.parse(out.slice(out.indexOf('{', at)));
+}
+
 /** Runs the real reconcile.mjs against the stand-in and the live Postgres. */
 function runGate(env = {}) {
   return new Promise((resolve) => {
@@ -214,7 +294,112 @@ function runGate(env = {}) {
   });
 }
 
+/** Runs copy-tables.mjs against the stand-in and the live Postgres. */
+function runCopy() {
+  return new Promise((resolve) => {
+    const child = spawn(process.execPath, ['copy-tables.mjs'], {
+      cwd: import.meta.dirname,
+      env: {
+        ...process.env,
+        PG_URL: PG,
+        AW_ENDPOINT: base,
+        AW_PROJECT: 'test',
+        AW_KEY: 'test',
+      },
+    });
+    let out = '';
+    child.stdout.on('data', (d) => (out += d));
+    child.stderr.on('data', (d) => (out += d));
+    child.on('close', (code) => resolve({ code, out }));
+  });
+}
+
+describe('copying the six collections nothing migrated', () => {
+  beforeEach(() => fixtures?.clearCopied());
+
+  test('writes every row, and the second run is a no-op', async (t) => {
+    if (!reachable) return t.skip('no Postgres');
+
+    const first = await runCopy();
+    assert.equal(first.code, 0, first.out);
+    const counts = JSON.parse(first.out.slice(first.out.indexOf('{'))).counts;
+    for (const table of [
+      'alerts', 'authorities', 'app_settings', 'scheduled_escalations',
+      'knowledge_base', 'news_links',
+    ]) {
+      const c = counts[table];
+      assert.ok(c, `${table} missing from the summary`);
+      assert.ok(c.source > 0, `${table}: fixture has no rows to copy`);
+      assert.equal(c.failed, 0, `${table}: ${first.out}`);
+      assert.equal(c.created, c.source, `${table}: not every row was written`);
+    }
+
+    // Idempotent: the Postgres key is the Appwrite id, so a re-run collides.
+    const second = await runCopy();
+    assert.equal(second.code, 0, second.out);
+    const again = JSON.parse(second.out.slice(second.out.indexOf('{'))).counts;
+    for (const table of Object.keys(counts)) {
+      assert.equal(again[table].created, 0, `${table}: re-run created rows`);
+      assert.equal(again[table].exists, counts[table].source, `${table}: not 409`);
+    }
+  });
+
+  test('no Postgres column is silently dropped', async (t) => {
+    if (!reachable) return t.skip('no Postgres');
+    const { out } = await runCopy();
+    const report = JSON.parse(out.slice(out.indexOf('{')));
+    assert.deepEqual(
+      report.unplannedColumns,
+      {},
+      'a column with no home in columns.json loses data; add it to the plan',
+    );
+  });
+
+  test('the gate stops calling them unmigrated', async (t) => {
+    if (!reachable) return t.skip('no Postgres');
+    await runCopy();
+    const { out } = await runGate();
+    for (const table of [
+      'alerts', 'authorities', 'app_settings', 'scheduled_escalations',
+      'knowledge_base', 'news_links',
+    ]) {
+      assert.doesNotMatch(
+        out,
+        new RegExp(`${table}: the table is EMPTY in Appwrite`),
+        `${table} should be migrated now`,
+      );
+    }
+  });
+
+  test('the gate passes once they are copied', async (t) => {
+    if (!reachable) return t.skip('no Postgres');
+    await runCopy();
+    const { code, out } = await runGate();
+
+    const report = findings(out);
+    // Never a leak, here or anywhere: that is the one thing no declaration
+    // forgives.
+    assert.deepEqual(
+      report.failures.filter((f) => f.leaked?.length),
+      [],
+      'no user may see a row Postgres would not have shown them',
+    );
+    assert.deepEqual(report.failures, [], out);
+    assert.deepEqual(report.unmigrated, [], out);
+
+    // `authorities` and `scheduled_escalations` are narrower on purpose, and
+    // the run says so out loud rather than passing in silence.
+    assert.match(out, /authorities: \d+ user\(s\) see fewer rows/);
+    assert.match(out, /ACCEPTED as a deliberate narrowing/);
+    assert.match(out, /every user sees exactly what they saw before/);
+    assert.equal(code, 0, out);
+  });
+});
+
 describe('the reconciliation gate', () => {
+  // Every test here describes the state BEFORE the six are copied.
+  beforeEach(() => fixtures?.clearCopied());
+
   test('covers every table, not just reports', async (t) => {
     if (!reachable) return t.skip(`no Postgres at ${PG}`);
     const { out } = await runGate();
@@ -249,7 +434,7 @@ describe('the reconciliation gate', () => {
       const pending = fixtures.profiles.find((p) => !p.is_approved && p.role !== 'user');
       assert.ok(pending, 'fixture needs an unapproved staff account');
 
-      const report = JSON.parse(out.slice(out.indexOf('{', out.indexOf('finding(s)'))));
+      const report = findings(out);
       const leaks = report.failures.filter(
         (f) => f.user === pending.id && f.leaked?.length,
       );
@@ -272,7 +457,7 @@ describe('the reconciliation gate', () => {
     const pending = fixtures.profiles.find((p) => !p.is_approved && p.role !== 'user');
     assert.ok(pending);
     const { out } = await runGate();
-    const report = JSON.parse(out.slice(out.indexOf('{', out.indexOf('finding(s)'))));
+    const report = findings(out);
     const migrated = new Set(['profiles', 'reports', 'verifications']);
     const leaks = report.failures.filter(
       (f) => f.user === pending.id && migrated.has(f.table) && f.leaked?.length,
@@ -283,7 +468,7 @@ describe('the reconciliation gate', () => {
   test('the users the migration gets right come back clean', async (t) => {
     if (!reachable) return t.skip('no Postgres');
     const { out } = await runGate();
-    const report = JSON.parse(out.slice(out.indexOf('{', out.indexOf('finding(s)'))));
+    const report = findings(out);
     const approved = fixtures.profiles.filter((p) => p.is_approved && !p.is_disabled);
     assert.ok(approved.length >= 4, 'fixture needs several correct users');
     // Only the three tables migrate.mjs writes. The other three are empty, so

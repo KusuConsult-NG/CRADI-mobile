@@ -72,29 +72,6 @@ export { wardTeam };
  */
 export const roleLabel = (role) => String(role ?? '').replace(/_(.)/g, (_, c) => c.toUpperCase());
 
-/**
- * The role Postgres would actually act on, which is not always `profiles.role`.
- *
- * `app_role()`:
- *
- *     case when p.is_approved and not p.is_disabled then p.role else 'user' end
- *
- * Every RLS policy branches on `app_role()`, never on the column. An Appwrite
- * label carries no such condition, so assigning one straight from the column
- * hands an unapproved or disabled staff account the reach its role implies —
- * every profile, every report, every verification. Postgres showed them their
- * own row and nothing else.
- *
- * This is the only place that rule is written down for the migration. The
- * seeder assigns labels through it; `reconcile.test.mjs` asserts that an
- * unapproved account gains nothing by it.
- */
-export function effectiveRole(profile) {
-  const approved = profile?.is_approved === true || profile?.isApproved === true;
-  const disabled = profile?.is_disabled === true || profile?.isDisabled === true;
-  return approved && !disabled ? String(profile?.role ?? 'user') : 'user';
-}
-
 /** Roles that `reports_select` lets see everything. */
 const STAFF_ROLES = ['ewv', 'ewr', 'ldp_coordinator', 'project_staff', 'admin', 'techSupport'];
 const STAFF_LABELS = STAFF_ROLES.map(roleLabel);

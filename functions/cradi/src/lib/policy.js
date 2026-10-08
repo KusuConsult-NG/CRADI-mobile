@@ -377,13 +377,26 @@ export function assertCoverage({ coverageState, coverageLga }) {
  * alphanumeric. A disabled profile gets none: the account is blocked
  * anyway, and leaving a label on it would outlive the block if it were
  * ever lifted by hand.
+ *
+ * **The role label requires approval**, which is what `app_role()` does:
+ *
+ *     case when p.is_approved and not p.is_disabled then p.role else 'user' end
+ *
+ * Every RLS policy branched on that, never on the column, so an unapproved
+ * staff account was a plain user to Postgres. This used to hand out the label
+ * from `role` alone, and since no ACL anywhere names `label:approved` as well
+ * as the role, such an account arrived holding the full reach of its role —
+ * every profile, every report, every verification — the moment any profile
+ * field was touched. `syncLabels` re-runs this whenever `role`, `isApproved`
+ * or `isDisabled` changes, so approving an account grants the label then.
  */
 export function accountLabels({ role, isApproved, isDisabled }) {
   if (isDisabled === true) return [];
   const labels = [];
+  const approved = isApproved === true;
   const name = String(role ?? '').replace(/_(.)/g, (_, c) => c.toUpperCase());
-  if (name && name !== 'user' && LABELS.includes(name)) labels.push(name);
-  if (isApproved === true) labels.push('approved');
+  if (approved && name && name !== 'user' && LABELS.includes(name)) labels.push(name);
+  if (approved) labels.push('approved');
   return labels;
 }
 

@@ -352,11 +352,34 @@ plus storage, in order, with ACL designs for each. `migrate.mjs` handles:
 There is no `label:fieldAgent` anywhere in this system; that name appeared only
 in the old version of this list.
 
-**Not migrated by any script here**, and reported as such by Phase 4:
+### The other six: `copy-tables.mjs`
+
+```bash
+node copy-tables.mjs
+```
+
 `alerts`, `authorities`, `app_settings`, `scheduled_escalations`,
-`knowledge_base`, `news_links`. Each has rows a signed-in user can read in
-Postgres and nothing in Appwrite. Writing them is work this runbook does not
-yet cover; until it is done, Phase 4 cannot pass.
+`knowledge_base` and `news_links` — the six Phase 4 used to report as holding
+rows in Postgres and nothing at all in Appwrite.
+
+Unlike `migrate.mjs`, this writes into **the schema the project actually has**:
+columns from `infra/appwrite/columns.json`, the camelCase rule from
+`extract-schema.mjs`'s own `toField`, the per-row ACL from `policy.js`'s
+`RULES`, and the `/tablesdb/…/tables/…/rows` endpoint the app and the Functions
+use. Nothing is restated — each of those is imported, so none of them can drift
+from what `verify.mjs` holds the project to.
+
+*Criteria:* every table reports `failed: 0`, and `unplannedColumns` is empty. A
+Postgres column with no column in the plan has nowhere to go, so it is reported
+rather than dropped in silence — add it to the migrations and re-run
+`extract-schema.mjs`, or accept the loss knowingly. Idempotent: the Postgres key
+becomes the Appwrite `$id`, so a re-run answers 409 and creates nothing.
+
+Note that five of the six are read from **table-level** permissions, not per-row
+ACLs: `plan.mjs` leaves row security off for them, so the ACL each row carries
+is stored and inert. It is written anyway, so that a row created by the migration
+and a row created later by the `client` Function are indistinguishable — and so
+that turning row security on later does not silently empty the table.
 
 ### Storage Asset Migration
 
@@ -444,25 +467,66 @@ which is what the app and the Functions use.
 ### What it does NOT prove
 - **Storage.** Reported, not compared, for the reason in Phase 3: nothing
   migrates the buckets, so there is no id mapping to diff.
-- **That Appwrite evaluates ACLs the way the test harness does.** `npm test`
-  here runs the gate against a stand-in that implements the documented REST
-  contract and decides visibility by evaluating the permission strings
-  `migrate.mjs` actually stamps against the grants `seed-identities.mjs`
-  actually assigns. That pins the gate's own logic and catches ACL *design*
-  errors — it found the label escalation below — but only a run against a real
-  project proves Appwrite agrees. That run is this phase.
+- **That Appwrite evaluates ACLs the way the test harness does.** `npm test` in
+  `docs/appwrite-spike/migrate` runs the gate — and `copy-tables.mjs` — against
+  a stand-in that implements the documented REST contract and decides visibility
+  the way Appwrite does: the table's own permissions, and a row's ACL only where
+  `plan.mjs` switches row security on. It reads that from `plan.mjs` and
+  evaluates the permission strings `migrate.mjs` and `policy.js` actually stamp
+  against the labels `accountLabels` actually assigns — all imported, none
+  restated. That pins the gate's logic and catches ACL *design* errors: it found
+  the label escalation below, and that five of these six tables are served from a
+  table rule rather than the row ACLs. Only a run against a real project proves
+  Appwrite agrees, and that run is this phase.
+
+### Two tables are narrower than the RLS, on purpose
+
+Phase 4 accepts a **loss** on `authorities` and `scheduled_escalations`, says so
+out loud on every run, and still fails on any **leak** anywhere. No declaration
+forgives a user seeing a row Postgres would not have shown them.
+
+- **`authorities`** — `plan.mjs` grants `read("label:admin")`; Postgres granted
+  all of `is_staff()`. The only consumer is the admin panel, and
+  `CRADI-Mobile-Admin/lib/appwrite-server.ts` gates that to an approved,
+  non-disabled **admin**, so no other staff role ever read this table.
+- **`scheduled_escalations`** — `plan.mjs` grants nobody; Postgres granted
+  `ldp_coordinator`, `project_staff` and `admin`. The worker cron writes and
+  reads it with an API key; no client queries it.
+
+A declared narrowing never hides an unmigrated table: with `AW_KEY` set, a table
+holding **zero** rows is reported as empty regardless, because "nobody may read
+this" and "there is nothing to read" are indistinguishable from a session and
+only one of them is acceptable.
+
+Three tables go slightly **wider**: `alerts`, `knowledge_base` and `news_links`
+are `read("any")`, which includes a guest, where Postgres required a session.
+The gate compares signed-in users, so it does not report this. It is public
+reference content, and the decision is recorded here rather than in a diff.
 
 ### The escalation this gate was built to catch
-`seed-identities.mjs` used to assign a role label straight from
-`profiles.role`. Every RLS policy branches on `app_role()`, which returns
-`'user'` unless the account **is_approved and not is_disabled**. A label carries
-no such condition, so an unapproved or disabled staff account arrived in
-Appwrite holding the reach its column claimed — every profile, every report,
-every verification — where Postgres had shown it its own row and nothing else.
+Appwrite labels used to be assigned from `profiles.role` alone. Every RLS policy
+branches on `app_role()`, which returns `'user'` unless the account
+**is_approved and not is_disabled** — so an unapproved or disabled staff account
+arrived holding the reach its column claimed (every profile, every report, every
+verification) where Postgres had shown it its own row and nothing else. No ACL
+anywhere names `label:approved` alongside the role, so the role label alone was
+enough.
 
-The seeder now assigns labels and ward-team membership through
-`effectiveRole()`, exported from `migrate.mjs` so one rule serves the ACLs and
-the labels both. A finding caused by this marks `demotedRole: true`.
+This was **not only in the migration**: `accountLabels()` in
+`functions/cradi/src/lib/policy.js` is what `write.js` calls on every change to
+`role`, `isApproved` or `isDisabled`, and it had the same rule and no tests. It
+now withholds the role label until the account is approved, and
+`seed-identities.mjs` calls it rather than keeping a second copy — so a migrated
+account starts with exactly what a later profile edit would give it, including
+the `approved` label that `plan.mjs` requires for `messages` and that the seeder
+never used to set.
+
+**This changes running behaviour.** An account whose approval is revoked now
+loses its role label as well as `approved`; approving it again restores both,
+since `syncLabels` re-runs on any of those three fields. The test that pinned
+the old behaviour (`drops 'approved' when approval is revoked`, which asserted
+the role label survived) is updated, with the reasoning in place. A gate finding
+caused by this marks `demotedRole: true`.
 
 ---
 

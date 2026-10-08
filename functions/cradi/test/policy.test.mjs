@@ -4,7 +4,9 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 
-import { RULES, WRITABLE, assertCoverage, assertLocation, assertTarget } from '../src/lib/policy.js';
+import { RULES, WRITABLE, assertCoverage, assertLocation, assertTarget,
+  accountLabels,
+} from '../src/lib/policy.js';
 import { wardTeam } from '../src/lib/appwrite.js';
 import { strip } from '../src/write.js';
 
@@ -289,5 +291,65 @@ describe('strip', () => {
       { ward: 'North Bank I' },
     );
     assert.deepEqual(strip({ ward: 'North Bank I' }, rule, { keepImmutable: false }), {});
+  });
+});
+
+describe('accountLabels', () => {
+  /*
+   * A label lives on the account, not the profile row, and every
+   * `read("label:…")` ACL in `plan.mjs` and `RULES` names one. The rule has to
+   * match `app_role()`, which is what the RLS this migration replaces branched
+   * on:
+   *
+   *     case when p.is_approved and not p.is_disabled then p.role else 'user' end
+   *
+   * This had no tests, and shipped giving the role label out on `role` alone.
+   */
+  it('gives an approved staff account its role label', () => {
+    assert.deepEqual(
+      accountLabels({ role: 'admin', isApproved: true, isDisabled: false }),
+      ['admin', 'approved'],
+    );
+    assert.deepEqual(
+      accountLabels({ role: 'ldp_coordinator', isApproved: true, isDisabled: false }),
+      ['ldpCoordinator', 'approved'],
+    );
+  });
+
+  it('withholds the role label until the account is approved', () => {
+    // The escalation this closes: with `['admin']` here, an account Postgres
+    // treated as a plain user could read every profile, report and
+    // verification, because no ACL names `label:approved` alongside the role.
+    assert.deepEqual(
+      accountLabels({ role: 'admin', isApproved: false, isDisabled: false }),
+      [],
+    );
+    assert.deepEqual(
+      accountLabels({ role: 'ewm', isApproved: undefined, isDisabled: false }),
+      [],
+    );
+  });
+
+  it('gives a disabled account nothing, approved or not', () => {
+    assert.deepEqual(
+      accountLabels({ role: 'admin', isApproved: true, isDisabled: true }),
+      [],
+    );
+  });
+
+  it('marks an ordinary approved user as approved and nothing more', () => {
+    assert.deepEqual(
+      accountLabels({ role: 'user', isApproved: true, isDisabled: false }),
+      ['approved'],
+    );
+  });
+
+  it('refuses a role that is not a label Appwrite knows', () => {
+    // An ACL naming a label nobody can hold is accepted in silence and grants
+    // nobody anything, so an unknown role must not become one.
+    assert.deepEqual(
+      accountLabels({ role: 'wizard', isApproved: true, isDisabled: false }),
+      ['approved'],
+    );
   });
 });

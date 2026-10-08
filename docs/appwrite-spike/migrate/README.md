@@ -1,10 +1,10 @@
 # The migration pipeline
 
 Run against the local stack and a Postgres carrying every migration. The
-endpoint, project and key come from the environment for all four scripts; the
+endpoint, project and key come from the environment for all five scripts; the
 spike's `../env.json` is the fallback when they are unset.
 
-    npm install                # pg — three of these scripts need it
+    npm install                # pg — four of these scripts need it
 
     createdb cradi_mig
     psql -d cradi_mig -f supabase/tests/local_stubs.sql
@@ -15,11 +15,26 @@ spike's `../env.json` is the fallback when they are unset.
 
     node prep.mjs              # collections and attributes
     node seed-identities.mjs   # users, ward teams, role labels — ALWAYS FIRST
-    node migrate.mjs           # the three collections that carry the hard parts
+    node migrate.mjs           # profiles, reports, verifications
+    node copy-tables.mjs       # the other six, into the schema the project has
     node reconcile.mjs         # exits non-zero if any user's visibility changed
 
 `seed-identities.mjs` runs first because an ACL naming a team, label or user
-that does not exist is accepted silently and grants nobody anything.
+that does not exist is accepted silently and grants nobody anything. It assigns
+labels through `accountLabels` from `functions/cradi/src/lib/policy.js` — the
+same rule `write.js` applies at runtime, so a migrated account starts with
+exactly what a later profile edit would give it.
+
+`copy-tables.mjs` handles `alerts`, `authorities`, `app_settings`,
+`scheduled_escalations`, `knowledge_base` and `news_links`, which nothing used
+to migrate. It is schema-driven: columns come from `infra/appwrite/columns.json`,
+the camelCase rule from `extract-schema.mjs`'s own `toField`, and each row's ACL
+from `policy.js`'s `RULES`, so a migrated row carries what the `client` Function
+stamps on one created afterwards. A Postgres column with no column in the plan
+is reported rather than dropped in silence. It writes through
+`/tablesdb/…/tables/…/rows`, which is what the app and the Functions use —
+unlike `migrate.mjs`, whose three collections still target the spike's own
+snake_case schema through the deprecated documents API.
 
 `reconcile.mjs` compares per-user visibility, not row counts: it queries the
 live RLS policy as each user and that user's Appwrite session, and diffs the

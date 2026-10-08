@@ -519,7 +519,22 @@ describe('account labels', () => {
     assert.deepEqual(labelsOf(fake, 'u2'), []);
   });
 
-  it('drops `approved` when approval is revoked', async () => {
+  it('takes the role label too when approval is revoked', async () => {
+    /*
+     * This asserted `['ewm']` — approval revoked, role label kept.
+     *
+     * That holds only if an ACL names `label:approved` as well as the role, and
+     * none does: `plan.mjs` uses it on `messages` alone, and every `RULES` ACL
+     * names a bare role label. So an account whose approval was revoked went on
+     * reading everything an `ewm` reads, while `app_role()` — which every RLS
+     * policy branched on — had been returning 'user' for it all along:
+     *
+     *     case when p.is_approved and not p.is_disabled then p.role else 'user' end
+     *
+     * Phase 4's reconciler reports it as a permission leak for exactly those
+     * accounts. Approving the account again restores both labels, because
+     * `syncLabels` re-runs on any change to role, isApproved or isDisabled.
+     */
     const fake = fakeAppwrite({
       rows: {
         profiles: {
@@ -532,7 +547,23 @@ describe('account labels', () => {
       op: 'update', collection: 'profiles', documentId: 'u2', data: { isApproved: false },
     }));
 
-    assert.deepEqual(labelsOf(fake, 'u2'), ['ewm']);
+    assert.deepEqual(labelsOf(fake, 'u2'), []);
+  });
+
+  it('restores both labels when the account is approved again', async () => {
+    const fake = fakeAppwrite({
+      rows: {
+        profiles: {
+          u1: profile({ role: 'admin' }),
+          u2: profile({ $id: 'u2', role: 'ewm', isApproved: false }),
+        },
+      },
+    });
+    await write(context({
+      op: 'update', collection: 'profiles', documentId: 'u2', data: { isApproved: true },
+    }));
+
+    assert.deepEqual(labelsOf(fake, 'u2'), ['ewm', 'approved']);
   });
 
   it('leaves the account alone when the edit touches nothing labels depend on', async () => {
