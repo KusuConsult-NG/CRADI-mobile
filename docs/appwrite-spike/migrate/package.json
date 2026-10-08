@@ -2,6 +2,7 @@
   "name": "cradi-migrate",
   "private": true,
   "description": "Supabase -> Appwrite migration pipeline. See README.md and docs/CUTOVER-RUNBOOK.md.",
+  "comment-concurrency": "--test-concurrency=1 because every suite here shares ONE live Postgres: reseed-passwords.test.mjs nulls auth.users.encrypted_password table-wide to exercise the refusal, and seed-identities.test.mjs asserts bcrypt counts on those same rows. Concurrent files make that a race, and the restore is in a finally — so a crash between them leaves the fixture wrong for whatever runs next. Narrow window, never reproduced, and a few seconds is cheaper than one re-run of a red CI job.",
   "comment": "pg was imported by three of these scripts and declared nowhere, so a clean machine failed at the import with ERR_MODULE_NOT_FOUND and neither README said to install anything. Run `npm install` here first.",
   "engines": {
     "node": ">=22"
@@ -10,6 +11,6 @@
     "pg": "^8.11.0"
   },
   "scripts": {
-    "test": "node --test storage-ids.test.mjs copy-tables.test.mjs reconcile.test.mjs seed-identities.test.mjs reseed-passwords.test.mjs purge-dart-accounts.test.mjs"
+    "test": "node --test --test-concurrency=1 storage-ids.test.mjs copy-tables.test.mjs reconcile.test.mjs seed-identities.test.mjs reseed-passwords.test.mjs purge-dart-accounts.test.mjs"
   }
 }
