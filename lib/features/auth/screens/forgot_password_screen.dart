@@ -12,10 +12,7 @@ import 'package:climate_app/core/utils/screen_security.dart';
 class ForgotPasswordScreen extends StatefulWidget {
   final bool isLegacyExpired;
 
-  const ForgotPasswordScreen({
-    super.key,
-    this.isLegacyExpired = false,
-  });
+  const ForgotPasswordScreen({super.key, this.isLegacyExpired = false});
 
   @override
   State<ForgotPasswordScreen> createState() => _ForgotPasswordScreenState();

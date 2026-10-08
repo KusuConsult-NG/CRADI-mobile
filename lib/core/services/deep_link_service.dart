@@ -83,7 +83,8 @@ class DeepLinkService {
   @visibleForTesting
   static String? locationFor(Uri uri) {
     final isCustomScheme = uri.scheme == kDeepLinkScheme;
-    final isHttpHost = (uri.scheme == 'https' || uri.scheme == 'http') &&
+    final isHttpHost =
+        (uri.scheme == 'https' || uri.scheme == 'http') &&
         kAppLinkHosts.contains(uri.host.toLowerCase());
 
     if (!isCustomScheme && !isHttpHost) return null;
