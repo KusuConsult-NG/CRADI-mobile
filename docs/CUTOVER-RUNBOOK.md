@@ -305,6 +305,29 @@ Save these numbers in your cutover execution log.
 
 ### 5.1 Everyone keeps their own password — and you get exactly one chance
 
+> **Prerequisite, and the one that was missed.** The hashes must actually be in
+> the database `PG_URL` points at. `sync-supabase.mjs` builds its mirror of
+> `auth.users` from `GET /auth/v1/admin/users`, and that API **does not return
+> `encrypted_password`** — so a mirror built without `SUPABASE_DB_URL` has the
+> column and no values, and `seed-identities.mjs` would create every account
+> without a password while reporting success. That is exactly how the live
+> project ended up with accounts nobody had the password to.
+>
+> Either point `PG_URL` at the Supabase Postgres directly (port 5432, or the
+> 6543 pooler — not the project URL, and a service key will not do), or re-run
+> `sync-supabase.mjs` with `SUPABASE_DB_URL` set, which mirrors the hashes and
+> says how many it carried. Confirm before going further:
+>
+> ```bash
+> psql "$PG_URL" -tAc "select count(*) filter (where encrypted_password ~ '^\\\$2[aby]\\\$') as bcrypt,
+>                             count(*) filter (where coalesce(encrypted_password,'') = '') as none
+>                        from auth.users"
+> ```
+>
+> `seed-identities.mjs` now refuses to run when every row is empty, and
+> `reseed-passwords.mjs` refuses a delete that would import fewer passwords than
+> the accounts already hold. Neither refusal is a substitute for checking.
+
 `seed-identities.mjs` imports each account's bcrypt hash from
 `auth.users.encrypted_password`, so every user keeps the password they already
 have and nobody has to be told anything. There is no `MIGRATION_PASSWORD` and no
@@ -343,8 +366,19 @@ node reseed-passwords.mjs          # audit: reads only, changes nothing
 ```
 
 The audit prints how many accounts exist, how many of them the seeder created,
-how many have a live session, and what re-seeding would import. It exits 1 on
-anything you must decide first — read those findings before going on. Then:
+how many have a live session, how many have a password today, and what
+re-seeding would import. It exits 1 on anything you must decide first — read
+those findings before going on.
+
+**The finding that matters most is a `STOP:`.** It means re-seeding would import
+fewer passwords than the accounts hold now, so the delete would leave people
+unable to sign in at all — worse than a shared password, and irreversible, since
+the accounts are the only place that password exists. The cause is almost always
+the mirror above. `--delete` refuses outright in that case, whatever
+`CONFIRM_DELETE_USERS` says; `--accept-password-loss` overrides it only for a
+project whose users genuinely have no password to keep.
+
+Once the audit is clean:
 
 ```bash
 CONFIRM_DELETE_USERS=<the number the audit printed> \

@@ -47,6 +47,35 @@ async function fetchRest(table) {
   return all;
 }
 
+/**
+ * The password hashes, which the Auth REST admin API does not return.
+ *
+ * `GET /auth/v1/admin/users` omits `encrypted_password` on purpose, so a mirror
+ * built from it carries every account with the column NULL. That is invisible
+ * until `seed-identities.mjs` runs against it and creates every account
+ * passwordless while reporting success — which is what happened: the live
+ * project ended up with 170 accounts nobody had the password to, and the
+ * recovery could not fix it because the mirror had no hash to import either.
+ *
+ * So the hashes come straight from Postgres, and only from there.
+ * `SUPABASE_DB_URL` is the direct connection (port 5432, or the 6543 pooler) —
+ * not the project URL, and not reachable with a service key.
+ */
+async function fetchPasswordHashes() {
+  const url = process.env.SUPABASE_DB_URL;
+  if (!url) return null;
+  const src = new pg.Client({ connectionString: url });
+  await src.connect();
+  try {
+    const { rows } = await src.query(
+      `select id, encrypted_password from auth.users where encrypted_password is not null`,
+    );
+    return new Map(rows.map((r) => [r.id, r.encrypted_password]));
+  } finally {
+    await src.end();
+  }
+}
+
 async function fetchAuthUsers() {
   let all = [];
   let page = 1;
@@ -74,12 +103,16 @@ try {
   console.log('Fetching auth.users from Supabase...');
   const users = await fetchAuthUsers();
   console.log(`Fetched ${users.length} auth.users`);
+  const hashes = await fetchPasswordHashes();
   for (const u of users) {
     await client.query(
-      `INSERT INTO auth.users (id, email, phone, raw_user_meta_data, email_confirmed_at, phone_confirmed_at)
-       VALUES ($1, $2, $3, $4, $5, $6)
+      `INSERT INTO auth.users (id, email, phone, encrypted_password, raw_user_meta_data, email_confirmed_at, phone_confirmed_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
        ON CONFLICT (id) DO UPDATE SET
          email = EXCLUDED.email, phone = EXCLUDED.phone,
+         -- Never overwrite a hash we have with a null we do not: a run without
+         -- SUPABASE_DB_URL must not silently empty a mirror that has them.
+         encrypted_password = coalesce(EXCLUDED.encrypted_password, auth.users.encrypted_password),
          raw_user_meta_data = EXCLUDED.raw_user_meta_data,
          email_confirmed_at = EXCLUDED.email_confirmed_at,
          phone_confirmed_at = EXCLUDED.phone_confirmed_at`,
@@ -87,10 +120,25 @@ try {
         u.id,
         u.email ?? null,
         u.phone ?? null,
+        hashes?.get(u.id) ?? null,
         JSON.stringify(u.user_metadata ?? {}),
         u.email_confirmed_at ?? null,
         u.phone_confirmed_at ?? null,
       ],
+    );
+  }
+  // Said out loud either way. A mirror with no hashes is usable for every other
+  // phase and useless for Phase 2, and the only symptom otherwise is a seeder
+  // run that reports success and leaves nobody able to sign in.
+  if (hashes) {
+    console.log(`Mirrored ${hashes.size} password hash(es) from SUPABASE_DB_URL`);
+  } else {
+    console.log(
+      'WARNING: SUPABASE_DB_URL is not set, so NO password hashes were mirrored.\n' +
+        '  /auth/v1/admin/users does not return encrypted_password, so auth.users\n' +
+        '  here will have none. seed-identities.mjs would create every account\n' +
+        '  passwordless. Set SUPABASE_DB_URL to the direct Postgres connection\n' +
+        '  (port 5432, or the 6543 pooler) and re-run before Phase 2.',
     );
   }
 

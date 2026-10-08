@@ -319,6 +319,31 @@ async function signIn(userId) {
   return { cookie: (r.headers.get('set-cookie') ?? '').split(';')[0] };
 }
 
+/**
+ * Ends the session this run minted.
+ *
+ * Without this the gate leaves one live session per user behind, for a year —
+ * Appwrite's default length — on every account it checks. A run against the
+ * real project left 170 of them, and they then read from the outside exactly
+ * like somebody having signed in with a leaked password, which is a signal the
+ * recovery audit depends on being able to trust. Cleaning up is also simply
+ * correct: a read-only check should leave no trace.
+ *
+ * Best-effort: a failure here is reported at the end, never a visibility
+ * finding, because it says nothing about whether the migration was right.
+ */
+async function signOut(cookie) {
+  try {
+    const r = await fetch(`${EP}/account/sessions/current`, {
+      method: 'DELETE',
+      headers: { 'x-appwrite-project': project, cookie },
+    });
+    return r.ok || r.status === 204 || r.status === 401;
+  } catch {
+    return false;
+  }
+}
+
 /*
  * Paginated, and loud on failure.
  *
@@ -448,6 +473,8 @@ if (!people.length) {
 console.log(`reconciling ${targets.length} table(s) for ${people.length} user(s) via ${API}\n`);
 
 const failures = [];
+/** Sessions this run minted and then failed to end — see `signOut`. */
+let staleSessions = 0;
 const perTable = new Map(
   targets.map((t) => [
     t.table,
@@ -564,6 +591,15 @@ for (const p of people) {
     });
   }
   console.log(`${who} ${cells.join('  ')}`);
+  if (!(await signOut(cookie))) staleSessions += 1;
+}
+
+if (staleSessions) {
+  console.log(
+    `\n${staleSessions} session(s) this run minted could not be ended, and are` +
+      ' still live on those accounts. Clear them before anybody reads a live' +
+      ' session as a sign-in.',
+  );
 }
 
 // ── summary ─────────────────────────────────────────────────────────────────
