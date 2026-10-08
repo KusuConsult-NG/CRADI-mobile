@@ -24,6 +24,8 @@
  * matches the Supabase pattern it looks for.
  */
 import { writeFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { resolve } from 'node:path';
 import pg from 'pg';
 import { appwriteTarget } from './target.mjs';
 import { fileIdFor, fileViewUrl, idsFor } from './storage-ids.mjs';
@@ -219,7 +221,7 @@ export async function run({ log = console.log } = {}) {
   return { buckets, rewrites, failures, mapping };
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {
   const { buckets, rewrites, failures } = await run();
   console.log(JSON.stringify({ buckets, rewrites }, null, 2));
   if (failures.length) {

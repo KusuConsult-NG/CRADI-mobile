@@ -30,6 +30,8 @@
  * answers 409 rather than duplicating.
  */
 import pg from 'pg';
+import { fileURLToPath } from 'node:url';
+import { resolve } from 'node:path';
 import { appwriteTarget } from './target.mjs';
 import { toField } from '../../../infra/appwrite/extract-schema.mjs';
 import { RULES } from '../../../functions/cradi/src/lib/policy.js';
@@ -111,6 +113,8 @@ export const TABLES = [
       const author = profiles.get(row.user_id);
       return { userName: author?.name ?? '', userRole: author?.role ?? 'user' };
     },
+    // A legacy report with no LGA cannot be addressed to a ward team or validated.
+    skip: (row) => (!row.lga ? `report ${row.id} has no LGA` : null),
     // `previousStatus` is deliberately unset: it exists so an event Function
     // can tell a status change from any other edit, and a migrated row has no
     // previous status. Stamping the current one would announce a change that
@@ -143,6 +147,31 @@ export const TABLES = [
   { table: 'scheduled_escalations', pgId: 'id' },
   { table: 'knowledge_base', pgId: 'id' },
   { table: 'news_links', pgId: 'id' },
+  {
+    table: 'trusted_devices',
+    pgId: 'id',
+    acl: (row) => [`read("user:${row.user_id}")`],
+  },
+  {
+    table: 'login_history',
+    pgId: 'id',
+    acl: (row) => [`read("user:${row.user_id}")`, 'read("label:admin")'],
+  },
+  {
+    table: 'contacts',
+    pgId: 'id',
+    acl: (row) => [`read("user:${row.user_id}")`, 'read("label:admin")'],
+  },
+  {
+    table: 'messages',
+    pgId: 'id',
+    acl: () => ['read("label:approved")'],
+  },
+  {
+    table: 'ndpa_consents',
+    pgId: 'user_id',
+    acl: (row) => [`read("user:${row.user_id}")`, 'read("label:admin")'],
+  },
 ];
 
 /** Appwrite's row id rule: 36 chars, no leading special character. */
@@ -328,7 +357,7 @@ export async function run({ log = console.log } = {}) {
   return { counts, failures, unplannedColumns };
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {
   const { counts, failures, unplannedColumns } = await run();
   console.log(JSON.stringify({ counts, unplannedColumns }, null, 2));
   if (Object.keys(unplannedColumns).length) {

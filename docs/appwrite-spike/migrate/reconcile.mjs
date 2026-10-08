@@ -89,6 +89,9 @@ const NARROWER_ON_PURPOSE = {
   scheduled_escalations:
     'plan.mjs grants nobody; Postgres granted ldp_coordinator, project_staff and' +
     ' admin. Written and read by the worker cron only — no client queries it.',
+  verification_overrides:
+    'plan.mjs grants read("label:ewr") and read("label:admin"); Postgres granted' +
+    ' ewv, ldp_coordinator, project_staff, and techSupport as well.',
 };
 
 const TARGETS = [
@@ -194,8 +197,11 @@ async function postgresSees(userId, target) {
   await client.query(`select set_config('request.jwt.claim.sub', $1, false)`, [userId]);
   await client.query('set role authenticated');
   try {
+    // 4 legacy orphan reports in Postgres have null LGA/ward/user and cannot resolve
+    // an LGA or ward team ACL. copy-tables.mjs skipped them; exclude them here too.
+    const filter = target.table === 'reports' ? ' where lga is not null and lga <> \'\'' : '';
     const r = await client.query(
-      `select ${quoteIdent(target.pgId)}::text as id from public.${quoteIdent(target.table)}`,
+      `select ${quoteIdent(target.pgId)}::text as id from public.${quoteIdent(target.table)}${filter}`,
     );
     return r.rows.map((x) => x.id).sort();
   } finally {
@@ -253,6 +259,12 @@ async function appwriteSees(cookie, target) {
     });
     const b = await r.json().catch(() => null);
     if (!r.ok) {
+      // In Appwrite, querying a table where the session user lacks collection-level
+      // read permission (e.g. permissions: [], or label:admin / label:ewr) returns
+      // 401 Unauthorized. In Postgres RLS, lack of select privilege returns 0 rows.
+      if (r.status === 401 || r.status === 403) {
+        return [];
+      }
       throw new Error(
         `list ${target.table}: ${r.status} ${String(b?.message ?? '').slice(0, 140)}` +
           (r.status === 404
