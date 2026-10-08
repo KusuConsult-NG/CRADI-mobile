@@ -334,33 +334,45 @@ The summary's `passwords` block is the thing to read: `imported`, `none`,
 
 **If accounts already exist with a shared password** — because an earlier
 rehearsal of this runbook ran the pre-import seeder against the project — the
-only way to the hashes is to delete and re-create. Do it before the app ships,
-not after:
+only way to the hashes is to delete and re-create. `reseed-passwords.mjs` does
+it, and it audits before it touches anything:
 
 ```bash
-# 1. Confirm what is actually in the project, and that it is seeded accounts
-#    rather than real sign-ups. Compare the count to Phase 3's profiles count.
-curl -s -H "x-appwrite-project: $AW_PROJECT" -H "x-appwrite-key: $AW_KEY" \
-  "$AW_ENDPOINT/users?queries[]=%7B%22method%22%3A%22limit%22%2C%22values%22%3A%5B1%5D%7D" \
-  | python3 -c 'import json,sys; print(json.load(sys.stdin)["total"])'
-
-# 2. Delete them. The Postgres uuid is the Appwrite userId, so the ids come from
-#    Postgres and nothing has to be guessed.
-psql "$PG_URL" -tAc \
-  'select p.id from profiles p join auth.users u on u.id = p.id order by p.id' \
-  | while read -r id; do
-      curl -s -o /dev/null -w "%{http_code} $id\n" -X DELETE \
-        -H "x-appwrite-project: $AW_PROJECT" -H "x-appwrite-key: $AW_KEY" \
-        "$AW_ENDPOINT/users/$id"
-    done
-
-# 3. Re-seed. Expect alreadyExisted: 0 and imported ≈ the bcrypt count from 3.3.
-node seed-identities.mjs
+cd docs/appwrite-spike/migrate
+node reseed-passwords.mjs          # audit: reads only, changes nothing
 ```
+
+The audit prints how many accounts exist, how many of them the seeder created,
+how many have a live session, and what re-seeding would import. It exits 1 on
+anything you must decide first — read those findings before going on. Then:
+
+```bash
+CONFIRM_DELETE_USERS=<the number the audit printed> \
+  node reseed-passwords.mjs --delete
+node seed-identities.mjs           # re-creates them, with their own hashes
+```
+
+Expect `passwords.alreadyExisted: 0` from that last run. Anything else means an
+account survived the delete and kept its old password.
+
+Three properties worth knowing, because this is the one destructive step in the
+runbook:
+
+- **It deletes only accounts whose id is a Postgres profile id.** That is how
+  the seeder names them, so anything else is a real sign-up made after the
+  migration, or an account somebody created by hand. The audit reports those and
+  the delete skips them — but if any exists, the app may already be live, which
+  is what the third point is about.
+- **The count is an interlock.** `CONFIRM_DELETE_USERS` must equal what the run
+  itself counts, or nothing is deleted. A command copied from an earlier audit,
+  or aimed at a project with a different population, stops rather than deleting
+  a set nobody looked at.
+- **A live session is a finding, not a footnote.** A session on a seeded account
+  means somebody has signed in with the shared password. Deleting ends it.
 
 Deleting an account does **not** touch the rows it owns: the row ACLs name
 `user:<uuid>`, the uuid comes from Postgres, and re-creating with the same
-`userId` restores the match exactly. What it does destroy is that account's
+`userId` restores the match exactly. What it destroys is that account's
 sessions, labels and team memberships — the seeder re-creates the labels and
 memberships in the same run, and there are no sessions worth keeping before the
 app ships. **After** the app ships this becomes expensive: every signed-in user
