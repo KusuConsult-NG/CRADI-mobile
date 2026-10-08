@@ -1714,6 +1714,10 @@ class AppLocalizationsEn extends AppLocalizations {
       'Enter your email address to receive a password reset code.';
 
   @override
+  String get forgotLegacyLinkExpired =>
+      'This password reset link came from our previous sign-in system and no longer works. Enter your email below and we will send you a new one.';
+
+  @override
   String get authEmailHint => 'Enter your email';
 
   @override

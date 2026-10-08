@@ -16,18 +16,15 @@
  * property Phase 6 leans on for the SMS claim.
  */
 import pg from 'pg';
+import { appwriteTarget } from './target.mjs';
 
 const PG = process.env.PG_URL ?? 'postgres://postgres:postgres@localhost:5432/cradi_mig';
-const EP = process.env.AW_ENDPOINT ?? 'http://localhost:8080/v1';
-const PROJECT = process.env.AW_PROJECT;
-const KEY = process.env.AW_KEY;
 const DB = 'cradi';
 
-const H = { 'content-type': 'application/json', 'x-appwrite-project': PROJECT, 'x-appwrite-key': KEY };
-const aw = async (path, init = {}) => {
-  const r = await fetch(`${EP}${path}`, { ...init, headers: H });
-  return { status: r.status, body: await r.json().catch(() => null) };
-};
+// Resolved and validated in one place for all four scripts. This one already
+// read the environment; it did not check it, so an unset AW_KEY sent the header
+// `undefined` and every write came back 401 one row at a time.
+const { aw } = appwriteTarget();
 
 /**
  * The ward team id.

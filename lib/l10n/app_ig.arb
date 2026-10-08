@@ -492,6 +492,7 @@
   "accessCodeBodyNoEmail": "Anyị zigara koodu nnyocha nwere ọnụọgụ 6 na imel gị.\nTinye koodu ahụ ka ị mee ka akaụntụ gị rụọ ọrụ.",
   "forgotTitle": "Chefuru Paswọọdụ?",
   "forgotBody": "Tinye adreesị imel gị ka ị nata koodu ntọghachi paswọọdụ.",
+  "forgotLegacyLinkExpired": "Njikọ ntọghachi paswọọdụ a sitere na usoro nbanye ochie anyị, ọ naghịzi arụ ọrụ. Tinye adreesị imel gị n’okpuru, anyị ga-ezitere gị nke ọhụrụ.",
   "authEmailHint": "Tinye imel gị",
   "authEmailRequired": "Biko tinye imel gị",
   "authEmailInvalid": "Biko tinye imel ziri ezi",

@@ -13,14 +13,21 @@ import 'package:climate_app/core/services/backend.dart' show registerPushTarget;
 import 'package:climate_app/core/services/hive_encryption_service.dart';
 import 'package:climate_app/core/services/supabase_mapping.dart'
     show parseTimestamp;
-import 'package:climate_app/features/profile/providers/profile_provider.dart';
 
 /// Push notifications via FCM + Appwrite Messaging topics.
 ///
 /// The Appwrite drain Function decides who receives what: it publishes to
-/// Appwrite Messaging topics (e.g. `role_field_agent`, `lga_ikeja`). The
-/// server-side topics worker subscribes each user's registered push target to
-/// the appropriate topics based on their profile. Appwrite Messaging relays
+/// Appwrite Messaging topics, which `functions/cradi/src/lib/notifications.js`
+/// derives from the alert's target — `all-users`, `state-benue`, or the
+/// state-scoped `lga-benue-obi` (state-scoped so that Obi in Benue and Obi in
+/// Nasarawa, which share a name and nothing else, stay distinct). Hyphens, not
+/// underscores: see `topicId` in that file.
+///
+/// Nothing here subscribes the device to those topics: the `worker` Function
+/// does it server-side from the user's `profiles` row, on every profile write
+/// (`push_topics_changed` -> `reconcileSubscriptions`). This service's only
+/// part in addressing is registering the device's push target, which is what
+/// gives the server something to subscribe. Appwrite Messaging then relays
 /// the message to FCM, which delivers it to the device.
 ///
 /// FCM displays notifications itself (including in the foreground via the
@@ -53,8 +60,6 @@ class NotificationService {
   /// denied, so nothing could ask again.
   bool get _pushEnabled => _fcmAvailable && _permissionGranted;
 
-  ProfileProvider? _profileProvider;
-
   GoRouter? _router;
   Map<String, dynamic>? _pendingNavigation;
 
@@ -75,7 +80,6 @@ class NotificationService {
 
   /// Signed-in user state.
   String? _userId;
-  String? _zone;
 
   static const String _notificationsBoxName = 'notifications_history';
   Box<Map>? _notificationsBox;
@@ -84,15 +88,7 @@ class NotificationService {
   final ValueNotifier<int> unreadCount = ValueNotifier<int>(0);
 
   /// Initialize FCM and the local notification history.
-  ///
-  /// [profileProvider] lets the service keep the `monitoring_zone` topic in
-  /// sync when the user changes zone.
-  Future<void> initialize({ProfileProvider? profileProvider}) async {
-    if (profileProvider != null && profileProvider != _profileProvider) {
-      _profileProvider?.removeListener(_onProfileChanged);
-      _profileProvider = profileProvider;
-      _profileProvider!.addListener(_onProfileChanged);
-    }
+  Future<void> initialize() async {
     if (_initialized) return;
     _initFuture ??= _initialize().whenComplete(() {
       // Allow a retry if initialization did not complete (e.g. error).
@@ -365,35 +361,7 @@ class NotificationService {
     router.go(route);
   }
 
-  // ─────────────────────────── Identity & topics ───────────────────────────
-
-  /// Sanitises a topic segment exactly as the backend does.
-  @visibleForTesting
-  static String sanitizeTag(String value) =>
-      value.toLowerCase().replaceAll(RegExp(r'[^a-z0-9_]'), '_');
-
-  /// Topic names for the signed-in user (empty values are omitted).
-  @visibleForTesting
-  static Map<String, String> tagsFor({
-    String? role,
-    String? lga,
-    String? state,
-    String? ward,
-    String? monitoringZone,
-  }) {
-    final raw = {
-      'role': role,
-      'lga': lga,
-      'state': state,
-      'ward': ward,
-      'monitoring_zone': monitoringZone,
-    };
-    return {
-      for (final e in raw.entries)
-        if (e.value != null && e.value!.isNotEmpty)
-          e.key: sanitizeTag(e.value!),
-    };
-  }
+  // ──────────────────────── Identity & push target ─────────────────────────
 
   /// FCM operations run one at a time.
   Future<void> _opChain = Future<void>.value();
@@ -404,23 +372,16 @@ class NotificationService {
     return next;
   }
 
-  /// Call after a user signs in (from AuthProvider): registers the device's push
-  /// target on Appwrite. Appwrite Messaging manages topic subscriptions server-side.
-  Future<void> onUserSignedIn({
-    required String userId,
-    String? role,
-    String? lga,
-    String? state,
-    String? ward,
-    String? monitoringZone,
-    bool updateTags = true,
-  }) async {
+  /// Call after a user signs in (from AuthProvider): registers this device's
+  /// push target against the account.
+  ///
+  /// Takes no targeting information. The `worker` Function subscribes the
+  /// target to topics from the user's own `profiles` row, so anything passed
+  /// here would be a second copy of what the server already reads — and a
+  /// copy that goes stale the moment an admin edits the row.
+  Future<void> onUserSignedIn({required String userId}) async {
     final sameUser = _userId == userId;
     _userId = userId;
-    final profileZone = _profileProvider?.monitoringZone;
-    _zone = (profileZone != null && profileZone.isNotEmpty)
-        ? profileZone
-        : monitoringZone;
     if (!_initialized) return;
     final sync = _serialized(_syncSignedInUser);
     if (!sameUser) await _ensureHistoryOwner(userId);
@@ -430,19 +391,19 @@ class NotificationService {
   /// Call after the user signs out: clears user state and history.
   Future<void> onUserSignedOut() async {
     _userId = null;
-    _zone = null;
     // The token is the device's, not the account's: the next user on this
     // phone has the same one, and remembering it as registered would skip
     // registering *their* target and leave them with no push at all.
     _registeredToken = null;
-    if (_userId == null) await clearHistoryForSignOut();
+    await clearHistoryForSignOut();
   }
 
   Future<void> _syncSignedInUser() async {
     if (!_pushEnabled || _userId == null) return;
-    // Registers the device FCM push token with Appwrite.
-    // The server-side topics worker subscribes the target to the appropriate
-    // Appwrite Messaging topics based on the user's profile and roles.
+    // Registers the device FCM push token with Appwrite, and asks the server
+    // to reconcile this account's topic subscriptions from its `profiles` row
+    // (state and LGA — there are no role or zone topics; nothing publishes to
+    // them).
     await syncPushTarget(await _pushToken());
   }
 
@@ -497,19 +458,6 @@ class NotificationService {
       );
     }
   }
-
-  /// Keep the monitoring_zone in sync with the ProfileProvider.
-  void _onProfileChanged() {
-    final provider = _profileProvider;
-    if (provider == null || _userId == null || provider.isLoading) return;
-    final zone = provider.monitoringZone;
-    if (zone == _zone) return;
-    _zone = zone;
-  }
-
-  /// Re-sync push target / zone if needed (no-op client-side; Appwrite topics
-  /// are reconciled server-side when the profile document changes).
-  Future<void> updateZoneSubscriptions() async {}
 
   // ─────────────────────────── Local history ───────────────────────────────
 

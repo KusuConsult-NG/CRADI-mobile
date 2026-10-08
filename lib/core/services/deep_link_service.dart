@@ -14,17 +14,16 @@ const Set<String> kAppLinkHosts = {'cradi.ng', 'www.cradi.ng'};
 /// Delivers incoming `cradi://…` and `https://cradi.ng/…` links to the router.
 ///
 /// Why an explicit listener rather than Flutter's framework deep linking
-/// (`flutter_deeplinking_enabled` / `FlutterDeepLinkingEnabled`): Supabase
-/// auth callbacks (password recovery, email confirmation, OAuth) arrive on
-/// the very same URL scheme and host. `supabase_flutter` consumes them from
-/// its own `app_links` subscription; framework deep linking would *also*
-/// hand them to go_router, which would try to navigate to whatever path the
-/// callback URL happens to carry (`/auth/v1/verify`, `/`, …) and could throw
-/// the user off the recovery screen. Filtering here keeps auth links with
-/// Supabase and share links with the router.
+/// (`flutter_deeplinking_enabled` / `FlutterDeepLinkingEnabled`): legacy
+/// Supabase auth callbacks (password recovery, email confirmation, OAuth)
+/// arrive on the very same URL scheme and host, carrying paths of Supabase's
+/// own (`/auth/v1/verify`, `/`, …). Framework deep linking would hand those
+/// straight to go_router, which would try to navigate to them. Mapping them
+/// here is what turns a dead link into an explanation — see [locationFor].
 ///
-/// `AppLinks` is a singleton whose `uriLinkStream` is a broadcast stream, so
-/// subscribing here does not take events away from `supabase_flutter`.
+/// `supabase_flutter` used to consume these from its own `app_links`
+/// subscription, which is why they were dropped rather than handled. That
+/// package is gone, so nothing else is listening and they are ours to answer.
 class DeepLinkService {
   factory DeepLinkService() => _instance;
   DeepLinkService._internal();
@@ -52,11 +51,18 @@ class DeepLinkService {
     }
   }
 
-  /// Whether [uri] is a Supabase auth callback.
+  /// Whether [uri] is a legacy Supabase auth callback.
   ///
   /// Mirrors `supabase_flutter`'s own check (`SupabaseAuth`): the callback is
   /// identified by its parameters, in the query string or the fragment, not
-  /// by its path. Those URIs belong to Supabase and are never routed.
+  /// by its path.
+  ///
+  /// Appwrite's own callbacks are safe from this: magic-URL, OAuth2, email
+  /// verification and recovery all come back with `userId` and `secret`, none
+  /// of which is matched here. Adding a `cradi://…?code=…` link of our own
+  /// would collide, though, so this list is the thing to check first if a new
+  /// link ever arrives at the forgot-password screen instead of its
+  /// destination.
   @visibleForTesting
   static bool isSupabaseAuthLink(Uri uri) {
     final fragmentParameters = Uri.splitQueryString(uri.fragment);

@@ -10,10 +10,12 @@
  * defect — in either direction, because granting too much is worse than
  * granting too little and both are silent.
  */
-import { readFileSync } from 'node:fs';
 import pg from 'pg';
-const { project, key } = JSON.parse(readFileSync('../spike/env.json', 'utf8'));
-const EP = 'http://localhost:8080/v1';
+import { appwriteTarget, migrationPassword } from './target.mjs';
+// No API key: every read here must go through a real user session, because a
+// key would read past the ACLs that are the whole subject of the comparison.
+const { endpoint: EP, project } = appwriteTarget({ requireKey: false });
+const PASSWORD = migrationPassword();
 const PG = process.env.PG_URL ?? 'postgres://postgres:postgres@localhost:5432/cradi_mig';
 
 const client = new pg.Client({ connectionString: PG });
@@ -31,7 +33,7 @@ async function appwriteSees(userId) {
   const email = (await client.query('select email from auth.users where id = $1', [userId])).rows[0].email;
   const s = await fetch(`${EP}/account/sessions/email`, {
     method: 'POST', headers: { 'content-type': 'application/json', 'x-appwrite-project': project },
-    body: JSON.stringify({ email, password: 'MigratedPassword123' }),
+    body: JSON.stringify({ email, password: PASSWORD }),
   });
   if (!s.ok) return { error: `sign-in ${s.status}` };
   const cookie = (s.headers.get('set-cookie') ?? '').split(';')[0];

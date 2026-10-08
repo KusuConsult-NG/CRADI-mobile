@@ -552,6 +552,7 @@
   "accessCodeBodyNoEmail": "Mun aika lambar tabbatarwa mai lambobi 6 zuwa imel ɗinka.\nShigar da lambar don kunna asusunka.",
   "forgotTitle": "Ka Manta Kalmar Sirri?",
   "forgotBody": "Shigar da adireshin imel ɗinka don karɓar lambar sake saita kalmar sirri.",
+  "forgotLegacyLinkExpired": "Wannan hanyar sake saita kalmar sirri ta zo daga tsohon tsarin shiga namu kuma ba ta aiki yanzu. Shigar da imel ɗinka a ƙasa, za mu aika maka sabuwa.",
   "authEmailHint": "Shigar da imel ɗinka",
   "authEmailRequired": "Don Allah shigar da imel ɗinka",
   "authEmailInvalid": "Don Allah shigar da ingantaccen imel",

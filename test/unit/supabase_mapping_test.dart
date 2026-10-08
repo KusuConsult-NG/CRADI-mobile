@@ -1,6 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:climate_app/core/services/supabase_mapping.dart';
-import 'package:climate_app/core/services/notification_service.dart';
 
 void main() {
   group('key conversion', () {
@@ -233,31 +232,6 @@ void main() {
       expect(t.toUtc(), DateTime.utc(2026, 9, 25, 10, 30));
       expect(parseTimestamp('nope'), isNull);
       expect(parseTimestamp(null), isNull);
-    });
-  });
-
-  group('OneSignal tags', () {
-    test('sanitised exactly like the backend', () {
-      expect(
-        NotificationService.sanitizeTag('Makurdi, Benue'),
-        'makurdi__benue',
-      );
-      expect(NotificationService.sanitizeTag('Katsina-Ala'), 'katsina_ala');
-      expect(NotificationService.sanitizeTag(' Ward 1'), '_ward_1');
-      expect(NotificationService.sanitizeTag('techSupport'), 'techsupport');
-    });
-
-    test('tagsFor omits empty values', () {
-      expect(
-        NotificationService.tagsFor(
-          role: 'ewm',
-          lga: 'Makurdi',
-          state: '',
-          ward: null,
-          monitoringZone: 'Benue State',
-        ),
-        {'role': 'ewm', 'lga': 'makurdi', 'monitoring_zone': 'benue_state'},
-      );
     });
   });
 }

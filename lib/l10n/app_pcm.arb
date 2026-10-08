@@ -492,6 +492,7 @@
   "accessCodeBodyNoEmail": "We don send 6-digit verification code to your email.\nPut di code to activate your account.",
   "forgotTitle": "You Forget Password?",
   "forgotBody": "Put your email address make we send you password reset code.",
+  "forgotLegacyLinkExpired": "Dis password reset link na from our old sign-in system, so e no work again. Put your email below and we go send you new one.",
   "authEmailHint": "Put your email",
   "authEmailRequired": "Abeg put your email",
   "authEmailInvalid": "Abeg put correct email",

@@ -78,7 +78,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
         ),
       ),
       body: SafeArea(
-        child: Padding(
+        child: SingleChildScrollView(
           padding: const EdgeInsets.all(24.0),
           child: _isSuccess ? _buildSuccessView() : _buildFormView(),
         ),
@@ -128,6 +128,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
           if (widget.isLegacyExpired) ...[
             const SizedBox(height: 20),
             Container(
+              key: const Key('legacy-link-expired-banner'),
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
                 color: Colors.amber.shade50,
@@ -145,7 +146,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
-                      'This password reset link was issued by the previous authentication system and has expired. Please enter your email to request a new link.',
+                      context.l10n.forgotLegacyLinkExpired,
                       style: GoogleFonts.lexend(
                         fontSize: 13,
                         color: Colors.amber.shade900,
@@ -179,7 +180,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
               return null;
             },
           ),
-          const Spacer(),
+          const SizedBox(height: 40),
           ElevatedButton(
             onPressed: _isLoading ? null : _submit,
             style: ElevatedButton.styleFrom(

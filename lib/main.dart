@@ -320,18 +320,15 @@ class _ClimateAppState extends State<ClimateApp> with WidgetsBindingObserver {
       WidgetsBinding.instance.addPostFrameCallback((_) async {
         if (!mounted) return;
         try {
-          final profileProvider = context.read<ProfileProvider>();
           final notificationService = NotificationService();
           // Inject the GoRouter so notification taps can navigate
           if (_router != null) {
             notificationService.router = _router;
           }
           // A notification that launched the app from a terminated state is
-          // delivered to the OneSignal click listener and routed once the
-          // router is set.
-          await notificationService.initialize(
-            profileProvider: profileProvider,
-          );
+          // delivered to FCM's `getInitialMessage` and routed once the router
+          // is set.
+          await notificationService.initialize();
         } on Exception catch (e) {
           debugPrint('Notification initialization error: $e');
         }

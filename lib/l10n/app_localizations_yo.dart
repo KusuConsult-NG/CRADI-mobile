@@ -1712,6 +1712,10 @@ class AppLocalizationsYo extends AppLocalizations {
       'Tẹ àdírẹ́sì ímeèlì rẹ láti gba kóòdù àtúntò ọ̀rọ̀ aṣínà.';
 
   @override
+  String get forgotLegacyLinkExpired =>
+      'Ọ̀nà àtúntò ọ̀rọ̀ aṣínà yìí wá láti inú ẹ̀rọ̀ ìwọlé àtijọ́ wa, kò sì ṣiṣẹ́ mọ́. Tẹ ímeèlì rẹ sí ìsàlẹ̀, a ó rán tuntun sí ọ.';
+
+  @override
   String get authEmailHint => 'Tẹ ímeèlì rẹ';
 
   @override
