@@ -298,7 +298,19 @@ export async function run({ log = console.log } = {}) {
     ['profiles', 'profiles', 'id'],
     ['reports', 'reports', 'id'],
   ]) {
+    const target = TABLES.find((t) => t.table === table);
     for (const row of (await client.query(`select * from public.${table}`)).rows) {
+      // Only the rows that will actually be COPIED. The first version loaded
+      // every row in Postgres, which quietly broke the one dependency the
+      // ordering exists to serve: `verifications` skips a vote whose report
+      // "was not migrated" by asking `reports.has(report_id)`, and a report
+      // this script is about to decline was still in that map. So a vote on a
+      // legacy orphan was copied with an ACL naming the ward team of a report
+      // with no ward — `wardTeam('', '', '')`, a team that was never created —
+      // and an ACL naming a team that does not exist grants nobody anything,
+      // in silence. Filtered through the same `skip` the copy loop uses, so
+      // there is one answer to "did this row migrate" rather than two.
+      if (target?.skip?.(row, context)) continue;
       context[key].set(row[idCol], row);
     }
   }

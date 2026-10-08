@@ -9,7 +9,7 @@ spike's `../env.json` is the fallback when they are unset.
     createdb cradi_mig
     psql -d cradi_mig -f supabase/tests/local_stubs.sql
     for f in supabase/migrations/*.sql; do psql -d cradi_mig -v ON_ERROR_STOP=1 -f "$f"; done
-    # …seed or restore real data…
+    psql -d cradi_mig -f supabase/tests/migration_fixture.sql   # or restore real data
 
     # Schema and first contact, from the repo root — not scripts in here:
     node infra/appwrite/provision.mjs
@@ -71,9 +71,20 @@ The suites: `storage-ids.test.mjs` (pure), `copy-tables.test.mjs`,
 `reconcile.test.mjs` (the copiers and the gate against a real Postgres and an
 Appwrite stand-in that evaluates the permission strings `migrate.mjs` actually
 stamps), and `seed-identities.test.mjs` (which endpoint each account goes to,
-and what a re-run does to a password). None of them run in CI, because they need
-a Postgres carrying every migration — run them by hand before any Phase 2 or 3
-step.
+and what a re-run does to a password).
+
+They run in CI, in the `Appwrite Migration Pipeline (Node) Test` job, against a
+`postgres:16` service container built the same way as above. They did not, and
+that is why the shared-password seeder reached the production project: the
+change to import the bcrypt hashes was never committed, nothing failed, and no
+job ran the suite that would have noticed.
+
+`supabase/tests/migration_fixture.sql` is the fixture, and it is not
+decoration — every suite here **skips** a test whose fixture row is absent, so
+a fixture that stopped carrying one branch would turn those tests into silent
+no-ops. The CI job asserts the branches are present before running anything,
+and several counts in the suites are pinned to it (two orphan reports, one
+non-bcrypt hash). Read the header of that file before changing it.
 
 `migrate.mjs` no longer copies anything: it is the ACL and identity module that
 `copy-tables.mjs` and `seed-identities.mjs` import. `prep.mjs` is gone with it —

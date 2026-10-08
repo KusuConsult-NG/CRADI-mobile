@@ -506,6 +506,10 @@ describe('copying every collection', () => {
     // declines and what `reconcile.mjs`'s NOT_COPIED forgives.
     assert.equal(counts.reports.skipped, 2, first.stderr);
     assert.match(first.stderr, /has no LGA/);
+    // And the copier's second skip, which follows from the first: a vote on a
+    // report that did not migrate has no ward to be read by.
+    assert.equal(counts.verifications.skipped, 1, first.stderr);
+    assert.match(first.stderr, /was not migrated/);
 
     // Idempotent: the Postgres key is the Appwrite id, so a re-run collides.
     const second = await runCopy();
@@ -590,6 +594,11 @@ describe('copying every collection', () => {
     assert.match(out, /legacy orphan rows with no LGA/);
     assert.match(out, /where lga is null or lga = ''/);
     assert.match(out, /0000000b0f01/, 'the declined ids belong in the output');
+    // Both of the copier's skips are declared, not just the one that is easy
+    // to see: the second follows from the first and would otherwise read as a
+    // loss on every run.
+    assert.match(out, /verifications: 1 source row\(s\) were NOT copied/);
+    assert.match(out, /a vote on a report that was not copied/);
   });
 
   test('a row missing for any other reason is still a finding', async (t) => {
