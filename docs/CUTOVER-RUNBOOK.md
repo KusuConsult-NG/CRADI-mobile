@@ -313,10 +313,19 @@ Save these numbers in your cutover execution log.
 > without a password while reporting success. That is exactly how the live
 > project ended up with accounts nobody had the password to.
 >
-> Either point `PG_URL` at the Supabase Postgres directly (port 5432, or the
-> 6543 pooler — not the project URL, and a service key will not do), or re-run
-> `sync-supabase.mjs` with `SUPABASE_DB_URL` set, which mirrors the hashes and
-> says how many it carried. Confirm before going further:
+> **Point `PG_URL` at the Supabase Postgres directly** — port 5432, or the 6543
+> pooler; not the project URL, and a service key will not do. Both
+> `seed-identities.mjs` and `reseed-passwords.mjs` are pure `select`s against
+> `profiles`, `auth.users` and `reports`: they never write to Postgres, so
+> reading them at source is safe and means the hashes cannot be silently absent.
+> Keep `reconcile.mjs` on the mirror — it is the one script that changes session
+> state (`set role authenticated` per user).
+>
+> Mirroring them with `sync-supabase.mjs` and `SUPABASE_DB_URL` also works and
+> is the right move when the mirror is wanted for other reasons, but it is a
+> second copy that can go stale, and a run of it *without* that variable is
+> exactly what produced the accounts nobody had the password to. Either way,
+> confirm before going further:
 >
 > ```bash
 > psql "$PG_URL" -tAc "select count(*) filter (where encrypted_password ~ '^\\\$2[aby]\\\$') as bcrypt,

@@ -135,7 +135,13 @@ all, while `docs/CUTOVER-RUNBOOK.md` presented them as the Cloud procedure.
 of building it does not put them there.** `sync-supabase.mjs` mirrors
 `auth.users` from `GET /auth/v1/admin/users`, which does not return
 `encrypted_password` — so without `SUPABASE_DB_URL` the mirror has the column
-and no values. `sync-supabase.mjs` now says so loudly, `seed-identities.mjs`
+and no values.
+
+The simplest answer is not to mirror at all: `seed-identities.mjs` and
+`reseed-passwords.mjs` are pure `select`s (`profiles`, `auth.users`, `reports`)
+and never write to Postgres, so `PG_URL` can point straight at the Supabase
+instance and read the hashes at source. `reconcile.mjs` is the exception —
+it sets `role authenticated` per user, so give that one the mirror. `sync-supabase.mjs` now says so loudly, `seed-identities.mjs`
 refuses to run when every row is empty, and `reseed-passwords.mjs` refuses a
 delete that would import fewer passwords than the accounts already hold. All
 three guards exist because the live project was seeded from such a mirror.
