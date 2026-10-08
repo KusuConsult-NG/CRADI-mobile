@@ -416,6 +416,23 @@ Where there is no hash column at all — a Supabase export that dropped
 `encrypted_password` — the seeder exits `2` before creating anything rather than
 making 650 passwordless accounts and reporting success.
 
+**Test accounts in the project are a separate purge.** `prep-dart.mjs` is for a
+local stack and reached Cloud anyway, leaving accounts whose password is a
+literal in this repository, carrying `label:ewr` and `label:approved`.
+`reseed-passwords.mjs` reports them and deliberately will not delete them — it
+only ever touches ids that are Postgres profile ids, which is what makes it safe
+to point at production. Clear them with their own confirmation:
+
+```bash
+node purge-dart-accounts.mjs                      # audit, reads only
+CONFIRM_DELETE_DART=<the number it printed> node purge-dart-accounts.mjs --delete
+```
+
+It removes the accounts, their `profiles` rows and the `dart-foreign-*` reports,
+rows before accounts so nothing is left readable by an id that no longer exists.
+Treat `DartTestPassword123!` as disclosed regardless: deleting the accounts does
+not un-publish it from this repository's history.
+
 ### 5.2 Provision the collections, then seed
 
 ```bash
