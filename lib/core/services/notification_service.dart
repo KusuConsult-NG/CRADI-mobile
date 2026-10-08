@@ -18,8 +18,9 @@ import 'package:climate_app/features/profile/providers/profile_provider.dart';
 /// Push notifications via FCM + Appwrite Messaging topics.
 ///
 /// The Appwrite drain Function decides who receives what: it publishes to
-/// Appwrite Messaging topics (e.g. `role_field_agent`, `lga_ikeja`) that this
-/// service subscribes the device to after sign-in. Appwrite Messaging relays
+/// Appwrite Messaging topics (e.g. `role_field_agent`, `lga_ikeja`). The
+/// server-side topics worker subscribes each user's registered push target to
+/// the appropriate topics based on their profile. Appwrite Messaging relays
 /// the message to FCM, which delivers it to the device.
 ///
 /// FCM displays notifications itself (including in the foreground via the
@@ -72,11 +73,9 @@ class NotificationService {
   /// In-flight initialization, so concurrent callers share one run.
   Future<void>? _initFuture;
 
-  /// Signed-in user state used to (re)compute topic subscriptions.
+  /// Signed-in user state.
   String? _userId;
-  Map<String, String> _baseTags = const {};
   String? _zone;
-  Map<String, String> _appliedTags = const {};
 
   static const String _notificationsBoxName = 'notifications_history';
   Box<Map>? _notificationsBox;
@@ -203,16 +202,13 @@ class NotificationService {
   }
 
   /// Opts this device in/out of push (the Settings toggle).
-  /// With FCM, opt-out is handled at the OS level — we simply skip
-  /// subscribing to topics when the user disables push.
+  /// With FCM, opt-out is handled at the OS / SDK level via setAutoInitEnabled.
   Future<bool> setPushSubscribed(bool enabled) async {
     if (!_fcmAvailable) return false;
     try {
       await FirebaseMessaging.instance.setAutoInitEnabled(enabled);
       if (enabled && _userId != null) {
         await _serialized(_syncSignedInUser);
-      } else if (!enabled) {
-        await _unsubscribeAllTopics();
       }
       return true;
     } on Exception catch (e) {
@@ -399,14 +395,7 @@ class NotificationService {
     };
   }
 
-  /// FCM topic name for a given key/value pair (e.g. `role` + `field_agent`
-  /// → `role_field_agent`).
-  static String _topicFor(String key, String value) => '${key}_$value';
-
-  /// All-users broadcast topic — every device subscribes on sign-in.
-  static const String _allUsersTopic = 'all-users';
-
-  /// FCM topic subscribe/unsubscribe calls run one at a time.
+  /// FCM operations run one at a time.
   Future<void> _opChain = Future<void>.value();
 
   Future<void> _serialized(Future<void> Function() op) {
@@ -415,11 +404,8 @@ class NotificationService {
     return next;
   }
 
-  bool _tagsKnown = false;
-
-  /// Call after a user signs in (from AuthProvider): subscribes the device to
-  /// the user's Appwrite Messaging topics. With [updateTags] false (profile
-  /// unavailable) only the all-users topic is subscribed.
+  /// Call after a user signs in (from AuthProvider): registers the device's push
+  /// target on Appwrite. Appwrite Messaging manages topic subscriptions server-side.
   Future<void> onUserSignedIn({
     required String userId,
     String? role,
@@ -431,13 +417,6 @@ class NotificationService {
   }) async {
     final sameUser = _userId == userId;
     _userId = userId;
-    if (updateTags) {
-      _baseTags = tagsFor(role: role, lga: lga, state: state, ward: ward);
-      _tagsKnown = true;
-    } else if (!sameUser) {
-      _baseTags = const {};
-      _tagsKnown = false;
-    }
     final profileZone = _profileProvider?.monitoringZone;
     _zone = (profileZone != null && profileZone.isNotEmpty)
         ? profileZone
@@ -448,50 +427,22 @@ class NotificationService {
     await sync;
   }
 
-  /// Call after the user signs out: unsubscribes all topics.
+  /// Call after the user signs out: clears user state and history.
   Future<void> onUserSignedOut() async {
-    final wasSignedIn = _userId != null;
     _userId = null;
-    _baseTags = const {};
-    _tagsKnown = false;
     _zone = null;
     // The token is the device's, not the account's: the next user on this
     // phone has the same one, and remembering it as registered would skip
     // registering *their* target and leave them with no push at all.
     _registeredToken = null;
-    final logout = (!_pushEnabled || !wasSignedIn)
-        ? Future<void>.value()
-        : _serialized(() async {
-            if (_userId != null) return; // new user signed in meanwhile
-            try {
-              await _unsubscribeAllTopics();
-              _appliedTags = const {};
-            } on Exception catch (e) {
-              developer.log(
-                'FCM topic unsubscribe error: $e',
-                name: 'NotificationService',
-              );
-            }
-          });
     if (_userId == null) await clearHistoryForSignOut();
-    await logout;
   }
 
   Future<void> _syncSignedInUser() async {
     if (!_pushEnabled || _userId == null) return;
-    try {
-      // Subscribe to all-users first, then role/lga/state/ward/zone topics.
-      await FirebaseMessaging.instance.subscribeToTopic(_allUsersTopic);
-      if (_tagsKnown) await _applyTags();
-    } on Exception catch (e) {
-      developer.log(
-        'FCM topic subscribe error: $e',
-        name: 'NotificationService',
-      );
-    }
-    // After the identity, because the server subscribes the target to the
-    // topics of the profile it belongs to, and on Appwrite the session is
-    // what says whose target this is.
+    // Registers the device FCM push token with Appwrite.
+    // The server-side topics worker subscribes the target to the appropriate
+    // Appwrite Messaging topics based on the user's profile and roles.
     await syncPushTarget(await _pushToken());
   }
 
@@ -547,70 +498,18 @@ class NotificationService {
     }
   }
 
-  Future<void> _applyTags() async {
-    final tags = {..._baseTags, ...tagsFor(monitoringZone: _zone)};
-
-    // Unsubscribe removed topics.
-    final removed = _appliedTags.keys
-        .where((k) => !tags.containsKey(k))
-        .toList();
-    for (final k in removed) {
-      await FirebaseMessaging.instance.unsubscribeFromTopic(
-        _topicFor(k, _appliedTags[k]!),
-      );
-    }
-
-    // Subscribe new / changed topics.
-    for (final entry in tags.entries) {
-      final prev = _appliedTags[entry.key];
-      if (prev == entry.value) continue;
-      if (prev != null) {
-        await FirebaseMessaging.instance.unsubscribeFromTopic(
-          _topicFor(entry.key, prev),
-        );
-      }
-      await FirebaseMessaging.instance.subscribeToTopic(
-        _topicFor(entry.key, entry.value),
-      );
-    }
-    _appliedTags = tags;
-  }
-
-  Future<void> _unsubscribeAllTopics() async {
-    await FirebaseMessaging.instance.unsubscribeFromTopic(_allUsersTopic);
-    for (final entry in _appliedTags.entries) {
-      await FirebaseMessaging.instance.unsubscribeFromTopic(
-        _topicFor(entry.key, entry.value),
-      );
-    }
-    _appliedTags = const {};
-  }
-
-  /// Keep the monitoring_zone topic in sync with the ProfileProvider.
+  /// Keep the monitoring_zone in sync with the ProfileProvider.
   void _onProfileChanged() {
     final provider = _profileProvider;
     if (provider == null || _userId == null || provider.isLoading) return;
     final zone = provider.monitoringZone;
     if (zone == _zone) return;
     _zone = zone;
-    if (_initialized && _pushEnabled) unawaited(updateZoneSubscriptions());
   }
 
-  /// Re-apply topic subscriptions after the user changes their monitoring zone.
-  Future<void> updateZoneSubscriptions() async {
-    if (!_pushEnabled || _userId == null || !_tagsKnown) return;
-    await _serialized(() async {
-      if (_userId == null || !_tagsKnown) return;
-      try {
-        await _applyTags();
-      } on Exception catch (e) {
-        developer.log(
-          'FCM topic update error: $e',
-          name: 'NotificationService',
-        );
-      }
-    });
-  }
+  /// Re-sync push target / zone if needed (no-op client-side; Appwrite topics
+  /// are reconciled server-side when the profile document changes).
+  Future<void> updateZoneSubscriptions() async {}
 
   // ─────────────────────────── Local history ───────────────────────────────
 

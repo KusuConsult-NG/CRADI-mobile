@@ -102,7 +102,10 @@ GoRouter createRouter(BuildContext context) {
       GoRoute(path: '/login', builder: (context, state) => const LoginScreen()),
       GoRoute(
         path: '/forgot-password',
-        builder: (context, state) => const ForgotPasswordScreen(),
+        builder: (context, state) {
+          final isExpired = state.uri.queryParameters['expired'] == '1';
+          return ForgotPasswordScreen(isLegacyExpired: isExpired);
+        },
       ),
       GoRoute(
         path: '/reset-password',

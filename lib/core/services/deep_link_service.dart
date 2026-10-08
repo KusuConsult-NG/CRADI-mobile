@@ -71,29 +71,36 @@ class DeepLinkService {
   }
 
   /// The in-app location [uri] should open, or null when the link is not
-  /// ours to route (a Supabase auth callback, a foreign host, an unknown
-  /// scheme, or a bare `https://cradi.ng` with no path).
+  /// ours to route (a foreign host, an unknown scheme, or a bare
+  /// `https://cradi.ng` with no path).
+  ///
+  /// Legacy Supabase auth callbacks (from the previous auth stack) are mapped
+  /// to `/forgot-password?expired=1` so users clicking old reset or magic
+  /// links are presented with a clear explanation instead of dropping silently.
   ///
   /// Pure: this is the whole of the link-mapping logic and is what the tests
   /// exercise.
   @visibleForTesting
   static String? locationFor(Uri uri) {
-    if (isSupabaseAuthLink(uri)) return null;
+    final isCustomScheme = uri.scheme == kDeepLinkScheme;
+    final isHttpHost = (uri.scheme == 'https' || uri.scheme == 'http') &&
+        kAppLinkHosts.contains(uri.host.toLowerCase());
 
-    if (uri.scheme == kDeepLinkScheme) return mapCustomSchemeLink(uri);
+    if (!isCustomScheme && !isHttpHost) return null;
 
-    if ((uri.scheme == 'https' || uri.scheme == 'http') &&
-        kAppLinkHosts.contains(uri.host.toLowerCase())) {
-      final segments = uri.pathSegments.where((s) => s.isNotEmpty).toList();
-      // The marketing root carries no destination — leave the app where it is.
-      if (segments.isEmpty) return null;
-      return Uri(
-        path: '/${segments.join('/')}',
-        query: uri.hasQuery ? uri.query : null,
-      ).toString();
+    if (isSupabaseAuthLink(uri)) {
+      return '/forgot-password?expired=1';
     }
 
-    return null;
+    if (isCustomScheme) return mapCustomSchemeLink(uri);
+
+    final segments = uri.pathSegments.where((s) => s.isNotEmpty).toList();
+    // The marketing root carries no destination — leave the app where it is.
+    if (segments.isEmpty) return null;
+    return Uri(
+      path: '/${segments.join('/')}',
+      query: uri.hasQuery ? uri.query : null,
+    ).toString();
   }
 
   /// Starts listening. Safe to call more than once.
