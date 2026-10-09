@@ -67,10 +67,15 @@ await fetch(`${MAIL}/api/v1/messages`, { method: 'DELETE' });
  * Appwrite addresses a message to users via **Bcc**, not To, so a
  * recipient search on `to:` finds nothing even though the mail arrived.
  *
- * And the token is **not six digits**. `POST /users/{id}/tokens` with
- * `length: 6` mints six characters from an alphanumeric alphabet —
- * `fea844`, not `251152`. Phase 2 recorded a sample that happened to be
- * all digits and the whole design has said "6-digit code" since.
+ * And the token's alphabet has changed with the endpoint. `POST
+ * /users/{id}/tokens` with `length: 6` minted six characters from an
+ * **alphanumeric** alphabet — `fea844`, not `251152` — so the design
+ * saying "6-digit code" was wrong about its own codes for a long time.
+ * `POST /account/tokens/email`, which `auth.js` uses now, mints a numeric
+ * OTP, which finally makes the app's copy true. The matcher below accepts
+ * either, and does not depend on the mail's wording: the template is
+ * Appwrite's now and is edited in a console, so a phrase this file greps
+ * for could change without any commit here.
  */
 async function codeFor(address) {
   for (let i = 0; i < 30; i++) {
@@ -81,7 +86,15 @@ async function codeFor(address) {
     if (found) {
       const full = await (await fetch(`${MAIL}/api/v1/message/${found.ID}`)).json();
       const text = `${full.Text ?? ''} ${found.Snippet ?? ''}`;
-      const m = /code is ([A-Za-z0-9]{4,10})\b/.exec(text);
+      // Numeric OTP first — that is what `/account/tokens/email` sends.
+      // Then the old alphanumeric token, still reachable through any
+      // flow that mints with `/users/{id}/tokens`. Anchored on word
+      // boundaries and required to hold a digit, so a word in the
+      // template's prose cannot be mistaken for a code.
+      // Exactly six, both forms: a looser 4-10 range would match a
+      // copyright year in the template's footer before the real code.
+      const m = /\b(\d{6})\b/.exec(text)
+        ?? /\b(?=[a-z0-9]*\d)([a-z0-9]{6})\b/i.exec(text);
       if (m) return { code: m[1], subject: found.Subject, text };
     }
     await new Promise((r2) => setTimeout(r2, 1000));

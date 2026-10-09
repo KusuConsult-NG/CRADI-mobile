@@ -4,16 +4,24 @@
  * Contract: docs/APPWRITE-FUNCTION-CONTRACTS.md.
  * Client: lib/core/services/appwrite/appwrite_auth_backend.dart.
  *
- * The whole design rests on the endpoint Phase 2 verified:
+ * The whole design rests on a typed code, not a link:
  *
- *   POST /v1/users/{userId}/tokens  {"length": 6, "expire": 900}
- *     -> 201 {"secret": "251152"}
+ *   POST /v1/account/tokens/email  {"userId": "...", "email": "..."}
+ *     -> 201 {"userId": "...", "secret": "251152", "expire": "..."}
  *
- * A server-minted secret of any length we choose, which the user types and
- * redeems for a real session. That is what keeps the app's six-digit code
- * screens instead of rebuilding them as email links — and it deletes a
- * class of bug this project has already paid for once, because a design
- * with no link in it cannot send anybody to the wrong one.
+ * A server-minted six-digit secret, which the user types and redeems for
+ * a real session. That is what keeps the app's code screens instead of
+ * rebuilding them as email links — and it deletes a class of bug this
+ * project has already paid for once, because a design with no link in it
+ * cannot send anybody to the wrong one.
+ *
+ * Phase 2 verified `POST /v1/users/{userId}/tokens` for this, which mints
+ * a secret of any length and expiry we choose but does **not** send it —
+ * delivery is the caller's. That half was Appwrite Messaging, which
+ * refuses to send without an enabled provider, and project
+ * 6ac51e70002ab6238fec has none: every reset failed with "We could not
+ * send the code". `/account/tokens/email` mints *and* mails, through
+ * Cloud's shared SMTP, so no provider is needed. See `sendCode`.
  */
 import { Query, api, apiOrThrow, databaseId } from './lib/appwrite.js';
 import {
@@ -24,10 +32,6 @@ import {
   readJson,
   unauthorized,
 } from './lib/http.js';
-
-/** How long a typed code is good for. */
-const TOKEN_SECONDS = 900;
-const TOKEN_LENGTH = 6;
 
 /**
  * Supabase threw this away per address and per project from a dashboard
@@ -287,58 +291,60 @@ async function findByEmail(email) {
 }
 
 /**
- * Mints a typed code and mails it.
+ * Has Appwrite mint a typed code and mail it.
  *
- * The template lives here rather than in a provider console. Phase 2 calls
- * that an improvement on balance: we shipped a bug last month because the
- * dashboard said 8 digits and the app's copy said 6, and a template in
- * version control cannot drift from the code that reads it.
+ * `POST /account/tokens/email` does both halves: it mints a six-digit
+ * secret good for fifteen minutes and sends it through Appwrite Cloud's
+ * shared SMTP server, which every project has. Nothing needs configuring.
+ *
+ * It replaced a pairing that read better and did not work: mint with
+ * `POST /users/{id}/tokens`, then post the code to
+ * `/messaging/messages/email` with our own subject and body. That kept
+ * the template in version control, which is worth something — this
+ * project shipped a bug once because a provider dashboard said eight
+ * digits and the app's copy said six. But Messaging is bring-your-own
+ * provider: it refuses to send without an enabled one, and project
+ * 6ac51e70002ab6238fec has none, so every reset answered "We could not
+ * send the code". A generic mail that arrives beats a well-worded one
+ * that does not.
+ *
+ * What moved to the console: the wording. Messaging → Templates → OTP,
+ * and it is one template for both a registration code and a reset code,
+ * where this function used to send two different ones. `kind` now only
+ * reaches the log.
+ *
+ * What did not move: the length and the expiry. Appwrite's defaults are
+ * six digits and fifteen minutes, which is exactly what the old mint
+ * asked for, so no screen or string in the app changes.
+ *
+ * **Only ever call this for an address that already has an account.**
+ * Appwrite *creates* one when the address is unknown, which would turn a
+ * reset request for a stranger's address into a new passwordless account
+ * — and hand an enumeration oracle to anyone willing to read the
+ * difference. Both callers resolve the user first and stay silent when
+ * there is none. For an address that does exist, Appwrite ignores the
+ * `userId` below in favour of that address's own account; it is sent
+ * because the endpoint requires it.
  */
 async function sendCode(userId, email, kind, log) {
   await assertNotFlooding(userId);
 
-  const token = await api(`/users/${userId}/tokens`, {
+  const sent = await api('/account/tokens/email', {
     method: 'POST',
-    body: { length: TOKEN_LENGTH, expire: TOKEN_SECONDS },
-  });
-  if (!token.ok) throw new Error(`token mint failed: ${token.status}`);
-  const code = token.body.secret;
-
-  const minutes = Math.round(TOKEN_SECONDS / 60);
-  const subject = kind === 'recovery'
-    ? 'Your CRADI password reset code'
-    : 'Your CRADI verification code';
-  const body = kind === 'recovery'
-    ? `Your CRADI password reset code is ${code}.\n\n` +
-      `It expires in ${minutes} minutes. If you did not ask to reset your ` +
-      `password, you can ignore this message — nothing has changed.`
-    : `Welcome to CRADI.\n\nYour verification code is ${code}.\n\n` +
-      `It expires in ${minutes} minutes.`;
-
-  const sent = await api('/messaging/messages/email', {
-    method: 'POST',
-    body: {
-      messageId: 'unique()',
-      subject,
-      content: body,
-      users: [userId],
-      draft: false,
-    },
+    body: { userId, email },
   });
   if (!sent.ok) {
-    // The code was minted and the mail was not sent. Say so: a silent
-    // success here leaves the user waiting for a code that will never
-    // come, which reads to them as the app being broken.
+    // The mail was not sent. Say so: a silent success here leaves the
+    // user waiting for a code that will never come, which reads to them
+    // as the app being broken.
     //
-    // The reason goes to the log, because the refusal cannot carry it:
-    // the caller sees one sentence whether the project has no enabled
-    // Messaging provider, the key lacks `messages.write`, or the account
-    // has no email target. Without this line the execution log shows
-    // only that the Function refused, and the three are indistinguishable.
+    // The reason goes to the log, because the refusal cannot carry it —
+    // the caller sees one sentence whichever of Appwrite's reasons it
+    // was, and that sameness is deliberate.
     //
-    // `status`, `type` and `message` only — never the whole body. A
-    // Messaging message object carries the email's content, and for this
-    // mail the content is the code.
+    // `status`, `type` and `message` only, never the whole body. Called
+    // with an API key this endpoint returns the minted `secret`, so a
+    // body dump would write live reset codes into the execution log.
     log(
       `${kind} email send failed: ${sent.status}`
         + (sent.body?.type ? ` ${sent.body.type}` : '')
@@ -356,6 +362,16 @@ async function sendCode(userId, email, kind, log) {
  *
  * Counted from the tokens Appwrite already stores for the user, so there
  * is no state of our own to keep consistent.
+ *
+ * **Unverified against a live project since `sendCode` moved to
+ * `/account/tokens/email`.** This reads `GET /users/{id}/tokens`, which
+ * listed the tokens the old `POST /users/{id}/tokens` minted. An email
+ * token is a token on the same user and should be listed too, but that
+ * has not been checked. If it is not, this window never fills and the
+ * throttle quietly stops throttling — Appwrite's own rate limit on
+ * `/account/tokens/email` still applies, so the failure mode is a
+ * different error message, not an open door. Worth confirming by asking
+ * for two codes and reading the list.
  */
 async function assertNotFlooding(userId) {
   const tokens = await api(`/users/${userId}/tokens`);

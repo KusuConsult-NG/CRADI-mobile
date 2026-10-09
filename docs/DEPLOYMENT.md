@@ -107,14 +107,22 @@ origin), but Flutter **web** builds would.
 | --- | --- | --- |
 | **Push** — FCM | Android devices | the FCM v1 **service-account JSON** |
 | **Push** — APNs | iOS devices | an APNs **`.p8` key**, key id, team id, bundle id |
-| **Email** — SMTP (or any supported provider) | the typed codes `/auth` sends: registration, recovery, verification | SMTP host, port, credentials |
+
+**No email provider is needed.** `/auth` sends its typed codes with
+`POST /account/tokens/email`, which mails them over Appwrite Cloud's
+shared SMTP. An email provider here buys only branding and a custom
+template; the codes arrive without one. It was a Messaging send until the
+provider's absence broke every password reset in production — see
+`functions/cradi/src/auth.js`. A self-hosted instance is the opposite
+case: it has no shared SMTP, so it needs `_APP_SMTP_*` set and a
+`worker-mails` container, as `infra/appwrite/local/docker-compose.yml`
+now does.
 
 > **Appwrite accepts a message with no enabled provider.** It answers
 > success, leaves the message `processing`, and delivers nothing. So a
 > missing provider is not a loud failure at deploy time — it is silence
-> afterwards. `infra/appwrite/local/bootstrap.mjs` records the same trap
-> for email, which is why the local stack provisions an SMTP provider by
-> hand.
+> afterwards. That still applies to everything else Messaging carries:
+> push, and any email the outbox sends.
 
 **State on project `6ac51e70002ab6238fec`:**
 

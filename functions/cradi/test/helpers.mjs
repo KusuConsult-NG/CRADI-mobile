@@ -192,6 +192,19 @@ export function fakeAppwrite({
     }
     if (/^\/users\/[^/]+\/verification$/.test(path)) return json(200, {});
     if (/^\/users\/[^/]+\/password$/.test(path)) return json(200, {});
+    if (path === '/account/tokens/email') {
+      // Mints *and* mails, which is why `auth.js` uses it: Messaging
+      // needs an enabled provider and this does not. Returns the secret
+      // because the Function calls it with an API key — a test that
+      // asserts the code never reaches a log or a response needs the
+      // fake to hand one over, or the assertion is vacuous.
+      return json(201, {
+        $id: 't1',
+        userId: body.userId,
+        secret: '251152',
+        expire: new Date(Date.now() + 900_000).toISOString(),
+      });
+    }
     if (path === '/account/sessions/token') {
       return json(201, { $id: 's1', secret: 'session-secret', userId: body.userId });
     }
