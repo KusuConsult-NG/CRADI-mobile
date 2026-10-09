@@ -829,10 +829,18 @@ Once Phase 4 passes:
 
 The panel is hosted on **Appwrite Sites**. It needs a Node runtime, not static
 hosting: `app/api/admin/*` and `app/api/health` are server routes, `proxy.ts`
-is middleware, and `APPWRITE_API_KEY` must never reach the browser. Sites
-detects Next.js with no config file in the repo, so nothing in
-`CRADI-Mobile-Admin` changes for this. `SETUP.md` in that repository has the
-console walkthrough; this is the cutover-order version.
+is middleware, and `APPWRITE_API_KEY` must never reach the browser. `SETUP.md`
+in that repository has the console walkthrough; this is the cutover-order
+version.
+
+Sites detects the framework as `nextjs` on its own, but **framework detection
+does not set the adapter**, and the adapter is the thing that decides whether
+your app runs. Every route in this app is `ƒ` (dynamic, server-rendered on
+demand) — there is not one statically exportable page, not even `/`. Under
+`adapter: static` Appwrite serves `./.next` as a folder of files, finds no
+`index.html`, and returns its own 404 on every path. That is indistinguishable
+from a broken app and it cost most of a day: the build was green, all 15 routes
+compiled, the variables were correct, and the site served nothing.
 
 1. Set the production environment variables **before the first build**:
    ```env
@@ -855,24 +863,76 @@ console walkthrough; this is the cutover-order version.
    Railway deployment served a "Configuration required" screen for exactly
    this reason, for the whole of the cutover, and nothing reported it.
 
-2. Build and deploy the latest `main` commit of `CRADI-Mobile-Admin`. If the
-   variables were added to an existing site, trigger a **rebuild** — a restart
-   re-uses the same bundle.
-3. Add the site's domain as a **Web platform** in the Appwrite project, or
-   every request from it is refused by CORS.
-4. Log into the admin portal using an administrator account **with that
+   Set and inspect these **in the console**. `appwrite sites list-variables`
+   prints every value in full, `APPWRITE_API_KEY` included — the `secret:
+   [hidden]` line in its output is decoration, not redaction. Creating one from
+   the CLI also requires `--variable-id`, and the server's "Variable with the
+   same ID already exists in this project" is misreported: it fires on the
+   uniqueness constraint over `(resourceId, key)`, so it means *that key is
+   already on this site*, not that your chosen ID is taken.
+
+2. Set the adapter to `ssr`, and **pass the VCS flags in the same call**:
+   ```sh
+   appwrite sites update --site-id "$SITE" --name 'CRADI-Mobile-Admin' \
+     --framework nextjs --adapter ssr \
+     --install-command 'npm install' --build-command 'npm run build' \
+     --output-directory './.next' --build-runtime node-22 \
+     --installation-id "$INSTALLATION_ID" \
+     --provider-repository-id "$REPO_ID" \
+     --provider-branch main --provider-root-directory './'
+   ```
+   `sites update` is a **full replace**. Omitting `--installation-id` and the
+   `--provider-*` flags silently clears the GitHub connection, and the next
+   `create-vcs-deployment` then fails with "Installation with the requested ID
+   could not be found". Read the four current values out of `appwrite sites get`
+   before any update and pass them back. `live` needs no flag — it is derived,
+   and reads `false` while the active deployment is not servable under the
+   current adapter.
+
+3. Deploy **from the repository**, never by uploading a folder:
+   ```sh
+   appwrite sites create-vcs-deployment --site-id "$SITE" \
+     --type branch --reference main --activate true
+   ```
+   A manual deployment of the working tree uploads `node_modules` as source and
+   reports `buildDuration: 0` — nothing is compiled, no `NEXT_PUBLIC_*` value is
+   inlined, and the result is `status: ready` over an empty build. Two such
+   deployments sat active during the cutover looking healthy.
+
+4. Confirm the deployment really built, with
+   `appwrite sites get-deployment --site-id "$SITE" --deployment-id <id>`:
+   - `buildSize` is non-zero (~245 MB here); `0` means nothing was produced.
+   - `buildDuration` is tens of seconds (~88s here), never `0`.
+   - the logs contain `Bundling for SSR started` / `finished` — this line is
+     absent under the static adapter and is the clearest proof the adapter took.
+   - `Edge distribution finished successfully (6/6)`. A partial count such as
+     `(1/6)` is a *symptom* of distributing a large wrong payload, not an
+     Appwrite fault — check the adapter before reporting it upstream.
+   - `appwrite sites get` shows `deploymentId` equal to the new deployment.
+
+5. Add the site's domain (`cradi-mobile-admin.appwrite.network`, or the custom
+   domain) as a **Web platform** in the Appwrite project, or every request from
+   the browser is refused by CORS. The server side works regardless, so the
+   signature of a missing platform is a network error on sign-in rather than
+   "invalid credentials".
+
+6. Log into the admin portal using an administrator account **with that
    person's own password**. This is also the end-to-end proof that 5.1's hash
    import worked: it exercises the imported bcrypt hash, Appwrite's
    verification of it, and the `label:admin` grant in one action. No row count
-   substitutes for it.
-5. Verify — by using the panel, not by the healthcheck. `GET /api/health`
-   returns `{"ok": true}` unconditionally and passes while the app is
-   completely misconfigured:
+   substitutes for it — `with a password now: N` distinguishes "has a password"
+   from "has none", and nothing more.
+
+7. Verify — by using the panel, not by the healthcheck. `GET /api/health`
+   returns `{"ok": true}` unconditionally. It does prove the Node server is
+   running, which is worth knowing when the adapter is in doubt, but it passes
+   while the app is completely misconfigured:
    - Dashboard stats load and match migrated counts.
    - Live report list loads with images rendering.
    - Authority contacts can be edited.
    - Broadcast alert test draft works.
-6. Only once sign-in and the checks above pass, decommission the previous
+
+8. Only once sign-in and the checks above pass, decommission the previous
    host: delete the Railway service, then remove its domain from the Appwrite
    project's Web platforms. A stale, misconfigured admin panel left reachable
    on a public URL is worse than none. `railway.json` stays in the repository
