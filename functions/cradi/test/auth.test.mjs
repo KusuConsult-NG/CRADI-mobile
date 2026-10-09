@@ -90,6 +90,36 @@ describe('recovery does not say who exists', () => {
     assert.deepEqual(known.body, unknown.body);
   });
 
+  it('logs why the mail failed, and still tells the caller nothing', async () => {
+    fakeAppwrite({
+      users: [{ $id: 'u1', email: 'known@b.com' }],
+      fail: {
+        '/messaging/messages/email': {
+          status: 400,
+          body: { message: 'no provider is enabled', type: 'general_argument_invalid' },
+        },
+      },
+    });
+    // Its own context: the reason is in the log, and that is the point —
+    // a missing Messaging provider, a key without `messages.write` and an
+    // account with no email target all answer the caller identically.
+    const ctx = context(
+      { action: 'sendRecoveryCode', email: 'known@b.com' },
+      { userId: null },
+    );
+    await auth(ctx);
+
+    assert.equal(ctx.captured.status, 502);
+    assert.ok(!JSON.stringify(ctx.captured.body).includes('no provider'));
+    assert.ok(
+      ctx.logs.some(
+        (l) => l.includes('recovery email send failed: 400')
+          && l.includes('no provider is enabled'),
+      ),
+      `reason not logged: ${JSON.stringify(ctx.logs)}`,
+    );
+  });
+
   it('mints nothing for an address with no account', async () => {
     const fake = fakeAppwrite({ users: [] });
     await call({ action: 'sendRecoveryCode', email: 'nobody@b.com' });
