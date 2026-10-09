@@ -118,13 +118,29 @@ dev_dependencies:
   build_runner: ^2.4.13
   flutter_launcher_icons: ^0.14.1
 
-# App icon configuration
+# App icon configuration.
+#
+# The two image paths are deliberately different files.
+#
+# `image_path` is the legacy pre-API-26 icon. The launcher does not mask
+# it, so an opaque square is right and the JPEG is fine.
+#
+# `adaptive_icon_foreground` is masked, and composited over
+# `adaptive_icon_background`. `ewer_logo.jpg` cannot be used for it: it is
+# a circular logo in a square frame whose corners are solid black, and
+# JPEG has no alpha channel to make them disappear. Used as the
+# foreground it covers the background entirely and the launcher's mask
+# shows those corners as black edges around the icon. The `_foreground`
+# PNG is the same artwork with the corner black cleared to transparent —
+# flood-filled inward from the edges, so black inside the logo is kept.
+#
+# Regenerate with `dart run flutter_launcher_icons` after changing either.
 flutter_launcher_icons:
   android: true
   ios: true
   image_path: "assets/images/ewer_logo.jpg"
   adaptive_icon_background: "#E63946"
-  adaptive_icon_foreground: "assets/images/ewer_logo.jpg"
+  adaptive_icon_foreground: "assets/images/ewer_logo_foreground.png"
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

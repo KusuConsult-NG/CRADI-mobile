@@ -329,6 +329,21 @@ async function sendCode(userId, email, kind, log) {
     // The code was minted and the mail was not sent. Say so: a silent
     // success here leaves the user waiting for a code that will never
     // come, which reads to them as the app being broken.
+    //
+    // The reason goes to the log, because the refusal cannot carry it:
+    // the caller sees one sentence whether the project has no enabled
+    // Messaging provider, the key lacks `messages.write`, or the account
+    // has no email target. Without this line the execution log shows
+    // only that the Function refused, and the three are indistinguishable.
+    //
+    // `status`, `type` and `message` only — never the whole body. A
+    // Messaging message object carries the email's content, and for this
+    // mail the content is the code.
+    log(
+      `${kind} email send failed: ${sent.status}`
+        + (sent.body?.type ? ` ${sent.body.type}` : '')
+        + (sent.body?.message ? `: ${sent.body.message}` : ''),
+    );
     throw new Refusal(502,
       'We could not send the code. Please try again in a moment.',
       null);
