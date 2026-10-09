@@ -32,8 +32,8 @@ describe('registration', () => {
     assert.equal(profile.isApproved, false);
     assert.equal(profile.isVerified, false);
 
-    assert.ok(fake.calls.some((c) => c.path.endsWith('/tokens') && c.method === 'POST'));
-    assert.ok(fake.calls.some((c) => c.path === '/messaging/messages/email'));
+    // One call that mints and mails, not a mint plus a Messaging send.
+    assert.ok(fake.calls.some((c) => c.path === '/account/tokens/email' && c.method === 'POST'));
   });
 
   it('never lets the client decide its own approval', async () => {
@@ -69,7 +69,7 @@ describe('registration', () => {
     // Silence here leaves the user waiting for a code that will never
     // arrive, which reads to them as the app being broken.
     fakeAppwrite({
-      fail: { '/messaging/messages/email': { status: 500, body: { message: 'smtp down' } } },
+      fail: { '/account/tokens/email': { status: 500, body: { message: 'smtp down' } } },
     });
     const out = await call({
       action: 'signUp', email: 'a@b.com', password: 'Password1!', metadata: {},
@@ -90,19 +90,44 @@ describe('recovery does not say who exists', () => {
     assert.deepEqual(known.body, unknown.body);
   });
 
+  it('never lets the minted code reach the log or the response', async () => {
+    // New hazard with `/account/tokens/email`: called with an API key it
+    // answers with the `secret` it just mailed. The old mint did too, but
+    // the code then had to travel through this Function into an email
+    // body, so a stray log line was plausible. It no longer needs to be
+    // touched at all — and the fake returns one so this cannot pass
+    // vacuously.
+    fakeAppwrite({ users: [{ $id: 'u1', email: 'known@b.com' }] });
+    const ctx = context(
+      { action: 'sendRecoveryCode', email: 'known@b.com' },
+      { userId: null },
+    );
+    await auth(ctx);
+
+    assert.equal(ctx.captured.status, 200);
+    assert.ok(
+      !JSON.stringify(ctx.captured.body).includes('251152'),
+      `the code is in the response: ${JSON.stringify(ctx.captured.body)}`,
+    );
+    assert.ok(
+      !ctx.logs.some((l) => l.includes('251152')),
+      `the code is in the log: ${JSON.stringify(ctx.logs)}`,
+    );
+  });
+
   it('logs why the mail failed, and still tells the caller nothing', async () => {
     fakeAppwrite({
       users: [{ $id: 'u1', email: 'known@b.com' }],
       fail: {
-        '/messaging/messages/email': {
+        '/account/tokens/email': {
           status: 400,
-          body: { message: 'no provider is enabled', type: 'general_argument_invalid' },
+          body: { message: 'mail server refused the sender', type: 'general_smtp_disabled' },
         },
       },
     });
     // Its own context: the reason is in the log, and that is the point —
-    // a missing Messaging provider, a key without `messages.write` and an
-    // account with no email target all answer the caller identically.
+    // every reason Appwrite can give answers the caller identically, so
+    // the log is the only place the difference survives.
     const ctx = context(
       { action: 'sendRecoveryCode', email: 'known@b.com' },
       { userId: null },
@@ -110,11 +135,11 @@ describe('recovery does not say who exists', () => {
     await auth(ctx);
 
     assert.equal(ctx.captured.status, 502);
-    assert.ok(!JSON.stringify(ctx.captured.body).includes('no provider'));
+    assert.ok(!JSON.stringify(ctx.captured.body).includes('mail server'));
     assert.ok(
       ctx.logs.some(
         (l) => l.includes('recovery email send failed: 400')
-          && l.includes('no provider is enabled'),
+          && l.includes('mail server refused the sender'),
       ),
       `reason not logged: ${JSON.stringify(ctx.logs)}`,
     );
@@ -123,15 +148,18 @@ describe('recovery does not say who exists', () => {
   it('mints nothing for an address with no account', async () => {
     const fake = fakeAppwrite({ users: [] });
     await call({ action: 'sendRecoveryCode', email: 'nobody@b.com' });
-    assert.equal(fake.calls.filter((c) => c.path.endsWith('/tokens')).length, 0);
-    assert.equal(fake.calls.filter((c) => c.path === '/messaging/messages/email').length, 0);
+    // Not merely "no mail sent": `/account/tokens/email` CREATES an
+    // account for an address it does not know, so reaching it at all
+    // would leave a passwordless account behind AND leak that the
+    // address was new. Never calling it is the property under test.
+    assert.equal(fake.calls.filter((c) => c.path === '/account/tokens/email').length, 0);
   });
 
   it('and the resend is just as quiet', async () => {
     const fake = fakeAppwrite({ users: [] });
     const out = await call({ action: 'resendSignUpCode', email: 'nobody@b.com' });
     assert.equal(out.status, 200);
-    assert.equal(fake.calls.filter((c) => c.path.endsWith('/tokens')).length, 0);
+    assert.equal(fake.calls.filter((c) => c.path === '/account/tokens/email').length, 0);
   });
 });
 
@@ -304,7 +332,7 @@ describe('a registration that fails halfway', () => {
       'the account was deleted',
     );
     // And no code was sent for an account that no longer exists.
-    assert.ok(!fake.calls.some((c) => c.path === '/messaging/messages/email'));
+    assert.ok(!fake.calls.some((c) => c.path === '/account/tokens/email'));
   });
 
   it('lets the address be registered again afterwards', async () => {

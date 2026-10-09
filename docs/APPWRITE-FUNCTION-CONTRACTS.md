@@ -110,11 +110,22 @@ of retrying it after the fix.
 
 **Request** `{"action": "...", ...}`.
 
-The design rests on the endpoint Phase 2 verified:
-`POST /v1/users/{userId}/tokens {"length": 6, "expire": 900}` mints a
-secret of **any length we choose**, so the app's six-digit code screens
-survive instead of becoming email links. That call needs a server key, so
-every step that touches it is here.
+The design rests on a typed code rather than an email link, so the app's
+code screens survive. It is minted and mailed by
+`POST /v1/account/tokens/email {"userId": "...", "email": "..."}` — six
+digits, fifteen minutes, delivered over Appwrite Cloud's shared SMTP, so
+no Messaging provider is involved. Called with a server key it also
+returns the `secret`, which is why every step that touches it is here and
+why the code must never reach a log or a response.
+
+Phase 2 verified `POST /v1/users/{userId}/tokens` for this instead, which
+mints a secret of any length and expiry but does **not** send it. Delivery
+was then Appwrite Messaging, which refuses to send without an enabled
+provider, and production had none: every code failed. Two consequences of
+the move are worth knowing — the wording is now Appwrite's OTP template,
+edited in the console rather than in this repository, and the codes are
+numeric where `/users/{id}/tokens` minted alphanumeric ones (`fea844`),
+which finally makes "six-digit code" an accurate description.
 
 ### `signUp`
 

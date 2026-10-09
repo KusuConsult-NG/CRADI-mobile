@@ -160,10 +160,14 @@ if (!key.ok) throw new Error(`key failed: ${JSON.stringify(key.body).slice(0, 30
 /**
  * An SMTP provider pointed at Mailpit.
  *
- * The auth Function sends its typed codes through Appwrite Messaging
- * (`/messaging/messages/email`), and Messaging refuses to send without
- * an enabled provider — it accepts the message and leaves it
- * `processing`, so the Function reports success and no mail is ever
+ * No longer what carries the typed codes: `auth.js` sends those with
+ * `POST /account/tokens/email`, which uses the *instance's* SMTP
+ * (`_APP_SMTP_*` in docker-compose.yml) and the `worker-mails`
+ * container, not a Messaging provider. This stays for everything else
+ * Messaging carries — the outbox's own email sends — and because the
+ * trap it documents is still live for those: Messaging refuses to send
+ * without an enabled provider, but it *accepts* the message and leaves
+ * it `processing`, so the caller reports success and no mail is ever
  * delivered. Phase 15 created this by hand and never recorded it, which
  * is why a freshly bootstrapped project looked like a broken mailer.
  */

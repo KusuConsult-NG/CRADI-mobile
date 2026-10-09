@@ -21,7 +21,9 @@
 # are created asynchronously by it — without it every attribute sits in
 # "processing" forever), MariaDB and Redis.
 #
-# Not a deployment. No Traefik, no functions executor, no mail.
+# Not a deployment. No Traefik, no functions executor. Mail goes to a
+# Mailpit catcher, because the typed-code flows cannot be tested without
+# an inbox to read.
 services:
   mariadb:
     image: mariadb:10.11
@@ -102,6 +104,18 @@ services:
       _APP_DB_PASS: password
       _APP_REDIS_HOST: redis
       _APP_REDIS_PORT: "6379"
+      # `auth.js` sends its typed codes with `POST /account/tokens/email`,
+      # which mints the code *and* mails it. On Cloud that goes out over
+      # Appwrite's shared SMTP and needs no configuration; a self-hosted
+      # instance has none, and an empty `_APP_SMTP_HOST` disables all mail
+      # sending outright — so without these three the local stack mints
+      # codes that reach no inbox and `e2e-auth.mjs` times out looking for
+      # one. No username or password: Mailpit accepts anything.
+      _APP_SMTP_HOST: mailpit
+      _APP_SMTP_PORT: "1025"
+      _APP_SMTP_SECURE: ""
+      _APP_SYSTEM_EMAIL_ADDRESS: no-reply@cradi.test
+      _APP_SYSTEM_EMAIL_NAME: CRADI (local)
       _APP_WORKER_PER_CORE: "2"
       _APP_STORAGE_LIMIT: "30000000"
       _APP_STORAGE_PREVIEW_LIMIT: "20000000"
@@ -132,6 +146,19 @@ services:
   appwrite-worker-messaging:
     image: appwrite/appwrite:1.9.6
     entrypoint: worker-messaging
+    depends_on:
+      - appwrite
+    environment: *appwrite_env
+
+  # Account mail — verification and recovery codes — is dispatched by this
+  # worker, not by `worker-messaging`. They are separate queues: Messaging
+  # carries `/messaging/messages/*`, this carries everything Appwrite sends
+  # on the account's behalf. Omitting it has the same shape of failure the
+  # messaging worker's comment describes: the API accepts the request and
+  # nothing is ever sent.
+  appwrite-worker-mails:
+    image: appwrite/appwrite:1.9.6
+    entrypoint: worker-mails
     depends_on:
       - appwrite
     environment: *appwrite_env
