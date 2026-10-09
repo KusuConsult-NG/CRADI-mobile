@@ -233,11 +233,26 @@ ORDER BY len DESC;
 Send broadcast notice to field agents 2 hours before the cutover window:
 > *"Scheduled maintenance in progress. Incident reports submitted via the mobile app will be stored safely in local offline storage on your device and automatically synced once maintenance completes."*
 
-### 4.2 Enable Maintenance Mode on Admin Portal
-Deploy maintenance banner on `CRADI-Mobile-Admin` or set environment variable:
-```bash
-NEXT_PUBLIC_MAINTENANCE_MODE=true
-```
+### 4.2 Close the Admin Portal to Staff
+
+> **`NEXT_PUBLIC_MAINTENANCE_MODE` does not exist.** The string "maintenance"
+> appears nowhere in `CRADI-Mobile-Admin` — not in code, config or docs. An
+> earlier version of this runbook told you to set it here and unset it in 8.1,
+> and both steps did nothing: the panel serves normally and an operator who
+> followed them believed the portal was closed while it was fully open.
+
+There is no built-in maintenance mode. Pick one of:
+
+- **Nothing** — the write freeze in 4.3 is what actually stops data changing,
+  from the panel and from the app alike. A read-only panel during the cutover
+  is harmless, and this is the honest default.
+- **Take the deployment offline** for the window, if staff must not see stale
+  data mid-migration.
+- **Build one**, if you want a banner. That is a change to
+  `CRADI-Mobile-Admin`, not a variable, and it needs a rebuild to take effect
+  like every other `NEXT_PUBLIC_*` value.
+
+Whichever you choose, the Phase 1 broadcast is what actually tells people.
 
 ### 4.3 Supabase Database Write Freeze
 Lock all public writes on Supabase while keeping read access available for the
@@ -811,7 +826,15 @@ caused by this marks `demotedRole: true`.
 Once Phase 4 passes:
 
 ### 8.1 Admin Portal Cutover (`CRADI-Mobile-Admin`)
-1. In Vercel / hosting provider, update environment variables for production:
+
+The panel is hosted on **Appwrite Sites**. It needs a Node runtime, not static
+hosting: `app/api/admin/*` and `app/api/health` are server routes, `proxy.ts`
+is middleware, and `APPWRITE_API_KEY` must never reach the browser. Sites
+detects Next.js with no config file in the repo, so nothing in
+`CRADI-Mobile-Admin` changes for this. `SETUP.md` in that repository has the
+console walkthrough; this is the cutover-order version.
+
+1. Set the production environment variables **before the first build**:
    ```env
    NEXT_PUBLIC_APPWRITE_ENDPOINT=https://fra.cloud.appwrite.io/v1
    NEXT_PUBLIC_APPWRITE_PROJECT_ID=6ac51e70002ab6238fec
@@ -826,14 +849,34 @@ Once Phase 4 passes:
    `NEXT_PUBLIC_APPWRITE_REPORT_IMAGES_BUCKET`, and it must agree with the
    Flutter client's `REPORT_IMAGES_BUCKET` define. The database is `cradi`, not
    the previous project's `6941e2c2003705bb5a25`.
-2. Deploy the latest `main` commit of `CRADI-Mobile-Admin`.
-3. Disable `NEXT_PUBLIC_MAINTENANCE_MODE`.
-4. Log into the admin portal using an administrator account.
-5. Verify:
+   **Order matters here, and getting it wrong is the known failure.**
+   `next build` inlines every `NEXT_PUBLIC_*` value into the client bundle, so
+   one set after the build changes nothing until the site is rebuilt. The
+   Railway deployment served a "Configuration required" screen for exactly
+   this reason, for the whole of the cutover, and nothing reported it.
+
+2. Build and deploy the latest `main` commit of `CRADI-Mobile-Admin`. If the
+   variables were added to an existing site, trigger a **rebuild** — a restart
+   re-uses the same bundle.
+3. Add the site's domain as a **Web platform** in the Appwrite project, or
+   every request from it is refused by CORS.
+4. Log into the admin portal using an administrator account **with that
+   person's own password**. This is also the end-to-end proof that 5.1's hash
+   import worked: it exercises the imported bcrypt hash, Appwrite's
+   verification of it, and the `label:admin` grant in one action. No row count
+   substitutes for it.
+5. Verify — by using the panel, not by the healthcheck. `GET /api/health`
+   returns `{"ok": true}` unconditionally and passes while the app is
+   completely misconfigured:
    - Dashboard stats load and match migrated counts.
    - Live report list loads with images rendering.
    - Authority contacts can be edited.
    - Broadcast alert test draft works.
+6. Only once sign-in and the checks above pass, decommission the previous
+   host: delete the Railway service, then remove its domain from the Appwrite
+   project's Web platforms. A stale, misconfigured admin panel left reachable
+   on a public URL is worse than none. `railway.json` stays in the repository
+   until then — it is the way back if the move stalls.
 
 ### 8.2 Mobile Client Release
 1. Create and push a release tag on `KusuConsult-NG/CRADI-mobile`:
