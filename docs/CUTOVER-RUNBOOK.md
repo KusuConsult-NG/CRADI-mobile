@@ -825,6 +825,49 @@ caused by this marks `demotedRole: true`.
 
 Once Phase 4 passes:
 
+### 8.0 Deploy the Functions — nothing in CI does this
+
+**No workflow deploys `functions/cradi`.** `ci.yml` tests it and stops
+there. Merging to `main` does not ship a Function: the deployed code is
+whatever `deploy.mjs` last uploaded, and it changes only when someone runs
+it. So a correct fix can sit in `main`, green, reviewed and merged, while
+production keeps running the version it replaced — with no failing check
+anywhere to say so.
+
+That is not hypothetical. The password-reset fix (`/account/tokens/email`
+instead of Appwrite Messaging) was merged and every reset kept failing
+exactly as before, because nothing had deployed it. It is the same shape
+as the admin panel's "Configuration required" screen in 8.1: the change
+was right, and invisible, because the thing serving traffic had not been
+rebuilt.
+
+Source the file holding the Cloud endpoint, project id and API key first
+(`~/.cradi/appwrite-cloud.env` on the machine this was last run from), then:
+
+```bash
+cd /path/to/CRADI-mobile
+git pull origin main
+source ~/.cradi/appwrite-cloud.env
+node infra/appwrite/local/deploy.mjs
+```
+
+Nothing in that block is a placeholder except the path, and it carries no
+`#` comments — in an interactive zsh, `<angle brackets>` are redirections
+and `#` is not a comment unless `INTERACTIVE_COMMENTS` is set, so a block
+written the usual documentation way fails with `parse error near '\n'`.
+
+The `local/` in that path is a historical accident, and the script's own
+header says so: it deploys to whatever `APPWRITE_ENDPOINT` names, Cloud
+included. It uploads one source tree (`functions/cradi`) twice, once per
+entrypoint, and waits for both builds.
+
+**Run it whenever `functions/cradi/` changes, not only at cutover** — this
+is also step 2 of Scenario B in § 10, where it is the hotfix path. Then
+confirm from the console, **Functions → the Function → Deployments**, that
+the newest deployment is `ready` and its build time is not zero. A build
+that reports no time compiled nothing, the same trap 8.1 records for
+Sites.
+
 ### 8.1 Admin Portal Cutover (`CRADI-Mobile-Admin`)
 
 The panel is hosted on **Appwrite Sites**. It needs a Node runtime, not static
@@ -1023,7 +1066,8 @@ If a critical, blocking flaw is discovered during the cutover window:
 ### Scenario B: Flaw Discovered After Mobile Release
 Because mobile apps cannot be instantly rolled back across client handsets once published:
 1. **Fix Forward Priority:** The Appwrite Function backend is serverless. Function hotfixes can be deployed to Appwrite Cloud in seconds without client app updates.
-2. **Hotfix Command:**
+2. **Hotfix Command** — the same deploy § 8.0 describes, including the
+   check that the new deployment is `ready` with a non-zero build time:
    ```bash
    node infra/appwrite/local/deploy.mjs
    ```
