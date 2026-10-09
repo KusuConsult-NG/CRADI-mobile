@@ -78,6 +78,39 @@ const PORT = Number(process.env.SMS_STANDIN_PORT ?? 8099);
 
 let BASE_URL = null;
 if (!LIVE) {
+  /**
+   * Stand-in mode only works against a local stack, and must refuse to
+   * run anywhere else.
+   *
+   * It redeploys the worker with `TERMII_BASE_URL` pointing at a private
+   * address on this machine's docker network. On a remote project that
+   * address is unreachable, so the worker is left aimed at nothing and
+   * every authority SMS fails — the same outage a deploy without the
+   * Termii pair causes, arrived at from the other direction and just as
+   * quiet. Recovering means another deploy, which is not obvious when
+   * the symptom is "no SMS" rather than an error.
+   *
+   * Live mode is exempt and is the way to exercise a remote project: it
+   * leaves `TERMII_BASE_URL` unset so the worker calls Termii itself,
+   * which is the contract this cannot otherwise prove. Its own
+   * assertions above cover the cost of that.
+   */
+  const host = new URL(EP).hostname;
+  if (host !== 'appwrite.local' && host !== 'localhost' && host !== '127.0.0.1') {
+    console.error(
+      `Refusing to run: the stand-in rewrites the deployed worker's\n`
+        + `TERMII_BASE_URL to an address on this machine's docker network,\n`
+        + `which ${host} cannot reach — it would leave the worker unable to\n`
+        + `send any authority SMS until the next deploy.\n\n`
+        + 'To exercise a remote project, use live mode, which leaves\n'
+        + 'TERMII_BASE_URL alone and sends through Termii for real:\n'
+        + '  SMS_LIVE_NUMBER=+234XXXXXXXXXX node infra/appwrite/local/e2e-sms-deployed.mjs\n\n'
+        + 'It costs money and reaches a handset, and refuses unless exactly\n'
+        + 'one authority covers the LGA it uses.',
+    );
+    process.exit(3);
+  }
+
   const gateway = execFileSync('docker', [
     'network', 'inspect', NETWORK, '-f', '{{range .IPAM.Config}}{{.Gateway}}{{end}}',
   ]).toString().trim();

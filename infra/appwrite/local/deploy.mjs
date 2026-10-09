@@ -102,6 +102,46 @@ const SMS = {
   ...(process.env.TERMII_BASE_URL ? { TERMII_BASE_URL: process.env.TERMII_BASE_URL } : {}),
 };
 
+/**
+ * A deploy that silences SMS has to be chosen, not discovered.
+ *
+ * The loop below deletes every existing variable before writing these,
+ * so a deploy whose shell lacks the Termii pair does not merely fail to
+ * set them — it removes the pair that was already there, and `drain.js`
+ * then skips every authority SMS silently (`smsSender()` returns null).
+ * The `SMS: OFF` warning this script prints is not a safety device: it
+ * is printed on the way to the delete, and by the time anyone reads it
+ * the credentials are gone and only Termii can reissue them.
+ *
+ * That is not hypothetical. It happened on 9 October 2026, deploying the
+ * password-reset fix from a shell that had the Appwrite keys and not the
+ * Termii ones.
+ *
+ * Local stacks are exempt: a stand-in sender is the point there and no
+ * authority is waiting on it. `ALLOW_SMS_OFF=1` is the deliberate
+ * override, for a project that genuinely has no SMS yet.
+ */
+if (!isLocalStack && !(SMS.TERMII_API_KEY && SMS.TERMII_SENDER_ID)) {
+  if (!process.env.ALLOW_SMS_OFF) {
+    console.error(
+      'Refusing to deploy: TERMII_API_KEY and TERMII_SENDER_ID are not in this\n'
+        + 'environment, and this deploy would DELETE whatever the Functions\n'
+        + `currently hold for them — turning off every authority SMS on ${EP}.\n\n`
+        + 'Put both in the environment and run again:\n'
+        + '  set -a; source <your env file>; set +a\n\n'
+        + 'Read the current values from the Appwrite console first if your env\n'
+        + 'file does not have them (Functions -> worker -> Settings -> Variables);\n'
+        + 'once this script has run they are only recoverable from Termii.\n\n'
+        + 'If this project really has no SMS, say so deliberately:\n'
+        + '  ALLOW_SMS_OFF=1 node infra/appwrite/local/deploy.mjs',
+    );
+    process.exit(3);
+  }
+  console.error(
+    '! ALLOW_SMS_OFF is set: deploying with every authority SMS disabled.',
+  );
+}
+
 const VARIABLES = {
   // Only when the stack is the local one; on Cloud Appwrite's own
   // injection is right and `lib/appwrite.js` prefers it, correctly.

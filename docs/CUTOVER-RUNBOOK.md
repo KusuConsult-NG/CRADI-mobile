@@ -841,13 +841,43 @@ as the admin panel's "Configuration required" screen in 8.1: the change
 was right, and invisible, because the thing serving traffic had not been
 rebuilt.
 
-Source the file holding the Cloud endpoint, project id and API key first
-(`~/.cradi/appwrite-cloud.env` on the machine this was last run from), then:
+**It replaces each Function's variables wholesale, so check the Termii pair
+before you run it.** The script deletes every existing variable and writes
+back only what its own shell carries. A deploy from an environment holding
+the Appwrite keys but not `TERMII_API_KEY` and `TERMII_SENDER_ID` therefore
+*removes* them, and `drain.js` then skips every authority SMS silently —
+`smsSender()` returns null rather than failing, so a system that cannot
+warn a single local authority looks exactly like one with nothing to warn
+them about. The copy in the Function's variables is the only copy; once
+deleted, only Termii can reissue the key.
+
+This happened on 9 October 2026, deploying the password-reset fix. The
+script now refuses it: a non-local deploy without both Termii variables
+exits 3 and writes nothing, and `ALLOW_SMS_OFF=1` is the deliberate
+override for a project that genuinely has no SMS. The `SMS: OFF` line in
+the output is not the safety device — it prints on the way to the delete.
+
+Confirm the environment file carries all five names before deploying, with
+values never printed:
+
+```bash
+grep -o '^[[:space:]]*\(export \)\?[A-Za-z_][A-Za-z0-9_]*' ~/.cradi/appwrite-cloud.env
+```
+
+`APPWRITE_ENDPOINT`, `APPWRITE_PROJECT_ID`, `APPWRITE_API_KEY`,
+`TERMII_API_KEY`, `TERMII_SENDER_ID`. If the Termii pair is missing, read
+the live values out of the console first — **Functions → `worker` →
+Settings → Variables** — and add them to the file.
+
+Then source that file and deploy. `set -a` matters: a file that assigns
+without `export` creates shell variables, which `node` never sees, and the
+script's `source … .env.local first` message fires even though you just
+sourced something.
 
 ```bash
 cd /path/to/CRADI-mobile
 git pull origin main
-source ~/.cradi/appwrite-cloud.env
+set -a; source ~/.cradi/appwrite-cloud.env; set +a
 node infra/appwrite/local/deploy.mjs
 ```
 
@@ -862,11 +892,11 @@ included. It uploads one source tree (`functions/cradi`) twice, once per
 entrypoint, and waits for both builds.
 
 **Run it whenever `functions/cradi/` changes, not only at cutover** — this
-is also step 2 of Scenario B in § 10, where it is the hotfix path. Then
-confirm from the console, **Functions → the Function → Deployments**, that
-the newest deployment is `ready` and its build time is not zero. A build
-that reports no time compiled nothing, the same trap 8.1 records for
-Sites.
+is also step 2 of Scenario B in § 10, where it is the hotfix path. The
+output must read `SMS: on, as "<sender>"` before the uploads. Then confirm
+from the console, **Functions → the Function → Deployments**, that the
+newest deployment is `ready` and its build time is not zero. A build that
+reports no time compiled nothing, the same trap 8.1 records for Sites.
 
 ### 8.1 Admin Portal Cutover (`CRADI-Mobile-Admin`)
 
