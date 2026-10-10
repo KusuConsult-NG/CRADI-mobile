@@ -18,6 +18,7 @@ import 'package:climate_app/features/knowledge_base/providers/knowledge_provider
 import 'package:climate_app/features/alerts/providers/alerts_provider.dart';
 import 'package:climate_app/features/knowledge_base/providers/news_provider.dart';
 import 'package:climate_app/core/services/secure_storage_service.dart';
+import 'package:climate_app/core/services/appwrite/appwrite_config.dart';
 import 'package:climate_app/core/services/session_manager.dart';
 import 'package:climate_app/core/services/offline_storage_service.dart';
 import 'package:climate_app/core/providers/settings_provider.dart';
@@ -114,6 +115,25 @@ Future<void> _bootstrap() async {
 
   // Initialize settings
   await SettingsProvider().init();
+
+  // A build with no backend compiled in has to say so.
+  //
+  // `AppwriteConfig.endpoint` and `projectId` are bare
+  // `String.fromEnvironment` with no default, so a build missing
+  // `--dart-define-from-file=env.json` compiles in empty strings and
+  // `isConfigured` is false for the life of the binary. Every backend call
+  // then fails, and the app's own handling of that is to behave as signed
+  // out (`AuthProvider`, `auth_provider.dart`) — which is indistinguishable
+  // from a broken server. An APK built this way was diagnosed as a mail
+  // outage on 9 October 2026 before anyone thought to check the build.
+  //
+  // CI already refuses to produce a *tagged release* this way
+  // (`.github/workflows/ci.yml`, "this build would start signed out"). This
+  // is the same guard for a build made by hand, where nothing else checks.
+  if (!AppwriteConfig.isConfigured) {
+    runApp(const _UnconfiguredApp());
+    return;
+  }
 
   runApp(
     MultiProvider(
@@ -374,6 +394,72 @@ class _ClimateAppState extends State<ClimateApp> with WidgetsBindingObserver {
         // Blocks the app while this build is below app_min_version.
         builder: (context, child) => ForceUpdateGate(
           child: SignOutNoticeListener(child: child ?? const SizedBox.shrink()),
+        ),
+      ),
+    );
+  }
+}
+
+/// Shown instead of the app when no backend was compiled in.
+///
+/// Deliberately plain: no providers, no localisation, no router. Those all
+/// assume a configured backend, and the one thing this screen must do is
+/// render when the rest of the app cannot. It is a build fault rather than
+/// a user-facing state, so the text is diagnostic rather than friendly —
+/// whoever sees it is whoever can fix it.
+class _UnconfiguredApp extends StatelessWidget {
+  const _UnconfiguredApp();
+
+  @override
+  Widget build(BuildContext context) {
+    return const MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: Scaffold(
+        backgroundColor: Color(0xFFE63946),
+        body: SafeArea(
+          child: Center(
+            child: Padding(
+              padding: EdgeInsets.all(24),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'No backend configured',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  SizedBox(height: 16),
+                  Text(
+                    'This build has no APPWRITE_ENDPOINT or '
+                    'APPWRITE_PROJECT_ID compiled into it, so it cannot '
+                    'reach the server. Sign-in and password reset will '
+                    'fail with errors that look like server problems.',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 15,
+                      height: 1.5,
+                    ),
+                  ),
+                  SizedBox(height: 16),
+                  Text(
+                    'Rebuild with:\n\n'
+                    'flutter build apk --release \\\n'
+                    '  --dart-define-from-file=env.json',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 13,
+                      height: 1.5,
+                      fontFamily: 'monospace',
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
         ),
       ),
     );
