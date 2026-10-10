@@ -1025,7 +1025,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsLogoutConfirm => 'Are you sure you want to sign out?';
 
   @override
-  String get settingsFooterSystemName => 'Climate Early Warning System (CEWS)';
+  String get settingsFooterSystemName =>
+      'Early Warning and Early Response System (EWER)';
 
   @override
   String get biometricErrorNotEnrolled =>

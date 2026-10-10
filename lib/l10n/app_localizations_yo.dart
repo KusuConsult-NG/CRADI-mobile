@@ -1023,7 +1023,7 @@ class AppLocalizationsYo extends AppLocalizations {
 
   @override
   String get settingsFooterSystemName =>
-      'Ètò Ìkìlọ̀ Kùtùkùtù Nípa Ojú-ọjọ́ (CEWS)';
+      'Ètò Ìkìlọ̀ Kùtùkùtù àti Ìdáhùn Kíákíá (EWER)';
 
   @override
   String get biometricErrorNotEnrolled =>

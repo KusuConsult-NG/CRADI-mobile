@@ -307,7 +307,7 @@
   "settingsOfflineModeEnabled": "Agbanyela ọnọdụ enweghị ịntanetị",
   "settingsOfflineModeRestoring": "Na-eweghachi njikọ...",
   "settingsLogoutConfirm": "Ị ji n'aka na ị chọrọ ịpụ?",
-  "settingsFooterSystemName": "Sistemụ Ịdọ Aka ná Ntị n'Oge Maka Ihu Igwe (CEWS)",
+  "settingsFooterSystemName": "Sistemụ Ịdọ Aka ná Ntị n'Oge na Nzaghachi n'Oge (EWER)",
   "biometricErrorNotEnrolled": "Edebanyeghị biometrik ọ bụla. Biko buru ụzọ tinye mkpịsị aka ma ọ bụ Face ID na Ntọala ngwaọrụ gị.",
   "biometricErrorUnavailable": "Biometrik adịghị na ngwaọrụ a.",
   "biometricErrorLockedOut": "Ọnwụnwa karịrị akarị. Akpọchiri biometrik; meghee ngwaọrụ gị ma nwaa ọzọ ma emechaa.",

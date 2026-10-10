@@ -1023,7 +1023,8 @@ class AppLocalizationsPcm extends AppLocalizations {
   String get settingsLogoutConfirm => 'You sure say you wan sign out?';
 
   @override
-  String get settingsFooterSystemName => 'Climate Early Warning System (CEWS)';
+  String get settingsFooterSystemName =>
+      'Early Warning and Early Response System (EWER)';
 
   @override
   String get biometricErrorNotEnrolled =>
