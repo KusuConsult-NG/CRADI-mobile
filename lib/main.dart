@@ -400,7 +400,6 @@ class _ClimateAppState extends State<ClimateApp> with WidgetsBindingObserver {
   }
 }
 
-
 /// Shown instead of the app when no backend was compiled in.
 ///
 /// Deliberately plain: no providers, no localisation, no router. Those all
