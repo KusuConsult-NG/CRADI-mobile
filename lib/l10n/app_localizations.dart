@@ -1946,10 +1946,10 @@ abstract class AppLocalizations {
   /// **'Are you sure you want to sign out?'**
   String get settingsLogoutConfirm;
 
-  /// Footer text at the bottom of Settings (system name; CEWS is the acronym).
+  /// Footer text at the bottom of Settings. The system name, which is the app name expanded: EWER is Early Warning and Early Response. Each locale's landingSubtitle carries the same expansion; keep the two in step.
   ///
   /// In en, this message translates to:
-  /// **'Climate Early Warning System (CEWS)'**
+  /// **'Early Warning and Early Response System (EWER)'**
   String get settingsFooterSystemName;
 
   /// Error when the device has no fingerprint/face enrolled.

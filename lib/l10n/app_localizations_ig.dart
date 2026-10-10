@@ -1018,7 +1018,7 @@ class AppLocalizationsIg extends AppLocalizations {
 
   @override
   String get settingsFooterSystemName =>
-      'Sistemụ Ịdọ Aka ná Ntị n\'Oge Maka Ihu Igwe (CEWS)';
+      'Sistemụ Ịdọ Aka ná Ntị n\'Oge na Nzaghachi n\'Oge (EWER)';
 
   @override
   String get biometricErrorNotEnrolled =>

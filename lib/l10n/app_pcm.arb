@@ -307,7 +307,7 @@
   "settingsOfflineModeEnabled": "Offline mode don on",
   "settingsOfflineModeRestoring": "E dey bring connection back...",
   "settingsLogoutConfirm": "You sure say you wan sign out?",
-  "settingsFooterSystemName": "Climate Early Warning System (CEWS)",
+  "settingsFooterSystemName": "Early Warning and Early Response System (EWER)",
   "biometricErrorNotEnrolled": "No biometrics dey for dis phone. Abeg add fingerprint or Face ID for your phone Settings first.",
   "biometricErrorUnavailable": "Biometrics no dey dis phone.",
   "biometricErrorLockedOut": "You don try too many times. Biometrics don lock; open your phone and try again later.",

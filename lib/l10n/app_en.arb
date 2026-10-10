@@ -1327,9 +1327,9 @@
   "@settingsLogoutConfirm": {
     "description": "Body of the log-out confirmation dialog."
   },
-  "settingsFooterSystemName": "Climate Early Warning System (CEWS)",
+  "settingsFooterSystemName": "Early Warning and Early Response System (EWER)",
   "@settingsFooterSystemName": {
-    "description": "Footer text at the bottom of Settings (system name; CEWS is the acronym)."
+    "description": "Footer text at the bottom of Settings. The system name, which is the app name expanded: EWER is Early Warning and Early Response. Each locale's landingSubtitle carries the same expansion; keep the two in step."
   },
   "biometricErrorNotEnrolled": "No biometrics enrolled. Please add a fingerprint or Face ID in your device Settings first.",
   "@biometricErrorNotEnrolled": {

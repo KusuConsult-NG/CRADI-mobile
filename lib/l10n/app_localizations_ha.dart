@@ -1031,7 +1031,7 @@ class AppLocalizationsHa extends AppLocalizations {
 
   @override
   String get settingsFooterSystemName =>
-      'Tsarin Gargaɗin Farko kan Yanayi (CEWS)';
+      'Tsarin Gargaɗin Farko da Ɗaukar Mataki da Wuri (EWER)';
 
   @override
   String get biometricErrorNotEnrolled =>
