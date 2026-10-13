@@ -244,58 +244,41 @@ class _LoginScreenState extends State<LoginScreen>
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   const SizedBox(height: 48),
-                  // EWER Logo with glass effect
+                  // EWER Logo
                   Center(
-                    child: GlassContainer(
-                      width: 140,
-                      height: 140,
-                      borderRadius: 70,
-                      child: Container(
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          boxShadow: [
-                            BoxShadow(
-                              color: AppColors.primaryRed.withValues(
-                                alpha: 0.3,
+                    child: Image.asset(
+                      'assets/images/ewer_logo.png',
+                      width: 120,
+                      height: 120,
+                      fit: BoxFit.contain,
+                      errorBuilder: (context, error, stackTrace) =>
+                          Container(
+                            width: 100,
+                            height: 100,
+                            decoration: const BoxDecoration(
+                              shape: BoxShape.circle,
+                              gradient: LinearGradient(
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                                colors: [
+                                  Color(0xFFE53935),
+                                  Color(0xFFB71C1C),
+                                  Color(0xFF5D5D5D),
+                                ],
                               ),
-                              blurRadius: 20,
-                              offset: const Offset(0, 8),
                             ),
-                          ],
-                        ),
-                        child: ClipOval(
-                          child: Image.asset(
-                            'assets/images/ewer_logo.jpg',
-                            fit: BoxFit.cover,
-                            errorBuilder: (context, error, stackTrace) =>
-                                Container(
-                                  decoration: const BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    gradient: LinearGradient(
-                                      begin: Alignment.topLeft,
-                                      end: Alignment.bottomRight,
-                                      colors: [
-                                        Color(0xFFE53935),
-                                        Color(0xFFB71C1C),
-                                        Color(0xFF5D5D5D),
-                                      ],
-                                    ),
-                                  ),
-                                  child: const Center(
-                                    child: Text(
-                                      'EWER',
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 32,
-                                        fontWeight: FontWeight.bold,
-                                        letterSpacing: 2,
-                                      ),
-                                    ),
-                                  ),
+                            child: const Center(
+                              child: Text(
+                                'EWER',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 24,
+                                  fontWeight: FontWeight.bold,
+                                  letterSpacing: 2,
                                 ),
+                              ),
+                            ),
                           ),
-                        ),
-                      ),
                     ),
                   ),
                   const SizedBox(height: 32),

@@ -52,7 +52,7 @@ class AboutAppScreen extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Image.asset(
-                'assets/images/ewer_logo.jpg',
+                'assets/images/ewer_logo.png',
                 width: 120,
                 height: 120,
                 fit: BoxFit.contain,

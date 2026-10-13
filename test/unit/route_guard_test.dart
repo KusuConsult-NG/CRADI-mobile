@@ -263,7 +263,7 @@ void main() {
   });
 
   group('MainShellScreen.selectedIndexFor', () {
-    test('maps tabs', () {
+    test('maps tabs for standard roles (non-techSupport)', () {
       expect(
         MainShellScreen.selectedIndexFor('/dashboard', destinationCount: 5),
         0,
@@ -293,6 +293,35 @@ void main() {
       );
       expect(
         MainShellScreen.selectedIndexFor('/my-reports', destinationCount: 4),
+        0,
+      );
+    });
+
+    test('techSupport: Settings=2 Admin=3, no Report tab', () {
+      // techSupport bar has 4 tabs: Home(0) Alerts(1) Settings(2) Admin(3)
+      expect(
+        MainShellScreen.selectedIndexFor(
+          '/settings',
+          destinationCount: 4,
+          isTechSupport: true,
+        ),
+        2,
+      );
+      expect(
+        MainShellScreen.selectedIndexFor(
+          '/admin/knowledge',
+          destinationCount: 4,
+          isTechSupport: true,
+        ),
+        3,
+      );
+      // /report is not a valid techSupport path — falls back to Home
+      expect(
+        MainShellScreen.selectedIndexFor(
+          '/report',
+          destinationCount: 4,
+          isTechSupport: true,
+        ),
         0,
       );
     });

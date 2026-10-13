@@ -38,29 +38,17 @@ class LandingScreen extends StatelessWidget {
 
                   // Logo
                   Center(
-                    child: GlassContainer(
+                    child: Image.asset(
+                      'assets/images/ewer_logo.png',
                       width: 120,
                       height: 120,
-                      borderRadius: 60,
-                      child: Container(
-                        padding: const EdgeInsets.all(20),
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: Colors.white.withValues(alpha: 0.9),
-                        ),
-                        child: ClipOval(
-                          child: Image.asset(
-                            'assets/images/ewer_logo.jpg',
-                            fit: BoxFit.contain,
-                            errorBuilder: (context, error, stackTrace) =>
-                                const Icon(
-                                  Icons.security,
-                                  size: 50,
-                                  color: AppColors.primaryRed,
-                                ),
+                      fit: BoxFit.contain,
+                      errorBuilder: (context, error, stackTrace) =>
+                          const Icon(
+                            Icons.security,
+                            size: 50,
+                            color: AppColors.primaryRed,
                           ),
-                        ),
-                      ),
                     ),
                   ),
 
