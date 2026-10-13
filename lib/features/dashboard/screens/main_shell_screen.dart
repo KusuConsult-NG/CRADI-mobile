@@ -14,9 +14,13 @@ class MainShellScreen extends StatefulWidget {
   /// Bottom-nav index for [location]. Always a valid index for a bar with
   /// [destinationCount] entries: a location whose tab is not rendered (e.g.
   /// /admin right after a role change) falls back to Home.
+  ///
+  /// When [isTechSupport] is true, the Report tab is omitted and Admin takes
+  /// its logical slot, so the tab order is: Home(0) Alerts(1) Settings(2) Admin(3).
   static int selectedIndexFor(
     String location, {
     required int destinationCount,
+    bool isTechSupport = false,
   }) {
     bool under(String p) => location == p || location.startsWith('$p/');
     final int index;
@@ -24,6 +28,15 @@ class MainShellScreen extends StatefulWidget {
       index = 0;
     } else if (under('/alerts')) {
       index = 1;
+    } else if (isTechSupport) {
+      // techSupport has no Report tab — Settings is 2, Admin is 3.
+      if (under('/settings')) {
+        index = 2;
+      } else if (under('/admin')) {
+        index = 3;
+      } else {
+        index = 0;
+      }
     } else if (under('/report')) {
       index = 2;
     } else if (under('/settings')) {
@@ -44,31 +57,59 @@ class _MainShellScreenState extends State<MainShellScreen> {
   bool _showAdminTab(AuthProvider auth) =>
       auth.userRole == UserRole.admin || auth.userRole == UserRole.techSupport;
 
+  bool _isTechSupport(AuthProvider auth) =>
+      auth.userRole == UserRole.techSupport;
+
   int _calculateSelectedIndex(BuildContext context) {
-    final showAdmin = _showAdminTab(context.read<AuthProvider>());
+    final auth = context.read<AuthProvider>();
+    final showAdmin = _showAdminTab(auth);
+    final techSupport = _isTechSupport(auth);
+    // techSupport: 4 tabs (no Report). admin: 5 tabs. others: 4 tabs (no Admin).
+    final count = showAdmin ? (techSupport ? 4 : 5) : 4;
     return MainShellScreen.selectedIndexFor(
       GoRouterState.of(context).uri.path,
-      destinationCount: showAdmin ? 5 : 4,
+      destinationCount: count,
+      isTechSupport: techSupport,
     );
   }
 
   void _onItemTapped(int index) {
-    switch (index) {
-      case 0:
-        context.go('/dashboard');
-        break;
-      case 1:
-        context.go('/alerts');
-        break;
-      case 2:
-        context.go('/report');
-        break;
-      case 3:
-        context.go('/settings');
-        break;
-      case 4:
-        context.go('/admin');
-        break;
+    final auth = context.read<AuthProvider>();
+    if (_isTechSupport(auth)) {
+      // techSupport tab order: 0=Dashboard 1=Alerts 2=Settings 3=Admin
+      switch (index) {
+        case 0:
+          context.go('/dashboard');
+          break;
+        case 1:
+          context.go('/alerts');
+          break;
+        case 2:
+          context.go('/settings');
+          break;
+        case 3:
+          context.go('/admin');
+          break;
+      }
+    } else {
+      // Standard tab order: 0=Dashboard 1=Alerts 2=Report 3=Settings [4=Admin]
+      switch (index) {
+        case 0:
+          context.go('/dashboard');
+          break;
+        case 1:
+          context.go('/alerts');
+          break;
+        case 2:
+          context.go('/report');
+          break;
+        case 3:
+          context.go('/settings');
+          break;
+        case 4:
+          context.go('/admin');
+          break;
+      }
     }
   }
 
@@ -171,10 +212,14 @@ class _MainShellScreenState extends State<MainShellScreen> {
           builder: (context, authProvider, _) {
             final l10n = context.l10n;
             final isAdmin = _showAdminTab(authProvider);
+            final techSupport = _isTechSupport(authProvider);
+            // techSupport: 4 tabs (no Report). admin: 5 tabs. others: 4 tabs.
+            final count = isAdmin ? (techSupport ? 4 : 5) : 4;
             return NavigationBar(
               selectedIndex: MainShellScreen.selectedIndexFor(
                 GoRouterState.of(context).uri.path,
-                destinationCount: isAdmin ? 5 : 4,
+                destinationCount: count,
+                isTechSupport: techSupport,
               ),
               onDestinationSelected: _onItemTapped,
               destinations: [
@@ -188,11 +233,14 @@ class _MainShellScreenState extends State<MainShellScreen> {
                   selectedIcon: const Icon(Icons.notifications),
                   label: l10n.navAlerts,
                 ),
-                NavigationDestination(
-                  icon: const Icon(Icons.add_circle_outline),
-                  selectedIcon: const Icon(Icons.add_circle),
-                  label: l10n.navReport,
-                ),
+                // techSupport does not have reporting access — the Report tab
+                // is omitted for that role.
+                if (!techSupport)
+                  NavigationDestination(
+                    icon: const Icon(Icons.add_circle_outline),
+                    selectedIcon: const Icon(Icons.add_circle),
+                    label: l10n.navReport,
+                  ),
                 NavigationDestination(
                   icon: const Icon(Icons.settings_outlined),
                   selectedIcon: const Icon(Icons.settings),

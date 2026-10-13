@@ -206,6 +206,14 @@ GoRouter createRouter(BuildContext context) {
           ),
           GoRoute(
             path: '/report',
+            // Only field-reporting roles may submit hazard reports.
+            // Admin and tech-support accounts use dedicated admin tools instead.
+            redirect: (context, state) => _requireRole(context, [
+              UserRole.ewm,
+              UserRole.ewv,
+              UserRole.ewr,
+              UserRole.admin,
+            ]),
             pageBuilder: (context, state) => _buildTransitionPage(
               context: context,
               state: state,

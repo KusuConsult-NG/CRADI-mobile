@@ -105,8 +105,10 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
     }
   }
 
-  bool _isAdmin(BuildContext context) =>
-      context.read<AuthProvider>().userRole == UserRole.admin;
+  bool _isAdmin(BuildContext context) {
+    final role = context.read<AuthProvider>().userRole;
+    return role == UserRole.admin || role == UserRole.techSupport;
+  }
 
   /// Status actions the current user may apply to a report in [status]
   /// (mirrors guard_report_update: only admins set 'verified' directly;
