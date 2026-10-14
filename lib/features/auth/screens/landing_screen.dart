@@ -43,12 +43,11 @@ class LandingScreen extends StatelessWidget {
                       width: 120,
                       height: 120,
                       fit: BoxFit.contain,
-                      errorBuilder: (context, error, stackTrace) =>
-                          const Icon(
-                            Icons.security,
-                            size: 50,
-                            color: AppColors.primaryRed,
-                          ),
+                      errorBuilder: (context, error, stackTrace) => const Icon(
+                        Icons.security,
+                        size: 50,
+                        color: AppColors.primaryRed,
+                      ),
                     ),
                   ),
 
