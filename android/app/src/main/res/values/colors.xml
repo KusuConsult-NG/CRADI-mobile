@@ -2,5 +2,5 @@
 <resources>
     <!-- AppColors.primaryRed (lib/core/theme/app_colors.dart). -->
     <color name="brand_red">#E63946</color>
-    <color name="ic_launcher_background">#E63946</color>
+    <color name="ic_launcher_background">#FFFFFF</color>
 </resources>

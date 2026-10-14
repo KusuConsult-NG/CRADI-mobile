@@ -247,7 +247,7 @@ class _LoginScreenState extends State<LoginScreen>
                   // EWER Logo
                   Center(
                     child: Image.asset(
-                      'assets/images/ewer_logo.png',
+                      'assets/images/CRADI-New-EWER App Logo-Eric.png',
                       width: 120,
                       height: 120,
                       fit: BoxFit.contain,
