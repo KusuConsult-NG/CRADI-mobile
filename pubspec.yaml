@@ -134,7 +134,15 @@ dev_dependencies:
 # PNG is the same artwork with the corner black cleared to transparent —
 # flood-filled inward from the edges, so black inside the logo is kept.
 #
+# Its artwork is also sized for the adaptive-icon safe zone: of the 108dp
+# foreground layer only 72dp is visible under the launcher's mask, and just
+# the inner 66dp is guaranteed, so the mark's bounding box is scaled until
+# its diagonal fits that 66dp circle and is centred on the canvas. That
+# padding lives in the PNG, not in an `<inset>` in
+# `mipmap-anydpi-v26/ic_launcher.xml` — doing both shrinks the mark twice.
+#
 # Regenerate with `dart run flutter_launcher_icons` after changing either.
+# It leaves `ic_launcher.xml` alone, so the no-inset version there stays.
 flutter_launcher_icons:
   android: true
   ios: true
