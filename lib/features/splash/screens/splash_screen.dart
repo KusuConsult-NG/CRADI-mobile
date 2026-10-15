@@ -97,19 +97,22 @@ class _SplashScreenState extends State<SplashScreen>
                         filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
                         child: Container(
                           color: Colors.white,
-                          padding: const EdgeInsets.all(20),
-                          child: ClipOval(
-                            child: Image.asset(
-                              'assets/images/CRADI-New-EWER App Logo-Eric.png',
-                              fit: BoxFit.contain,
-                              errorBuilder: (context, error, stackTrace) {
-                                return const Icon(
-                                  Icons.shield,
-                                  size: 100,
-                                  color: Color(0xFFE53935),
-                                );
-                              },
-                            ),
+                          // The mark is a wide rectangle and the container
+                          // is a circle: a second ClipOval here sliced the
+                          // envelope's sides off. The padding is what keeps
+                          // the whole mark inside the circle instead (its
+                          // half-diagonal has to stay under the radius).
+                          padding: const EdgeInsets.all(30),
+                          child: Image.asset(
+                            'assets/images/CRADI-New-EWER App Logo-Eric.png',
+                            fit: BoxFit.contain,
+                            errorBuilder: (context, error, stackTrace) {
+                              return const Icon(
+                                Icons.shield,
+                                size: 100,
+                                color: Color(0xFFE53935),
+                              );
+                            },
                           ),
                         ),
                       ),

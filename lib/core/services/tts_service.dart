@@ -43,15 +43,12 @@ class TTSService {
 
       if (!kIsWeb && Platform.isIOS) {
         await _flutterTts?.setSharedInstance(true);
-        await _flutterTts?.setIosAudioCategory(
-          IosTextToSpeechAudioCategory.playback,
-          [
-            IosTextToSpeechAudioCategoryOptions.defaultToSpeaker,
-            IosTextToSpeechAudioCategoryOptions.allowBluetooth,
-            IosTextToSpeechAudioCategoryOptions.allowBluetoothA2DP,
-          ],
-          IosTextToSpeechAudioMode.defaultMode,
-        );
+        await _flutterTts
+            ?.setIosAudioCategory(IosTextToSpeechAudioCategory.playback, [
+              IosTextToSpeechAudioCategoryOptions.defaultToSpeaker,
+              IosTextToSpeechAudioCategoryOptions.allowBluetooth,
+              IosTextToSpeechAudioCategoryOptions.allowBluetoothA2DP,
+            ], IosTextToSpeechAudioMode.defaultMode);
       }
 
       await _flutterTts?.setLanguage(languageTagFor('en'));
