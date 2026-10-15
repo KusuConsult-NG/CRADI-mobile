@@ -448,7 +448,10 @@ class ReportingProvider extends ChangeNotifier {
           'queued': true,
         };
       }
-    } on Exception catch (e) {
+    } on Object catch (e) {
+      // `Object`, not `Exception`: a thrown `Error` (a failed cast, a
+      // Hive error, a null assertion) would otherwise escape submitReport
+      // and leave the caller's spinner running with no message at all.
       _isLoading = false;
       notifyListeners();
       developer.log('Error submitting report: $e');

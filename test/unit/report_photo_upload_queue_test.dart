@@ -16,10 +16,14 @@ import 'package:provider/provider.dart';
 /// Records uploads / writes; the upload number [failUploadAt] (0-based)
 /// fails with [uploadError].
 class _FakeDb implements DataBackend {
-  _FakeDb({this.failUploadAt, this.uploadError});
+  _FakeDb({this.failUploadAt, this.uploadError, this.createError});
 
   final int? failUploadAt;
   final Exception? uploadError;
+
+  /// Thrown by [createDocument]. Typed `Object?` so a test can raise an
+  /// `Error` as well as an `Exception`.
+  final Object? createError;
   final List<String> uploadedPaths = [];
   final List<String> attemptedPaths = [];
 
@@ -74,6 +78,7 @@ class _FakeDb implements DataBackend {
     String? documentId,
   }) async {
     createdIds.add(documentId);
+    if (createError != null) throw createError!;
     return {r'$id': documentId, ...data};
   }
 
@@ -309,6 +314,23 @@ void main() {
     expect(db.uploadedPaths, hasLength(2));
     expect(db.createdIds.single, result['reportId']);
     expect(offline.drafts, isEmpty);
+  });
+
+  testWidgets('an Error during the insert is reported, not thrown', (
+    tester,
+  ) async {
+    // Regression: the handler used to be `on Exception`, so an `Error`
+    // (a failed cast, a Hive error, a null assertion) escaped submitReport
+    // and left the review screen spinning with no dialog and no message.
+    final db = _FakeDb(createError: StateError('bad state'));
+    final offline = _FakeOffline();
+    final provider = filledProvider(db, offline);
+    final ctx = await pumpContext(tester);
+
+    final result = await tester.runAsync(() => provider.submitReport(ctx));
+    expect(result!['success'], isFalse);
+    expect(result['message'], isA<LocalizedText>());
+    expect(provider.isLoading, isFalse);
   });
 
   test('draft photo paths: recorded paths are used only in the user\'s '

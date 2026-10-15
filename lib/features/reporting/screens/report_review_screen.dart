@@ -68,7 +68,10 @@ class _ReportReviewScreenState extends State<ReportReviewScreen> {
           ),
         );
       }
-    } on Exception catch (e) {
+    } on Object catch (e) {
+      // `Object`, not `Exception`: an `Error` raised below would
+      // otherwise skip this handler, leaving `_isSubmitting` true and the
+      // user with neither the success dialog nor a failure message.
       if (!mounted) return;
       setState(() => _isSubmitting = false);
       ScaffoldMessenger.of(context).showSnackBar(
