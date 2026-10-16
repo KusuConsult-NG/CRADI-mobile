@@ -984,6 +984,15 @@ class AuthProvider extends ChangeNotifier {
           throw AuthException((l) => l.authErrorAccountDisabled);
         case AuthFailure.rateLimited:
           throw AuthException((l) => l.authErrorTooManyLogins);
+        // The address itself was refused, so "wrong email or password"
+        // would send the user hunting for a typo in the password.
+        case AuthFailure.invalidEmail:
+          throw AuthException((l) => l.authEmailInvalid);
+        // Nothing the user can fix by retyping: email sign-in is off
+        // server-side. Saying so beats "Login failed. Please try again."
+        case AuthFailure.providerDisabled:
+        case AuthFailure.otpDisabled:
+          throw AuthException((l) => l.authErrorSignInUnavailable);
         default:
           ErrorHandler.logError(
             'Unhandled auth failure: ${e.failure.name} '
@@ -992,7 +1001,10 @@ class AuthProvider extends ChangeNotifier {
           );
           throw AuthException((l) => l.authErrorLoginFailed);
       }
-    } on Exception catch (e) {
+    } on Object catch (e) {
+      // `Object`, not `Exception`: an `Error` thrown below (a failed cast,
+      // a Hive error) would otherwise escape every handler here and in the
+      // login screen, leaving the button spinning with no message at all.
       _isLoading = false;
       _justLoggedIn = false;
       notifyListeners();

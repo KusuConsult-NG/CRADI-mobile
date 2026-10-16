@@ -1105,7 +1105,8 @@ class AppLocalizationsEn extends AppLocalizations {
       'Login failed. Please check your connection.';
 
   @override
-  String get authErrorInvalidCredentials => 'Invalid email or password';
+  String get authErrorInvalidCredentials =>
+      'Incorrect email or password. Check both and try again, or tap “Forgot Password?” to reset it.';
 
   @override
   String get authErrorTooManyLogins =>
@@ -1114,6 +1115,10 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get authErrorLoginUnexpected =>
       'An unexpected error occurred during login. Please try again.';
+
+  @override
+  String get authErrorSignInUnavailable =>
+      'Email sign-in is unavailable right now. Please try again later or contact support.';
 
   @override
   String get authErrorInvalidPhone => 'Invalid phone number.';

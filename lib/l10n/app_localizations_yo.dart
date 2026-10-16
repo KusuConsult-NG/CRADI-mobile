@@ -1103,7 +1103,8 @@ class AppLocalizationsYo extends AppLocalizations {
       'Wíwọlé kùnà. Jọ̀wọ́ ṣàyẹ̀wò ìsopọ̀ rẹ.';
 
   @override
-  String get authErrorInvalidCredentials => 'Ímeèlì tàbí ọ̀rọ̀ aṣínà kò tọ̀nà';
+  String get authErrorInvalidCredentials =>
+      'Ímeèlì tàbí ọ̀rọ̀ aṣínà kò tọ̀nà. Yọ̀ àwọn méjèèjì wò kí o si tun gbìyànjú, tàbí tẹ “O Gbàgbé ỌÌ€rọ̀ Aṣínà?” láti tun un ṣe.';
 
   @override
   String get authErrorTooManyLogins =>
@@ -1112,6 +1113,10 @@ class AppLocalizationsYo extends AppLocalizations {
   @override
   String get authErrorLoginUnexpected =>
       'Àṣìṣe àìròtẹ́lẹ̀ kan ṣẹlẹ̀ nígbà wíwọlé. Jọ̀wọ́ tún gbìyànjú.';
+
+  @override
+  String get authErrorSignInUnavailable =>
+      'Wíwọlé pẹ̀lú ímeèlì kò ṣiṣẹ nísinsin yìí. Jọwọ tun gbìyànjú ní ní́gbà míràn tàbí kan sí ìrànlọ́wọ́.';
 
   @override
   String get authErrorInvalidPhone => 'Nọ́mbà fóònù kò tọ̀nà.';
