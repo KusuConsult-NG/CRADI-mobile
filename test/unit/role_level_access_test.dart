@@ -16,14 +16,8 @@ void main() {
   // ── Tapping a tab opens the tab that was drawn there ─────────────────────
   group('routeForTab is the inverse of selectedIndexFor', () {
     test('standard bar: 2 is Report, not Settings', () {
-      expect(
-        MainShellScreen.routeForTab(2, isTechSupport: false),
-        '/report',
-      );
-      expect(
-        MainShellScreen.routeForTab(3, isTechSupport: false),
-        '/settings',
-      );
+      expect(MainShellScreen.routeForTab(2, isTechSupport: false), '/report');
+      expect(MainShellScreen.routeForTab(3, isTechSupport: false), '/settings');
       expect(MainShellScreen.routeForTab(4, isTechSupport: false), '/admin');
     });
 
