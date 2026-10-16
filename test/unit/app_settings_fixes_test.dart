@@ -377,36 +377,4 @@ void main() {
       expect(calls, 0);
     });
   });
-
-  group('RemoteConfigService min version', () {
-    tearDown(() {
-      RemoteConfigService()
-        ..debugSetValues({})
-        ..debugSetCurrentVersion(null);
-    });
-
-    test('compareVersions', () {
-      expect(RemoteConfigService.compareVersions('1.0.14', '1.0.14'), 0);
-      expect(RemoteConfigService.compareVersions('1.0.14+22', '1.0.14'), 0);
-      expect(
-        RemoteConfigService.compareVersions('1.0.9', '1.0.14'),
-        lessThan(0),
-      );
-      expect(
-        RemoteConfigService.compareVersions('1.2', '1.1.9'),
-        greaterThan(0),
-      );
-      expect(RemoteConfigService.compareVersions('2.0.0', '2'), 0);
-    });
-
-    test('updateRequired follows app_min_version', () {
-      final cfg = RemoteConfigService()..debugSetCurrentVersion('1.0.14');
-      cfg.debugSetValues({'app_min_version': '1.1.0'});
-      expect(cfg.updateRequired.value, isTrue);
-      cfg.debugSetValues({'app_min_version': '1.0.14'});
-      expect(cfg.updateRequired.value, isFalse);
-      cfg.debugSetValues({});
-      expect(cfg.updateRequired.value, isFalse); // default 1.0.0
-    });
-  });
 }

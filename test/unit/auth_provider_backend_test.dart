@@ -23,6 +23,10 @@ class _FakeAuthBackend implements AuthBackend {
   /// Thrown by the next call to the named method.
   final Map<String, AuthBackendException> failures = {};
 
+  /// Thrown by the next call to the named method, for raising something
+  /// that is not an [Exception] at all.
+  final Map<String, Object> errors = {};
+
   /// Returned by the next call to the named method.
   final Map<String, AuthOutcome> outcomes = {};
 
@@ -32,6 +36,8 @@ class _FakeAuthBackend implements AuthBackend {
 
   T _run<T>(String name, T Function() ok) {
     calls.add(name);
+    final error = errors[name];
+    if (error != null) throw error;
     final failure = failures[name];
     if (failure != null) throw failure;
     return ok();
@@ -373,6 +379,12 @@ void main() {
       AuthFailure.accountBanned: englishL10n.authErrorAccountDisabled,
       AuthFailure.rateLimited: englishL10n.authErrorTooManyLogins,
       AuthFailure.network: englishL10n.authErrorLoginConnection,
+      // Not "wrong email or password": the address itself was refused, so
+      // the user would otherwise go hunting for a typo in the password.
+      AuthFailure.invalidEmail: englishL10n.authEmailInvalid,
+      // Nothing retyping can fix — email sign-in is off server-side.
+      AuthFailure.providerDisabled: englishL10n.authErrorSignInUnavailable,
+      AuthFailure.otpDisabled: englishL10n.authErrorSignInUnavailable,
       AuthFailure.unknown: englishL10n.authErrorLoginFailed,
     };
 
@@ -390,6 +402,24 @@ void main() {
           message,
         );
       });
+    });
+
+    test('an Error is reported, not left to escape', () async {
+      // Regression: the handler was `on Exception`, so an `Error` (a failed
+      // cast, a Hive error) escaped both this provider and the login
+      // screen, leaving the button spinning with no message at all.
+      backend.errors['signIn'] = StateError('bad state');
+      final auth = provider();
+      expect(
+        await failureMessage(
+          () => auth.signInWithEmail(
+            email: 'a@example.com',
+            password: 'Password1!',
+          ),
+        ),
+        isNotEmpty,
+      );
+      expect(auth.isLoading, isFalse);
     });
 
     test('an unconfirmed address resends the code and says which', () async {

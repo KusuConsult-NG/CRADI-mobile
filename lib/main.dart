@@ -29,7 +29,6 @@ import 'package:flutter/services.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:climate_app/core/l10n/fallback_localizations.dart';
-import 'package:climate_app/core/widgets/force_update_gate.dart';
 import 'package:climate_app/core/services/remote_config_service.dart';
 import 'package:climate_app/core/services/backend.dart';
 import 'package:climate_app/core/constants/app_config.dart';
@@ -391,10 +390,8 @@ class _ClimateAppState extends State<ClimateApp> with WidgetsBindingObserver {
         localizationsDelegates: appLocalizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
         debugShowCheckedModeBanner: false,
-        // Blocks the app while this build is below app_min_version.
-        builder: (context, child) => ForceUpdateGate(
-          child: SignOutNoticeListener(child: child ?? const SizedBox.shrink()),
-        ),
+        builder: (context, child) =>
+            SignOutNoticeListener(child: child ?? const SizedBox.shrink()),
       ),
     );
   }
