@@ -211,7 +211,12 @@ This branch starts from no parent commit, so none of either repository's
 history comes with it."
 
 say "Assembled $(git rev-parse --short HEAD) on $BRANCH"
-git show --stat --oneline HEAD | head -20
+# `sed -n`, not `head`: head closes the pipe as soon as it has its lines,
+# git dies on SIGPIPE, and `set -o pipefail` turns that into a failure that
+# ends the script — silently, because SIGPIPE prints nothing. sed reads to
+# the end instead. A commit of 700 files hits this; a commit of 11 does not,
+# which is why it survived testing.
+git show --stat --oneline HEAD | sed -n '1,20p'
 printf '\n  %s files total\n' "$(git ls-files | wc -l | tr -d ' ')"
 
 # ── 8. Push ──────────────────────────────────────────────────────────────
