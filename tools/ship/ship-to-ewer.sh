@@ -26,6 +26,14 @@ BRANCH="${BRANCH:-ship/monorepo}"
 PUSH=0
 [ "${1:-}" = "--push" ] && PUSH=1
 
+# Resolved to an absolute path **before** anything cds, because this
+# script cds into the clone and then reads its own `root/` directory. With
+# `$(dirname "$0")` evaluated after that cd, a relative invocation —
+# `bash tools/ship/ship-to-ewer.sh` — looked for `root/` inside the clone
+# and died halfway, with the tree already assembled. Only an absolute
+# invocation worked, which is not a difference anybody should have to know.
+HERE="$(cd "$(dirname "$0")" && pwd)"
+
 say() { printf '\n\033[1m%s\033[0m\n' "$*"; }
 die() { printf '\n\033[31merror:\033[0m %s\n' "$*" >&2; exit 1; }
 
@@ -173,7 +181,7 @@ PYEOF
 # ── 5. Root-level files ──────────────────────────────────────────────────
 say "Writing the root files"
 for f in README.md docs/IMPLEMENTATION.md scripts/deploy.sh; do
-  src="$(dirname "$0")/root/$f"
+  src="$HERE/root/$f"
   [ -f "$src" ] || die "missing $src — keep ship-to-ewer.sh next to its root/ directory."
   mkdir -p "$(dirname "$f")"
   cp "$src" "$f"
@@ -183,7 +191,7 @@ chmod +x scripts/deploy.sh
 
 # ── 6. Scrub tooling references, then prove none are left ────────────────
 say "Scrubbing tooling references"
-SCRUB="$(dirname "$0")/scrub.py"
+SCRUB="$HERE/scrub.py"
 [ -f "$SCRUB" ] || die "missing $SCRUB — keep it next to ship-to-ewer.sh."
 # Text files only: a PNG whose bytes happen to spell one of these is not a
 # reference, and rewriting it would corrupt the image.
