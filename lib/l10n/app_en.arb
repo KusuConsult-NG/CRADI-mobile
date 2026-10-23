@@ -2904,6 +2904,10 @@
   "@roleTechSupport": {
     "description": "Role name: technical support."
   },
+  "roleMedia": "Media",
+  "@roleMedia": {
+    "description": "Role name: media — reads validated reports only, writes nothing."
+  },
   "profilePhotoUpdated": "Profile photo updated!",
   "@profilePhotoUpdated": {
     "description": "Snackbar after uploading a new profile photo."
@@ -4462,5 +4466,33 @@
   "knowledgeNoSavedGuides": "No saved guides yet. Tap the bookmark on a guide to save it.",
   "@knowledgeNoSavedGuides": {
     "description": "Empty state of the Saved filter on the hazard guides screen."
+  },
+  "responseStatusTitle": "Response",
+  "@responseStatusTitle": {
+    "description": "Heading of the response-status card on a report."
+  },
+  "responseStatusAwaiting": "Awaiting response",
+  "@responseStatusAwaiting": {
+    "description": "Response status: nobody has responded yet."
+  },
+  "responseStatusAcknowledged": "Acknowledged",
+  "@responseStatusAcknowledged": {
+    "description": "Response status: a responder has seen it."
+  },
+  "responseStatusDispatched": "Team dispatched",
+  "@responseStatusDispatched": {
+    "description": "Response status: a team is on the way."
+  },
+  "responseStatusResolved": "Resolved",
+  "@responseStatusResolved": {
+    "description": "Response status: the response is finished."
+  },
+  "responseStatusUpdated": "Response status updated",
+  "@responseStatusUpdated": {
+    "description": "Confirmation after the response status is changed."
+  },
+  "responseStatusUpdateFailed": "Could not update the response status. Please try again.",
+  "@responseStatusUpdateFailed": {
+    "description": "Error when the response status could not be changed."
   }
 }

@@ -52,11 +52,14 @@ class MainShellScreen extends StatefulWidget {
 
   /// Whether the bar draws a Report tab for [role].
   ///
-  /// Matrix 4.1 gives neither Early Responder nor tech support Submit
-  /// Reports, and the server refuses the write either way
-  /// (`guardReportCreate`), so offering the tab would only earn a 403.
+  /// Matrix 4.1 gives Submit Reports to neither Early Responder, nor
+  /// Media, nor tech support, and the server refuses the write either way
+  /// (`guardReportCreate` / `NON_REPORTERS`), so offering the tab would
+  /// only earn a 403.
   static bool hasReportTabFor(UserRole? role) =>
-      role != UserRole.ewr && role != UserRole.techSupport;
+      role != UserRole.ewr &&
+      role != UserRole.techSupport &&
+      role != UserRole.media;
 
   /// Home and Alerts always, Settings always, Report and Admin by role.
   static int tabCountFor({

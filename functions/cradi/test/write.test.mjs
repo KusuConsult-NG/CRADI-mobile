@@ -3,6 +3,7 @@ import { describe, it, beforeEach } from 'node:test';
 
 import write from '../src/write.js';
 import { context, fakeAppwrite, profile } from './helpers.mjs';
+import { lgaLabel } from '../src/lib/appwrite.js';
 
 const report = {
   op: 'create',
@@ -41,8 +42,11 @@ describe('the write Function', () => {
 
   it('refuses a role the matrix gives no Submit Reports', async () => {
     // Matrix 4.1: Early Responder reads and responds, it does not file.
-    // tech_support has never had a Report tab in the app either.
-    for (const role of ['ewr', 'tech_support']) {
+    // Media reads validated reports and writes nothing anywhere.
+    // techSupport is not in the matrix and has never had a Report tab.
+    // Both spellings of that one, because `canonicalRole` has to be in
+    // the path for the underscored legacy value to be refused as well.
+    for (const role of ['ewr', 'media', 'techSupport', 'tech_support']) {
       const world = fakeAppwrite({
         rows: { profiles: { u1: profile({ role }) } },
       });
@@ -143,10 +147,22 @@ describe('the write Function', () => {
     assert.deepEqual(fake.store.reports.r1.$permissions, [
       'read("user:u1")',
       'read("team:ward-benue-makurdi-north-bank-i")',
+      `read("label:${lgaLabel('Benue', 'Makurdi')}")`,
+      'read("label:projectStaff")',
       'read("label:ewv")',
-      'read("label:ewr")',
       'read("label:admin")',
     ]);
+  });
+
+  it('a pending report is not readable by Early Responder or Media', async () => {
+    // Matrix 4.1 gives both "validated reports only", and every report is
+    // created pending. Granting them at creation — which is what the ACL
+    // did — is the whole of the scope being wrong.
+    const ctx = context(report);
+    await write(ctx);
+    const acl = fake.store.reports.r1.$permissions;
+    assert.ok(!acl.includes('read("label:ewr")'), acl.join(' '));
+    assert.ok(!acl.includes('read("label:media")'), acl.join(' '));
   });
 
   it('creates the ward team before the document that points at it', async () => {
@@ -829,6 +845,74 @@ describe('deciding a report', () => {
         }
     });
 
+    // A validated report throughout the response cases, so each fails for
+    // its own reason: a responder may only touch a report it can read, and
+    // every report starts `pending`.
+    const validated = { status: 'approved' };
+
+    it('lets an Early Responder move the response status', async () => {
+        // Matrix 4.1 reserves this one column for that role, on a report it
+        // has no power to approve — the two are separate jobs.
+        const { status, row } = await run('ewr', { responseStatus: 'dispatched' }, validated);
+        assert.equal(status, 200);
+        assert.equal(row.responseStatus, 'dispatched');
+        assert.equal(row.status, 'approved', 'the decision is untouched');
+    });
+
+    it('refuses a responder a report it cannot read', async () => {
+        // Writes come through this Function on a server key, so the
+        // document ACL that scopes the *read* does not apply to them.
+        // Without this guard a responder holding an id could move the
+        // response status of a pending or rejected report it has no way to
+        // open — which is the scope matrix 4.1 gives it, bypassed.
+        for (const status of ['pending', 'rejected']) {
+            const result = await run('ewr', { responseStatus: 'dispatched' }, { status });
+            assert.equal(result.status, 403, status);
+            assert.equal(result.row.responseStatus, undefined, status);
+            assert.match(result.body.message, /validated/);
+        }
+    });
+
+    it('still lets an admin respond at any status', async () => {
+        // An admin reads every report, so there is nothing to bypass.
+        const { status, row } = await run('admin', { responseStatus: 'dispatched' });
+        assert.equal(status, 200);
+        assert.equal(row.responseStatus, 'dispatched');
+    });
+
+    it('stamps who moved it and when, ignoring whatever was sent', async () => {
+        const { row } = await run('ewr', {
+            responseStatus: 'acknowledged',
+            responseUpdatedBy: 'somebody-else',
+            responseUpdatedAt: '1999-01-01T00:00:00.000Z',
+        }, validated);
+        assert.equal(row.responseUpdatedBy, 'me');
+        assert.notEqual(row.responseUpdatedAt, '1999-01-01T00:00:00.000Z');
+        assert.ok(Date.parse(row.responseUpdatedAt) > Date.parse('2020-01-01'));
+    });
+
+    it('refuses the stamps on their own', async () => {
+        // Otherwise a row can name a responder and a time for a status that
+        // nobody moved.
+        const { status, row } = await run('ewr', { responseUpdatedBy: 'me' }, validated);
+        assert.equal(status, 403);
+        assert.equal(row.responseUpdatedBy, undefined);
+    });
+
+    it('refuses a response status no responder could reach', async () => {
+        const { status, row } = await run('ewr', { responseStatus: 'teleported' }, validated);
+        assert.equal(status, 403);
+        assert.equal(row.responseStatus, undefined);
+    });
+
+    it('refuses every role the matrix does not give it to', async () => {
+        for (const role of ['user', 'ewm', 'ewv', 'ldp_coordinator', 'project_staff']) {
+            const { status, row } = await run(role, { responseStatus: 'dispatched' });
+            assert.equal(status, 403, role);
+            assert.equal(row.responseStatus, undefined, role);
+        }
+    });
+
     it('refuses a role that may not decide', async () => {
         // 'ewr' is here because the client's permission matrix (4.1) gives
         // Early Responder no Validate/Reject column. It used to decide.
@@ -1155,4 +1239,138 @@ describe('an alert’s target is validated when it is edited', () => {
     });
     assert.equal((await edit({ targetLga: 'all' })).status, 200);
   });
+});
+
+describe("a report's read scope follows its status", () => {
+    // Matrix 4.1 gives Early Responder and Media "validated reports
+    // only". An Appwrite ACL is stored on the row and written once, at
+    // creation, and every report is created `pending` — so the two of
+    // them can only ever read anything if the permissions are rewritten
+    // when the status moves. This is that rewrite.
+    const world = (status = 'pending') => ({
+        rows: {
+            profiles: { admin1: profile({ role: 'admin' }) },
+            reports: {
+                r1: {
+                    $id: 'r1',
+                    status,
+                    userId: 'reporter9',
+                    state: 'Benue',
+                    lga: 'Makurdi',
+                    ward: 'North Bank I',
+                    $permissions: [
+                        'read("user:reporter9")',
+                        'read("team:ward-benue-makurdi-north-bank-i")',
+                        `read("label:${lgaLabel('Benue', 'Makurdi')}")`,
+                        'read("label:projectStaff")',
+                        'read("label:ewv")',
+                        'read("label:admin")',
+                    ],
+                },
+            },
+        },
+    });
+
+    const decide = (status, expect) => ({
+        op: 'update',
+        collection: 'reports',
+        documentId: 'r1',
+        data: { status },
+        ...(expect ? { expect } : {}),
+    });
+
+    for (const status of ['verified', 'approved']) {
+        it(`grants them once it is ${status}`, async () => {
+            const fake = fakeAppwrite(world());
+            const ctx = context(decide(status), { userId: 'admin1' });
+            await write(ctx);
+            assert.equal(ctx.captured.status, 200);
+            const acl = fake.store.reports.r1.$permissions;
+            assert.ok(acl.includes('read("label:ewr")'), acl.join(' '));
+            assert.ok(acl.includes('read("label:media")'), acl.join(' '));
+        });
+    }
+
+    it('takes them away again when a report is rejected', async () => {
+        const fake = fakeAppwrite(world('approved'));
+        fake.store.reports.r1.$permissions.push('read("label:ewr")', 'read("label:media")');
+        const ctx = context(decide('rejected'), { userId: 'admin1' });
+        await write(ctx);
+        assert.equal(ctx.captured.status, 200);
+        const acl = fake.store.reports.r1.$permissions;
+        assert.ok(!acl.includes('read("label:ewr")'), acl.join(' '));
+        assert.ok(!acl.includes('read("label:media")'), acl.join(' '));
+    });
+
+    it('leaves the reporter their own report', async () => {
+        // The rewrite runs as the *reviewer*, so a list built from the
+        // acting user's id would hand the report to whoever approved it
+        // and take it from whoever filed it. It reads the stored
+        // `userId`, which is immutable, for exactly this reason.
+        const fake = fakeAppwrite(world());
+        await write(context(decide('approved'), { userId: 'admin1' }));
+        const acl = fake.store.reports.r1.$permissions;
+        assert.ok(acl.includes('read("user:reporter9")'), acl.join(' '));
+        assert.ok(!acl.includes('read("user:admin1")'), acl.join(' '));
+    });
+
+    it('also rewrites on the optimistic-lock path', async () => {
+        // Two ways out of the update branch, and the admin panel decides
+        // reports through this one.
+        const fake = fakeAppwrite(world());
+        const ctx = context(decide('approved', { status: 'pending' }), { userId: 'admin1' });
+        await write(ctx);
+        assert.equal(ctx.captured.status, 200);
+        assert.ok(fake.store.reports.r1.$permissions.includes('read("label:ewr")'));
+    });
+
+    it('sends the permissions alone, with no data key', async () => {
+        // A permission-only update, which is what Appwrite's own SDKs send
+        // when given no attributes. `data: {}` would ask the server to
+        // tolerate an update of nothing, and a refusal here is *logged*
+        // rather than thrown — the edit it follows has already been
+        // applied — so it would be a quiet one.
+        const fake = fakeAppwrite(world());
+        await write(context(decide('approved'), { userId: 'admin1' }));
+        const resync = fake.calls.find((c) => c.method === 'PATCH' && c.body?.permissions);
+        assert.ok(resync, 'no permission write was made');
+        assert.ok(!('data' in resync.body), JSON.stringify(resync.body));
+    });
+
+    it('does not touch the permissions when the status did not change', async () => {
+        const fake = fakeAppwrite(world());
+        await write(context({
+            op: 'update',
+            collection: 'reports',
+            documentId: 'r1',
+            data: { severity: 'high' },
+        }, { userId: 'admin1' }));
+        const permissionWrites = fake.calls.filter(
+            (c) => c.method === 'PATCH' && c.body?.permissions,
+        );
+        assert.equal(permissionWrites.length, 0);
+    });
+
+    it('still reports the edit as applied when the rewrite fails', async () => {
+        // The edit has already landed, so failing the call here would
+        // have the caller retry a write that worked — and the retry
+        // would then be refused by the optimistic lock it no longer
+        // matches, leaving them told it failed twice.
+        //
+        // Via the `expect` path on purpose: that writes the row through
+        // the bulk endpoint, which has no id in its URL, so this pattern
+        // matches the resync PATCH and nothing else.
+        const fake = fakeAppwrite({
+            ...world(),
+            fail: { 'PATCH /tables/reports/rows/r1': { status: 500 } },
+        });
+        const ctx = context(decide('approved', { status: 'pending' }), { userId: 'admin1' });
+        await write(ctx);
+        assert.equal(ctx.captured.status, 200);
+        assert.equal(fake.store.reports.r1.status, 'approved');
+        assert.ok(
+            ctx.logs.some((l) => l.includes('PERMISSIONS RESYNC FAILED')),
+            `nothing warned about it: ${ctx.logs.join(' | ')}`,
+        );
+    });
 });

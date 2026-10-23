@@ -356,6 +356,18 @@ class MockReportsStatusProvider extends _i1.Mock
           as _i5.Future<void>);
 
   @override
+  _i5.Future<void> updateResponseStatus(
+    String? reportId,
+    _i4.ResponseStatus? status,
+  ) =>
+      (super.noSuchMethod(
+            Invocation.method(#updateResponseStatus, [reportId, status]),
+            returnValue: _i5.Future<void>.value(),
+            returnValueForMissingStub: _i5.Future<void>.value(),
+          )
+          as _i5.Future<void>);
+
+  @override
   _i5.Future<void> moveBackToPending(String? reportId) =>
       (super.noSuchMethod(
             Invocation.method(#moveBackToPending, [reportId]),
@@ -447,6 +459,14 @@ class MockAuthProvider extends _i1.Mock implements _i8.AuthProvider {
           as bool);
 
   @override
+  bool get isPasswordRecoveryPending =>
+      (super.noSuchMethod(
+            Invocation.getter(#isPasswordRecoveryPending),
+            returnValue: false,
+          )
+          as bool);
+
+  @override
   bool get hasStoredSession =>
       (super.noSuchMethod(
             Invocation.getter(#hasStoredSession),
@@ -466,6 +486,16 @@ class MockAuthProvider extends _i1.Mock implements _i8.AuthProvider {
               #reporterId: reporterId,
               #reportWard: reportWard,
               #reportLga: reportLga,
+            }),
+            returnValue: false,
+          )
+          as bool);
+
+  @override
+  bool canUpdateResponseStatus({bool? reportIsValidated = false}) =>
+      (super.noSuchMethod(
+            Invocation.method(#canUpdateResponseStatus, [], {
+              #reportIsValidated: reportIsValidated,
             }),
             returnValue: false,
           )
@@ -652,6 +682,24 @@ class MockAuthProvider extends _i1.Mock implements _i8.AuthProvider {
           as _i5.Future<void>);
 
   @override
+  _i5.Future<void> cancelPasswordRecovery() =>
+      (super.noSuchMethod(
+            Invocation.method(#cancelPasswordRecovery, []),
+            returnValue: _i5.Future<void>.value(),
+            returnValueForMissingStub: _i5.Future<void>.value(),
+          )
+          as _i5.Future<void>);
+
+  @override
+  _i5.Future<void> completePasswordRecovery(String? newPassword) =>
+      (super.noSuchMethod(
+            Invocation.method(#completePasswordRecovery, [newPassword]),
+            returnValue: _i5.Future<void>.value(),
+            returnValueForMissingStub: _i5.Future<void>.value(),
+          )
+          as _i5.Future<void>);
+
+  @override
   _i5.Future<bool> authenticateWithBiometrics({String? promptReason}) =>
       (super.noSuchMethod(
             Invocation.method(#authenticateWithBiometrics, [], {
@@ -686,6 +734,14 @@ class MockAuthProvider extends _i1.Mock implements _i8.AuthProvider {
   _i5.Future<bool> isBiometricAvailable() =>
       (super.noSuchMethod(
             Invocation.method(#isBiometricAvailable, []),
+            returnValue: _i5.Future<bool>.value(false),
+          )
+          as _i5.Future<bool>);
+
+  @override
+  _i5.Future<bool> isBiometricUsable() =>
+      (super.noSuchMethod(
+            Invocation.method(#isBiometricUsable, []),
             returnValue: _i5.Future<bool>.value(false),
           )
           as _i5.Future<bool>);

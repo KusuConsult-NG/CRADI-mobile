@@ -20,7 +20,7 @@ import {
   readJson,
   ErrorType,
 } from './lib/http.js';
-import { isAdmin } from './lib/policy.js';
+import { canonicalRole, isAdmin } from './lib/policy.js';
 import { reconcileSubscriptions } from './lib/topics.js';
 import {
   COLLECTION as OUTBOX,
@@ -59,7 +59,7 @@ export default handler(async (context) => {
   return run(payload.params ?? {}, {
     ...context,
     userId,
-    role: profile.body.role ?? 'user',
+    role: canonicalRole(profile.body.role ?? 'user'),
     // The dispatcher has already read the row to check the account is
     // set up; handing it over saves every operation that needs the
     // caller's own profile a second read of what is in hand.

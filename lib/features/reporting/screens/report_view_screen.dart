@@ -9,6 +9,7 @@ import 'package:climate_app/core/theme/app_colors.dart';
 import 'package:climate_app/features/verification/models/verification_report_model.dart';
 import 'package:climate_app/features/verification/providers/reports_status_provider.dart';
 import 'package:climate_app/features/verification/widgets/report_staff_actions.dart';
+import 'package:climate_app/features/verification/widgets/report_response_actions.dart';
 import 'package:climate_app/features/verification/widgets/report_verifications_section.dart';
 import 'package:climate_app/features/verification/widgets/report_vote_actions.dart';
 import 'package:climate_app/core/l10n/l10n.dart';
@@ -132,6 +133,9 @@ class _ReportViewScreenState extends State<ReportViewScreen>
 
             // ── Staff approve / reject / reopen ───────────────────────
             ReportStaffActions(report: report, onChanged: _reload),
+
+            // ── Response status (Early Responder) ─────────────────────
+            ReportResponseActions(report: report, onChanged: _reload),
 
             // ── Confirmations / disputes with comments (staff) ────────
             ReportVerificationsSection(

@@ -2282,6 +2282,9 @@ class AppLocalizationsYo extends AppLocalizations {
   String get roleTechSupport => 'Àtìlẹ́yìn Ìmọ̀-ẹ̀rọ';
 
   @override
+  String get roleMedia => 'Ilé Ìròyìn';
+
+  @override
   String get profilePhotoUpdated => 'A ti ṣe àtúnṣe fọ́tò profaili!';
 
   @override
@@ -3445,4 +3448,26 @@ class AppLocalizationsYo extends AppLocalizations {
   @override
   String get knowledgeNoSavedGuides =>
       'Kò sí ìwé ìtọ́nisọ́nà tí a fipamọ́ síbẹ̀. Tẹ àmì ìfipamọ́ lórí ìwé ìtọ́nisọ́nà láti fipamọ́ ọ.';
+
+  @override
+  String get responseStatusTitle => 'Ídáhùn';
+
+  @override
+  String get responseStatusAwaiting => 'Ń dúró de ìdáhùn';
+
+  @override
+  String get responseStatusAcknowledged => 'A ti gbà á';
+
+  @override
+  String get responseStatusDispatched => 'A ti rán ẹgbẹ́ lọ';
+
+  @override
+  String get responseStatusResolved => 'A ti yanjú';
+
+  @override
+  String get responseStatusUpdated => 'A ti ṣàtúnṣe ipò ìdáhùn';
+
+  @override
+  String get responseStatusUpdateFailed =>
+      'Kò ṣeé ṣe láti ṣàtúnṣe ipò ìdáhùn. Jọwọ tún gbìyànjú.';
 }

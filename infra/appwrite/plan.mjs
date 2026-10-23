@@ -56,6 +56,14 @@ const DENORMALISED = {
     // the document with no "before", so the event Function cannot
     // otherwise tell a status change from any other edit (Phase 11).
     { key: 'previousStatus', type: 'string', size: 32, required: false },
+    // Matrix 4.1 'Update Response Status'. What the response to this
+    // report is doing, which is a different question from whether the
+    // report is true (`status`). Written only by an Early Responder; the
+    // two stamps are server-owned and follow it. See RESPONSE_STATUSES in
+    // functions/cradi/src/lib/policy.js.
+    { key: 'responseStatus', type: 'string', size: 32, required: false },
+    { key: 'responseUpdatedAt', type: 'string', size: 64, required: false },
+    { key: 'responseUpdatedBy', type: 'string', size: 64, required: false },
   ],
   verifications: [
     { key: 'verifierName', type: 'string', size: 8192, required: false },

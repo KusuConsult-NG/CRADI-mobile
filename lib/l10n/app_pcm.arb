@@ -649,6 +649,7 @@
   "roleProjectStaff": "Project Staff",
   "roleAdmin": "Administrator",
   "roleTechSupport": "Tech Support",
+  "roleMedia": "Media",
   "profilePhotoUpdated": "Profile photo don update!",
   "profileCameraUnavailable": "Camera no dey work. Abeg use gallery.",
   "profilePickImageFailed": "We no fit pick di picture. Abeg try again.",
@@ -983,5 +984,12 @@
   "notificationReportPending": "Your report ({hazard}) dey wait make peers verify am.",
   "notificationAlertBody": "Dem don send new alert for your area.",
   "knowledgeSavedFilter": "Saved",
-  "knowledgeNoSavedGuides": "You never save any guide. Tap di bookmark for one guide make you save am."
+  "knowledgeNoSavedGuides": "You never save any guide. Tap di bookmark for one guide make you save am.",
+  "responseStatusTitle": "Response",
+  "responseStatusAwaiting": "Dey wait for response",
+  "responseStatusAcknowledged": "Dem don see am",
+  "responseStatusDispatched": "Dem don send team",
+  "responseStatusResolved": "Dem don settle am",
+  "responseStatusUpdated": "Response status don update",
+  "responseStatusUpdateFailed": "E no fit update the response status. Abeg try again."
 }

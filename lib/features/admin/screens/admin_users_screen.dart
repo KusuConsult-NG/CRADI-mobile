@@ -152,6 +152,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen>
     'project_staff',
     'admin',
     'techSupport',
+    'media',
   ];
 
   /// Display name of a stored role value.

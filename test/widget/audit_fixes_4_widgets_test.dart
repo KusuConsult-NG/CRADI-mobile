@@ -3,6 +3,7 @@ import 'package:climate_app/features/auth/providers/auth_provider.dart';
 import 'package:climate_app/features/verification/models/verification_report_model.dart';
 import 'package:climate_app/features/verification/providers/reports_status_provider.dart';
 import 'package:climate_app/features/verification/widgets/dispute_comment_dialog.dart';
+import 'package:climate_app/features/verification/widgets/report_response_actions.dart';
 import 'package:climate_app/features/verification/widgets/report_staff_actions.dart';
 import 'package:climate_app/features/verification/widgets/report_verifications_section.dart';
 import 'package:flutter/material.dart';
@@ -13,7 +14,10 @@ import 'package:provider/provider.dart';
 import 'reports_status_screen_test.mocks.dart';
 import 'package:climate_app/l10n/app_localizations.dart';
 
-VerificationReport _report(ReportStatus status) => VerificationReport(
+VerificationReport _report(
+  ReportStatus status, {
+  ResponseStatus response = ResponseStatus.awaiting,
+}) => VerificationReport(
   id: 'r1',
   title: 'Flood',
   type: 'Flood',
@@ -25,6 +29,7 @@ VerificationReport _report(ReportStatus status) => VerificationReport(
   iconName: 'warning',
   iconColor: 'orange',
   bgIconColor: 'orange',
+  responseStatus: response,
 );
 
 void main() {
@@ -50,6 +55,107 @@ void main() {
       home: Scaffold(body: SingleChildScrollView(child: child)),
     ),
   );
+
+  group('ReportResponseActions', () {
+    testWidgets('says nothing when nobody has responded and you cannot', (
+      tester,
+    ) async {
+      // An "Awaiting response" card on every report is noise.
+      when(
+        auth.canUpdateResponseStatus(
+          reportIsValidated: anyNamed('reportIsValidated'),
+        ),
+      ).thenReturn(false);
+      await tester.pumpWidget(
+        wrap(
+          ReportResponseActions(
+            report: _report(ReportStatus.pending),
+            onChanged: () async {},
+          ),
+        ),
+      );
+      expect(find.text('Response'), findsNothing);
+    });
+
+    testWidgets('shows the status read-only once it has moved', (tester) async {
+      // Knowing a team is on the way is useful to the reporter too.
+      when(
+        auth.canUpdateResponseStatus(
+          reportIsValidated: anyNamed('reportIsValidated'),
+        ),
+      ).thenReturn(false);
+      await tester.pumpWidget(
+        wrap(
+          ReportResponseActions(
+            report: _report(
+              ReportStatus.pending,
+              response: ResponseStatus.dispatched,
+            ),
+            onChanged: () async {},
+          ),
+        ),
+      );
+      expect(find.text('Response'), findsOneWidget);
+      expect(find.text('Team dispatched'), findsOneWidget);
+      expect(find.byType(ChoiceChip), findsNothing);
+    });
+
+    testWidgets('a responder moves it, and the screen re-fetches', (
+      tester,
+    ) async {
+      when(
+        auth.canUpdateResponseStatus(
+          reportIsValidated: anyNamed('reportIsValidated'),
+        ),
+      ).thenReturn(true);
+      when(reports.updateResponseStatus(any, any)).thenAnswer((_) async {});
+      var reloaded = false;
+      await tester.pumpWidget(
+        wrap(
+          ReportResponseActions(
+            // Approved: the server refuses a responder a report that is
+            // not validated, so a fixture that is editable *and* pending
+            // would be asserting a state the real provider cannot reach.
+            report: _report(ReportStatus.approved),
+            onChanged: () async => reloaded = true,
+          ),
+        ),
+      );
+      expect(find.byType(ChoiceChip), findsNWidgets(4));
+
+      await tester.tap(find.text('Team dispatched'));
+      await tester.pumpAndSettle();
+
+      verify(
+        reports.updateResponseStatus('r1', ResponseStatus.dispatched),
+      ).called(1);
+      expect(reloaded, isTrue);
+    });
+
+    testWidgets('tapping the status it already has writes nothing', (
+      tester,
+    ) async {
+      when(
+        auth.canUpdateResponseStatus(
+          reportIsValidated: anyNamed('reportIsValidated'),
+        ),
+      ).thenReturn(true);
+      await tester.pumpWidget(
+        wrap(
+          ReportResponseActions(
+            report: _report(
+              ReportStatus.approved,
+              response: ResponseStatus.resolved,
+            ),
+            onChanged: () async {},
+          ),
+        ),
+      );
+      await tester.tap(find.text('Resolved'));
+      await tester.pumpAndSettle();
+      verifyNever(reports.updateResponseStatus(any, any));
+    });
+  });
 
   group('ReportStaffActions', () {
     testWidgets('hidden for users who may not manage status', (tester) async {

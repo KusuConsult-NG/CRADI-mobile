@@ -856,6 +856,31 @@ class ReportsStatusProvider extends ChangeNotifier {
     }
   }
 
+  /// Moves a report's response status (matrix 4.1, Early Responder).
+  ///
+  /// Only `responseStatus` is sent: `responseUpdatedBy` and
+  /// `responseUpdatedAt` are stamped by the Function, and a client that
+  /// sends them has them overwritten. The write is refused for a role
+  /// outside `AuthProvider.responderRoles`, so the caller gates the UI on
+  /// the same set rather than letting the user find out from a 403.
+  Future<void> updateResponseStatus(
+    String reportId,
+    ResponseStatus status,
+  ) async {
+    try {
+      await _db.updateDocument(
+        collectionId: AppConfig.reportsCollection,
+        documentId: reportId,
+        data: {'responseStatus': status.name},
+      );
+      developer.log('Response status of $reportId set to ${status.name}');
+      unawaited(refreshLoadedLists());
+    } on Object catch (e) {
+      developer.log('Error updating response status: $e');
+      rethrow;
+    }
+  }
+
   /// Reopens a report (senior staff / admin): the `reopen_report` RPC clears
   /// its peer votes, sets it back to pending and reschedules escalation.
   Future<void> moveBackToPending(String reportId) async {

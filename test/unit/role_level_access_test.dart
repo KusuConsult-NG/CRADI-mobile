@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:climate_app/features/auth/providers/auth_provider.dart';
 import 'package:climate_app/features/dashboard/screens/main_shell_screen.dart';
+import 'package:climate_app/features/verification/models/verification_report_model.dart';
 
 /// Verifies that the Level 1–5 role access rules are reflected in the
 /// bottom-nav tab index logic and in the role-set definitions.
@@ -15,11 +16,13 @@ void main() {
 
   // ── Who gets a Report tab ────────────────────────────────────────────────
   group('hasReportTabFor', () {
-    test('Early Responder and tech support do not', () {
-      // Matrix 4.1 gives neither Submit Reports, and the server refuses
-      // the create (`guardReportCreate`), so a tab would only earn a 403.
+    test('Early Responder, Media and tech support do not', () {
+      // Matrix 4.1 gives none of them Submit Reports, and the server
+      // refuses the create (`NON_REPORTERS`), so a tab would only earn a
+      // 403.
       expect(MainShellScreen.hasReportTabFor(UserRole.ewr), isFalse);
       expect(MainShellScreen.hasReportTabFor(UserRole.techSupport), isFalse);
+      expect(MainShellScreen.hasReportTabFor(UserRole.media), isFalse);
     });
 
     test('every other role does', () {
@@ -160,6 +163,9 @@ void main() {
     });
   });
 
+  mediaRoleTests();
+  responseScopeTests();
+
   // ── Role-set definitions ──────────────────────────────────────────────────
   group('Level 1 (ewm) role sets', () {
     test('ewm can cast peer-verification votes', () {
@@ -234,6 +240,112 @@ void main() {
         AuthProvider.verificationReaderRoles,
         contains(UserRole.techSupport),
       );
+    });
+  });
+}
+
+/// The Media role from matrix 4.1: it reads validated reports and writes
+/// nothing anywhere.
+///
+/// Worth its own group because it is the only role in the matrix with no
+/// write at all, and "no write at all" is a claim that has to be checked
+/// against every set rather than assumed from the one that was added last.
+void mediaRoleTests() {
+  group('Media', () {
+    test('is in no write set', () {
+      for (final set in {
+        'verifierRoles': AuthProvider.verifierRoles,
+        'statusManagerRoles': AuthProvider.statusManagerRoles,
+        'verificationRequestRoles': AuthProvider.verificationRequestRoles,
+        'alertManagerRoles': AuthProvider.alertManagerRoles,
+        'responderRoles': AuthProvider.responderRoles,
+      }.entries) {
+        expect(
+          set.value,
+          isNot(contains(UserRole.media)),
+          reason: '${set.key} must not contain media',
+        );
+      }
+    });
+
+    test('does not read peer votes either', () {
+      // Verification data is the staff deliberation on a report, not the
+      // report. The matrix gives Media the validated report and nothing
+      // around it.
+      expect(
+        AuthProvider.verificationReaderRoles,
+        isNot(contains(UserRole.media)),
+      );
+    });
+
+    test('stores as `media`, and parses back', () {
+      // The value the report ACL names as `label:media` — via
+      // accountLabels, which camel-cases the stored role. A mismatch here
+      // is an ACL naming a label nobody holds, which Appwrite accepts in
+      // silence and grants to nobody.
+      expect(UserRole.media.dbValue, 'media');
+      expect(UserRoleValue.fromDb('media'), UserRole.media);
+    });
+
+    test('its bar is Home, Alerts and Settings', () {
+      expect(
+        MainShellScreen.tabCountFor(showAdmin: false, hasReportTab: false),
+        3,
+      );
+    });
+  });
+}
+
+/// A responder may only move the response status of a report it can read,
+/// and matrix 4.1 shows it validated reports only.
+///
+/// The ACL cannot express this, because a write goes through the Appwrite
+/// Function on a server key and document permissions do not apply to it.
+/// So the server has an explicit guard, and this is the client agreeing
+/// with it — without which the chips are offered and the write 403s.
+void responseScopeTests() {
+  bool may(UserRole? role, {required bool validated}) =>
+      AuthProvider.mayUpdateResponseStatus(role, reportIsValidated: validated);
+
+  group('mayUpdateResponseStatus', () {
+    test('a responder gets it on a validated report and no other', () {
+      // Every ReportStatus, through the same set the widget passes, so a
+      // status added later is covered rather than forgotten.
+      for (final status in ReportStatus.values) {
+        final validated = validatedReportStatuses.contains(status);
+        expect(
+          may(UserRole.ewr, validated: validated),
+          validated,
+          reason: '$status',
+        );
+      }
+    });
+
+    test('an admin gets it at any status', () {
+      for (final role in [UserRole.admin, UserRole.techSupport]) {
+        expect(may(role, validated: false), isTrue, reason: '$role');
+        expect(may(role, validated: true), isTrue, reason: '$role');
+      }
+    });
+
+    test('nobody else gets it, validated or not', () {
+      for (final role in [
+        UserRole.user,
+        UserRole.ewm,
+        UserRole.ewv,
+        UserRole.ldpCoordinator,
+        UserRole.projectStaff,
+        UserRole.media,
+      ]) {
+        expect(may(role, validated: true), isFalse, reason: '$role');
+      }
+    });
+
+    test('an unresolved role gets nothing', () {
+      // Unlike the Report tab, which is offered while the profile loads:
+      // there the cost of being wrong is hiding a feature from a real
+      // reporter, and here it is offering a write the server refuses.
+      expect(may(null, validated: true), isFalse);
     });
   });
 }

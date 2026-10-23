@@ -2295,6 +2295,9 @@ class AppLocalizationsHa extends AppLocalizations {
   String get roleTechSupport => 'Taimakon Fasaha';
 
   @override
+  String get roleMedia => 'Kafofin Yaɗa Labarai';
+
+  @override
   String get profilePhotoUpdated => 'An sabunta hoton bayanan kai!';
 
   @override
@@ -3462,4 +3465,26 @@ class AppLocalizationsHa extends AppLocalizations {
   @override
   String get knowledgeNoSavedGuides =>
       'Babu jagororin da aka ajiye tukuna. Danna alamar ajiya a kan jagora don ajiye shi.';
+
+  @override
+  String get responseStatusTitle => 'Mayar da martani';
+
+  @override
+  String get responseStatusAwaiting => 'Ana jiran mayar da martani';
+
+  @override
+  String get responseStatusAcknowledged => 'An karɓa';
+
+  @override
+  String get responseStatusDispatched => 'An tura ƙungiya';
+
+  @override
+  String get responseStatusResolved => 'An warware';
+
+  @override
+  String get responseStatusUpdated => 'An sabunta matsayin mayar da martani';
+
+  @override
+  String get responseStatusUpdateFailed =>
+      'An kasa sabunta matsayin mayar da martani. Don Allah sake gwadawa.';
 }

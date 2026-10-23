@@ -26,6 +26,14 @@ enum UserRole {
   projectStaff,
   admin,
   techSupport,
+
+  /// Reads validated reports and writes nothing anywhere.
+  ///
+  /// Matrix 4.1 gives it no Submit Reports, no Verify, no Validate/Reject
+  /// and no alerts — the only role in the matrix with no write at all. Its
+  /// read reaches validated reports in any LGA, which is a document ACL
+  /// (`reportAcl`) rather than anything this enum can express.
+  media,
 }
 
 extension UserRoleValue on UserRole {
@@ -47,6 +55,7 @@ extension UserRoleValue on UserRole {
     UserRole.projectStaff => l10n.roleProjectStaff,
     UserRole.admin => l10n.roleAdmin,
     UserRole.techSupport => l10n.roleTechSupport,
+    UserRole.media => l10n.roleMedia,
   };
 
   /// Parses a `profiles.role` value (null when unknown).
@@ -219,6 +228,18 @@ class AuthProvider extends ChangeNotifier {
     UserRole.techSupport,
   };
 
+  /// Roles that may move a report's response status.
+  ///
+  /// Exactly `RESPONDERS` in `functions/cradi/src/lib/policy.js`. Per the
+  /// client's permission matrix (4.1) this is Early Responder's one write:
+  /// it says what the response is doing, not whether the report is true,
+  /// so it is deliberately not [statusManagerRoles].
+  static const Set<UserRole> responderRoles = {
+    UserRole.ewr,
+    UserRole.admin,
+    UserRole.techSupport,
+  };
+
   /// Roles that may broadcast / dismiss alerts (`alerts_insert` /
   /// `alerts_update`).
   ///
@@ -274,6 +295,44 @@ class AuthProvider extends ChangeNotifier {
   static bool _sameArea(String? mine, String? theirs) {
     final a = mine ?? '';
     return a.isNotEmpty && a == theirs;
+  }
+
+  /// Whether this user may move a report's response status.
+  ///
+  /// No "not your own report" clause, unlike [canManageReportStatus]: that
+  /// rule exists so nobody judges their own report, and responding to one
+  /// you filed is not a conflict of interest.
+  ///
+  /// [reportIsValidated] decides it for everybody but an admin, because
+  /// the server refuses a responder a report that is not validated
+  /// (`guardReportUpdate`). A write goes through the Function on a server
+  /// key, so the document ACL that hides an unvalidated report from them
+  /// does not apply to it — the guard is what draws the line, and offering
+  /// the control anyway would earn a 403.
+  ///
+  /// A bool rather than the report's status, so this provider does not
+  /// have to import a feature's model: `validatedReportStatuses` in
+  /// `verification_report_model.dart` is what answers it, next to the
+  /// enum it reads.
+  bool canUpdateResponseStatus({bool reportIsValidated = false}) =>
+      mayUpdateResponseStatus(userRole, reportIsValidated: reportIsValidated);
+
+  /// [canUpdateResponseStatus] without an instance, so the rule can be
+  /// tested for every role.
+  ///
+  /// A static for the same reason [MainShellScreen.hasReportTabFor] is
+  /// one: the decision is a function of the role, and reaching it through
+  /// a provider means a test can only assert whatever a mock was told to
+  /// return — which is the stub, not the rule.
+  static bool mayUpdateResponseStatus(
+    UserRole? role, {
+    required bool reportIsValidated,
+  }) {
+    if (role == null || !responderRoles.contains(role)) return false;
+    // `isAdmin` on the server is admin plus tech support, and both read
+    // every report, so there is nothing here for the guard to protect.
+    if (role == UserRole.admin || role == UserRole.techSupport) return true;
+    return reportIsValidated;
   }
 
   /// Whether the user may approve / reject / reopen a report (mirrors the
