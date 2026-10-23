@@ -26,6 +26,14 @@ enum UserRole {
   projectStaff,
   admin,
   techSupport,
+
+  /// Reads validated reports and writes nothing anywhere.
+  ///
+  /// Matrix 4.1 gives it no Submit Reports, no Verify, no Validate/Reject
+  /// and no alerts — the only role in the matrix with no write at all. Its
+  /// read reaches validated reports in any LGA, which is a document ACL
+  /// (`reportAcl`) rather than anything this enum can express.
+  media,
 }
 
 extension UserRoleValue on UserRole {
@@ -47,6 +55,7 @@ extension UserRoleValue on UserRole {
     UserRole.projectStaff => l10n.roleProjectStaff,
     UserRole.admin => l10n.roleAdmin,
     UserRole.techSupport => l10n.roleTechSupport,
+    UserRole.media => l10n.roleMedia,
   };
 
   /// Parses a `profiles.role` value (null when unknown).

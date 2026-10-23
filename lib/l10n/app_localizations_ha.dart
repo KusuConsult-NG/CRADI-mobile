@@ -2295,6 +2295,9 @@ class AppLocalizationsHa extends AppLocalizations {
   String get roleTechSupport => 'Taimakon Fasaha';
 
   @override
+  String get roleMedia => 'Kafofin Yaɗa Labarai';
+
+  @override
   String get profilePhotoUpdated => 'An sabunta hoton bayanan kai!';
 
   @override

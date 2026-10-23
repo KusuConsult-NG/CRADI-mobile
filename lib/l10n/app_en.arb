@@ -2904,6 +2904,10 @@
   "@roleTechSupport": {
     "description": "Role name: technical support."
   },
+  "roleMedia": "Media",
+  "@roleMedia": {
+    "description": "Role name: media — reads validated reports only, writes nothing."
+  },
   "profilePhotoUpdated": "Profile photo updated!",
   "@profilePhotoUpdated": {
     "description": "Snackbar after uploading a new profile photo."

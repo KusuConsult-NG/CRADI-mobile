@@ -2268,6 +2268,9 @@ class AppLocalizationsIg extends AppLocalizations {
   String get roleTechSupport => 'Nkwado Teknụzụ';
 
   @override
+  String get roleMedia => 'Mgbasa Ozi';
+
+  @override
   String get profilePhotoUpdated => 'Emelitere foto profaịlụ!';
 
   @override

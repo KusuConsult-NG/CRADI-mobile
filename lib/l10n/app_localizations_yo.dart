@@ -2282,6 +2282,9 @@ class AppLocalizationsYo extends AppLocalizations {
   String get roleTechSupport => 'Àtìlẹ́yìn Ìmọ̀-ẹ̀rọ';
 
   @override
+  String get roleMedia => 'Ilé Ìròyìn';
+
+  @override
   String get profilePhotoUpdated => 'A ti ṣe àtúnṣe fọ́tò profaili!';
 
   @override

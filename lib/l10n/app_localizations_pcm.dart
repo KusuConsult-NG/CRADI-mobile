@@ -2279,6 +2279,9 @@ class AppLocalizationsPcm extends AppLocalizations {
   String get roleTechSupport => 'Tech Support';
 
   @override
+  String get roleMedia => 'Media';
+
+  @override
   String get profilePhotoUpdated => 'Profile photo don update!';
 
   @override

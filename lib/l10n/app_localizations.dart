@@ -3998,6 +3998,12 @@ abstract class AppLocalizations {
   /// **'Tech Support'**
   String get roleTechSupport;
 
+  /// Role name: media — reads validated reports only, writes nothing.
+  ///
+  /// In en, this message translates to:
+  /// **'Media'**
+  String get roleMedia;
+
   /// Snackbar after uploading a new profile photo.
   ///
   /// In en, this message translates to:

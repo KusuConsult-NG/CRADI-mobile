@@ -2285,6 +2285,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get roleTechSupport => 'Tech Support';
 
   @override
+  String get roleMedia => 'Media';
+
+  @override
   String get profilePhotoUpdated => 'Profile photo updated!';
 
   @override

@@ -15,11 +15,13 @@ void main() {
 
   // ── Who gets a Report tab ────────────────────────────────────────────────
   group('hasReportTabFor', () {
-    test('Early Responder and tech support do not', () {
-      // Matrix 4.1 gives neither Submit Reports, and the server refuses
-      // the create (`guardReportCreate`), so a tab would only earn a 403.
+    test('Early Responder, Media and tech support do not', () {
+      // Matrix 4.1 gives none of them Submit Reports, and the server
+      // refuses the create (`NON_REPORTERS`), so a tab would only earn a
+      // 403.
       expect(MainShellScreen.hasReportTabFor(UserRole.ewr), isFalse);
       expect(MainShellScreen.hasReportTabFor(UserRole.techSupport), isFalse);
+      expect(MainShellScreen.hasReportTabFor(UserRole.media), isFalse);
     });
 
     test('every other role does', () {
@@ -160,6 +162,8 @@ void main() {
     });
   });
 
+  mediaRoleTests();
+
   // ── Role-set definitions ──────────────────────────────────────────────────
   group('Level 1 (ewm) role sets', () {
     test('ewm can cast peer-verification votes', () {
@@ -233,6 +237,58 @@ void main() {
       expect(
         AuthProvider.verificationReaderRoles,
         contains(UserRole.techSupport),
+      );
+    });
+  });
+}
+
+/// The Media role from matrix 4.1: it reads validated reports and writes
+/// nothing anywhere.
+///
+/// Worth its own group because it is the only role in the matrix with no
+/// write at all, and "no write at all" is a claim that has to be checked
+/// against every set rather than assumed from the one that was added last.
+void mediaRoleTests() {
+  group('Media', () {
+    test('is in no write set', () {
+      for (final set in {
+        'verifierRoles': AuthProvider.verifierRoles,
+        'statusManagerRoles': AuthProvider.statusManagerRoles,
+        'verificationRequestRoles': AuthProvider.verificationRequestRoles,
+        'alertManagerRoles': AuthProvider.alertManagerRoles,
+        'responderRoles': AuthProvider.responderRoles,
+      }.entries) {
+        expect(
+          set.value,
+          isNot(contains(UserRole.media)),
+          reason: '${set.key} must not contain media',
+        );
+      }
+    });
+
+    test('does not read peer votes either', () {
+      // Verification data is the staff deliberation on a report, not the
+      // report. The matrix gives Media the validated report and nothing
+      // around it.
+      expect(
+        AuthProvider.verificationReaderRoles,
+        isNot(contains(UserRole.media)),
+      );
+    });
+
+    test('stores as `media`, and parses back', () {
+      // The value the report ACL names as `label:media` — via
+      // accountLabels, which camel-cases the stored role. A mismatch here
+      // is an ACL naming a label nobody holds, which Appwrite accepts in
+      // silence and grants to nobody.
+      expect(UserRole.media.dbValue, 'media');
+      expect(UserRoleValue.fromDb('media'), UserRole.media);
+    });
+
+    test('its bar is Home, Alerts and Settings', () {
+      expect(
+        MainShellScreen.tabCountFor(showAdmin: false, hasReportTab: false),
+        3,
       );
     });
   });
