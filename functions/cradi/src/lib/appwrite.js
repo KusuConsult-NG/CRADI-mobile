@@ -212,6 +212,27 @@ export function wardTeam(state, lga, ward) {
   return `ward-${head}-${fnv1a64(slug)}`;
 }
 
+/**
+ * The account label that means "an LDP Coordinator for this LGA".
+ *
+ * A label rather than a team, deliberately. Team membership is created by
+ * the one-time migration seeder and by nothing else in the running system,
+ * so an account made since then is in no ward team at all; a second kind
+ * of team would inherit that. Labels are re-derived from the profile on
+ * every write that touches one (`syncLabels`), which is the mechanism that
+ * actually works.
+ *
+ * Hashed for the same reason `wardTeam` hashes: Appwrite labels are
+ * alphanumeric and capped at 36 characters, and Nigerian LGA names are
+ * neither short nor ASCII-safe. `lga` + 16 hex = 19.
+ */
+export function lgaLabel(state, lga) {
+  const slug = [state, lga]
+    .map((part) => String(part ?? '').toLowerCase().replace(/[^a-z0-9]+/g, '-'))
+    .join('-');
+  return `lga${fnv1a64(slug)}`;
+}
+
 /** Appwrite's limit for a team, document or file id. */
 export const MAX_ID = 36;
 

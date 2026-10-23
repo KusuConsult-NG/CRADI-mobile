@@ -49,10 +49,40 @@ import {
   assertCoverage,
   assertTarget,
   isAdmin,
+  canonicalRole,
   reportContentChanged,
 } from './lib/policy.js';
 
 const OPS = new Set(['create', 'upsert', 'update', 'delete']);
+
+/**
+ * Rewrites a row's permissions when a column its ACL reads has changed.
+ *
+ * An Appwrite ACL is stored on the row and written once, at creation, so
+ * a rule that depends on a mutable column is only ever true for the value
+ * that column held then. `reports` is exactly such a rule — Early
+ * Responder and Media may read a report *once it is validated* — and
+ * every report is created `pending`. Without this they would never see
+ * one, however many were approved.
+ *
+ * Derived from the stored row rather than the patch, so the result
+ * matches what a fresh read of the document would produce.
+ */
+async function syncAcl(collection, documentId, rule, before, after, log) {
+  const moved = rule.aclFollows?.some(
+    (field) => (after?.[field] ?? null) !== (before?.[field] ?? null),
+  );
+  if (!moved) return;
+  const permissions = rule.acl?.({ data: after });
+  if (!permissions) return;
+  const applied = await updateRow(collection, documentId, {}, permissions);
+  // Logged, not thrown. The edit the caller asked for has already been
+  // applied, so failing the request would have them retry a write that
+  // worked. It fails closed — a role reads one report later than it
+  // should — and `fix-report-permissions.mjs` re-derives the lot.
+  if (applied.ok) log(`permissions resynced for ${collection}/${documentId}`);
+  else log(`PERMISSIONS RESYNC FAILED for ${collection}/${documentId}: ${applied.status}`);
+}
 
 /**
  * `report_has_votes(p_report_id)`: has anybody voted on this report?
@@ -121,7 +151,7 @@ export default handler(async ({ req, log }) => {
   }
 
   const rule = RULES[collection] ?? {};
-  const role = profile.role ?? 'user';
+  const role = canonicalRole(profile.role ?? 'user');
   const context = { userId, profile, role, documentId, collection };
 
   if (collection === 'profiles') {
@@ -211,12 +241,15 @@ export default handler(async ({ req, log }) => {
       }
       log(`updated ${collection}/${documentId} by ${userId} (expected ${JSON.stringify(expect)})`);
       const after = await getRow(collection, documentId);
-      return { document: after.ok ? after.body : { ...current.body, ...clean } };
+      const merged = after.ok ? after.body : { ...current.body, ...clean };
+      await syncAcl(collection, documentId, rule, current.body, merged, log);
+      return { document: merged };
     }
 
     const updated = await updateRow(collection, documentId, clean);
     if (!updated.ok) refuseWrite('update', updated);
     log(`updated ${collection}/${documentId} by ${userId}`);
+    await syncAcl(collection, documentId, rule, current.body, updated.body, log);
     return { document: updated.body };
   }
 
@@ -349,7 +382,15 @@ async function writeProfile({ op, userId, documentId, data, expect, role, log })
     log(`profile ${documentId} updated by ${userId} (expected ${JSON.stringify(expect)})`);
     const after = await getRow('profiles', documentId);
     const document = after.ok ? after.body : { $id: documentId, ...data };
-    await syncLabels(documentId, data, document, log);
+    // Only from a row we actually read. `accountLabels` derives from the
+    // whole profile, so handing it the patch alone computes labels for a
+    // profile that has only the fields this call happened to change — a
+    // patch of `{ isApproved: true }` comes back with no role at all, and
+    // writing that *removes* the role label the account was entitled to.
+    // Skipping leaves the labels as they were, which `syncLabels` warns
+    // about and the next profile write repairs.
+    if (after.ok) await syncLabels(documentId, data, document, log);
+    else log(`profile ${documentId} written but not re-read; labels left as they were`);
     return { document };
   }
 

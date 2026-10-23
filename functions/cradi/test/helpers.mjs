@@ -283,12 +283,17 @@ export function fakeAppwrite({
   return { calls, store, users, sentMessages, targets, topics: topicSet, subscribers: subscriberSet };
 }
 
+// `permissions` is spread *after* `data`, not before. The update branch
+// calls this with `data` already merged over the stored row, so `data`
+// carries that row's old `$permissions` — ahead of the new list, the old
+// one won and a permissions rewrite was invisible to every test that
+// looked. Which is the one behaviour a fake must not get wrong here.
 const stamp = (id, data, permissions) => ({
   $id: id,
   $createdAt: '2026-10-02T00:00:00.000+00:00',
   $updatedAt: '2026-10-02T00:00:00.000+00:00',
-  ...(permissions ? { $permissions: permissions } : {}),
   ...data,
+  ...(permissions ? { $permissions: permissions } : {}),
 });
 
 /** Whether one Appwrite query matches a stored row. */

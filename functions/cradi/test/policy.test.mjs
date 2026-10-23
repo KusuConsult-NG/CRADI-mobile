@@ -5,9 +5,10 @@ import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 
 import { RULES, WRITABLE, assertCoverage, assertLocation, assertTarget,
-  accountLabels,
+  accountLabels, canonicalRole, isAdmin, reportAcl, VALIDATED_STATUSES,
+  LABEL_FIELDS,
 } from '../src/lib/policy.js';
-import { wardTeam } from '../src/lib/appwrite.js';
+import { lgaLabel, wardTeam } from '../src/lib/appwrite.js';
 import { strip } from '../src/write.js';
 
 // Resolved from this file, so `npm test` works from the Function
@@ -351,5 +352,146 @@ describe('accountLabels', () => {
       accountLabels({ role: 'wizard', isApproved: true, isDisabled: false }),
       ['approved'],
     );
+  });
+
+  it('gives an LDP Coordinator the label for their own LGA', () => {
+    // Matrix 4.1's "own LGA" scope. A per-LGA label and not a flat
+    // `ldpCoordinator` read, which is the all-LGAs scope the matrix gives
+    // Project Staff instead.
+    const labels = accountLabels({
+      role: 'ldp_coordinator', isApproved: true, isDisabled: false,
+      state: 'Benue', lga: 'Makurdi',
+    });
+    assert.deepEqual(labels, ['ldpCoordinator', 'approved', lgaLabel('Benue', 'Makurdi')]);
+  });
+
+  it('withholds the LGA label from a coordinator with no LGA on file', () => {
+    // `lgaLabel('', '')` is a perfectly good hash of the empty string, so
+    // granting it would put every coordinator with an incomplete profile
+    // in one shared bucket and hand each the others' reports.
+    for (const where of [{}, { state: 'Benue' }, { lga: 'Makurdi' }]) {
+      const labels = accountLabels({
+        role: 'ldp_coordinator', isApproved: true, isDisabled: false, ...where,
+      });
+      assert.deepEqual(labels, ['ldpCoordinator', 'approved'], JSON.stringify(where));
+    }
+  });
+
+  it('gives nobody else an LGA label', () => {
+    // Project Staff reads every LGA by flat label; an EWM reads its ward
+    // through the team. Neither needs one, and an extra grant is the kind
+    // that is never noticed.
+    for (const role of ['project_staff', 'ewm', 'ewv', 'ewr', 'admin', 'media']) {
+      const labels = accountLabels({
+        role, isApproved: true, isDisabled: false, state: 'Benue', lga: 'Makurdi',
+      });
+      assert.ok(!labels.some((l) => l.startsWith('lga')), `${role}: ${labels.join()}`);
+    }
+  });
+
+  it('gives Media its label, so a validated report can name it', () => {
+    assert.deepEqual(
+      accountLabels({ role: 'media', isApproved: true, isDisabled: false }),
+      ['media', 'approved'],
+    );
+  });
+
+  it('re-derives the labels when a coordinator is moved', () => {
+    // The transfer case: without `state` and `lga` in LABEL_FIELDS the
+    // move writes the row and leaves the old label — and so the old
+    // LGA's reports — in place.
+    assert.ok(LABEL_FIELDS.includes('state'));
+    assert.ok(LABEL_FIELDS.includes('lga'));
+  });
+});
+
+describe('tech support is the role the server thought it was', () => {
+  /**
+   * Every writer of `profiles.role` stores `techSupport`: the app's
+   * `UserRole.dbValue` falls through to the enum name, the admin panel's
+   * `USER_ROLES` lists it that way, and the Postgres CHECK this schema
+   * came from allows that spelling and not the other. `policy.js` had
+   * `tech_support`, so `isAdmin` was false for every real tech support
+   * account — and `isAdmin` is the delete gate, the
+   * edit-anyone's-profile gate, the reopen gate, and the `roles` list of
+   * every admin-only collection.
+   */
+  it('counts a techSupport account as an administrator', () => {
+    assert.ok(isAdmin('techSupport'));
+    assert.ok(isAdmin('admin'));
+    assert.ok(!isAdmin('ldp_coordinator'));
+  });
+
+  it('still accepts a row seeded with the underscored spelling', () => {
+    assert.equal(canonicalRole('tech_support'), 'techSupport');
+    assert.ok(isAdmin(canonicalRole('tech_support')));
+  });
+
+  it('leaves every other role alone', () => {
+    for (const role of ['user', 'ewm', 'ewv', 'ewr', 'ldp_coordinator',
+      'project_staff', 'admin', 'media', 'techSupport']) {
+      assert.equal(canonicalRole(role), role);
+    }
+  });
+
+  it('gives it the label the ACLs name', () => {
+    assert.deepEqual(
+      accountLabels({ role: 'techSupport', isApproved: true, isDisabled: false }),
+      ['techSupport', 'approved'],
+    );
+    // And by the legacy spelling too, which camel-cases to the same thing.
+    assert.deepEqual(
+      accountLabels({ role: 'tech_support', isApproved: true, isDisabled: false }),
+      ['techSupport', 'approved'],
+    );
+  });
+});
+
+describe("a report's read scope", () => {
+  const report = {
+    userId: 'reporter9', status: 'pending',
+    state: 'Benue', lga: 'Makurdi', ward: 'North Bank I',
+  };
+
+  it('is the three scopes matrix 4.1 names', () => {
+    assert.deepEqual(reportAcl({ data: report }), [
+      'read("user:reporter9")',
+      `read("team:${wardTeam('Benue', 'Makurdi', 'North Bank I')}")`,
+      `read("label:${lgaLabel('Benue', 'Makurdi')}")`,
+      'read("label:projectStaff")',
+      'read("label:ewv")',
+      'read("label:admin")',
+    ]);
+  });
+
+  for (const status of VALIDATED_STATUSES) {
+    it(`admits Early Responder and Media once it is ${status}`, () => {
+      const acl = reportAcl({ data: { ...report, status } });
+      assert.ok(acl.includes('read("label:ewr")'));
+      assert.ok(acl.includes('read("label:media")'));
+    });
+  }
+
+  for (const status of ['pending', 'rejected', 'escalated', undefined]) {
+    it(`keeps them out while it is ${status}`, () => {
+      const acl = reportAcl({ data: { ...report, status } });
+      assert.ok(!acl.includes('read("label:ewr")'), acl.join(' '));
+      assert.ok(!acl.includes('read("label:media")'), acl.join(' '));
+    });
+  }
+
+  it('reads the reporter from the row, not from whoever is writing', () => {
+    // The ACL is recomputed on a status change, which happens under the
+    // *reviewer's* session. A list built from the acting user's id would
+    // hand the report to whoever approved it and take it from whoever
+    // filed it — so this takes no `userId` from the context at all.
+    const acl = reportAcl({ userId: 'someone-else', data: report });
+    assert.ok(acl.includes('read("user:reporter9")'));
+    assert.ok(!acl.includes('read("user:someone-else")'));
+  });
+
+  it('is what the rule uses, so there is one definition of it', () => {
+    assert.equal(RULES.reports.acl, reportAcl);
+    assert.deepEqual(RULES.reports.aclFollows, ['status']);
   });
 });

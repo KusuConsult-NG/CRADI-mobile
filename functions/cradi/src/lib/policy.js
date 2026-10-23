@@ -18,7 +18,7 @@
  */
 
 import { ErrorType, forbidden, invalid } from './http.js';
-import { wardTeam } from './appwrite.js';
+import { lgaLabel, wardTeam } from './appwrite.js';
 import locations from '../data/locations.json' with { type: 'json' };
 
 /** Collections this Function will write. Anything else is refused. */
@@ -36,7 +36,26 @@ export const WRITABLE = new Set([
 
 /** Roles, as stored in `profiles.role`. */
 const STAFF = ['ewm', 'ewv', 'ewr', 'ldp_coordinator', 'project_staff'];
-const ADMIN = ['admin', 'tech_support'];
+const ADMIN = ['admin', 'techSupport'];
+
+/**
+ * `techSupport`, not `tech_support`.
+ *
+ * Every writer of `profiles.role` stores `techSupport`: the app's
+ * `UserRole.dbValue` falls through to the enum name, the admin panel's
+ * `USER_ROLES` lists it that way, and the Postgres CHECK this schema came
+ * from allows that spelling and not the other. This file had the other
+ * one, so `ADMIN.includes(role)` was false for every real tech support
+ * account — which is `isAdmin`, which is the delete gate, the
+ * edit-anyone's-profile gate, the reopen gate and the `roles` list of
+ * every admin-only collection. The role existed and did nothing.
+ *
+ * [canonicalRole] keeps the underscored spelling working, because a row
+ * seeded by hand may carry it and a 403 is not how that should surface.
+ */
+export function canonicalRole(role) {
+  return role === 'tech_support' ? 'techSupport' : role;
+}
 // Per the client's permission matrix (4.1): EWM, LDP Coordinator and
 // Project Staff verify peer reports; Early Responder does not.
 const VERIFIER = ['ewm', 'ewv', 'ldp_coordinator', 'project_staff', 'admin'];
@@ -55,10 +74,62 @@ const RESPONDERS = ['ewr', ...ADMIN];
  */
 export const RESPONSE_STATUSES = ['awaiting', 'acknowledged', 'dispatched', 'resolved'];
 
-// Matrix 4.1: no Submit Reports, no Upload Photos. `tech_support` is not in
+// Matrix 4.1: no Submit Reports, no Upload Photos. `techSupport` is not in
 // the matrix at all and has never had a Report tab in the app, so it is
 // named here rather than left to differ between the client and the server.
-const NON_REPORTERS = ['ewr', 'tech_support'];
+// `media` reads validated reports and writes nothing anywhere.
+const NON_REPORTERS = ['ewr', 'techSupport', 'media'];
+
+/**
+ * A report staff have decided is real.
+ *
+ * Both statuses, because the two paths to "real" are separate: peer votes
+ * reaching the threshold set `verified`, and a reviewer deciding by hand
+ * sets `approved`. The matrix's "validated reports only" covers either,
+ * and naming just one would hide half the reports from the roles it is
+ * meant to let in.
+ */
+export const VALIDATED_STATUSES = ['verified', 'approved'];
+
+/**
+ * Who may read a report, as Appwrite document permissions.
+ *
+ * Reads go straight to Appwrite under the user's own session — the admin
+ * panel's report list included, which calls `listRows` and not this
+ * Function — so this list *is* the read-scope rule. There is no second
+ * place that filters.
+ *
+ * Matrix 4.1's three scopes, in order:
+ *
+ * - **own ward** — the reporter (by stored `userId`, so a reviewer
+ *   recomputing this does not take the report away from whoever filed
+ *   it) and their ward team. EWM reviews peers here and has no label.
+ * - **own LGA** — `ldp_coordinator`, via a per-LGA label. A label and
+ *   not a second kind of team: team membership is written by the one-time
+ *   migration seeder and by nothing else in the running system, so an
+ *   account created since is in no team at all, whereas `syncLabels`
+ *   re-derives labels on every write that touches one.
+ * - **all LGAs** — `project_staff`, `ewv` and `admin`, by flat label.
+ *
+ * `ewr` and `media` are outside that hierarchy: they see a report only
+ * once it is validated, at any location. This is the part that needs the
+ * permissions **rewritten when the status changes**, since an ACL is
+ * stored per document at creation and nothing re-reads this function
+ * later on its own.
+ */
+export function reportAcl({ data }) {
+  return [
+    `read("user:${data.userId}")`,
+    `read("team:${wardTeam(data.state, data.lga, data.ward)}")`,
+    `read("label:${lgaLabel(data.state, data.lga)}")`,
+    'read("label:projectStaff")',
+    'read("label:ewv")',
+    'read("label:admin")',
+    ...(VALIDATED_STATUSES.includes(data.status)
+      ? ['read("label:ewr")', 'read("label:media")']
+      : []),
+  ];
+}
 
 /**
  * Per-collection rules.
@@ -131,13 +202,13 @@ export const RULES = {
       }
     },
     requiresLocation: true,
-    acl: ({ userId, data }) => [
-      `read("user:${userId}")`,
-      `read("team:${wardTeam(data.state, data.lga, data.ward)}")`,
-      'read("label:ewv")',
-      'read("label:ewr")',
-      'read("label:admin")',
-    ],
+    acl: reportAcl,
+    // The one collection whose ACL depends on a column an update can
+    // change, so `write.js` recomputes the permissions after a status
+    // change. Without this, `ewr` and `media` would be frozen at
+    // whatever the report's status was the moment it was filed — which
+    // is always `pending`, so they would never see anything.
+    aclFollows: ['status'],
   },
 
   verifications: {
@@ -461,24 +532,41 @@ export function assertCoverage({ coverageState, coverageLga }) {
  * field was touched. `syncLabels` re-runs this whenever `role`, `isApproved`
  * or `isDisabled` changes, so approving an account grants the label then.
  */
-export function accountLabels({ role, isApproved, isDisabled }) {
+export function accountLabels({ role, isApproved, isDisabled, state, lga }) {
   if (isDisabled === true) return [];
   const labels = [];
   const approved = isApproved === true;
-  const name = String(role ?? '').replace(/_(.)/g, (_, c) => c.toUpperCase());
+  const name = canonicalRole(String(role ?? '').replace(/_(.)/g, (_, c) => c.toUpperCase()));
   if (approved && name && name !== 'user' && LABELS.includes(name)) labels.push(name);
   if (approved) labels.push('approved');
+  // The LGA scope matrix 4.1 gives an LDP Coordinator. One label per LGA
+  // rather than a flat `ldpCoordinator` read, which would be the
+  // all-LGAs scope the matrix gives Project Staff instead.
+  //
+  // Only for a coordinator with an LGA on file: `lgaLabel('', '')` is a
+  // perfectly valid hash of the empty string, and granting it would hand
+  // every coordinator whose profile is incomplete the reports of every
+  // other incomplete one.
+  if (approved && name === 'ldpCoordinator' && state && lga) {
+    labels.push(lgaLabel(state, lga));
+  }
   return labels;
 }
 
 /** Every label an ACL may name; anything else is not a label Appwrite knows. */
 const LABELS = [
   'ewm', 'ewv', 'ewr', 'ldpCoordinator', 'projectStaff', 'admin',
-  'techSupport', 'approved',
+  'techSupport', 'media', 'approved',
 ];
 
-/** The profile fields whose value decides the account's labels. */
-export const LABEL_FIELDS = ['role', 'isApproved', 'isDisabled'];
+/**
+ * The profile fields whose value decides the account's labels.
+ *
+ * `state` and `lga` are here because an LDP Coordinator's read scope is
+ * their LGA: a coordinator transferred to another LGA keeps the old
+ * label — and so the old LGA's reports — until the move re-derives it.
+ */
+export const LABEL_FIELDS = ['role', 'isApproved', 'isDisabled', 'state', 'lga'];
 
 /** Refuses when [role] is not in [allowed]. */
 export function assertRole(role, allowed, what) {
