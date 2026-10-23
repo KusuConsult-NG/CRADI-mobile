@@ -99,15 +99,36 @@ void main() {
       expect(AuthProvider.verifierRoles, contains(UserRole.ewv));
       expect(AuthProvider.statusManagerRoles, contains(UserRole.ewv));
       expect(AuthProvider.verificationRequestRoles, contains(UserRole.ewv));
-      expect(AuthProvider.alertManagerRoles, contains(UserRole.ewv));
+    });
+
+    test('ewv does not broadcast alerts, and never could', () {
+      // It was in this set on the client only: `alerts.roles` in
+      // functions/cradi/src/lib/policy.js has never listed it, so the
+      // button was offered and the write refused.
+      expect(AuthProvider.alertManagerRoles, isNot(contains(UserRole.ewv)));
     });
   });
 
   group('Level 3 (ewr) role sets', () {
-    test('ewr has all ewv abilities', () {
-      expect(AuthProvider.verifierRoles, contains(UserRole.ewr));
-      expect(AuthProvider.statusManagerRoles, contains(UserRole.ewr));
-      expect(AuthProvider.alertManagerRoles, contains(UserRole.ewr));
+    test('ewr judges nothing — it reads and responds', () {
+      // The client's permission matrix (4.1) gives Early Responder no
+      // Verify, no Validate/Reject and no Send Manual Alerts. It used to
+      // have all three, which is what this now guards against.
+      expect(AuthProvider.verifierRoles, isNot(contains(UserRole.ewr)));
+      expect(AuthProvider.statusManagerRoles, isNot(contains(UserRole.ewr)));
+      expect(AuthProvider.alertManagerRoles, isNot(contains(UserRole.ewr)));
+    });
+
+    test('the roles that do judge, per the matrix', () {
+      for (final role in [UserRole.ldpCoordinator, UserRole.projectStaff]) {
+        expect(AuthProvider.verifierRoles, contains(role), reason: '$role');
+        expect(
+          AuthProvider.statusManagerRoles,
+          contains(role),
+          reason: '$role',
+        );
+        expect(AuthProvider.alertManagerRoles, contains(role), reason: '$role');
+      }
     });
   });
 

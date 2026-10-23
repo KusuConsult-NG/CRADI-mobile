@@ -177,10 +177,17 @@ class AuthProvider extends ChangeNotifier {
   String? _signInUid;
 
   /// Roles that may cast a peer-verification vote (`is_verifier()`).
+  ///
+  /// Mirrors `VERIFIER` in `functions/cradi/src/lib/policy.js`, which is
+  /// where it is enforced; this set only decides what the UI offers. Per
+  /// the client's permission matrix (4.1) that is EWM, LDP Coordinator and
+  /// Project Staff — not Early Responder, which reads reports rather than
+  /// judging them.
   static const Set<UserRole> verifierRoles = {
     UserRole.ewm,
     UserRole.ewv,
-    UserRole.ewr,
+    UserRole.ldpCoordinator,
+    UserRole.projectStaff,
     UserRole.admin,
   };
 
@@ -189,14 +196,12 @@ class AuthProvider extends ChangeNotifier {
   /// [verifierRoles], so this must stay a subset of those.
   static const Set<UserRole> verificationRequestRoles = {
     UserRole.ewv,
-    UserRole.ewr,
     UserRole.admin,
   };
 
   /// Roles that may approve / reject / reopen reports.
   static const Set<UserRole> statusManagerRoles = {
     UserRole.ewv,
-    UserRole.ewr,
     UserRole.ldpCoordinator,
     UserRole.projectStaff,
     UserRole.admin,
@@ -216,9 +221,11 @@ class AuthProvider extends ChangeNotifier {
 
   /// Roles that may broadcast / dismiss alerts (`alerts_insert` /
   /// `alerts_update`).
+  ///
+  /// Exactly `alerts.roles` in `functions/cradi/src/lib/policy.js`, which
+  /// is what actually decides. `ewv` was in this set and has never been in
+  /// that one, so an EW Verifier was shown a button the server refused.
   static const Set<UserRole> alertManagerRoles = {
-    UserRole.ewv,
-    UserRole.ewr,
     UserRole.ldpCoordinator,
     UserRole.projectStaff,
     UserRole.admin,

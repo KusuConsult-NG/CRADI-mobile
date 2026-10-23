@@ -37,7 +37,9 @@ export const WRITABLE = new Set([
 /** Roles, as stored in `profiles.role`. */
 const STAFF = ['ewm', 'ewv', 'ewr', 'ldp_coordinator', 'project_staff'];
 const ADMIN = ['admin', 'tech_support'];
-const VERIFIER = ['ewm', 'ewv', 'ewr', 'admin'];
+// Per the client's permission matrix (4.1): EWM, LDP Coordinator and
+// Project Staff verify peer reports; Early Responder does not.
+const VERIFIER = ['ewm', 'ewv', 'ldp_coordinator', 'project_staff', 'admin'];
 
 /**
  * Per-collection rules.
@@ -146,7 +148,9 @@ export const RULES = {
   },
 
   alerts: {
-    roles: [...ADMIN, 'ewr', 'ldp_coordinator'],
+    // Matrix 4.1 'Send Manual Alerts': LDP Coordinator and Project
+    // Staff. Early Responder receives alerts rather than raising them.
+    roles: [...ADMIN, 'ldp_coordinator', 'project_staff'],
     serverOwned: ['createdBy', 'createdAt'],
     create: ({ userId }) => ({
       createdBy: userId,
@@ -190,7 +194,10 @@ export const RULES = {
 export const ALERT_SEVERITIES = ['high', 'critical'];
 
 /** Roles that may approve, reject or reopen a report. */
-const DECIDERS = ['ewv', 'ewr', 'ldp_coordinator', 'project_staff', ...ADMIN];
+// Matrix 4.1 'Validate/Reject Reports': LDP Coordinator and Project
+// Staff only. Early Responder reads reports and updates response
+// status; it does not decide them.
+const DECIDERS = ['ewv', 'ldp_coordinator', 'project_staff', ...ADMIN];
 
 const changed = (data, current, field) =>
   field in data && data[field] !== (current[field] ?? null);
