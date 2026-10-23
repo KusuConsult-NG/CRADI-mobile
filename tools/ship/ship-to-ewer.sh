@@ -88,6 +88,13 @@ say "Copying tracked files"
 mkdir -p mobile web
 git -C "$MOBILE" archive HEAD | tar -x -C mobile
 git -C "$WEB" archive HEAD | tar -x -C web
+# This directory builds the deliverable; it is not part of it. Two
+# reasons, and the second is the one that forced the matter: the client
+# has no use for the script that overwrites their repository, and
+# `scrub.py` carries every tool and vendor name in its own pattern — so
+# shipping it makes the scrub check fail on the scrubber. The check
+# caught that itself the first time this ran from `main`.
+rm -rf mobile/tools/ship
 printf '  mobile  %s files\n' "$(find mobile -type f | wc -l | tr -d ' ')"
 printf '  web     %s files\n' "$(find web -type f | wc -l | tr -d ' ')"
 
