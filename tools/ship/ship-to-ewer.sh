@@ -79,7 +79,13 @@ DEFAULT_BRANCH="$(git symbolic-ref --short HEAD)"
 # with. And the source repositories' commit messages carry contributor
 # trailers that are not wanted here — a branch on top of them would keep
 # every one.
-git checkout --quiet --orphan "$BRANCH"
+# Assembled under a fixed internal name, not under "$BRANCH". Two
+# reasons. `git checkout --orphan main` fails outright when the clone
+# already has main, which it always does — so the target could never be
+# the default branch. And naming the local branch after the target
+# invited `git push origin "$BRANCH"`, which is the bug below.
+LOCAL_BRANCH=ship-assembly
+git checkout --quiet --orphan "$LOCAL_BRANCH"
 git rm -rf --quiet . >/dev/null 2>&1 || true
 find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
 
@@ -259,13 +265,47 @@ printf '\n  %s files total\n' "$(git ls-files | wc -l | tr -d ' ')"
 # ── 8. Push ──────────────────────────────────────────────────────────────
 if [ "$PUSH" -eq 1 ]; then
   say "Pushing"
+  if [ "$BRANCH" = "$DEFAULT_BRANCH" ]; then
+    printf '  \033[33mReplacing %s. Its current history is discarded.\033[0m\n' "$BRANCH"
+  fi
+
+  # `--force`, and it is not a shortcut. This commit is an orphan by
+  # design, so it shares no history with whatever the target ref points
+  # at — including a `ship/monorepo` left by the previous ship. A plain
+  # push therefore succeeds exactly once, the first time the branch does
+  # not exist, and is rejected non-fast-forward on every ship after that.
+  #
+  # It pushes the commit just built, by its local name, never the remote
+  # ref. Resolving the target through `origin/<branch>` instead reads
+  # whatever the *previous* ship left there, and pushing that on is how
+  # an old deliverable gets re-published over a newer one.
+  pushed=0
   for n in 1 2 3 4; do
-    git push -u origin "$BRANCH" && break
+    if git push --force origin "$LOCAL_BRANCH:refs/heads/$BRANCH" 2>&1 | tee "$WORK/push.log"; then
+      pushed=1; break
+    fi
+    # A rejection, a refusal or a missing repository is settled: the next
+    # attempt fails the same way. Only a transport failure is worth
+    # waiting out, and burying a rejection under four retries is how one
+    # got mistaken for a network blip.
+    if grep -qE 'rejected|denied|not found|403|permission' "$WORK/push.log"; then
+      die "the remote refused the push — see git's output above.
+  This is not a transport error, so retrying will not help."
+    fi
     printf '  push failed, retrying in %ss\n' "$((2 ** n))"; sleep "$((2 ** n))"
   done
-  SLUG="$(printf '%s' "$REMOTE" | sed -E 's#.*github\.com[:/]##; s#\.git$##')"
-  printf '\n  Open a pull request:\n  https://github.com/%s/compare/%s...%s?expand=1\n' \
-    "$SLUG" "$DEFAULT_BRANCH" "$BRANCH"
+  # Never print a success-shaped link for a push that did not happen.
+  [ "$pushed" -eq 1 ] || die "could not push after four attempts."
+
+  printf '  pushed %s to %s\n' "$(git rev-parse --short HEAD)" "$BRANCH"
+  if [ "$BRANCH" != "$DEFAULT_BRANCH" ]; then
+    SLUG="$(printf '%s' "$REMOTE" | sed -E 's#.*github\.com[:/]##; s#\.git$##')"
+    case "$REMOTE" in
+      *github.com*)
+        printf '\n  Open a pull request:\n  https://github.com/%s/compare/%s...%s?expand=1\n' \
+          "$SLUG" "$DEFAULT_BRANCH" "$BRANCH" ;;
+    esac
+  fi
 else
   say "Not pushed. Re-run with --push to push $BRANCH to $REMOTE."
 fi
