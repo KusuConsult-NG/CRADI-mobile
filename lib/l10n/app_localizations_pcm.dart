@@ -1103,7 +1103,8 @@ class AppLocalizationsPcm extends AppLocalizations {
       'Login no work. Abeg check your connection.';
 
   @override
-  String get authErrorInvalidCredentials => 'Email or password no correct';
+  String get authErrorInvalidCredentials =>
+      'Email or password no correct. Check the two of dem try again, or press “You Forget Password?” make you change am.';
 
   @override
   String get authErrorTooManyLogins =>
@@ -1112,6 +1113,10 @@ class AppLocalizationsPcm extends AppLocalizations {
   @override
   String get authErrorLoginUnexpected =>
       'Something wey we no expect happen during login. Abeg try again.';
+
+  @override
+  String get authErrorSignInUnavailable =>
+      'Email login no dey work now. Abeg try again later or contact support.';
 
   @override
   String get authErrorInvalidPhone => 'Phone number no correct.';

@@ -303,7 +303,7 @@ void main() {
         MainShellScreen.selectedIndexFor(
           '/settings',
           destinationCount: 4,
-          isTechSupport: true,
+          hasReportTab: false,
         ),
         2,
       );
@@ -311,7 +311,7 @@ void main() {
         MainShellScreen.selectedIndexFor(
           '/admin/knowledge',
           destinationCount: 4,
-          isTechSupport: true,
+          hasReportTab: false,
         ),
         3,
       );
@@ -320,7 +320,7 @@ void main() {
         MainShellScreen.selectedIndexFor(
           '/report',
           destinationCount: 4,
-          isTechSupport: true,
+          hasReportTab: false,
         ),
         0,
       );

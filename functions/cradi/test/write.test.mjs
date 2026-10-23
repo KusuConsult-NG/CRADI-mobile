@@ -39,6 +39,32 @@ describe('the write Function', () => {
     assert.equal(stored.userRole, 'ewm');
   });
 
+  it('refuses a role the matrix gives no Submit Reports', async () => {
+    // Matrix 4.1: Early Responder reads and responds, it does not file.
+    // tech_support has never had a Report tab in the app either.
+    for (const role of ['ewr', 'tech_support']) {
+      const world = fakeAppwrite({
+        rows: { profiles: { u1: profile({ role }) } },
+      });
+      const ctx = context(report);
+      await write(ctx);
+      assert.equal(ctx.captured.status, 403, role);
+      assert.equal(world.store.reports?.r1, undefined, role);
+    }
+  });
+
+  it('still lets every role that does file one', async () => {
+    for (const role of ['user', 'ewm', 'ewv', 'ldp_coordinator', 'project_staff']) {
+      const world = fakeAppwrite({
+        rows: { profiles: { u1: profile({ role }) } },
+      });
+      const ctx = context(report);
+      await write(ctx);
+      assert.equal(ctx.captured.status, 200, role);
+      assert.equal(world.store.reports.r1.userRole, role);
+    }
+  });
+
   it('refuses to let a client approve its own report', async () => {
     // Phase 4's third row, which is the one the whole write path exists
     // for: the client asks for approved/99/true and gets a success and a

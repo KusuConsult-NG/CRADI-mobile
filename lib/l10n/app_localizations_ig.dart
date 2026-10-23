@@ -1091,7 +1091,8 @@ class AppLocalizationsIg extends AppLocalizations {
   String get authErrorLoginConnection => 'Nbanye adaghị. Biko lelee njikọ gị.';
 
   @override
-  String get authErrorInvalidCredentials => 'Imel ma ọ bụ paswọọdụ ezighị ezi';
+  String get authErrorInvalidCredentials =>
+      'Imel ma ọ bụ paswọọdụ ezighị ezi. Lelee ha abụọ ma nwaa ọzọ, ma ọ bụ pịa “Chefuru Paswọọdụ?” iji setapụ ya ọzọ.';
 
   @override
   String get authErrorTooManyLogins =>
@@ -1100,6 +1101,10 @@ class AppLocalizationsIg extends AppLocalizations {
   @override
   String get authErrorLoginUnexpected =>
       'Njehie a na-atụghị anya mere n\'oge nbanye. Biko nwaa ọzọ.';
+
+  @override
+  String get authErrorSignInUnavailable =>
+      'Nbanye site na imel anaghị arụ ọrụ ugbu a. Biko nwaa ọzọ ma emesịa ma ọ bụ kọtọa nkwado.';
 
   @override
   String get authErrorInvalidPhone => 'Nọmba ekwentị ezighị ezi.';

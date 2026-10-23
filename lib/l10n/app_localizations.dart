@@ -2081,7 +2081,7 @@ abstract class AppLocalizations {
   /// Login error for wrong email/password.
   ///
   /// In en, this message translates to:
-  /// **'Invalid email or password'**
+  /// **'Incorrect email or password. Check both and try again, or tap “Forgot Password?” to reset it.'**
   String get authErrorInvalidCredentials;
 
   /// Rate-limit error for login.
@@ -2095,6 +2095,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'An unexpected error occurred during login. Please try again.'**
   String get authErrorLoginUnexpected;
+
+  /// Login error when email sign-in is turned off server-side.
+  ///
+  /// In en, this message translates to:
+  /// **'Email sign-in is unavailable right now. Please try again later or contact support.'**
+  String get authErrorSignInUnavailable;
 
   /// Error for an invalid phone number when requesting an SMS code.
   ///

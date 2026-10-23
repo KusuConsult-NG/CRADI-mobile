@@ -10,8 +10,89 @@ void main() {
       MainShellScreen.selectedIndexFor(
         path,
         destinationCount: count,
-        isTechSupport: techSupport,
+        hasReportTab: !techSupport,
       );
+
+  // ── Who gets a Report tab ────────────────────────────────────────────────
+  group('hasReportTabFor', () {
+    test('Early Responder and tech support do not', () {
+      // Matrix 4.1 gives neither Submit Reports, and the server refuses
+      // the create (`guardReportCreate`), so a tab would only earn a 403.
+      expect(MainShellScreen.hasReportTabFor(UserRole.ewr), isFalse);
+      expect(MainShellScreen.hasReportTabFor(UserRole.techSupport), isFalse);
+    });
+
+    test('every other role does', () {
+      for (final role in [
+        UserRole.user,
+        UserRole.ewm,
+        UserRole.ewv,
+        UserRole.ldpCoordinator,
+        UserRole.projectStaff,
+        UserRole.admin,
+      ]) {
+        expect(MainShellScreen.hasReportTabFor(role), isTrue, reason: '$role');
+      }
+      // An unresolved role still gets one: the profile may not have loaded,
+      // and hiding the tab from a reporter is worse than briefly offering
+      // it to somebody the server will refuse.
+      expect(MainShellScreen.hasReportTabFor(null), isTrue);
+    });
+
+    test('the bar is counted to match', () {
+      int count({required bool admin, required bool report}) =>
+          MainShellScreen.tabCountFor(showAdmin: admin, hasReportTab: report);
+      expect(count(admin: false, report: true), 4); // plain user
+      expect(count(admin: true, report: true), 5); // admin
+      expect(count(admin: true, report: false), 4); // techSupport
+      expect(count(admin: false, report: false), 3); // Early Responder
+    });
+  });
+
+  // ── Tapping a tab opens the tab that was drawn there ─────────────────────
+  group('routeForTab is the inverse of selectedIndexFor', () {
+    test('standard bar: 2 is Report, not Settings', () {
+      expect(MainShellScreen.routeForTab(2, hasReportTab: true), '/report');
+      expect(MainShellScreen.routeForTab(3, hasReportTab: true), '/settings');
+      expect(MainShellScreen.routeForTab(4, hasReportTab: true), '/admin');
+    });
+
+    test('techSupport bar: there is no Report tab, so 2 is Settings', () {
+      expect(MainShellScreen.routeForTab(2, hasReportTab: false), '/settings');
+      expect(MainShellScreen.routeForTab(3, hasReportTab: false), '/admin');
+    });
+
+    test('a tab the bar does not have opens nothing', () {
+      expect(MainShellScreen.routeForTab(4, hasReportTab: false), isNull);
+      expect(MainShellScreen.routeForTab(5, hasReportTab: true), isNull);
+      expect(MainShellScreen.routeForTab(-1, hasReportTab: true), isNull);
+    });
+
+    // Every tab the bar draws must round-trip: tapping tab n opens a route
+    // whose own index is n again. This is what the two halves disagreeing
+    // would break.
+    test('every drawn tab round-trips', () {
+      for (final techSupport in [false, true]) {
+        final count = techSupport ? 4 : 5;
+        for (var i = 0; i < count; i++) {
+          final route = MainShellScreen.routeForTab(
+            i,
+            hasReportTab: !techSupport,
+          );
+          expect(route, isNotNull, reason: 'tab $i (tech=$techSupport)');
+          expect(
+            MainShellScreen.selectedIndexFor(
+              route!,
+              destinationCount: count,
+              hasReportTab: !techSupport,
+            ),
+            i,
+            reason: 'tab $i (tech=$techSupport) opened $route',
+          );
+        }
+      }
+    });
+  });
 
   // ── Level 5 (techSupport) bottom nav ─────────────────────────────────────
   group('Level 5 techSupport — bottom nav has no Report tab', () {

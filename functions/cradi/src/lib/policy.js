@@ -55,6 +55,11 @@ const RESPONDERS = ['ewr', ...ADMIN];
  */
 export const RESPONSE_STATUSES = ['awaiting', 'acknowledged', 'dispatched', 'resolved'];
 
+// Matrix 4.1: no Submit Reports, no Upload Photos. `tech_support` is not in
+// the matrix at all and has never had a Report tab in the app, so it is
+// named here rather than left to differ between the client and the server.
+const NON_REPORTERS = ['ewr', 'tech_support'];
+
 /**
  * Per-collection rules.
  *
@@ -64,6 +69,9 @@ export const RESPONSE_STATUSES = ['awaiting', 'acknowledged', 'dispatched', 'res
  *   context; `policy.test.js` asserts the two agree.
  * - `create(ctx)` — the values the server stamps on.
  * - `roles` — who may write here at all.
+ * - `guardCreate` — refuses a create the role list cannot express, because
+ *   `roles` covers every write and a role may be barred from filing a row
+ *   while still allowed to move one field on an existing one.
  * - `immutable` — fields an update may not change (refused, not ignored).
  * - `acl` — the document's permissions.
  */
@@ -95,6 +103,7 @@ export const RULES = {
       'updatedBy', 'severity', 'isAlert',
       'responseStatus', 'responseUpdatedAt', 'responseUpdatedBy',
     ],
+    guardCreate: guardReportCreate,
     guardUpdate: guardReportUpdate,
     derive: (clean, merged, current = {}) => {
       // Postgres set this on insert *and* update; nothing else does, so
@@ -264,6 +273,18 @@ export const reportContentChanged = (current, data) =>
  * which needs a read; `write.js` runs that one, gated on
  * [reportContentChanged], and this function is what says the rest.
  */
+/**
+ * Matrix 4.1: Early Responder has no Submit Reports and no Upload Photos.
+ *
+ * Not expressible through `roles`, which covers updates too — and a write
+ * to an existing report is exactly what this role is meant to keep.
+ */
+export function guardReportCreate({ role }) {
+  if (NON_REPORTERS.includes(role)) {
+    throw forbidden('Your role cannot file reports');
+  }
+}
+
 export function guardReportUpdate({ role, userId, current, data }) {
   const admin = isAdmin(role);
 
