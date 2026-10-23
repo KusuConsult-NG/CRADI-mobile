@@ -397,6 +397,18 @@ export function guardReportUpdate({ role, userId, current, data }) {
     if (!RESPONDERS.includes(role)) {
       throw forbidden('Your role cannot update the response status');
     }
+    // A responder responds to reports it can see, and matrix 4.1 shows it
+    // validated reports only.
+    //
+    // The ACL cannot say this. Every write goes through this Function on a
+    // server key, so document permissions do not apply to it — they scope
+    // the *read*, which the app and the panel do directly. Without this a
+    // responder holding an id could move the response status of a pending
+    // or rejected report it has no way to open. Admins keep it at any
+    // status, because they can read every report anyway.
+    if (!admin && !VALIDATED_STATUSES.includes(current.status)) {
+      throw forbidden('A report can only be responded to once it has been validated');
+    }
     if (!RESPONSE_STATUSES.includes(data.responseStatus)) {
       throw forbidden(
         `Unknown response status: ${data.responseStatus}. ` +

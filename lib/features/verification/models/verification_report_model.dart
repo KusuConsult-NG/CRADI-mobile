@@ -293,6 +293,21 @@ class VerificationReport {
 
 enum ReportStatus { pending, verified, approved, rejected }
 
+/// The statuses that mean staff have decided a report is real.
+///
+/// Mirrors `VALIDATED_STATUSES` in `functions/cradi/src/lib/policy.js`.
+/// Both, because the two paths to "real" are separate: peer votes reaching
+/// the threshold set [ReportStatus.verified], and a reviewer deciding by
+/// hand sets [ReportStatus.approved].
+///
+/// This is the client's copy of the line the matrix draws for Early
+/// Responder and Media — "validated reports only" — and the server's is
+/// what enforces it.
+const Set<ReportStatus> validatedReportStatuses = {
+  ReportStatus.verified,
+  ReportStatus.approved,
+};
+
 /// What the response to a report is doing — a different question from
 /// [ReportStatus], which is whether the report is true.
 ///

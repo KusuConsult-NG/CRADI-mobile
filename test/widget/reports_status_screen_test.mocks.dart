@@ -431,14 +431,6 @@ class MockAuthProvider extends _i1.Mock implements _i8.AuthProvider {
           as bool);
 
   @override
-  bool get canUpdateResponseStatus =>
-      (super.noSuchMethod(
-            Invocation.getter(#canUpdateResponseStatus),
-            returnValue: false,
-          )
-          as bool);
-
-  @override
   bool get isLoading =>
       (super.noSuchMethod(Invocation.getter(#isLoading), returnValue: false)
           as bool);
@@ -494,6 +486,16 @@ class MockAuthProvider extends _i1.Mock implements _i8.AuthProvider {
               #reporterId: reporterId,
               #reportWard: reportWard,
               #reportLga: reportLga,
+            }),
+            returnValue: false,
+          )
+          as bool);
+
+  @override
+  bool canUpdateResponseStatus({bool? reportIsValidated = false}) =>
+      (super.noSuchMethod(
+            Invocation.method(#canUpdateResponseStatus, [], {
+              #reportIsValidated: reportIsValidated,
             }),
             returnValue: false,
           )

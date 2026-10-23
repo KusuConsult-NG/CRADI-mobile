@@ -297,18 +297,46 @@ class AuthProvider extends ChangeNotifier {
     return a.isNotEmpty && a == theirs;
   }
 
-  /// Whether the user may approve / reject / reopen a report (mirrors the
-  /// `guard_report_update` trigger).
   /// Whether this user may move a report's response status.
   ///
   /// No "not your own report" clause, unlike [canManageReportStatus]: that
   /// rule exists so nobody judges their own report, and responding to one
   /// you filed is not a conflict of interest.
-  bool get canUpdateResponseStatus {
-    final role = userRole;
-    return role != null && responderRoles.contains(role);
+  ///
+  /// [reportIsValidated] decides it for everybody but an admin, because
+  /// the server refuses a responder a report that is not validated
+  /// (`guardReportUpdate`). A write goes through the Function on a server
+  /// key, so the document ACL that hides an unvalidated report from them
+  /// does not apply to it — the guard is what draws the line, and offering
+  /// the control anyway would earn a 403.
+  ///
+  /// A bool rather than the report's status, so this provider does not
+  /// have to import a feature's model: `validatedReportStatuses` in
+  /// `verification_report_model.dart` is what answers it, next to the
+  /// enum it reads.
+  bool canUpdateResponseStatus({bool reportIsValidated = false}) =>
+      mayUpdateResponseStatus(userRole, reportIsValidated: reportIsValidated);
+
+  /// [canUpdateResponseStatus] without an instance, so the rule can be
+  /// tested for every role.
+  ///
+  /// A static for the same reason [MainShellScreen.hasReportTabFor] is
+  /// one: the decision is a function of the role, and reaching it through
+  /// a provider means a test can only assert whatever a mock was told to
+  /// return — which is the stub, not the rule.
+  static bool mayUpdateResponseStatus(
+    UserRole? role, {
+    required bool reportIsValidated,
+  }) {
+    if (role == null || !responderRoles.contains(role)) return false;
+    // `isAdmin` on the server is admin plus tech support, and both read
+    // every report, so there is nothing here for the guard to protect.
+    if (role == UserRole.admin || role == UserRole.techSupport) return true;
+    return reportIsValidated;
   }
 
+  /// Whether the user may approve / reject / reopen a report (mirrors the
+  /// `guard_report_update` trigger).
   bool canManageReportStatus({String? reporterId}) {
     final role = userRole;
     if (role == null || !statusManagerRoles.contains(role)) return false;

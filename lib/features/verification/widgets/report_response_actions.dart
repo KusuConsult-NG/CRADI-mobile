@@ -68,7 +68,9 @@ class _ReportResponseActionsState extends State<ReportResponseActions> {
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
     final report = widget.report;
-    final canEdit = auth.canUpdateResponseStatus;
+    final canEdit = auth.canUpdateResponseStatus(
+      reportIsValidated: validatedReportStatuses.contains(report.status),
+    );
 
     // Nothing has happened yet and this user cannot make it happen: an
     // "Awaiting response" card on every report would be noise.

@@ -845,13 +845,39 @@ describe('deciding a report', () => {
         }
     });
 
+    // A validated report throughout the response cases, so each fails for
+    // its own reason: a responder may only touch a report it can read, and
+    // every report starts `pending`.
+    const validated = { status: 'approved' };
+
     it('lets an Early Responder move the response status', async () => {
         // Matrix 4.1 reserves this one column for that role, on a report it
         // has no power to approve — the two are separate jobs.
-        const { status, row } = await run('ewr', { responseStatus: 'dispatched' });
+        const { status, row } = await run('ewr', { responseStatus: 'dispatched' }, validated);
         assert.equal(status, 200);
         assert.equal(row.responseStatus, 'dispatched');
-        assert.equal(row.status, 'pending', 'the decision is untouched');
+        assert.equal(row.status, 'approved', 'the decision is untouched');
+    });
+
+    it('refuses a responder a report it cannot read', async () => {
+        // Writes come through this Function on a server key, so the
+        // document ACL that scopes the *read* does not apply to them.
+        // Without this guard a responder holding an id could move the
+        // response status of a pending or rejected report it has no way to
+        // open — which is the scope matrix 4.1 gives it, bypassed.
+        for (const status of ['pending', 'rejected']) {
+            const result = await run('ewr', { responseStatus: 'dispatched' }, { status });
+            assert.equal(result.status, 403, status);
+            assert.equal(result.row.responseStatus, undefined, status);
+            assert.match(result.body.message, /validated/);
+        }
+    });
+
+    it('still lets an admin respond at any status', async () => {
+        // An admin reads every report, so there is nothing to bypass.
+        const { status, row } = await run('admin', { responseStatus: 'dispatched' });
+        assert.equal(status, 200);
+        assert.equal(row.responseStatus, 'dispatched');
     });
 
     it('stamps who moved it and when, ignoring whatever was sent', async () => {
@@ -859,7 +885,7 @@ describe('deciding a report', () => {
             responseStatus: 'acknowledged',
             responseUpdatedBy: 'somebody-else',
             responseUpdatedAt: '1999-01-01T00:00:00.000Z',
-        });
+        }, validated);
         assert.equal(row.responseUpdatedBy, 'me');
         assert.notEqual(row.responseUpdatedAt, '1999-01-01T00:00:00.000Z');
         assert.ok(Date.parse(row.responseUpdatedAt) > Date.parse('2020-01-01'));
@@ -868,13 +894,13 @@ describe('deciding a report', () => {
     it('refuses the stamps on their own', async () => {
         // Otherwise a row can name a responder and a time for a status that
         // nobody moved.
-        const { status, row } = await run('ewr', { responseUpdatedBy: 'me' });
+        const { status, row } = await run('ewr', { responseUpdatedBy: 'me' }, validated);
         assert.equal(status, 403);
         assert.equal(row.responseUpdatedBy, undefined);
     });
 
     it('refuses a response status no responder could reach', async () => {
-        const { status, row } = await run('ewr', { responseStatus: 'teleported' });
+        const { status, row } = await run('ewr', { responseStatus: 'teleported' }, validated);
         assert.equal(status, 403);
         assert.equal(row.responseStatus, undefined);
     });

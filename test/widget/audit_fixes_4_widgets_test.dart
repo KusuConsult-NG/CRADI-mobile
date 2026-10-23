@@ -61,7 +61,11 @@ void main() {
       tester,
     ) async {
       // An "Awaiting response" card on every report is noise.
-      when(auth.canUpdateResponseStatus).thenReturn(false);
+      when(
+        auth.canUpdateResponseStatus(
+          reportIsValidated: anyNamed('reportIsValidated'),
+        ),
+      ).thenReturn(false);
       await tester.pumpWidget(
         wrap(
           ReportResponseActions(
@@ -75,7 +79,11 @@ void main() {
 
     testWidgets('shows the status read-only once it has moved', (tester) async {
       // Knowing a team is on the way is useful to the reporter too.
-      when(auth.canUpdateResponseStatus).thenReturn(false);
+      when(
+        auth.canUpdateResponseStatus(
+          reportIsValidated: anyNamed('reportIsValidated'),
+        ),
+      ).thenReturn(false);
       await tester.pumpWidget(
         wrap(
           ReportResponseActions(
@@ -95,13 +103,20 @@ void main() {
     testWidgets('a responder moves it, and the screen re-fetches', (
       tester,
     ) async {
-      when(auth.canUpdateResponseStatus).thenReturn(true);
+      when(
+        auth.canUpdateResponseStatus(
+          reportIsValidated: anyNamed('reportIsValidated'),
+        ),
+      ).thenReturn(true);
       when(reports.updateResponseStatus(any, any)).thenAnswer((_) async {});
       var reloaded = false;
       await tester.pumpWidget(
         wrap(
           ReportResponseActions(
-            report: _report(ReportStatus.pending),
+            // Approved: the server refuses a responder a report that is
+            // not validated, so a fixture that is editable *and* pending
+            // would be asserting a state the real provider cannot reach.
+            report: _report(ReportStatus.approved),
             onChanged: () async => reloaded = true,
           ),
         ),
@@ -120,12 +135,16 @@ void main() {
     testWidgets('tapping the status it already has writes nothing', (
       tester,
     ) async {
-      when(auth.canUpdateResponseStatus).thenReturn(true);
+      when(
+        auth.canUpdateResponseStatus(
+          reportIsValidated: anyNamed('reportIsValidated'),
+        ),
+      ).thenReturn(true);
       await tester.pumpWidget(
         wrap(
           ReportResponseActions(
             report: _report(
-              ReportStatus.pending,
+              ReportStatus.approved,
               response: ResponseStatus.resolved,
             ),
             onChanged: () async {},
