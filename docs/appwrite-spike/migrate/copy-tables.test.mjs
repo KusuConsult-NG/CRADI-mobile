@@ -16,7 +16,8 @@
  */
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { RULES } from '../../../functions/cradi/src/lib/policy.js';
+import { RULES, VALIDATED_STATUSES } from '../../../functions/cradi/src/lib/policy.js';
+import { lgaLabel } from '../../../functions/cradi/src/lib/appwrite.js';
 import {
   profilePermissions,
   reportPermissions,
@@ -54,20 +55,64 @@ describe('the migration ACL against the one the Function stamps', () => {
     assert.ok(!RULES.profiles.acl({ documentId: 'u1' }).some((p) => p.includes('team:')));
   });
 
-  test('reports: the Function omits two roles that may decide a report', () => {
+  test('reports: the two sets now differ by scope, not by oversight', () => {
+    // This test used to record the opposite: `created` was
+    // `['admin', 'ewr', 'ewv']`, and the comment here said a report that
+    // `ldpCoordinator` and `projectStaff` could decide but not read looked
+    // "like an oversight rather than a decision". It was one, and it is
+    // fixed — `reportAcl` now gives Project Staff every LGA by label and an
+    // LDP Coordinator their own by a per-LGA label, per matrix 4.1.
+    //
+    // So the difference that remains is deliberate on both sides:
+    //
+    //   the migration  grants every staff role every report, because
+    //                  narrowing access during a cutover is not its call
+    //   the Function   grants the matrix's scopes, and `ewr` only once a
+    //                  report is validated
+    //
+    // What closes it is `infra/appwrite/fix-report-permissions.mjs`, which
+    // re-derives the stored ACL of every existing row from `reportAcl` —
+    // including the rows this migration wrote. Until that has run against
+    // the project, a migrated report is readable by more roles than a new
+    // one, which is what this file exists to keep visible.
     const migrated = labels(reportPermissions(ROW));
-    const created = labels(RULES.reports.acl({ userId: 'u1', data: ROW }));
+    const created = labels(RULES.reports.acl({ data: ROW }));
     assert.deepEqual(migrated, [
       'admin', 'ewr', 'ewv', 'ldpCoordinator', 'projectStaff', 'techSupport',
     ]);
-    assert.deepEqual(created, ['admin', 'ewr', 'ewv']);
-    // `ldpCoordinator` and `projectStaff` are in `DECIDERS` — they may approve,
-    // reject and reopen a report — so a report they cannot read is the half of
-    // this difference that looks like an oversight rather than a decision.
-    for (const role of ['ldpCoordinator', 'projectStaff']) {
-      assert.ok(migrated.includes(role), role);
-      assert.ok(!created.includes(role), `${role} unexpectedly in RULES now`);
+    assert.deepEqual(created, [
+      'admin', 'ewv', lgaLabel(ROW.state, ROW.lga), 'projectStaff',
+    ].sort());
+
+    // The roles that may decide a report can now read it.
+    assert.ok(created.includes('projectStaff'));
+    assert.ok(created.includes(lgaLabel(ROW.state, ROW.lga)));
+
+    // `techSupport` is the one role the migration grants and the Function
+    // does not. Deliberate: it is absent from matrix 4.1 entirely, and
+    // `isAdmin` already covers what it needs to *write*.
+    assert.ok(migrated.includes('techSupport'));
+    assert.ok(!created.includes('techSupport'));
+  });
+
+  test('reports: ewr and media wait for the report to be validated', () => {
+    // The scope the migration cannot express at all, because an Appwrite
+    // ACL is stored per row at creation and `status` changes afterwards.
+    // `write.js` rewrites the permissions when it does.
+    const pending = labels(RULES.reports.acl({ data: { ...ROW, status: 'pending' } }));
+    assert.ok(!pending.includes('ewr'), pending.join());
+    assert.ok(!pending.includes('media'), pending.join());
+
+    for (const status of VALIDATED_STATUSES) {
+      const validated = labels(RULES.reports.acl({ data: { ...ROW, status } }));
+      assert.ok(validated.includes('ewr'), `${status}: ${validated.join()}`);
+      assert.ok(validated.includes('media'), `${status}: ${validated.join()}`);
     }
+
+    // And the migration grants `ewr` regardless, which is the other half of
+    // why the reconciliation script has to run: it takes reach away as well
+    // as granting it.
+    assert.ok(labels(reportPermissions(ROW)).includes('ewr'));
   });
 
   test('verifications: the Function does not grant the verifier their own vote', () => {
