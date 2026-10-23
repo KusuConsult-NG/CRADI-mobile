@@ -132,11 +132,14 @@ async function fixReports() {
       );
       continue;
     }
-    // `data: {}` — the columns are not being touched, only the ACL. A
-    // patch that re-sent the row would race anybody editing it.
+    // Permissions only, with no `data` key at all: the columns are not
+    // being touched, and a patch that re-sent the row would race anybody
+    // editing it. Omitting `data` rather than sending `{}` is what
+    // Appwrite's own SDKs do for a permission-only update, and matches
+    // `updateRow` in the Function.
     const written = await api(`${rowsPath('reports')}/${encodeURIComponent(row.$id)}`, {
       method: 'PATCH',
-      body: { data: {}, permissions: wanted },
+      body: { permissions: wanted },
     });
     if (written.ok) {
       tally.changed += 1;

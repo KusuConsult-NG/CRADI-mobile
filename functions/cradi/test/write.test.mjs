@@ -1324,6 +1324,19 @@ describe("a report's read scope follows its status", () => {
         assert.ok(fake.store.reports.r1.$permissions.includes('read("label:ewr")'));
     });
 
+    it('sends the permissions alone, with no data key', async () => {
+        // A permission-only update, which is what Appwrite's own SDKs send
+        // when given no attributes. `data: {}` would ask the server to
+        // tolerate an update of nothing, and a refusal here is *logged*
+        // rather than thrown — the edit it follows has already been
+        // applied — so it would be a quiet one.
+        const fake = fakeAppwrite(world());
+        await write(context(decide('approved'), { userId: 'admin1' }));
+        const resync = fake.calls.find((c) => c.method === 'PATCH' && c.body?.permissions);
+        assert.ok(resync, 'no permission write was made');
+        assert.ok(!('data' in resync.body), JSON.stringify(resync.body));
+    });
+
     it('does not touch the permissions when the status did not change', async () => {
         const fake = fakeAppwrite(world());
         await write(context({

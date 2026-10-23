@@ -126,10 +126,25 @@ export const upsertRow = (table, rowId, data, permissions) =>
     body: { data, ...(permissions ? { permissions } : {}) },
   });
 
+/**
+ * `data` is omitted when it is empty, which is how a permissions-only
+ * update is sent.
+ *
+ * `write.js` rewrites a report's ACL on a status change without touching
+ * a column, and this is the call it makes. Sending `data: {}` alongside
+ * the permissions relies on the server tolerating an update of no
+ * attributes; omitting the key is what Appwrite's own SDKs send when only
+ * permissions are given. Worth the branch because the failure here is
+ * logged rather than thrown — the edit it follows has already been
+ * applied — so a refusal would be quiet.
+ */
 export const updateRow = (table, rowId, data, permissions) =>
   api(`${rowsPath(table)}/${encodeURIComponent(rowId)}`, {
     method: 'PATCH',
-    body: { data, ...(permissions ? { permissions } : {}) },
+    body: {
+      ...(data && Object.keys(data).length > 0 ? { data } : {}),
+      ...(permissions ? { permissions } : {}),
+    },
   });
 
 /**
