@@ -187,7 +187,10 @@ void main() {
       expect(effectiveFeedTab(0, UserRole.ewm), 0);
       expect(effectiveFeedTab(0, UserRole.admin), 0);
       expect(effectiveFeedTab(0, UserRole.user), 2);
-      expect(effectiveFeedTab(0, UserRole.projectStaff), 2);
+      // Project Staff verifies under the matrix, so the tab is theirs now.
+      expect(effectiveFeedTab(0, UserRole.projectStaff), 0);
+      // Early Responder does not, so it falls back to My Reports.
+      expect(effectiveFeedTab(0, UserRole.ewr), 2);
       expect(effectiveFeedTab(0, null), 2);
     });
 
@@ -383,8 +386,6 @@ void main() {
   group('L2 alert broadcasting roles', () {
     test('match the alerts insert policy', () {
       expect(AuthProvider.alertManagerRoles, {
-        UserRole.ewv,
-        UserRole.ewr,
         UserRole.ldpCoordinator,
         UserRole.projectStaff,
         UserRole.admin,

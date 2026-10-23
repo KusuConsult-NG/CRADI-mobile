@@ -37,7 +37,14 @@ export const WRITABLE = new Set([
 /** Roles, as stored in `profiles.role`. */
 const STAFF = ['ewm', 'ewv', 'ewr', 'ldp_coordinator', 'project_staff'];
 const ADMIN = ['admin', 'tech_support'];
-const VERIFIER = ['ewm', 'ewv', 'ewr', 'admin'];
+// Per the client's permission matrix (4.1): EWM, LDP Coordinator and
+// Project Staff verify peer reports; Early Responder does not.
+const VERIFIER = ['ewm', 'ewv', 'ldp_coordinator', 'project_staff', 'admin'];
+
+// Matrix 4.1: no Submit Reports, no Upload Photos. `tech_support` is not in
+// the matrix at all and has never had a Report tab in the app, so it is
+// named here rather than left to differ between the client and the server.
+const NON_REPORTERS = ['ewr', 'tech_support'];
 
 /**
  * Per-collection rules.
@@ -48,6 +55,9 @@ const VERIFIER = ['ewm', 'ewv', 'ewr', 'admin'];
  *   context; `policy.test.js` asserts the two agree.
  * - `create(ctx)` — the values the server stamps on.
  * - `roles` — who may write here at all.
+ * - `guardCreate` — refuses a create the role list cannot express, because
+ *   `roles` covers every write and a role may be barred from filing a row
+ *   while still allowed to move one field on an existing one.
  * - `immutable` — fields an update may not change (refused, not ignored).
  * - `acl` — the document's permissions.
  */
@@ -76,6 +86,7 @@ export const RULES = {
       'escalated', 'escalatedAt', 'escalationStatus',
       'updatedBy', 'severity', 'isAlert',
     ],
+    guardCreate: guardReportCreate,
     guardUpdate: guardReportUpdate,
     derive: (clean, merged, current = {}) => {
       // Postgres set this on insert *and* update; nothing else does, so
@@ -146,7 +157,9 @@ export const RULES = {
   },
 
   alerts: {
-    roles: [...ADMIN, 'ewr', 'ldp_coordinator'],
+    // Matrix 4.1 'Send Manual Alerts': LDP Coordinator and Project
+    // Staff. Early Responder receives alerts rather than raising them.
+    roles: [...ADMIN, 'ldp_coordinator', 'project_staff'],
     serverOwned: ['createdBy', 'createdAt'],
     create: ({ userId }) => ({
       createdBy: userId,
@@ -190,7 +203,10 @@ export const RULES = {
 export const ALERT_SEVERITIES = ['high', 'critical'];
 
 /** Roles that may approve, reject or reopen a report. */
-const DECIDERS = ['ewv', 'ewr', 'ldp_coordinator', 'project_staff', ...ADMIN];
+// Matrix 4.1 'Validate/Reject Reports': LDP Coordinator and Project
+// Staff only. Early Responder reads reports and updates response
+// status; it does not decide them.
+const DECIDERS = ['ewv', 'ldp_coordinator', 'project_staff', ...ADMIN];
 
 const changed = (data, current, field) =>
   field in data && data[field] !== (current[field] ?? null);
@@ -240,6 +256,18 @@ export const reportContentChanged = (current, data) =>
  * which needs a read; `write.js` runs that one, gated on
  * [reportContentChanged], and this function is what says the rest.
  */
+/**
+ * Matrix 4.1: Early Responder has no Submit Reports and no Upload Photos.
+ *
+ * Not expressible through `roles`, which covers updates too — and a write
+ * to an existing report is exactly what this role is meant to keep.
+ */
+export function guardReportCreate({ role }) {
+  if (NON_REPORTERS.includes(role)) {
+    throw forbidden('Your role cannot file reports');
+  }
+}
+
 export function guardReportUpdate({ role, userId, current, data }) {
   const admin = isAdmin(role);
 

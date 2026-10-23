@@ -39,6 +39,32 @@ describe('the write Function', () => {
     assert.equal(stored.userRole, 'ewm');
   });
 
+  it('refuses a role the matrix gives no Submit Reports', async () => {
+    // Matrix 4.1: Early Responder reads and responds, it does not file.
+    // tech_support has never had a Report tab in the app either.
+    for (const role of ['ewr', 'tech_support']) {
+      const world = fakeAppwrite({
+        rows: { profiles: { u1: profile({ role }) } },
+      });
+      const ctx = context(report);
+      await write(ctx);
+      assert.equal(ctx.captured.status, 403, role);
+      assert.equal(world.store.reports?.r1, undefined, role);
+    }
+  });
+
+  it('still lets every role that does file one', async () => {
+    for (const role of ['user', 'ewm', 'ewv', 'ldp_coordinator', 'project_staff']) {
+      const world = fakeAppwrite({
+        rows: { profiles: { u1: profile({ role }) } },
+      });
+      const ctx = context(report);
+      await write(ctx);
+      assert.equal(ctx.captured.status, 200, role);
+      assert.equal(world.store.reports.r1.userRole, role);
+    }
+  });
+
   it('refuses to let a client approve its own report', async () => {
     // Phase 4's third row, which is the one the whole write path exists
     // for: the client asks for approved/99/true and gets a success and a
@@ -796,7 +822,7 @@ describe('deciding a report', () => {
         // The bug this covers: `status` is server-owned at creation, and
         // stripping it from updates too made every approval a silent no-op
         // that still answered 200.
-        for (const role of ['ewv', 'ewr', 'ldp_coordinator', 'project_staff', 'admin']) {
+        for (const role of ['ewv', 'ldp_coordinator', 'project_staff', 'admin']) {
             const { status, row } = await run(role, { status: 'approved' });
             assert.equal(status, 200, role);
             assert.equal(row.status, 'approved', role);
@@ -804,7 +830,9 @@ describe('deciding a report', () => {
     });
 
     it('refuses a role that may not decide', async () => {
-        for (const role of ['user', 'ewm']) {
+        // 'ewr' is here because the client's permission matrix (4.1) gives
+        // Early Responder no Validate/Reject column. It used to decide.
+        for (const role of ['user', 'ewm', 'ewr']) {
             const { status, row } = await run(role, { status: 'approved' });
             assert.equal(status, 403, role);
             assert.equal(row.status, 'pending', role);
@@ -813,7 +841,7 @@ describe('deciding a report', () => {
 
     it('refuses deciding your own report unless you are an admin', async () => {
         const mine = { userId: 'me' };
-        const refused = await run('ewr', { status: 'approved' }, mine);
+        const refused = await run('ldp_coordinator', { status: 'approved' }, mine);
         assert.equal(refused.status, 403);
         assert.equal(refused.row.status, 'pending');
 
@@ -829,7 +857,7 @@ describe('deciding a report', () => {
             { autoValidated: true },
             { status: 'verified' },
         ]) {
-            const { status } = await run('ewr', data);
+            const { status } = await run('ldp_coordinator', data);
             assert.equal(status, 403, JSON.stringify(data));
         }
         const { status } = await run('admin', { verificationCount: 9 });
@@ -838,7 +866,7 @@ describe('deciding a report', () => {
 
     it('keeps ownership and escalation for admins', async () => {
         for (const data of [{ escalated: true }, { escalationStatus: 'processed' }]) {
-            assert.equal((await run('ewr', data)).status, 403, JSON.stringify(data));
+            assert.equal((await run('ldp_coordinator', data)).status, 403, JSON.stringify(data));
             assert.equal((await run('admin', data)).status, 200, JSON.stringify(data));
         }
     });
@@ -910,7 +938,7 @@ describe('the rules the Postgres guard had and the port had not', () => {
       },
     });
 
-  const patch = async (data, { role = 'ewr', userId = 'u1' } = {}) => {
+  const patch = async (data, { role = 'ldp_coordinator', userId = 'u1' } = {}) => {
     const ctx = context(
       { op: 'update', collection: 'reports', documentId: 'r1', data },
       { userId },
@@ -925,7 +953,7 @@ describe('the rules the Postgres guard had and the port had not', () => {
       // supersedes the queued notifications. A PATCH does none of that,
       // so a report reopened this way keeps the votes it was decided on
       // and re-escalates immediately on a count that is no longer true.
-      const fake = world('ewr', pendingReport({ status: 'approved' }));
+      const fake = world('ldp_coordinator', pendingReport({ status: 'approved' }));
       const out = await patch({ status: 'pending' });
 
       assert.equal(out.status, 403);
@@ -949,7 +977,7 @@ describe('the rules the Postgres guard had and the port had not', () => {
 
   describe("'Only the reporter can edit a report\\'s details'", () => {
     it('refuses a reviewer rewriting somebody else’s description', async () => {
-      const fake = world('ewr', pendingReport({ userId: 'someone-else' }));
+      const fake = world('ldp_coordinator', pendingReport({ userId: 'someone-else' }));
       const out = await patch({ description: 'Rewritten by a reviewer' });
 
       assert.equal(out.status, 403);
@@ -973,7 +1001,7 @@ describe('the rules the Postgres guard had and the port had not', () => {
       // A staff reporter passes the role check at any status, so this is
       // the only thing keeping a decided report from being rewritten
       // after the fact.
-      const fake = world('ewr', pendingReport({ userId: 'u1', status: 'approved' }));
+      const fake = world('ldp_coordinator', pendingReport({ userId: 'u1', status: 'approved' }));
       const out = await patch({ description: 'Quietly changed after approval' });
 
       assert.equal(out.status, 403);
@@ -1012,7 +1040,7 @@ describe('the rules the Postgres guard had and the port had not', () => {
     it('does not ask when the edit is a decision rather than content', async () => {
       // An approval is not a content edit, and a report being approved
       // has votes almost by definition.
-      world('ewr', pendingReport({ userId: 'someone-else' }), {
+      world('ldp_coordinator', pendingReport({ userId: 'someone-else' }), {
         verifications: { v1: { $id: 'v1', reportId: 'r1', isConfirmed: true } },
       });
       assert.equal((await patch({ status: 'approved' })).status, 200);
@@ -1022,7 +1050,7 @@ describe('the rules the Postgres guard had and the port had not', () => {
   describe('the admin-only escalation fields the port had missed', () => {
     for (const field of ['escalationReason', 'escalationScheduledAt']) {
       it(`refuses a non-admin changing ${field}`, async () => {
-        const fake = world('ewr', pendingReport({ userId: 'someone-else' }));
+        const fake = world('ldp_coordinator', pendingReport({ userId: 'someone-else' }));
         const out = await patch({ [field]: '2030-01-01T00:00:00.000Z' });
 
         assert.equal(out.status, 403, field);
@@ -1035,7 +1063,7 @@ describe('the rules the Postgres guard had and the port had not', () => {
     it('clears the rejection when a report is approved', async () => {
       // Otherwise an approved report still carries the reason it was
       // turned down with, and the app shows both.
-      const fake = world('ewr', pendingReport({
+      const fake = world('ldp_coordinator', pendingReport({
         userId: 'someone-else',
         status: 'rejected',
         rejectedAt: '2026-01-01T00:00:00.000Z',
@@ -1050,7 +1078,7 @@ describe('the rules the Postgres guard had and the port had not', () => {
     });
 
     it('clears the approval when a report is rejected', async () => {
-      const fake = world('ewr', pendingReport({
+      const fake = world('ldp_coordinator', pendingReport({
         userId: 'someone-else',
         status: 'approved',
         approvedAt: '2026-01-01T00:00:00.000Z',

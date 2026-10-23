@@ -10,26 +10,62 @@ void main() {
       MainShellScreen.selectedIndexFor(
         path,
         destinationCount: count,
-        isTechSupport: techSupport,
+        hasReportTab: !techSupport,
       );
+
+  // ── Who gets a Report tab ────────────────────────────────────────────────
+  group('hasReportTabFor', () {
+    test('Early Responder and tech support do not', () {
+      // Matrix 4.1 gives neither Submit Reports, and the server refuses
+      // the create (`guardReportCreate`), so a tab would only earn a 403.
+      expect(MainShellScreen.hasReportTabFor(UserRole.ewr), isFalse);
+      expect(MainShellScreen.hasReportTabFor(UserRole.techSupport), isFalse);
+    });
+
+    test('every other role does', () {
+      for (final role in [
+        UserRole.user,
+        UserRole.ewm,
+        UserRole.ewv,
+        UserRole.ldpCoordinator,
+        UserRole.projectStaff,
+        UserRole.admin,
+      ]) {
+        expect(MainShellScreen.hasReportTabFor(role), isTrue, reason: '$role');
+      }
+      // An unresolved role still gets one: the profile may not have loaded,
+      // and hiding the tab from a reporter is worse than briefly offering
+      // it to somebody the server will refuse.
+      expect(MainShellScreen.hasReportTabFor(null), isTrue);
+    });
+
+    test('the bar is counted to match', () {
+      int count({required bool admin, required bool report}) =>
+          MainShellScreen.tabCountFor(showAdmin: admin, hasReportTab: report);
+      expect(count(admin: false, report: true), 4); // plain user
+      expect(count(admin: true, report: true), 5); // admin
+      expect(count(admin: true, report: false), 4); // techSupport
+      expect(count(admin: false, report: false), 3); // Early Responder
+    });
+  });
 
   // ── Tapping a tab opens the tab that was drawn there ─────────────────────
   group('routeForTab is the inverse of selectedIndexFor', () {
     test('standard bar: 2 is Report, not Settings', () {
-      expect(MainShellScreen.routeForTab(2, isTechSupport: false), '/report');
-      expect(MainShellScreen.routeForTab(3, isTechSupport: false), '/settings');
-      expect(MainShellScreen.routeForTab(4, isTechSupport: false), '/admin');
+      expect(MainShellScreen.routeForTab(2, hasReportTab: true), '/report');
+      expect(MainShellScreen.routeForTab(3, hasReportTab: true), '/settings');
+      expect(MainShellScreen.routeForTab(4, hasReportTab: true), '/admin');
     });
 
     test('techSupport bar: there is no Report tab, so 2 is Settings', () {
-      expect(MainShellScreen.routeForTab(2, isTechSupport: true), '/settings');
-      expect(MainShellScreen.routeForTab(3, isTechSupport: true), '/admin');
+      expect(MainShellScreen.routeForTab(2, hasReportTab: false), '/settings');
+      expect(MainShellScreen.routeForTab(3, hasReportTab: false), '/admin');
     });
 
     test('a tab the bar does not have opens nothing', () {
-      expect(MainShellScreen.routeForTab(4, isTechSupport: true), isNull);
-      expect(MainShellScreen.routeForTab(5, isTechSupport: false), isNull);
-      expect(MainShellScreen.routeForTab(-1, isTechSupport: false), isNull);
+      expect(MainShellScreen.routeForTab(4, hasReportTab: false), isNull);
+      expect(MainShellScreen.routeForTab(5, hasReportTab: true), isNull);
+      expect(MainShellScreen.routeForTab(-1, hasReportTab: true), isNull);
     });
 
     // Every tab the bar draws must round-trip: tapping tab n opens a route
@@ -41,14 +77,14 @@ void main() {
         for (var i = 0; i < count; i++) {
           final route = MainShellScreen.routeForTab(
             i,
-            isTechSupport: techSupport,
+            hasReportTab: !techSupport,
           );
           expect(route, isNotNull, reason: 'tab $i (tech=$techSupport)');
           expect(
             MainShellScreen.selectedIndexFor(
               route!,
               destinationCount: count,
-              isTechSupport: techSupport,
+              hasReportTab: !techSupport,
             ),
             i,
             reason: 'tab $i (tech=$techSupport) opened $route',
@@ -144,15 +180,36 @@ void main() {
       expect(AuthProvider.verifierRoles, contains(UserRole.ewv));
       expect(AuthProvider.statusManagerRoles, contains(UserRole.ewv));
       expect(AuthProvider.verificationRequestRoles, contains(UserRole.ewv));
-      expect(AuthProvider.alertManagerRoles, contains(UserRole.ewv));
+    });
+
+    test('ewv does not broadcast alerts, and never could', () {
+      // It was in this set on the client only: `alerts.roles` in
+      // functions/cradi/src/lib/policy.js has never listed it, so the
+      // button was offered and the write refused.
+      expect(AuthProvider.alertManagerRoles, isNot(contains(UserRole.ewv)));
     });
   });
 
   group('Level 3 (ewr) role sets', () {
-    test('ewr has all ewv abilities', () {
-      expect(AuthProvider.verifierRoles, contains(UserRole.ewr));
-      expect(AuthProvider.statusManagerRoles, contains(UserRole.ewr));
-      expect(AuthProvider.alertManagerRoles, contains(UserRole.ewr));
+    test('ewr judges nothing — it reads and responds', () {
+      // The client's permission matrix (4.1) gives Early Responder no
+      // Verify, no Validate/Reject and no Send Manual Alerts. It used to
+      // have all three, which is what this now guards against.
+      expect(AuthProvider.verifierRoles, isNot(contains(UserRole.ewr)));
+      expect(AuthProvider.statusManagerRoles, isNot(contains(UserRole.ewr)));
+      expect(AuthProvider.alertManagerRoles, isNot(contains(UserRole.ewr)));
+    });
+
+    test('the roles that do judge, per the matrix', () {
+      for (final role in [UserRole.ldpCoordinator, UserRole.projectStaff]) {
+        expect(AuthProvider.verifierRoles, contains(role), reason: '$role');
+        expect(
+          AuthProvider.statusManagerRoles,
+          contains(role),
+          reason: '$role',
+        );
+        expect(AuthProvider.alertManagerRoles, contains(role), reason: '$role');
+      }
     });
   });
 

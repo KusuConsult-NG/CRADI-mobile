@@ -15,12 +15,13 @@ class MainShellScreen extends StatefulWidget {
   /// [destinationCount] entries: a location whose tab is not rendered (e.g.
   /// /admin right after a role change) falls back to Home.
   ///
-  /// When [isTechSupport] is true, the Report tab is omitted and Admin takes
-  /// its logical slot, so the tab order is: Home(0) Alerts(1) Settings(2) Admin(3).
+  /// When [hasReportTab] is false the Report tab is omitted and everything
+  /// after it moves up one, so the order is Home(0) Alerts(1) Settings(2)
+  /// Admin(3) rather than Home(0) Alerts(1) Report(2) Settings(3) Admin(4).
   static int selectedIndexFor(
     String location, {
     required int destinationCount,
-    bool isTechSupport = false,
+    bool hasReportTab = true,
   }) {
     bool under(String p) => location == p || location.startsWith('$p/');
     final int index;
@@ -28,8 +29,8 @@ class MainShellScreen extends StatefulWidget {
       index = 0;
     } else if (under('/alerts')) {
       index = 1;
-    } else if (isTechSupport) {
-      // techSupport has no Report tab — Settings is 2, Admin is 3.
+    } else if (!hasReportTab) {
+      // No Report tab, so Settings is 2 and Admin is 3.
       if (under('/settings')) {
         index = 2;
       } else if (under('/admin')) {
@@ -49,14 +50,28 @@ class MainShellScreen extends StatefulWidget {
     return index < destinationCount ? index : 0;
   }
 
-  /// The route tab [index] opens, on a bar drawn for [isTechSupport], or
+  /// Whether the bar draws a Report tab for [role].
+  ///
+  /// Matrix 4.1 gives neither Early Responder nor tech support Submit
+  /// Reports, and the server refuses the write either way
+  /// (`guardReportCreate`), so offering the tab would only earn a 403.
+  static bool hasReportTabFor(UserRole? role) =>
+      role != UserRole.ewr && role != UserRole.techSupport;
+
+  /// Home and Alerts always, Settings always, Report and Admin by role.
+  static int tabCountFor({
+    required bool showAdmin,
+    required bool hasReportTab,
+  }) => 3 + (hasReportTab ? 1 : 0) + (showAdmin ? 1 : 0);
+
+  /// The route tab [index] opens, on a bar drawn with [hasReportTab], or
   /// null when that bar has no such tab.
   ///
   /// The inverse of [selectedIndexFor]; the two have to agree on the tab
   /// order, so they are kept together.
-  static String? routeForTab(int index, {required bool isTechSupport}) {
-    if (isTechSupport) {
-      // techSupport tab order: 0=Dashboard 1=Alerts 2=Settings 3=Admin
+  static String? routeForTab(int index, {required bool hasReportTab}) {
+    if (!hasReportTab) {
+      // Without it: 0=Dashboard 1=Alerts 2=Settings 3=Admin
       const routes = ['/dashboard', '/alerts', '/settings', '/admin'];
       return index >= 0 && index < routes.length ? routes[index] : null;
     }
@@ -73,30 +88,28 @@ class _MainShellScreenState extends State<MainShellScreen> {
   bool _showAdminTab(AuthProvider auth) =>
       auth.userRole == UserRole.admin || auth.userRole == UserRole.techSupport;
 
-  bool _isTechSupport(AuthProvider auth) =>
-      auth.userRole == UserRole.techSupport;
-
   int _calculateSelectedIndex(BuildContext context, AuthProvider auth) {
     final showAdmin = _showAdminTab(auth);
-    final techSupport = _isTechSupport(auth);
-    // techSupport: 4 tabs (no Report). admin: 5 tabs. others: 4 tabs (no Admin).
-    final count = showAdmin ? (techSupport ? 4 : 5) : 4;
+    final report = MainShellScreen.hasReportTabFor(auth.userRole);
     return MainShellScreen.selectedIndexFor(
       GoRouterState.of(context).uri.path,
-      destinationCount: count,
-      isTechSupport: techSupport,
+      destinationCount: MainShellScreen.tabCountFor(
+        showAdmin: showAdmin,
+        hasReportTab: report,
+      ),
+      hasReportTab: report,
     );
   }
 
-  /// [isTechSupport] is the value the bar was *drawn* with, not a fresh
+  /// [hasReportTab] is the value the bar was *drawn* with, not a fresh
   /// read. Reading the role again here meant a role that changed between
   /// the build and the tap shifted the tab order under the user's finger:
-  /// on a bar drawn with a Report tab at 2, a role that had since become
-  /// techSupport sent that tap to /settings instead.
-  void _onItemTapped(int index, {required bool isTechSupport}) {
+  /// on a bar drawn with a Report tab at 2, a role that had since lost it
+  /// sent that tap to /settings instead.
+  void _onItemTapped(int index, {required bool hasReportTab}) {
     final route = MainShellScreen.routeForTab(
       index,
-      isTechSupport: isTechSupport,
+      hasReportTab: hasReportTab,
     );
     if (route != null) context.go(route);
   }
@@ -204,17 +217,21 @@ class _MainShellScreenState extends State<MainShellScreen> {
           builder: (context, authProvider, _) {
             final l10n = context.l10n;
             final isAdmin = _showAdminTab(authProvider);
-            final techSupport = _isTechSupport(authProvider);
-            // techSupport: 4 tabs (no Report). admin: 5 tabs. others: 4 tabs.
-            final count = isAdmin ? (techSupport ? 4 : 5) : 4;
+            final report = MainShellScreen.hasReportTabFor(
+              authProvider.userRole,
+            );
+            final count = MainShellScreen.tabCountFor(
+              showAdmin: isAdmin,
+              hasReportTab: report,
+            );
             return NavigationBar(
               selectedIndex: MainShellScreen.selectedIndexFor(
                 GoRouterState.of(context).uri.path,
                 destinationCount: count,
-                isTechSupport: techSupport,
+                hasReportTab: report,
               ),
               onDestinationSelected: (index) =>
-                  _onItemTapped(index, isTechSupport: techSupport),
+                  _onItemTapped(index, hasReportTab: report),
               destinations: [
                 NavigationDestination(
                   icon: const Icon(Icons.grid_view),
@@ -226,9 +243,9 @@ class _MainShellScreenState extends State<MainShellScreen> {
                   selectedIcon: const Icon(Icons.notifications),
                   label: l10n.navAlerts,
                 ),
-                // techSupport does not have reporting access — the Report tab
-                // is omitted for that role.
-                if (!techSupport)
+                // Neither Early Responder nor tech support has Submit
+                // Reports under matrix 4.1, so the tab is omitted for them.
+                if (report)
                   NavigationDestination(
                     icon: const Icon(Icons.add_circle_outline),
                     selectedIcon: const Icon(Icons.add_circle),

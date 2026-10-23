@@ -222,6 +222,10 @@ export default handler(async ({ req, log }) => {
 
   // create / upsert
   const stamped = { ...strip(data, rule, { keepImmutable: true }), ...(rule.create?.(context) ?? {}) };
+  // `roles` cannot express this: it governs every write to the collection,
+  // and a role may be barred from creating a row while still allowed to
+  // move one field on an existing one.
+  rule.guardCreate?.({ role, userId, data: stamped });
   if (rule.requiresTarget) assertTarget(stamped);
   if (rule.requiresCoverage) assertCoverage(stamped);
   if (rule.requiresLocation) {
