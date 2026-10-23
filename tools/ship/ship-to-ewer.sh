@@ -109,6 +109,28 @@ for key in ('cache-dependency-path', 'file', 'path'):
     text = re.sub(r'(\n\s+' + key + r':\s+)([^\s#$][^\s#]*)',
                   lambda m: m.group(1) + f'{PREFIX}/{m.group(2)}', text)
 
+# `cache: npm` with no `cache-dependency-path` looks for a lock file in the
+# repository root. That was right when the project *was* the root; it is not
+# now, and there is no key to prefix because the lookup was implicit. Add one.
+out2, lines2 = [], text.split('\n')
+for n, line in enumerate(lines2):
+    out2.append(line)
+    m = re.match(r'^(\s+)cache:\s*(npm|yarn|pnpm)\s*$', line)
+    if not m:
+        continue
+    indent = m.group(1)
+    siblings = []
+    for later in lines2[n + 1:]:
+        if later.strip() and not later.startswith(indent):
+            break
+        siblings.append(later)
+    if any(re.match(r'^' + indent + r'cache-dependency-path:', s2) for s2 in siblings):
+        continue
+    lock = {'npm': 'package-lock.json', 'yarn': 'yarn.lock',
+            'pnpm': 'pnpm-lock.yaml'}[m.group(2)]
+    out2.append(f'{indent}cache-dependency-path: {PREFIX}/{lock}')
+text = '\n'.join(out2)
+
 lines, out, i = text.split('\n'), [], 0
 while i < len(lines):
     line = lines[i]
