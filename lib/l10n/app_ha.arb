@@ -1042,5 +1042,12 @@
   "notificationReportPending": "Rahotonka ({hazard}) yana jiran tabbatarwa daga maƙwabta.",
   "notificationAlertBody": "An fitar da sabuwar faɗakarwa don yankinka.",
   "knowledgeSavedFilter": "Ajiyayyu",
-  "knowledgeNoSavedGuides": "Babu jagororin da aka ajiye tukuna. Danna alamar ajiya a kan jagora don ajiye shi."
+  "knowledgeNoSavedGuides": "Babu jagororin da aka ajiye tukuna. Danna alamar ajiya a kan jagora don ajiye shi.",
+  "responseStatusTitle": "Mayar da martani",
+  "responseStatusAwaiting": "Ana jiran mayar da martani",
+  "responseStatusAcknowledged": "An karɓa",
+  "responseStatusDispatched": "An tura ƙungiya",
+  "responseStatusResolved": "An warware",
+  "responseStatusUpdated": "An sabunta matsayin mayar da martani",
+  "responseStatusUpdateFailed": "An kasa sabunta matsayin mayar da martani. Don Allah sake gwadawa."
 }

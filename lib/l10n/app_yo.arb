@@ -982,5 +982,12 @@
   "notificationReportPending": "Ìròyìn rẹ ({hazard}) ń dúró de ìjẹ́rìí àwọn ẹlẹgbẹ́.",
   "notificationAlertBody": "A gbé ìkìlọ̀ tuntun jáde fún agbègbè rẹ.",
   "knowledgeSavedFilter": "Tí a fipamọ́",
-  "knowledgeNoSavedGuides": "Kò sí ìwé ìtọ́nisọ́nà tí a fipamọ́ síbẹ̀. Tẹ àmì ìfipamọ́ lórí ìwé ìtọ́nisọ́nà láti fipamọ́ ọ."
+  "knowledgeNoSavedGuides": "Kò sí ìwé ìtọ́nisọ́nà tí a fipamọ́ síbẹ̀. Tẹ àmì ìfipamọ́ lórí ìwé ìtọ́nisọ́nà láti fipamọ́ ọ.",
+  "responseStatusTitle": "Ídáhùn",
+  "responseStatusAwaiting": "Ń dúró de ìdáhùn",
+  "responseStatusAcknowledged": "A ti gbà á",
+  "responseStatusDispatched": "A ti rán ẹgbẹ́ lọ",
+  "responseStatusResolved": "A ti yanjú",
+  "responseStatusUpdated": "A ti ṣàtúnṣe ipò ìdáhùn",
+  "responseStatusUpdateFailed": "Kò ṣeé ṣe láti ṣàtúnṣe ipò ìdáhùn. Jọwọ tún gbìyànjú."
 }

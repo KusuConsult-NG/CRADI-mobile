@@ -6001,6 +6001,48 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'No saved guides yet. Tap the bookmark on a guide to save it.'**
   String get knowledgeNoSavedGuides;
+
+  /// Heading of the response-status card on a report.
+  ///
+  /// In en, this message translates to:
+  /// **'Response'**
+  String get responseStatusTitle;
+
+  /// Response status: nobody has responded yet.
+  ///
+  /// In en, this message translates to:
+  /// **'Awaiting response'**
+  String get responseStatusAwaiting;
+
+  /// Response status: a responder has seen it.
+  ///
+  /// In en, this message translates to:
+  /// **'Acknowledged'**
+  String get responseStatusAcknowledged;
+
+  /// Response status: a team is on the way.
+  ///
+  /// In en, this message translates to:
+  /// **'Team dispatched'**
+  String get responseStatusDispatched;
+
+  /// Response status: the response is finished.
+  ///
+  /// In en, this message translates to:
+  /// **'Resolved'**
+  String get responseStatusResolved;
+
+  /// Confirmation after the response status is changed.
+  ///
+  /// In en, this message translates to:
+  /// **'Response status updated'**
+  String get responseStatusUpdated;
+
+  /// Error when the response status could not be changed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not update the response status. Please try again.'**
+  String get responseStatusUpdateFailed;
 }
 
 class _AppLocalizationsDelegate

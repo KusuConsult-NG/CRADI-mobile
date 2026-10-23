@@ -219,6 +219,18 @@ class AuthProvider extends ChangeNotifier {
     UserRole.techSupport,
   };
 
+  /// Roles that may move a report's response status.
+  ///
+  /// Exactly `RESPONDERS` in `functions/cradi/src/lib/policy.js`. Per the
+  /// client's permission matrix (4.1) this is Early Responder's one write:
+  /// it says what the response is doing, not whether the report is true,
+  /// so it is deliberately not [statusManagerRoles].
+  static const Set<UserRole> responderRoles = {
+    UserRole.ewr,
+    UserRole.admin,
+    UserRole.techSupport,
+  };
+
   /// Roles that may broadcast / dismiss alerts (`alerts_insert` /
   /// `alerts_update`).
   ///
@@ -278,6 +290,16 @@ class AuthProvider extends ChangeNotifier {
 
   /// Whether the user may approve / reject / reopen a report (mirrors the
   /// `guard_report_update` trigger).
+  /// Whether this user may move a report's response status.
+  ///
+  /// No "not your own report" clause, unlike [canManageReportStatus]: that
+  /// rule exists so nobody judges their own report, and responding to one
+  /// you filed is not a conflict of interest.
+  bool get canUpdateResponseStatus {
+    final role = userRole;
+    return role != null && responderRoles.contains(role);
+  }
+
   bool canManageReportStatus({String? reporterId}) {
     final role = userRole;
     if (role == null || !statusManagerRoles.contains(role)) return false;

@@ -982,5 +982,12 @@
   "notificationReportPending": "Akụkọ gị ({hazard}) na-echere nkwado ndị agbata obi.",
   "notificationAlertBody": "E wepụtara ọkwa ọhụrụ maka mpaghara gị.",
   "knowledgeSavedFilter": "Echekwara",
-  "knowledgeNoSavedGuides": "Enwebeghị ntuziaka echekwara. Pịa akara nchekwa na ntuziaka iji chekwaa ya."
+  "knowledgeNoSavedGuides": "Enwebeghị ntuziaka echekwara. Pịa akara nchekwa na ntuziaka iji chekwaa ya.",
+  "responseStatusTitle": "Nzaghachi",
+  "responseStatusAwaiting": "Na-echere nzaghachi",
+  "responseStatusAcknowledged": "Anabatala ya",
+  "responseStatusDispatched": "Ezigala ndị otu",
+  "responseStatusResolved": "Edozila ya",
+  "responseStatusUpdated": "Emelitere ọnọdụ nzaghachi",
+  "responseStatusUpdateFailed": "Emelitechaghị ọnọdụ nzaghachi. Biko nwaa ọzọ."
 }

@@ -3420,4 +3420,26 @@ class AppLocalizationsIg extends AppLocalizations {
   @override
   String get knowledgeNoSavedGuides =>
       'Enwebeghị ntuziaka echekwara. Pịa akara nchekwa na ntuziaka iji chekwaa ya.';
+
+  @override
+  String get responseStatusTitle => 'Nzaghachi';
+
+  @override
+  String get responseStatusAwaiting => 'Na-echere nzaghachi';
+
+  @override
+  String get responseStatusAcknowledged => 'Anabatala ya';
+
+  @override
+  String get responseStatusDispatched => 'Ezigala ndị otu';
+
+  @override
+  String get responseStatusResolved => 'Edozila ya';
+
+  @override
+  String get responseStatusUpdated => 'Emelitere ọnọdụ nzaghachi';
+
+  @override
+  String get responseStatusUpdateFailed =>
+      'Emelitechaghị ọnọdụ nzaghachi. Biko nwaa ọzọ.';
 }

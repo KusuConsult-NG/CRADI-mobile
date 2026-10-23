@@ -3435,4 +3435,26 @@ class AppLocalizationsPcm extends AppLocalizations {
   @override
   String get knowledgeNoSavedGuides =>
       'You never save any guide. Tap di bookmark for one guide make you save am.';
+
+  @override
+  String get responseStatusTitle => 'Response';
+
+  @override
+  String get responseStatusAwaiting => 'Dey wait for response';
+
+  @override
+  String get responseStatusAcknowledged => 'Dem don see am';
+
+  @override
+  String get responseStatusDispatched => 'Dem don send team';
+
+  @override
+  String get responseStatusResolved => 'Dem don settle am';
+
+  @override
+  String get responseStatusUpdated => 'Response status don update';
+
+  @override
+  String get responseStatusUpdateFailed =>
+      'E no fit update the response status. Abeg try again.';
 }

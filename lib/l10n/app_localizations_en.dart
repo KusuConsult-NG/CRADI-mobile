@@ -3440,4 +3440,26 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get knowledgeNoSavedGuides =>
       'No saved guides yet. Tap the bookmark on a guide to save it.';
+
+  @override
+  String get responseStatusTitle => 'Response';
+
+  @override
+  String get responseStatusAwaiting => 'Awaiting response';
+
+  @override
+  String get responseStatusAcknowledged => 'Acknowledged';
+
+  @override
+  String get responseStatusDispatched => 'Team dispatched';
+
+  @override
+  String get responseStatusResolved => 'Resolved';
+
+  @override
+  String get responseStatusUpdated => 'Response status updated';
+
+  @override
+  String get responseStatusUpdateFailed =>
+      'Could not update the response status. Please try again.';
 }

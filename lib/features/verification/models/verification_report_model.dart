@@ -52,6 +52,9 @@ class VerificationReport {
   /// When the report was rejected (local time).
   final DateTime? rejectedAt;
 
+  /// How far the response to this report has got.
+  final ResponseStatus responseStatus;
+
   VerificationReport({
     required this.id,
     required this.title,
@@ -77,6 +80,7 @@ class VerificationReport {
     this.state,
     this.rejectionReason,
     this.rejectedAt,
+    this.responseStatus = ResponseStatus.awaiting,
   });
 
   /// Whether this report is in an active state (visible in "Active" tab).
@@ -179,6 +183,7 @@ class VerificationReport {
       state: data['state'] as String?,
       rejectionReason: _nonEmpty(data['rejectionReason']),
       rejectedAt: _parseDate(data['rejectedAt']),
+      responseStatus: parseResponseStatus(data['responseStatus']),
     );
   }
 
@@ -208,6 +213,7 @@ class VerificationReport {
       'state': state,
       'rejectionReason': rejectionReason,
       'rejectedAt': rejectedAt?.toUtc().toIso8601String(),
+      'responseStatus': responseStatus.name,
     };
   }
 
@@ -286,6 +292,33 @@ class VerificationReport {
 }
 
 enum ReportStatus { pending, verified, approved, rejected }
+
+/// What the response to a report is doing — a different question from
+/// [ReportStatus], which is whether the report is true.
+///
+/// Mirrors `RESPONSE_STATUSES` in `functions/cradi/src/lib/policy.js`,
+/// which refuses any other value. Only an Early Responder (and an admin)
+/// may move it; see `AuthProvider.responderRoles`.
+enum ResponseStatus { awaiting, acknowledged, dispatched, resolved }
+
+/// The stored value parsed back, defaulting to [ResponseStatus.awaiting]
+/// for a report written before the column existed.
+ResponseStatus parseResponseStatus(Object? value) {
+  final s = value?.toString().toLowerCase();
+  for (final v in ResponseStatus.values) {
+    if (v.name.toLowerCase() == s) return v;
+  }
+  return ResponseStatus.awaiting;
+}
+
+extension ResponseStatusExtension on ResponseStatus {
+  String label(AppLocalizations l10n) => switch (this) {
+    ResponseStatus.awaiting => l10n.responseStatusAwaiting,
+    ResponseStatus.acknowledged => l10n.responseStatusAcknowledged,
+    ResponseStatus.dispatched => l10n.responseStatusDispatched,
+    ResponseStatus.resolved => l10n.responseStatusResolved,
+  };
+}
 
 /// Display text for a stored report status value ('pending', 'approved',
 /// …); unknown values are shown as stored.
