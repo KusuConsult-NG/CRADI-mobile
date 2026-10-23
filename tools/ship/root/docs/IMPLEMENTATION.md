@@ -226,6 +226,7 @@ present without printing any value.
 
 | | |
 |---|---|
+| **Everything** | `./scripts/go-live.sh --apply` — columns, Functions, the permissions migration and the version gate, in order. It refuses to start without the `TERMII_*` pair, because the Functions step would delete whatever is there. |
 | **Functions** | `./scripts/deploy.sh functions`. Rewrites each Function's variables from the environment it is given, so a missing `TERMII_*` would turn off every authority SMS; the script refuses rather than let that through, and `ALLOW_SMS_OFF=1` is the deliberate override. Confirm each Function reads `ready` with a non-zero build time. |
 | **Admin panel** | `./scripts/deploy.sh web` proves the build, then push to the branch Appwrite Sites tracks. Check the adapter is SSR. |
 | **Android** | `./scripts/deploy.sh apk`, then compare the APK's SHA-256 against the keystore's. `CN=Android Debug` means the signing config was not picked up. |
@@ -239,11 +240,19 @@ set -a; source ~/.cradi/appwrite-cloud.env; set +a
 
 ### The order matters
 
-Three steps, and the order is not a preference:
+```bash
+./scripts/go-live.sh            # show the plan, change nothing
+./scripts/go-live.sh --apply    # do it
+```
+
+That runs the four steps in the only order that works, dry-running the
+migration and showing you the counts before it asks. Prefer it to the
+individual commands: the ordering below is a constraint, not a
+preference, and a script cannot forget it.
 
 ```bash
-node mobile/infra/appwrite/provision.mjs              # 1. columns
-./scripts/deploy.sh functions                         # 2. the rules
+node mobile/infra/appwrite/provision.mjs               # 1. columns
+./scripts/deploy.sh functions                          # 2. the rules
 node mobile/infra/appwrite/fix-report-permissions.mjs  # 3. existing rows (dry run)
 node mobile/infra/appwrite/fix-report-permissions.mjs --apply
 ```

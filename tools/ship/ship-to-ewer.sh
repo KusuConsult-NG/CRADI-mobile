@@ -193,14 +193,14 @@ PYEOF
 
 # ── 5. Root-level files ──────────────────────────────────────────────────
 say "Writing the root files"
-for f in README.md docs/IMPLEMENTATION.md scripts/deploy.sh; do
+for f in README.md docs/IMPLEMENTATION.md scripts/deploy.sh scripts/go-live.sh; do
   src="$HERE/root/$f"
   [ -f "$src" ] || die "missing $src — keep ship-to-ewer.sh next to its root/ directory."
   mkdir -p "$(dirname "$f")"
   cp "$src" "$f"
   printf '  %s\n' "$f"
 done
-chmod +x scripts/deploy.sh
+chmod +x scripts/deploy.sh scripts/go-live.sh
 
 # ── 6. Scrub tooling references, then prove none are left ────────────────
 say "Scrubbing tooling references"
