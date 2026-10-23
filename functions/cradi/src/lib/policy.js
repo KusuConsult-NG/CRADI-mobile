@@ -41,6 +41,20 @@ const ADMIN = ['admin', 'tech_support'];
 // Project Staff verify peer reports; Early Responder does not.
 const VERIFIER = ['ewm', 'ewv', 'ldp_coordinator', 'project_staff', 'admin'];
 
+// Matrix 4.1 'Update Response Status': Early Responder, and nobody else.
+// Deliberately not DECIDERS — this says what the response to a report is
+// doing, not whether the report is true, and those are different jobs held
+// by different people.
+const RESPONDERS = ['ewr', ...ADMIN];
+
+/**
+ * The response lifecycle, in order. Provisional: the matrix names the
+ * capability and not the states, so these are the smallest set that is
+ * useful and they are cheap to change — they live here, in the column's
+ * guard, and in the app's labels.
+ */
+export const RESPONSE_STATUSES = ['awaiting', 'acknowledged', 'dispatched', 'resolved'];
+
 /**
  * Per-collection rules.
  *
@@ -56,7 +70,8 @@ const VERIFIER = ['ewm', 'ewv', 'ldp_coordinator', 'project_staff', 'admin'];
 export const RULES = {
   reports: {
     serverOwned: ['userId', 'userName', 'userRole', 'status',
-                  'verificationCount', 'escalated', 'previousStatus'],
+                  'verificationCount', 'escalated', 'previousStatus',
+                  'responseStatus', 'responseUpdatedAt', 'responseUpdatedBy'],
     create: ({ userId, profile }) => ({
       userId,
       // Denormalised at creation, per Phase 1: the report list shows who
@@ -66,6 +81,7 @@ export const RULES = {
       status: 'pending',
       verificationCount: 0,
       escalated: false,
+      responseStatus: 'awaiting',
     }),
     immutable: ['userId', 'state', 'lga', 'ward'],
     /**
@@ -77,6 +93,7 @@ export const RULES = {
       'verifiedAt', 'verificationCount', 'autoValidated',
       'escalated', 'escalatedAt', 'escalationStatus',
       'updatedBy', 'severity', 'isAlert',
+      'responseStatus', 'responseUpdatedAt', 'responseUpdatedBy',
     ],
     guardUpdate: guardReportUpdate,
     derive: (clean, merged, current = {}) => {
@@ -279,6 +296,32 @@ export function guardReportUpdate({ role, userId, current, data }) {
     (data.status === 'verified' && current.status !== 'verified');
   if (touchesTally && !admin) {
     throw forbidden('Reports are verified by peer confirmations');
+  }
+
+  // Who is responding, and how far along they are. Separate from the
+  // decision block below: a responder may move this on a report it may not
+  // approve, and a reviewer may approve one it may not respond to.
+  if (changed(data, current, 'responseStatus')) {
+    if (!RESPONDERS.includes(role)) {
+      throw forbidden('Your role cannot update the response status');
+    }
+    if (!RESPONSE_STATUSES.includes(data.responseStatus)) {
+      throw forbidden(
+        `Unknown response status: ${data.responseStatus}. ` +
+          `Expected one of ${RESPONSE_STATUSES.join(', ')}`,
+      );
+    }
+    // Stamped here rather than in `derive`, which is not given the user.
+    // Both are server-owned: a client that sends them has them overwritten.
+    data.responseUpdatedBy = userId;
+    data.responseUpdatedAt = new Date().toISOString();
+  } else if (
+    changed(data, current, 'responseUpdatedBy') ||
+    changed(data, current, 'responseUpdatedAt')
+  ) {
+    // Without this the two stamps are writable on their own, and a row can
+    // claim a responder and a time for a status nobody moved.
+    throw forbidden('The response stamps follow the response status');
   }
 
   const decides = ['status', 'approvedAt', 'rejectedAt', 'rejectionReason'].some((f) =>

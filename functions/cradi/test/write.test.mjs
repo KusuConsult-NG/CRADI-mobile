@@ -803,6 +803,48 @@ describe('deciding a report', () => {
         }
     });
 
+    it('lets an Early Responder move the response status', async () => {
+        // Matrix 4.1 reserves this one column for that role, on a report it
+        // has no power to approve — the two are separate jobs.
+        const { status, row } = await run('ewr', { responseStatus: 'dispatched' });
+        assert.equal(status, 200);
+        assert.equal(row.responseStatus, 'dispatched');
+        assert.equal(row.status, 'pending', 'the decision is untouched');
+    });
+
+    it('stamps who moved it and when, ignoring whatever was sent', async () => {
+        const { row } = await run('ewr', {
+            responseStatus: 'acknowledged',
+            responseUpdatedBy: 'somebody-else',
+            responseUpdatedAt: '1999-01-01T00:00:00.000Z',
+        });
+        assert.equal(row.responseUpdatedBy, 'me');
+        assert.notEqual(row.responseUpdatedAt, '1999-01-01T00:00:00.000Z');
+        assert.ok(Date.parse(row.responseUpdatedAt) > Date.parse('2020-01-01'));
+    });
+
+    it('refuses the stamps on their own', async () => {
+        // Otherwise a row can name a responder and a time for a status that
+        // nobody moved.
+        const { status, row } = await run('ewr', { responseUpdatedBy: 'me' });
+        assert.equal(status, 403);
+        assert.equal(row.responseUpdatedBy, undefined);
+    });
+
+    it('refuses a response status no responder could reach', async () => {
+        const { status, row } = await run('ewr', { responseStatus: 'teleported' });
+        assert.equal(status, 403);
+        assert.equal(row.responseStatus, undefined);
+    });
+
+    it('refuses every role the matrix does not give it to', async () => {
+        for (const role of ['user', 'ewm', 'ewv', 'ldp_coordinator', 'project_staff']) {
+            const { status, row } = await run(role, { responseStatus: 'dispatched' });
+            assert.equal(status, 403, role);
+            assert.equal(row.responseStatus, undefined, role);
+        }
+    });
+
     it('refuses a role that may not decide', async () => {
         // 'ewr' is here because the client's permission matrix (4.1) gives
         // Early Responder no Validate/Reject column. It used to decide.
