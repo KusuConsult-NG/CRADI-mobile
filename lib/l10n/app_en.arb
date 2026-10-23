@@ -1415,7 +1415,7 @@
   "@authErrorLoginConnection": {
     "description": "Login error when the server cannot be reached."
   },
-  "authErrorInvalidCredentials": "Invalid email or password",
+  "authErrorInvalidCredentials": "Incorrect email or password. Check both and try again, or tap “Forgot Password?” to reset it.",
   "@authErrorInvalidCredentials": {
     "description": "Login error for wrong email/password."
   },
@@ -1426,6 +1426,10 @@
   "authErrorLoginUnexpected": "An unexpected error occurred during login. Please try again.",
   "@authErrorLoginUnexpected": {
     "description": "Unexpected login failure."
+  },
+  "authErrorSignInUnavailable": "Email sign-in is unavailable right now. Please try again later or contact support.",
+  "@authErrorSignInUnavailable": {
+    "description": "Login error when email sign-in is turned off server-side."
   },
   "authErrorInvalidPhone": "Invalid phone number.",
   "@authErrorInvalidPhone": {

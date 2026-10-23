@@ -49,6 +49,22 @@ class MainShellScreen extends StatefulWidget {
     return index < destinationCount ? index : 0;
   }
 
+  /// The route tab [index] opens, on a bar drawn for [isTechSupport], or
+  /// null when that bar has no such tab.
+  ///
+  /// The inverse of [selectedIndexFor]; the two have to agree on the tab
+  /// order, so they are kept together.
+  static String? routeForTab(int index, {required bool isTechSupport}) {
+    if (isTechSupport) {
+      // techSupport tab order: 0=Dashboard 1=Alerts 2=Settings 3=Admin
+      const routes = ['/dashboard', '/alerts', '/settings', '/admin'];
+      return index >= 0 && index < routes.length ? routes[index] : null;
+    }
+    // Standard tab order: 0=Dashboard 1=Alerts 2=Report 3=Settings [4=Admin]
+    const routes = ['/dashboard', '/alerts', '/report', '/settings', '/admin'];
+    return index >= 0 && index < routes.length ? routes[index] : null;
+  }
+
   @override
   State<MainShellScreen> createState() => _MainShellScreenState();
 }
@@ -60,8 +76,7 @@ class _MainShellScreenState extends State<MainShellScreen> {
   bool _isTechSupport(AuthProvider auth) =>
       auth.userRole == UserRole.techSupport;
 
-  int _calculateSelectedIndex(BuildContext context) {
-    final auth = context.read<AuthProvider>();
+  int _calculateSelectedIndex(BuildContext context, AuthProvider auth) {
     final showAdmin = _showAdminTab(auth);
     final techSupport = _isTechSupport(auth);
     // techSupport: 4 tabs (no Report). admin: 5 tabs. others: 4 tabs (no Admin).
@@ -73,49 +88,26 @@ class _MainShellScreenState extends State<MainShellScreen> {
     );
   }
 
-  void _onItemTapped(int index) {
-    final auth = context.read<AuthProvider>();
-    if (_isTechSupport(auth)) {
-      // techSupport tab order: 0=Dashboard 1=Alerts 2=Settings 3=Admin
-      switch (index) {
-        case 0:
-          context.go('/dashboard');
-          break;
-        case 1:
-          context.go('/alerts');
-          break;
-        case 2:
-          context.go('/settings');
-          break;
-        case 3:
-          context.go('/admin');
-          break;
-      }
-    } else {
-      // Standard tab order: 0=Dashboard 1=Alerts 2=Report 3=Settings [4=Admin]
-      switch (index) {
-        case 0:
-          context.go('/dashboard');
-          break;
-        case 1:
-          context.go('/alerts');
-          break;
-        case 2:
-          context.go('/report');
-          break;
-        case 3:
-          context.go('/settings');
-          break;
-        case 4:
-          context.go('/admin');
-          break;
-      }
-    }
+  /// [isTechSupport] is the value the bar was *drawn* with, not a fresh
+  /// read. Reading the role again here meant a role that changed between
+  /// the build and the tap shifted the tab order under the user's finger:
+  /// on a bar drawn with a Report tab at 2, a role that had since become
+  /// techSupport sent that tap to /settings instead.
+  void _onItemTapped(int index, {required bool isTechSupport}) {
+    final route = MainShellScreen.routeForTab(
+      index,
+      isTechSupport: isTechSupport,
+    );
+    if (route != null) context.go(route);
   }
 
   @override
   Widget build(BuildContext context) {
-    final int selectedIndex = _calculateSelectedIndex(context);
+    // `watch`, not `read`: the shell has to redraw when the role resolves,
+    // or the back-button handling below keeps the index it was first built
+    // with.
+    final auth = context.watch<AuthProvider>();
+    final int selectedIndex = _calculateSelectedIndex(context, auth);
 
     // Using PopScope for Android Back Button handling (Flutter 3.12+)
     return PopScope(
@@ -221,7 +213,8 @@ class _MainShellScreenState extends State<MainShellScreen> {
                 destinationCount: count,
                 isTechSupport: techSupport,
               ),
-              onDestinationSelected: _onItemTapped,
+              onDestinationSelected: (index) =>
+                  _onItemTapped(index, isTechSupport: techSupport),
               destinations: [
                 NavigationDestination(
                   icon: const Icon(Icons.grid_view),

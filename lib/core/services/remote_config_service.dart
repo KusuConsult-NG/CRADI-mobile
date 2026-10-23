@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'dart:developer' as developer;
 
 import 'package:flutter/foundation.dart';
-import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:climate_app/core/constants/app_config.dart';
@@ -44,22 +43,12 @@ class RemoteConfigService {
     'max_sms_per_lga_per_day': 50,
     'max_sms_per_alert_event': 20,
     'feature_flag_peer_chat': true,
-    'app_min_version': '1.0.0',
-    // Empty: the app shows its own (translated) default message.
-    'app_min_version_message': '',
     'support_email': 'support@cradi.org',
   };
 
   final Map<String, Object?> _values = {};
   DateTime? _lastFetch;
   Future<void>? _inFlight;
-
-  /// This build's version (from package_info_plus), once known.
-  String? _currentVersion;
-
-  /// True when this build is older than `app_min_version` (the app then
-  /// shows a blocking "update required" screen).
-  final ValueNotifier<bool> updateRequired = ValueNotifier<bool>(false);
 
   /// Load cached values, then refresh from the server in the background.
   /// Never throws.
@@ -76,56 +65,7 @@ class RemoteConfigService {
     } on Exception catch (e) {
       developer.log('app_settings cache unreadable: $e', name: 'RemoteConfig');
     }
-    try {
-      _currentVersion = (await PackageInfo.fromPlatform()).version;
-    } on Exception catch (e) {
-      developer.log('App version unavailable: $e', name: 'RemoteConfig');
-    }
-    _checkMinVersion();
     unawaited(refresh());
-  }
-
-  /// Compares dotted numeric versions ("1.0.14" vs "1.2"); a build suffix
-  /// ("+22") and pre-release tags are ignored, missing parts count as 0.
-  /// Returns <0, 0 or >0 like [Comparable.compareTo].
-  static int compareVersions(String a, String b) {
-    List<int> parts(String v) => v
-        .split('+')
-        .first
-        .split('-')
-        .first
-        .trim()
-        .split('.')
-        .map((p) => int.tryParse(p.trim()) ?? 0)
-        .toList();
-    final pa = parts(a);
-    final pb = parts(b);
-    final n = pa.length > pb.length ? pa.length : pb.length;
-    for (var i = 0; i < n; i++) {
-      final x = i < pa.length ? pa[i] : 0;
-      final y = i < pb.length ? pb[i] : 0;
-      if (x != y) return x.compareTo(y);
-    }
-    return 0;
-  }
-
-  /// Whether [currentVersion] is below the configured minimum version.
-  bool isBelowMinVersion(String currentVersion) {
-    final min = appMinVersion.trim();
-    if (min.isEmpty || currentVersion.trim().isEmpty) return false;
-    return compareVersions(currentVersion, min) < 0;
-  }
-
-  void _checkMinVersion() {
-    final current = _currentVersion;
-    updateRequired.value = current != null && isBelowMinVersion(current);
-  }
-
-  /// Sets this build's version and re-evaluates [updateRequired] (tests).
-  @visibleForTesting
-  void debugSetCurrentVersion(String? version) {
-    _currentVersion = version;
-    _checkMinVersion();
   }
 
   /// Whether values last fetched at [lastFetch] should be refetched at
@@ -202,7 +142,6 @@ class RemoteConfigService {
         ..clear()
         ..addAll(fresh);
       _lastFetch = DateTime.now();
-      _checkMinVersion();
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_cacheKey, jsonEncode(fresh));
       developer.log(
@@ -223,7 +162,6 @@ class RemoteConfigService {
     _values
       ..clear()
       ..addAll(values);
-    _checkMinVersion();
   }
 
   Object? _raw(String key) => _values[key] ?? _defaults[key];
@@ -265,11 +203,6 @@ class RemoteConfigService {
   // ── Feature Flags ─────────────────────────────────────────────────────────
 
   bool get featureFlagPeerChat => _getBool('feature_flag_peer_chat');
-
-  // ── Force Update ─────────────────────────────────────────────────────────
-
-  String get appMinVersion => _getString('app_min_version');
-  String get appMinVersionMessage => _getString('app_min_version_message');
 
   // ── Support ──────────────────────────────────────────────────────────────
 

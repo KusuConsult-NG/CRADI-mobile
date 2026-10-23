@@ -1111,7 +1111,7 @@ class AppLocalizationsHa extends AppLocalizations {
 
   @override
   String get authErrorInvalidCredentials =>
-      'Imel ko kalmar sirri ba daidai ba ne';
+      'Imel ko kalmar sirri ba daidai ba ne. Duba su biyu ka sake gwadawa, ko ka danna “Ka Manta Kalmar Sirri?” don sake saita ta.';
 
   @override
   String get authErrorTooManyLogins =>
@@ -1120,6 +1120,10 @@ class AppLocalizationsHa extends AppLocalizations {
   @override
   String get authErrorLoginUnexpected =>
       'An sami matsalar da ba a zata ba yayin shiga. Don Allah sake gwadawa.';
+
+  @override
+  String get authErrorSignInUnavailable =>
+      'Shiga da imel ba ya aiki a yanzu. Don Allah sake gwadawa daga baya ko ka tuntuɓi tallafi.';
 
   @override
   String get authErrorInvalidPhone => 'Lambar waya ba daidai ba ce.';

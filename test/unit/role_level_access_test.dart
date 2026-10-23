@@ -13,6 +13,51 @@ void main() {
         isTechSupport: techSupport,
       );
 
+  // ── Tapping a tab opens the tab that was drawn there ─────────────────────
+  group('routeForTab is the inverse of selectedIndexFor', () {
+    test('standard bar: 2 is Report, not Settings', () {
+      expect(MainShellScreen.routeForTab(2, isTechSupport: false), '/report');
+      expect(MainShellScreen.routeForTab(3, isTechSupport: false), '/settings');
+      expect(MainShellScreen.routeForTab(4, isTechSupport: false), '/admin');
+    });
+
+    test('techSupport bar: there is no Report tab, so 2 is Settings', () {
+      expect(MainShellScreen.routeForTab(2, isTechSupport: true), '/settings');
+      expect(MainShellScreen.routeForTab(3, isTechSupport: true), '/admin');
+    });
+
+    test('a tab the bar does not have opens nothing', () {
+      expect(MainShellScreen.routeForTab(4, isTechSupport: true), isNull);
+      expect(MainShellScreen.routeForTab(5, isTechSupport: false), isNull);
+      expect(MainShellScreen.routeForTab(-1, isTechSupport: false), isNull);
+    });
+
+    // Every tab the bar draws must round-trip: tapping tab n opens a route
+    // whose own index is n again. This is what the two halves disagreeing
+    // would break.
+    test('every drawn tab round-trips', () {
+      for (final techSupport in [false, true]) {
+        final count = techSupport ? 4 : 5;
+        for (var i = 0; i < count; i++) {
+          final route = MainShellScreen.routeForTab(
+            i,
+            isTechSupport: techSupport,
+          );
+          expect(route, isNotNull, reason: 'tab $i (tech=$techSupport)');
+          expect(
+            MainShellScreen.selectedIndexFor(
+              route!,
+              destinationCount: count,
+              isTechSupport: techSupport,
+            ),
+            i,
+            reason: 'tab $i (tech=$techSupport) opened $route',
+          );
+        }
+      }
+    });
+  });
+
   // ── Level 5 (techSupport) bottom nav ─────────────────────────────────────
   group('Level 5 techSupport — bottom nav has no Report tab', () {
     // techSupport bar: Home(0) Alerts(1) Settings(2) Admin(3) → 4 tabs

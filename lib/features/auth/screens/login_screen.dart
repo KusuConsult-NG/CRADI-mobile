@@ -215,7 +215,9 @@ class _LoginScreenState extends State<LoginScreen>
           _isLoading = false;
         });
         await _checkRateLimit();
-      } on Exception catch (e) {
+      } on Object catch (e) {
+        // `Object`, not `Exception`: an `Error` would otherwise skip this
+        // handler and leave the button spinning with no message.
         if (!mounted) return;
         setState(() {
           _errorMessage = ErrorHandler.getUserMessage(e, context.l10n);
